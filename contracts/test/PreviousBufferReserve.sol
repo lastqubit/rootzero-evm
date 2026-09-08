@@ -6,7 +6,7 @@ import {ValueOverflow} from "../utils/Errors.sol";
 /// @title Buffers
 /// @notice Allocation and finalization helpers for mutable memory byte buffers.
 /// @dev `write` copies from memory, while `copy` copies directly from calldata.
-library Buffers {
+library PreviousBufferReserve {
     /// @dev A reserved memory write exceeds the physical backing buffer.
     error BufferOverflow();
     /// @dev A buffer cursor does not match its logical or physical capacity.
@@ -21,8 +21,8 @@ library Buffers {
     }
 
     /// @notice Reserve relative write space and return the updated packed buffer cursor.
-    /// @dev Validates the larger of `advance` and `touch` against logical and
-    /// physical capacity. Allocations include one trailing word for scratch writes.
+    /// @dev `touch` may exceed `advance` by at most 31 bytes; `alloc` reserves one
+    /// trailing word so lazy allocation can safely return without another bounds check.
     /// @param cur Current packed buffer cursor.
     /// @param buffer Current backing buffer.
     /// @param advance Logical number of bytes appended.
@@ -43,8 +43,7 @@ library Buffers {
         dst = buffer;
 
         if (required > len) {
-            // The initial capacity was decoded from uint32; its first doubling is safe.
-            unchecked { len = len == 0 ? 64 : len * 2; }
+            len = len == 0 ? 64 : len * 2;
             while (len < required) {
                 len *= 2;
             }
@@ -53,14 +52,10 @@ library Buffers {
             if (!empty) dst = resize(dst, i, len);
         }
 
-        // required >= i + advance and now required <= len <= uint32.max.
-        // The addition cannot carry out of the position lane, even with high flags.
-        unchecked { updated = cur + advance; }
+        updated = cur + advance;
 
         if (empty) {
-            uint padded;
-            // len is still bounded by uint32 after the growth check above.
-            unchecked { padded = ((len + 31) & ~uint(31)) + 32; }
+            uint padded = ((len + 31) & ~uint(31)) + 32;
             dst = new bytes(padded);
         }
         if (required > dst.length) revert BufferOverflow();

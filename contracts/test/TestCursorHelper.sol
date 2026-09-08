@@ -18,15 +18,14 @@ contract TestCursorHelper {
     }
 
     function testSpanMeta(
-        uint8 stride,
         uint8 flags
-    ) external pure returns (uint cur, uint8 decodedStride, uint8 decodedFlags) {
-        cur = Cursors.create(0, 0, stride, flags);
-        (decodedStride, decodedFlags) = Cursors.meta(cur);
+    ) external pure returns (uint cur, uint8 decodedFlags) {
+        cur = Cursors.create(0, 0, flags);
+        decodedFlags = uint8(cur >> 64);
     }
 
     function testCursorBounds() external pure returns (uint abs, uint end) {
-        return Cursors.create(10, 30, 0, 0).seek(15).bounds();
+        return Cursors.create(10, 30, 0).seek(15).bounds();
     }
 
     /// @notice Exercise cursor consumption and report the resulting position.
@@ -36,7 +35,7 @@ contract TestCursorHelper {
         uint i,
         uint amount
     ) external pure returns (uint next, uint abs, bool more) {
-        uint cur = Cursors.create(offset, offset + len, 0, 0).seek(offset + i);
+        uint cur = Cursors.create(offset, offset + len, 0).seek(offset + i);
         (cur, abs) = cur.consume(amount);
         next = cur.position() - offset;
         more = cur.more();
@@ -44,7 +43,7 @@ contract TestCursorHelper {
 
     /// @notice Exercise cursor resizing at an existing position.
     function testCursorResize(uint len, uint i, uint resized) external pure returns (uint next, uint capacity) {
-        uint cur = Cursors.create(0, len, 0, 0).seek(i).resize(resized);
+        uint cur = Cursors.create(0, len, 0).seek(i).resize(resized);
         next = cur.position();
         capacity = cur.limit();
     }
@@ -355,7 +354,7 @@ contract TestCursorHelper {
     function testOpen(bytes calldata source)
         external
         pure
-        returns (uint sourceStart, uint pos, uint end, uint8 stride)
+        returns (uint sourceStart, uint pos, uint end, uint8 flags)
     {
         assembly ("memory-safe") {
             sourceStart := source.offset
@@ -364,7 +363,7 @@ contract TestCursorHelper {
         cur = Decoders.open(source);
         pos = cur.state.position();
         end = cur.state.limit();
-        (stride, ) = Cursors.meta(cur.state);
+        flags = uint8(cur.state >> 64);
     }
 
     function testClose(bytes calldata source, uint amount) external pure returns (bool) {

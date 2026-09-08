@@ -69,8 +69,8 @@ contract TestBlocksHelper is Action, Counterparty {
         counterparty(entity, account);
     }
 
-    function groupedCapacity() external pure returns (uint) {
-        return Specs.allocation(Specs.group(Specs.Balance, 3), 2);
+    function blockCapacity() external pure returns (uint) {
+        return Specs.allocation(Specs.Balance, 6);
     }
 
     function describeSpecs(uint state, uint input, uint output) external pure returns (uint) {
@@ -79,9 +79,9 @@ contract TestBlocksHelper is Action, Counterparty {
 
     function descriptorWord() external pure returns (uint) {
         return Executions.describe(
-            Specs.group(Specs.Balance, 2),
-            Specs.group(Specs.Asset, 3),
-            Specs.group(Specs.Amount, 4),
+            Specs.Balance,
+            Specs.Asset,
+            Specs.Amount,
             Flags.AdminFunded
         );
     }
@@ -91,9 +91,9 @@ contract TestBlocksHelper is Action, Counterparty {
         bytes calldata input
     ) external pure returns (uint stateCursor, uint stateWriter, uint inputCursor, uint inputWriter) {
         uint descriptor = Executions.describe(
-            Specs.group(Specs.Balance, 2),
-            Specs.group(Specs.Asset, 3),
-            Specs.group(Specs.Amount, 4),
+            Specs.Balance,
+            Specs.Asset,
+            Specs.Amount,
             0
         );
         Execution memory stateExec;
@@ -110,11 +110,10 @@ contract TestBlocksHelper is Action, Counterparty {
         uint stateSpec,
         uint inputSpec,
         uint outputSpec
-    ) external view returns (uint len, uint8 stride) {
+    ) external view returns (uint len) {
         uint descriptor = Executions.describe(stateSpec, inputSpec, outputSpec, 0);
         Execution memory exec = openExecution(state, input, descriptor);
         len = Cursors.limit(exec.writer);
-        (stride, ) = Cursors.meta(exec.writer);
     }
 
     function executionOutputPosition(
@@ -181,12 +180,14 @@ contract TestBlocksHelper is Action, Counterparty {
     }
 
     /// @notice Gas baseline reproducing the removed tagged, relative two-lane cursor path.
-    /// @dev Kept only to enforce that specialized execution cursors remain cheaper.
+    /// @dev Kept to compare traversal correctness and detect material gas regressions.
     function legacyExecutionEnterAmount(
         bytes calldata state,
         bytes calldata input
     ) external pure returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount) {
-        uint descriptor = Executions.describe(Specs.Balance, Specs.List, Specs.Empty, 0);
+        // Reproduce the legacy descriptor bytes used by this baseline.
+        uint descriptor = (uint(uint32(Specs.key(Specs.Balance))) << 224) | (uint(1) << 216)
+            | (uint(uint32(Specs.key(Specs.List))) << 184) | (uint(1) << 176);
         uint inputCursor;
         uint stateCursor;
         assembly ("memory-safe") {
@@ -302,6 +303,15 @@ contract TestBlocksHelper is Action, Counterparty {
         Execution memory exec = openInput(input, descriptor);
         data = Executions.takeRawInput(exec);
         complete = !Executions.more(exec);
+    }
+
+    function executionForwardRaw(bytes calldata state, bytes calldata input, uint stateSpec, uint inputSpec)
+        external view returns (bytes memory)
+    {
+        Execution memory exec = openExecution(state, input, Executions.describe(stateSpec, inputSpec, Specs.Empty, 0));
+        Executions.takeRawState(exec);
+        Executions.takeRawInput(exec);
+        return exec.finish();
     }
 
     function executionFinishUnread(bytes calldata input) external view returns (bytes memory) {
@@ -522,22 +532,20 @@ contract TestBlocksHelper is Action, Counterparty {
     /// @notice Reserve a lazily allocated buffer and expose its resulting metadata.
     function reserveBuffer(
         uint len,
-        uint8 stride,
         uint advance,
         uint touch
-    ) external pure returns (uint i, uint next, uint capacity, uint8 packedStride, uint physical) {
-        uint cur = Buffers.cursor(len, stride);
+    ) external pure returns (uint i, uint next, uint capacity, uint physical) {
+        uint cur = Buffers.cursor(len);
         bytes memory buffer;
         (cur, buffer, i) = Buffers.reserve(cur, buffer, advance, touch);
         next = Cursors.position(cur);
         capacity = Cursors.limit(cur);
-        (packedStride, ) = Cursors.meta(cur);
         physical = buffer.length;
     }
 
     /// @notice Grow a buffer across two writes and return its finalized bytes.
     function growBuffer(bytes32 a, bytes32 b) external pure returns (bytes memory buffer) {
-        uint cur = Buffers.cursor(32, 1);
+        uint cur = Buffers.cursor(32);
         uint i;
         (cur, buffer, i) = Buffers.reserve(cur, buffer, 32, 32);
         Buffers.write32(buffer, i, a);

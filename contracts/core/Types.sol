@@ -75,6 +75,14 @@ struct HostAccountAmount {
     uint amount;
 }
 
+/// @notice Inclusive quantity bounds without asset or counterparty identifiers.
+struct Limits {
+    /// @dev Minimum asset amount received after fees.
+    uint amount;
+    /// @dev Maximum liability debt paid including fees.
+    uint debt;
+}
+
 /// @notice Asset and liability pair threaded as live pipeline state.
 /// Also represents decoded QUOTE fields: amount is a minimum, debt a maximum,
 /// and asset, liability, and counterparty are exact requirements.

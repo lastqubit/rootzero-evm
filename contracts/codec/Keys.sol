@@ -30,6 +30,7 @@ library Keys {
     // Input and value blocks
 
     /// @dev Expected position outcome - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
+    bytes4 constant Limits = bytes4(keccak256("#limits"));
     bytes4 constant Quote = bytes4(keccak256("#quote"));
 
     /// @dev Input amount - (bytes32 asset, uint amount)

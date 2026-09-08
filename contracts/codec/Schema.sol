@@ -12,7 +12,12 @@ pragma solidity ^0.8.33;
 // - payload schemas are `""` or a comma-separated item sequence; one optional
 //   pair of outer braces may wrap a non-empty sequence without changing meaning
 // - an empty schema string means the block has no structured payload
-// - commas separate siblings at every level
+// - commas outside alias-list parentheses separate siblings at every level
+// - `#x as (a, b)` expands to `#x as a, #x as b` in declaration order; it adds
+//   no container or header and preserves the referenced key for every child
+// - alias lists require at least two valid alias paths and an unmodified schema
+//   reference; use expanded items with `maybe`, `many`, or `at` modifiers
+// - empty entries, trailing commas, nested lists, and colliding alias paths are invalid
 // - braces are presentation-only and do not change payload layout
 // - command inputs are a single run when the input schema is non-empty
 // - command state is a single active state run without trailing globals
@@ -120,6 +125,8 @@ library Schemas {
 
     // Two-word payloads
 
+    /// @dev Amount is a minimum and debt is a maximum, both inclusive.
+    string constant Limits = "uint amount, uint debt";
     string constant Amount = "bytes32 asset, uint amount";
     string constant AssetLiability = "bytes32 asset, bytes32 liability";
     string constant AccountAsset = "bytes32 account, bytes32 asset";

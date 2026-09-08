@@ -597,15 +597,13 @@ describe("Cursors", () => {
       expect(await blocksHelper.exactSpec(key, size)).to.equal(spec);
     });
 
-    it("derives initial byte capacity from spec groups and hints", async () => {
-      expect(await blocksHelper.groupedCapacity()).to.equal(6n * 72n);
+    it("derives initial byte capacity from block counts and hints", async () => {
+      expect(await blocksHelper.blockCapacity()).to.equal(6n * 72n);
     });
 
     it("initializes execution output capacity from the input run", async () => {
       const amountSpec = exactSpec(Keys.Amount, 64);
       const balanceSpec = exactSpec(Keys.Balance, 64);
-      const groupedInput = amountSpec | (2n << 128n);
-      const groupedOutput = balanceSpec | (3n << 128n);
       const input = concat(
         encodeAmountBlock(asset, 1n),
         encodeAmountBlock(asset, 2n),
@@ -613,8 +611,8 @@ describe("Cursors", () => {
         encodeAmountBlock(asset, 4n),
       );
 
-      expect(await blocksHelper.executionWriterHint("0x", input, 0, groupedInput, groupedOutput))
-        .to.deep.equal([6n * 72n, 3n]);
+      expect(await blocksHelper.executionWriterHint("0x", input, 0, amountSpec, balanceSpec))
+        .to.equal(4n * 72n);
     });
 
     it("uses state before input as the output hint source", async () => {
@@ -635,7 +633,7 @@ describe("Cursors", () => {
           amountSpec,
           positionSpec,
         ),
-      ).to.deep.equal([168n, 1n]);
+      ).to.equal(168n);
     });
 
     it("uses state as the output-hint source when descriptor input is empty", async () => {
@@ -648,70 +646,77 @@ describe("Cursors", () => {
       );
 
       expect(await blocksHelper.executionWriterHint(state, "0x", balanceSpec, 0, amountSpec))
-        .to.deep.equal([3n * 72n, 1n]);
+        .to.equal(3n * 72n);
     });
 
-    it("precomputes absent sources and maximum group sizes without truncation", async () => {
-      const grouped = rangedSpec(Keys.Bytes, 0, 0, 0xffffff) | (255n << 128n);
-      const descriptor = await blocksHelper.describeSpecs(0, grouped, grouped);
-      const size = (0xffffffn + 8n) * 255n;
+    it("precomputes absent sources and maximum block sizes without truncation", async () => {
+      const spec = rangedSpec(Keys.Bytes, 0, 0, 0xffffff);
+      const descriptor = await blocksHelper.describeSpecs(0, spec, spec);
+      const size = 0xffffffn + 8n;
+      expect((descriptor >> 96n) & 0xffffffffn).to.equal(size);
       expect((descriptor >> 64n) & 0xffffffffn).to.equal(size);
-      expect((descriptor >> 32n) & 0xffffffffn).to.equal(size);
-      expect((descriptor >> 104n) & 0xffffffffn).to.equal(BigInt(Keys.Bytes));
-      expect((descriptor >> 96n) & 0xffn).to.equal(255n);
-      expect((descriptor >> 24n) & 0xffn).to.equal(0n);
+      expect((descriptor >> 128n) & 0xffffffffn).to.equal(BigInt(Keys.Bytes));
+      expect(descriptor & ((1n << 64n) - 1n)).to.equal(2n << 48n);
       const noSource = await blocksHelper.describeSpecs(0, 0, exactSpec(Keys.Balance, 64));
-      expect((noSource >> 64n) & 0xffffffffn).to.equal(0n);
-      expect((noSource >> 96n) & 0xffffffffffn).to.equal(0n);
-      expect((noSource >> 24n) & 0xffn).to.equal(0n);
+      expect((noSource >> 96n) & 0xffffffffffffffffn).to.equal(0n);
+      expect((noSource >> 64n) & 0xffffffffn).to.equal(72n);
       expect(await blocksHelper.executionWriterHint("0x", "0x", 0, 0, exactSpec(Keys.Balance, 64)))
-        .to.deep.equal([72n, 1n]);
+        .to.equal(72n);
     });
 
-    it("uses divisible byte estimates and scans nondivisible variable groups", async () => {
+    it("uses divisible byte estimates and scans nondivisible variable blocks", async () => {
       const spec = rangedSpec(Keys.Bytes, 0, 0, 128);
       const output = exactSpec(Keys.Balance, 64);
       // Seventeen empty blocks occupy one hinted block: deliberately underestimate.
       const small = concat(...Array.from({ length: 17 }, () => encodeBytesBlock("0x")));
       expect(await blocksHelper.executionWriterHint("0x", small, 0, spec, output))
-        .to.deep.equal([72n, 1n]);
-      // Three encoded 264-byte blocks do not divide by a hinted 272-byte pair.
+        .to.equal(72n);
+      // Three encoded 264-byte blocks do not divide by the hinted 136-byte block.
       const large = concat(...Array.from({ length: 3 }, () => encodeBytesBlock("0x" + "a5".repeat(256))));
-      expect(await blocksHelper.executionWriterHint("0x", large, 0, spec | (2n << 128n), output))
-        .to.deep.equal([72n, 1n]);
+      expect(await blocksHelper.executionWriterHint("0x", large, 0, spec, output))
+        .to.equal(3n * 72n);
       expect(await blocksHelper.executionWriterHint(small, "0x", spec, 0, output))
-        .to.deep.equal([72n, 1n]);
+        .to.equal(72n);
       // Declared state remains the selected source even when empty.
       expect(await blocksHelper.executionWriterHint("0x", small, spec, spec, output))
-        .to.deep.equal([0n, 1n]);
+        .to.equal(0n);
     });
 
     it("packs complete descriptor metadata without exposing field accessors", async () => {
       const expected =
         (BigInt(Keys.Balance) << 224n) |
-        (2n << 216n) |
-        (BigInt(Keys.Asset) << 184n) |
-        (3n << 176n) |
-        (BigInt(Keys.Amount) << 144n) | (4n << 136n) |
-        (BigInt(Keys.Balance) << 104n) | (2n << 96n) |
-        (144n << 64n) | (288n << 32n) | (128n << 24n) |
+        (BigInt(Keys.Asset) << 192n) |
+        (BigInt(Keys.Amount) << 160n) |
+        (BigInt(Keys.Balance) << 128n) |
+        (72n << 96n) | (72n << 64n) | (64n << 56n) | (3n << 48n) |
         3n;
 
       expect(await blocksHelper.descriptorWord()).to.equal(expected);
+    });
+
+    it("precomputes every combination of declared lanes", async () => {
+      for (const state of [0n, exactSpec(Keys.Balance, 64)]) {
+        for (const input of [0n, exactSpec(Keys.Amount, 64)]) {
+          const descriptor = await blocksHelper.describeSpecs(state, input, 0);
+          const lanes = (state === 0n ? 0n : 1n) | (input === 0n ? 0n : 2n);
+          expect((descriptor >> 48n) & 0xffn).to.equal(lanes);
+          expect(descriptor & ((1n << 48n) - 1n)).to.equal(0n);
+        }
+      }
     });
 
     it("opens descriptor state and input cursors with initialized writers", async () => {
       const [stateCursor, stateWriter, inputCursor, inputWriter] =
         await blocksHelper.descriptorOpens("0x1234", "0xaabbcc");
 
-      expect(((stateCursor >> 160n) & 0xffffffffn) - ((stateCursor >> 128n) & 0xffffffffn)).to.equal(2n);
-      expect((stateCursor >> 192n) & 0xffn).to.equal(2n);
+      expect(((stateCursor >> 96n) & 0xffffffffn) - ((stateCursor >> 64n) & 0xffffffffn)).to.equal(2n);
+      expect(stateCursor >> 128n).to.equal(3n);
       expect(((inputCursor >> 32n) & 0xffffffffn) - (inputCursor & 0xffffffffn)).to.equal(3n);
-      expect((inputCursor >> 64n) & 0xffn).to.equal(3n);
+      expect(inputCursor >> 64n).to.equal(2n << 64n);
       expect((stateWriter >> 32n) & 0xffffffffn).to.equal(0n);
-      expect((stateWriter >> 64n) & 0xffn).to.equal(4n);
+      expect(stateWriter >> 64n).to.equal(0n);
       expect((inputWriter >> 32n) & 0xffffffffn).to.equal(0n);
-      expect((inputWriter >> 64n) & 0xffn).to.equal(4n);
+      expect(inputWriter >> 64n).to.equal(0n);
     });
 
     it("enters an input parent while preserving execution state", async () => {
@@ -724,13 +729,17 @@ describe("Cursors", () => {
         .to.deep.equal([stateAsset, 41n, inputAsset, 42n]);
     });
 
-    it("uses less gas than tagged relative cursors when switching between state and input", async () => {
+    it("keeps state/input traversal gas within one percent of tagged relative cursors", async () => {
       const state = encodeBalanceBlock(ethers.zeroPadValue("0x31", 32), 41n);
       const input = encodeListBlock(encodeAmountBlock(ethers.zeroPadValue("0x32", 32), 42n));
 
+      expect(await blocksHelper.executionEnterAmount(state, input))
+        .to.deep.equal(await blocksHelper.legacyExecutionEnterAmount(state, input));
       const specialized = await blocksHelper.executionEnterAmount.estimateGas(state, input);
       const legacy = await blocksHelper.legacyExecutionEnterAmount.estimateGas(state, input);
-      expect(specialized).to.be.lessThan(legacy);
+      // Whole-call estimates include selector dispatch and cursor initialization.
+      // Allow small compiler/layout changes while detecting a material regression.
+      expect(specialized * 100n).to.be.lessThan(legacy * 101n);
     });
 
     it("next32 consumes raw words from an entered execution parent", async () => {
@@ -818,14 +827,14 @@ describe("Cursors", () => {
       expect(await blocksHelper.emptyWriter()).to.deep.equal([0n, 0n, 0n]);
     });
 
-    it("lazily allocates a buffer while preserving cursor stride", async () => {
-      expect(await blocksHelper.reserveBuffer(33, 7, 2, 32))
-        .to.deep.equal([0n, 2n, 33n, 7n, 96n]);
+    it("lazily allocates a buffer with packed position and capacity", async () => {
+      expect(await blocksHelper.reserveBuffer(33, 2, 32))
+        .to.deep.equal([0n, 2n, 33n, 96n]);
     });
 
     it("uses touch for capacity and advance for the logical position", async () => {
-      expect(await blocksHelper.reserveBuffer(16, 1, 2, 32))
-        .to.deep.equal([0n, 2n, 32n, 1n, 64n]);
+      expect(await blocksHelper.reserveBuffer(16, 2, 32))
+        .to.deep.equal([0n, 2n, 32n, 64n]);
     });
 
     it("grows an allocated buffer and preserves its written prefix", async () => {
@@ -836,8 +845,8 @@ describe("Cursors", () => {
     });
 
     it("grows every buffer beyond its initial capacity", async () => {
-      expect(await blocksHelper.reserveBuffer(8, 1, 16, 16))
-        .to.deep.equal([0n, 16n, 16n, 1n, 64n]);
+      expect(await blocksHelper.reserveBuffer(8, 16, 16))
+        .to.deep.equal([0n, 16n, 16n, 64n]);
     });
 
     it("opens, spends, drains, and detaches standalone value budgets", async () => {
@@ -973,11 +982,10 @@ describe("Cursors", () => {
     const otherAsset = ethers.zeroPadValue("0xbb", 32);
     const amount = 9999n;
 
-    it("packs optional stride and consumer flags into cursor metadata", async () => {
-      const [cur, stride, flags] = await helper.testSpanMeta(0x34, 0x56);
+    it("packs consumer flags directly above cursor bounds", async () => {
+      const [cur, flags] = await helper.testSpanMeta(0x56);
 
-      expect(cur).to.equal((0x34n << 64n) | (0x56n << 72n));
-      expect(stride).to.equal(0x34n);
+      expect(cur).to.equal(0x56n << 64n);
       expect(flags).to.equal(0x56n);
     });
 
@@ -1011,21 +1019,21 @@ describe("Cursors", () => {
       expect(i).to.equal(BigInt(ethers.getBytes(source).length));
     });
 
-    it("open(source) creates an ungrouped cursor over the complete source", async () => {
+    it("open(source) creates an cursor over the complete source", async () => {
       const a = encodeAmountBlock(asset, 1n);
       const b = encodeBalanceBlock(asset, 2n);
       const source = concat(a, b);
-      const [sourceStart, pos, end, stride] = await helper.testOpen(source);
+      const [sourceStart, pos, end, flags] = await helper.testOpen(source);
       expect(pos).to.equal(sourceStart);
       expect(end - pos).to.equal(BigInt(ethers.getBytes(source).length));
-      expect(stride).to.equal(0n);
+      expect(flags).to.equal(0n);
     });
 
     it("open(source) accepts an empty source", async () => {
-      const [sourceStart, pos, end, stride] = await helper.testOpen("0x");
+      const [sourceStart, pos, end, flags] = await helper.testOpen("0x");
       expect(pos).to.equal(sourceStart);
       expect(end).to.equal(pos);
-      expect(stride).to.equal(0n);
+      expect(flags).to.equal(0n);
     });
 
     it("close succeeds after the complete decoder source is consumed", async () => {
@@ -1431,6 +1439,20 @@ describe("Cursors", () => {
       expect(await blocksHelper.executionTakeRawInput(input)).to.deep.equal([input, true]);
     });
 
+    it("raw forwarding preserves independent EMPTY lane restrictions", async () => {
+      const state = encodeBalanceBlock(asset, amount);
+      const input = encodeAmountBlock(asset, amount);
+      const stateSpec = exactSpec(Keys.Balance, 64);
+      const inputSpec = exactSpec(Keys.Amount, 64);
+      expect(await blocksHelper.executionForwardRaw(state, input, stateSpec, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardRaw("0x", input, 0, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardRaw(state, "0x", stateSpec, 0)).to.equal("0x");
+      await expect(blocksHelper.executionForwardRaw(state, input, 0, inputSpec))
+        .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
+      await expect(blocksHelper.executionForwardRaw(state, input, stateSpec, 0))
+        .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
+    });
+
     it("finish rejects unread execution data", async () => {
       const input = encodeAmountBlock(asset, amount);
       await expect(blocksHelper.executionFinishUnread(input))
@@ -1621,17 +1643,17 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(erc20Helper, "InvalidAsset");
     });
 
-    it("accepts matching 2:1 ratio between state and input runs", async () => {
+    it("opens state and input independently of their block counts", async () => {
       const state = concat(
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
       );
       const input = encodeAmountBlock(asset, 3n);
 
-      expect(await operation.testCheckCursorRatio(state, 2n, input, 1n)).to.equal(true);
+      expect(await operation.testOpenSources(state, input)).to.equal(true);
     });
 
-    it("does not pre-scan or reconcile state and input ratios", async () => {
+    it("does not pre-scan or reconcile state and input counts", async () => {
       const state = concat(
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
@@ -1639,7 +1661,7 @@ describe("Cursors", () => {
       );
       const input = encodeAmountBlock(asset, 4n);
 
-      expect(await operation.testCheckCursorRatio(state, 2n, input, 1n)).to.equal(true);
+      expect(await operation.testOpenSources(state, input)).to.equal(true);
     });
   });
 

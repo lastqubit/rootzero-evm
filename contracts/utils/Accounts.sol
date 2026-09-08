@@ -170,10 +170,10 @@ library Accounts {
 
     /// @notice Encode an EVM address as a chain-local host account ID.
     /// @dev Encoding only; use `host` to validate the embedded address.
-    /// @param accountAddr EVM address to embed.
+    /// @param hostAddr EVM address to embed.
     /// @return Host account ID bound to the current chain.
-    function toHost(address accountAddr) internal view returns (bytes32) {
-        return bytes32(toLocalBase(Host) | uint(uint160(accountAddr)));
+    function toHost(address hostAddr) internal view returns (bytes32) {
+        return bytes32(toLocalBase(Host) | uint(uint160(hostAddr)));
     }
 
     /// @notice Derive a host account from an EVM host node, preserving its chain and address.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Keys} from "./Keys.sol";
+import {Keys} from "../codec/Keys.sol";
 import {max24} from "../utils/Utils.sol";
 
 /// @title Sizes
@@ -61,7 +61,7 @@ library Sizes {
 /// The upper eight bytes of a fixed-layout spec are its encoded block header,
 /// allowing the entire spec word to be written directly as that header.
 /// A maximum of zero means the payload size is unbounded.
-library Specs {
+library PreviousSpecs {
     /// @dev A payload is incompatible with its block specification.
     error InvalidSpec();
     uint private constant SizeFields = (uint(1) << 192) | (uint(1) << 160) | (uint(1) << 136);
@@ -222,8 +222,7 @@ library Specs {
     /// @param spec Packed block specification.
     /// @return Estimated encoded size, using the payload hint for variable-size specs.
     function blockSize(uint spec) internal pure returns (uint) {
-        // The payload hint is uint24, so adding the header cannot overflow uint256.
-        unchecked { return key(spec) == bytes4(0) ? 0 : Sizes.Header + uint24(spec >> 136); }
+        return key(spec) == bytes4(0) ? 0 : Sizes.Header + uint24(spec >> 136);
     }
 
     /// @notice Return the initial buffer capacity for `count` blocks of `spec`.

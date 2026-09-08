@@ -21,62 +21,24 @@ export function rangedSpec(key: string, min: number, max: number, hint: number):
     | (BigInt(hint) << 136n);
 }
 
-function laneStride(lane: string, stride?: number): number {
-  const value = stride ?? 0;
-  return value === 0 && BigInt(lane) !== 0n ? 1 : value;
-}
-
 export function endpointDescriptor({
-  state = Keys.Empty,
-  stateStride,
-  stateHint = 0,
-  input = Keys.Empty,
-  inputStride,
-  inputHint = 0,
-  output = Keys.Empty,
-  outputStride,
-  funded = false,
-  admin = false,
-  handoff = false,
+  state = Keys.Empty, stateHint = 0, input = Keys.Empty, inputHint = 0,
+  output = Keys.Empty, funded = false, admin = false, handoff = false,
 }: {
-  state?: string;
-  stateStride?: number;
-  stateHint?: number;
-  input?: string;
-  inputStride?: number;
-  inputHint?: number;
-  output?: string | bigint;
-  outputStride?: number;
-  funded?: boolean;
-  admin?: boolean;
-  handoff?: boolean;
+  state?: string; stateHint?: number; input?: string; inputHint?: number;
+  output?: string | bigint; funded?: boolean; admin?: boolean; handoff?: boolean;
 }): bigint {
   const flags = (funded ? 1n : 0n) | (admin ? 2n : 0n) | (handoff ? 128n : 0n);
-  const stateLaneStride = laneStride(state, stateStride);
-  const inputLaneStride = laneStride(input, inputStride);
-  const outputSpec = typeof output === "bigint"
-    ? output
-    : output === Keys.Empty
-      ? 0n
-      : (() => { throw new Error("non-empty output lanes require a spec"); })();
-  const encodedOutputStride = outputStride
-    ?? (typeof output === "bigint" ? Number((output >> 128n) & 0xffn) : 0);
-  const outputLaneStride = encodedOutputStride === 0 && outputSpec !== 0n
-    ? 1
-    : encodedOutputStride;
-  const stateLane = (BigInt(state) << 8n) | BigInt(stateLaneStride);
-  const inputLane = (BigInt(input) << 8n) | BigInt(inputLaneStride);
-  const outputLane = ((outputSpec >> 224n) << 8n) | BigInt(outputLaneStride);
-  const sourceStride = stateLaneStride || inputLaneStride;
-  const sourceShift = stateLaneStride ? 128 : 0;
-  const sourceGroupSize = BigInt((8 + (stateLaneStride ? stateHint : inputHint)) * sourceStride);
-  const outputGroupSize = (8n + ((outputSpec >> 136n) & 0xffffffn)) * BigInt(outputLaneStride);
-  const descriptor = (stateLane << 216n) | (inputLane << 176n) | (outputLane << 136n)
-    | ((stateLaneStride ? stateLane : inputLane) << 96n)
-    | (sourceGroupSize << 64n) | (outputGroupSize << 32n)
-    | (BigInt(sourceShift) << 24n) | flags;
-
-  return descriptor;
+  const outputSpec = typeof output === "bigint" ? output : output === Keys.Empty
+    ? 0n : (() => { throw new Error("non-empty output lanes require a spec"); })();
+  const stateKey = BigInt(state), inputKey = BigInt(input), outputKey = outputSpec >> 224n;
+  const sourceKey = stateKey || inputKey;
+  const sourceSize = sourceKey === 0n ? 0n : BigInt(8 + (stateKey !== 0n ? stateHint : inputHint));
+  const outputSize = outputKey === 0n ? 0n : 8n + ((outputSpec >> 136n) & 0xffffffn);
+  return (stateKey << 224n) | (inputKey << 192n) | (outputKey << 160n)
+    | (sourceKey << 128n) | (sourceSize << 96n) | (outputSize << 64n)
+    | ((stateKey !== 0n ? 64n : 0n) << 56n)
+    | (((stateKey !== 0n ? 1n : 0n) | (inputKey !== 0n ? 2n : 0n)) << 48n) | flags;
 }
 
 // Known block keys
@@ -94,6 +56,7 @@ export const Keys = {
 
   // Input and value blocks
   Amount: blockKey("#amount"),
+  Limits: blockKey("#limits"),
   Quote: blockKey("#quote"),
   Bootstrap: blockKey("#bootstrap"),
   Allocation: blockKey("#allocation"),
@@ -201,6 +164,10 @@ export function encodeCustodyBlock(host: bigint, asset: string, amount: bigint):
 }
 
 /** Expected outcome: amount is a minimum and debt is a maximum. */
+export function encodeLimitsBlock(amount: bigint, debt: bigint): string {
+  return encodeBlock(Keys.Limits, ethers.concat([pad32(amount), pad32(debt)]));
+}
+
 export function encodeQuoteBlock(asset: string, amount: bigint, liability: string, debt: bigint, counterparty = ethers.ZeroHash): string {
   return encodeBlock(Keys.Quote, ethers.concat([pad32(asset), pad32(amount), pad32(liability), pad32(debt), pad32(counterparty)]));
 }
@@ -331,4 +298,11 @@ export function guardSelector(name: string): string {
 export function encodeHostAccount(host: bigint): string {
   return ethers.toBeHex((0x03010200n << 224n) | (host & (0xffffffffn << 192n))
     | (host & ((1n << 160n) - 1n)), 32);
+}
+
+// Unnamed local input schema published by ExchangePort in these test hosts.
+export const ExchangeKey = localKey(1);
+
+export function encodeExchangeBlock(debit: string, credit: string): string {
+  return encodeBlock(ExchangeKey, concat(debit, credit));
 }

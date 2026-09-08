@@ -24,7 +24,7 @@ library Budgets {
     /// @return The consumed native value.
     function useValue(Budget memory budget, uint value) internal pure returns (uint) {
         if (value > budget.remaining) revert InsufficientValue();
-        budget.remaining -= value;
+        unchecked { budget.remaining -= value; }
         return value;
     }
 
@@ -43,7 +43,7 @@ library Budgets {
     /// @return remaining Native value remaining after the deduction.
     function useValue(uint budget, uint value) internal pure returns (uint remaining) {
         if (value > budget) revert InsufficientValue();
-        remaining = budget - value;
+        unchecked { remaining = budget - value; }
     }
 
     /// @notice Deduct the EVM value lane of `resources` from `budget`.

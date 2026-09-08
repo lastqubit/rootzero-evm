@@ -4,8 +4,8 @@ pragma solidity ^0.8.33;
 import {Keys} from "./Keys.sol";
 import {Sizes, Specs} from "./Specs.sol";
 import {max32} from "../utils/Utils.sol";
-import {Position} from "../core/Types.sol";
-import {UnexpectedValue} from "../utils/Errors.sol";
+import {Limits, Position} from "../core/Types.sol";
+import {AmountOutOfRange, UnexpectedValue} from "../utils/Errors.sol";
 
 /// @title Blocks
 /// @notice Stateless helpers for inspecting and encoding protocol blocks.
@@ -30,7 +30,8 @@ import {UnexpectedValue} from "../utils/Errors.sol";
 /// larger payloads. `write*` helpers copy dynamic inputs from memory, while
 /// `copy*` helpers copy dynamic inputs directly from calldata. Allocating
 /// factories use the semantic block name for memory inputs and append `Copy`
-/// for calldata inputs, while delegating to the corresponding writer.
+/// for calldata inputs. Factories reuse validated lengths in private writers
+/// where delegating to standalone writers would repeat length calculations.
 library Blocks {
     /// @dev A block header or declared payload exceeds the source region.
     error MalformedBlocks();
@@ -79,9 +80,13 @@ library Blocks {
     /// @return key Decoded block key.
     /// @return len Decoded payload length.
     function peek(uint abs, uint end) internal pure returns (bytes4 key, uint len) {
-        if (abs > end || Sizes.Header > end - abs) revert MalformedBlocks();
-        (key, len) = header(abs);
-        if (len > end - abs - Sizes.Header) revert MalformedBlocks();
+        if (abs > end) revert MalformedBlocks();
+        unchecked {
+            uint remaining = end - abs;
+            if (remaining < Sizes.Header) revert MalformedBlocks();
+            (key, len) = header(abs);
+            if (len > remaining - Sizes.Header) revert MalformedBlocks();
+        }
     }
 
     /// @notice Validate and enter a block at the start of a calldata slice.
@@ -132,7 +137,9 @@ library Blocks {
             head := calldataload(abs)
         }
         uint len = uint32(head >> 192);
-        if (!Specs.matches(spec, bytes4(uint32(head >> 224)), len)) revert InvalidBlock();
+        uint max = uint32(spec >> 160);
+        if (uint32(head >> 224) != uint32(spec >> 224) || len < uint32(spec >> 192)
+            || (max != 0 && len > max)) revert InvalidBlock();
 
         unchecked {
             body = abs + Sizes.Header;
@@ -210,7 +217,10 @@ library Blocks {
     /// @return body Absolute position of the payload.
     /// @return end Absolute position after the payload.
     function expectFixed(uint abs, bytes4 key, uint size) private pure returns (uint body, uint end) {
-        if (header(abs, key) != size) revert InvalidBlock();
+        uint actual;
+        assembly ("memory-safe") { actual := shr(192, calldataload(abs)) }
+        uint expected = uint(uint32(key)) << 32 | size;
+        if (actual != expected) revert InvalidBlock();
         unchecked {
             body = abs + Sizes.Header;
             end = body + size;
@@ -224,7 +234,10 @@ library Blocks {
     /// @param key Expected block key.
     /// @return end Absolute position immediately after the empty block header.
     function expectEmpty(uint abs, bytes4 key) internal pure returns (uint end) {
-        if (header(abs, key) != 0) revert InvalidBlock();
+        uint actual;
+        assembly ("memory-safe") { actual := shr(192, calldataload(abs)) }
+        uint expected = uint(uint32(key)) << 32;
+        if (actual != expected) revert InvalidBlock();
         return abs + Sizes.Header;
     }
 
@@ -234,7 +247,10 @@ library Blocks {
     /// @param key Expected block key.
     /// @return Whether a complete matching header exists.
     function hasAt(uint abs, uint end, bytes4 key) internal pure returns (bool) {
-        if (abs > end || Sizes.Header > end - abs) return false;
+        // Short-circuiting proves the subtraction cannot underflow.
+        unchecked {
+            if (abs > end || Sizes.Header > end - abs) return false;
+        }
         return bytes4(read32(abs)) == key;
     }
 
@@ -244,9 +260,11 @@ library Blocks {
     /// @param key Expected block key.
     /// @return Whether the expected key occurs with a zero-length payload.
     function isEmpty(uint abs, uint end, bytes4 key) internal pure returns (bool) {
-        if (abs > end || Sizes.Header > end - abs) return false;
+        unchecked {
+            if (abs > end || Sizes.Header > end - abs) return false;
+        }
         uint head = uint(read32(abs));
-        return uint32(head >> 224) == uint32(key) && uint32(head >> 192) == 0;
+        return head >> 192 == uint(uint32(key)) << 32;
     }
 
     /// @notice Find the first block with `key` at or after absolute position `abs`.
@@ -257,9 +275,13 @@ library Blocks {
     function find(uint abs, uint end, bytes4 key) internal pure returns (uint) {
         while (abs < end) {
             (bytes4 current, uint len) = header(abs);
-            if (Sizes.Header + len > end - abs) revert MalformedBlocks();
-            if (current == key) return abs;
-            abs += Sizes.Header + len;
+            // len is uint32; the loop and region check prove these operations safe.
+            unchecked {
+                uint size = Sizes.Header + len;
+                if (size > end - abs) revert MalformedBlocks();
+                if (current == key) return abs;
+                abs += size;
+            }
         }
         return end;
     }
@@ -274,11 +296,12 @@ library Blocks {
         end = abs;
         while (end < limit) {
             (bytes4 current, uint len) = header(end);
-            if (Sizes.Header + len > limit - end) revert MalformedBlocks();
-            if (current != key) break;
-            end += Sizes.Header + len;
-
+            // Validate before testing the key, including a malformed nonmatching block.
             unchecked {
+                uint size = Sizes.Header + len;
+                if (size > limit - end) revert MalformedBlocks();
+                if (current != key) break;
+                end += size;
                 ++total;
             }
         }
@@ -395,6 +418,18 @@ library Blocks {
     /// @param payload Block payload.
     function write(bytes memory dst, uint i, bytes4 key, bytes memory payload) internal pure {
         uint len = max32(payload.length);
+        uint head = (uint(uint32(key)) << 224) | (len << 192);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, head)
+            mcopy(add(p, 0x08), add(payload, 0x20), len)
+        }
+    }
+
+    /// @dev DANGER: len must equal payload.length and fit uint32. The caller must
+    /// reserve the complete header/payload and trailing header scratch space.
+    /// The standalone writer stays direct to avoid extra helper-call overhead.
+    function writeSized(bytes memory dst, uint i, bytes4 key, bytes memory payload, uint len) internal pure {
         uint head = (uint(uint32(key)) << 224) | (len << 192);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
@@ -670,6 +705,22 @@ library Blocks {
             mstore(add(p, 0x08), host)
             mstore(add(p, 0x28), account)
             mstore(add(p, 0x48), asset)
+        }
+    }
+
+    /// @notice Write a LIMITS block with minimum amount and maximum debt.
+    /// @dev Unchecked memory write; reserve Sizes.Limits bytes first.
+    /// @param dst Destination buffer.
+    /// @param i Relative write position.
+    /// @param amount Inclusive minimum asset amount.
+    /// @param debt Inclusive maximum liability debt.
+    function writeLimits(bytes memory dst, uint i, uint amount, uint debt) internal pure {
+        uint spec = Specs.Limits;
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, spec)
+            mstore(add(p, 0x08), amount)
+            mstore(add(p, 0x28), debt)
         }
     }
 
@@ -1056,6 +1107,18 @@ library Blocks {
         }
     }
 
+    /// @dev DANGER: len must equal payload.length and fit uint32. The caller must
+    /// reserve the full header/payload and trailing header scratch space.
+    /// Standalone copy retains its direct implementation and length validation.
+    function copySized(bytes memory dst, uint i, bytes4 key, bytes calldata payload, uint len) internal pure {
+        uint head = (uint(uint32(key)) << 224) | (len << 192);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, head)
+            calldatacopy(add(p, 0x08), payload.offset, len)
+        }
+    }
+
     /// @notice Encode a LIST block at `i`, copying its payload from calldata.
     function copyList(bytes memory dst, uint i, bytes calldata value) internal pure {
         copy(dst, i, Keys.List, value);
@@ -1186,6 +1249,422 @@ library Blocks {
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
+            mstore(add(p, 0x08), handler)
+            mstore(add(p, 0x28), resources)
+            mstore(add(p, 0x48), recoverykey)
+
+            let q := add(p, 0x68)
+            let witnesslen := witness.length
+            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
+            calldatacopy(add(q, 0x08), witness.offset, witnesslen)
+        }
+    }
+
+    /// @dev Factory-only writers. The destination's complete length has already
+    /// passed max32 and allocation; reuse it for the outer payload header.
+    function writeCompositeAllocated(bytes memory dst, bytes4 blockkey, uint cmd, uint value, bytes memory input) private pure {
+        uint key = uint32(blockkey);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), cmd)
+            mstore(add(p, 0x28), value)
+
+            let q := add(p, 0x48)
+            let inputlen := mload(input)
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
+        }
+    }
+
+    function writeRelayAllocated(bytes memory dst, bytes memory input, bytes memory steps) private pure {
+        uint key = uint32(Keys.Relay);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            let q := add(p, 0x08)
+            let inputlen := mload(input)
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
+            q := add(add(q, 0x08), inputlen)
+            let stepslen := mload(steps)
+            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
+            mcopy(add(q, 0x08), add(steps, 0x20), stepslen)
+        }
+    }
+
+    function writeContextAllocated(
+        bytes memory dst,
+        bytes32 account,
+        bytes memory state,
+        bytes memory input
+    ) private pure {
+        uint key = uint32(Keys.Context);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), account)
+
+            let q := add(p, 0x28)
+            let statelen := mload(state)
+            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mcopy(add(q, 0x08), add(state, 0x20), statelen)
+
+            let r := add(add(q, 0x08), statelen)
+            let inputlen := mload(input)
+            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(r, 0x08), add(input, 0x20), inputlen)
+        }
+    }
+
+    function writeRecoverAllocated(
+        bytes memory dst,
+        uint handler,
+        uint resources,
+        bytes32 recoverykey,
+        bytes memory witness
+    ) private pure {
+        uint key = uint32(Keys.Recover);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), handler)
+            mstore(add(p, 0x28), resources)
+            mstore(add(p, 0x48), recoverykey)
+
+            let q := add(p, 0x68)
+            let witnesslen := mload(witness)
+            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
+            mcopy(add(q, 0x08), add(witness, 0x20), witnesslen)
+        }
+    }
+
+    function copyCompositeAllocated(bytes memory dst, bytes4 blockkey, uint cmd, uint value, bytes calldata input) private pure {
+        uint key = uint32(blockkey);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), cmd)
+            mstore(add(p, 0x28), value)
+
+            let q := add(p, 0x48)
+            let inputlen := input.length
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(q, 0x08), input.offset, inputlen)
+        }
+    }
+
+    function copyRelayAllocated(bytes memory dst, bytes calldata input, bytes calldata steps) private pure {
+        uint key = uint32(Keys.Relay);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            let q := add(p, 0x08)
+            let inputlen := input.length
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(q, 0x08), input.offset, inputlen)
+            q := add(add(q, 0x08), inputlen)
+            let stepslen := steps.length
+            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
+            calldatacopy(add(q, 0x08), steps.offset, stepslen)
+        }
+    }
+
+    function copyContextAllocated(
+        bytes memory dst,
+        bytes32 account,
+        bytes calldata state,
+        bytes calldata input
+    ) private pure {
+        uint key = uint32(Keys.Context);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), account)
+
+            let q := add(p, 0x28)
+            let statelen := state.length
+            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            calldatacopy(add(q, 0x08), state.offset, statelen)
+
+            let r := add(add(q, 0x08), statelen)
+            let inputlen := input.length
+            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(r, 0x08), input.offset, inputlen)
+        }
+    }
+
+    function copyRecoverAllocated(
+        bytes memory dst,
+        uint handler,
+        uint resources,
+        bytes32 recoverykey,
+        bytes calldata witness
+    ) private pure {
+        uint key = uint32(Keys.Recover);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), handler)
+            mstore(add(p, 0x28), resources)
+            mstore(add(p, 0x48), recoverykey)
+
+            let q := add(p, 0x68)
+            let witnesslen := witness.length
+            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
+            calldatacopy(add(q, 0x08), witness.offset, witnesslen)
+        }
+    }
+
+    function writeLabelAllocated(bytes memory dst, bytes32 namespace, string memory name) private pure {
+        uint key = uint32(Keys.Label);
+        uint stringkey = uint32(Keys.String);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), namespace)
+
+            let q := add(p, 0x28)
+            let namelen := mload(name)
+            mstore(q, or(shl(224, stringkey), shl(192, namelen)))
+            mcopy(add(q, 0x08), add(name, 0x20), namelen)
+        }
+    }
+
+    function writeSchemaAllocated(bytes memory dst, uint spec, string memory body, bytes32 name) private pure {
+        uint key = uint32(Keys.Schema);
+        uint stringkey = uint32(Keys.String);
+        assembly ("memory-safe") {
+            let p := add(dst, 0x20)
+            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
+            mstore(add(p, 0x08), spec)
+
+            let q := add(p, 0x28)
+            let bodylen := mload(body)
+            mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
+            mcopy(add(q, 0x08), add(body, 0x20), bodylen)
+            mstore(add(add(q, 0x08), bodylen), name)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeCompositeSized(bytes memory dst, uint i, bytes4 blockkey, uint cmd, uint value, bytes memory input, uint size) internal pure {
+        uint key = uint32(blockkey);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), cmd)
+            mstore(add(p, 0x28), value)
+
+            let q := add(p, 0x48)
+            let inputlen := mload(input)
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeRelaySized(bytes memory dst, uint i, bytes memory input, bytes memory steps, uint size) internal pure {
+        uint key = uint32(Keys.Relay);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            let q := add(p, 0x08)
+            let inputlen := mload(input)
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
+            q := add(add(q, 0x08), inputlen)
+            let stepslen := mload(steps)
+            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
+            mcopy(add(q, 0x08), add(steps, 0x20), stepslen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeContextSized(
+        bytes memory dst,
+        uint i,
+        bytes32 account,
+        bytes memory state,
+        bytes memory input,
+        uint size
+    ) internal pure {
+        uint key = uint32(Keys.Context);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), account)
+
+            let q := add(p, 0x28)
+            let statelen := mload(state)
+            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mcopy(add(q, 0x08), add(state, 0x20), statelen)
+
+            let r := add(add(q, 0x08), statelen)
+            let inputlen := mload(input)
+            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mcopy(add(r, 0x08), add(input, 0x20), inputlen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeRecoverSized(
+        bytes memory dst,
+        uint i,
+        uint handler,
+        uint resources,
+        bytes32 recoverykey,
+        bytes memory witness,
+        uint size
+    ) internal pure {
+        uint key = uint32(Keys.Recover);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), handler)
+            mstore(add(p, 0x28), resources)
+            mstore(add(p, 0x48), recoverykey)
+
+            let q := add(p, 0x68)
+            let witnesslen := mload(witness)
+            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
+            mcopy(add(q, 0x08), add(witness, 0x20), witnesslen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeLabelSized(bytes memory dst, uint i, bytes32 namespace, string memory name, uint size) internal pure {
+        uint key = uint32(Keys.Label);
+        uint stringkey = uint32(Keys.String);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), namespace)
+
+            let q := add(p, 0x28)
+            let namelen := mload(name)
+            mstore(q, or(shl(224, stringkey), shl(192, namelen)))
+            mcopy(add(q, 0x08), add(name, 0x20), namelen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function writeSchemaSized(bytes memory dst, uint i, uint spec, string memory body, bytes32 name, uint size) internal pure {
+        uint key = uint32(Keys.Schema);
+        uint stringkey = uint32(Keys.String);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), spec)
+
+            let q := add(p, 0x28)
+            let bodylen := mload(body)
+            mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
+            mcopy(add(q, 0x08), add(body, 0x20), bodylen)
+            mstore(add(add(q, 0x08), bodylen), name)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function copyCompositeSized(bytes memory dst, uint i, bytes4 blockkey, uint cmd, uint value, bytes calldata input, uint size) internal pure {
+        uint key = uint32(blockkey);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), cmd)
+            mstore(add(p, 0x28), value)
+
+            let q := add(p, 0x48)
+            let inputlen := input.length
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(q, 0x08), input.offset, inputlen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function copyRelaySized(bytes memory dst, uint i, bytes calldata input, bytes calldata steps, uint size) internal pure {
+        uint key = uint32(Keys.Relay);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            let q := add(p, 0x08)
+            let inputlen := input.length
+            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(q, 0x08), input.offset, inputlen)
+            q := add(add(q, 0x08), inputlen)
+            let stepslen := steps.length
+            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
+            calldatacopy(add(q, 0x08), steps.offset, stepslen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function copyContextSized(
+        bytes memory dst,
+        uint i,
+        bytes32 account,
+        bytes calldata state,
+        bytes calldata input,
+        uint size
+    ) internal pure {
+        uint key = uint32(Keys.Context);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
+            mstore(add(p, 0x08), account)
+
+            let q := add(p, 0x28)
+            let statelen := state.length
+            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            calldatacopy(add(q, 0x08), state.offset, statelen)
+
+            let r := add(add(q, 0x08), statelen)
+            let inputlen := input.length
+            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            calldatacopy(add(r, 0x08), input.offset, inputlen)
+        }
+    }
+
+    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
+    /// prove size fits uint32, and pass the exact complete block size.
+    function copyRecoverSized(
+        bytes memory dst,
+        uint i,
+        uint handler,
+        uint resources,
+        bytes32 recoverykey,
+        bytes calldata witness,
+        uint size
+    ) internal pure {
+        uint key = uint32(Keys.Recover);
+        uint byteskey = uint32(Keys.Bytes);
+        assembly ("memory-safe") {
+            let p := add(add(dst, 0x20), i)
+            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
             mstore(add(p, 0x08), handler)
             mstore(add(p, 0x28), resources)
             mstore(add(p, 0x48), recoverykey)
@@ -1710,6 +2189,37 @@ library Blocks {
         if (head >> 192 != Specs.HostAccountAsset >> 192) revert InvalidBlock();
     }
 
+    /// @notice Decode a LIMITS block at an in-bounds absolute calldata position.
+    /// @param abs Absolute block position.
+    /// @return amount Inclusive minimum asset amount.
+    /// @return debt Inclusive maximum liability debt.
+    function unpackLimits(uint abs) internal pure returns (uint amount, uint debt) {
+        uint head;
+        assembly ("memory-safe") {
+            head := calldataload(abs)
+            amount := calldataload(add(abs, 0x08))
+            debt := calldataload(add(abs, 0x28))
+        }
+        if (head >> 192 != Specs.Limits >> 192) revert InvalidBlock();
+    }
+
+    /// @notice Require quantities to satisfy a LIMITS block directly in calldata.
+    /// @dev The caller must ensure the complete block is in bounds. Validates the
+    /// exact header before reporting an inclusive quantity-bound violation.
+    /// @param abs Absolute block position.
+    /// @param amount Actual asset amount; must be at least the encoded minimum.
+    /// @param debt Actual liability debt; must not exceed the encoded maximum.
+    function requireLimits(uint abs, uint amount, uint debt) internal pure {
+        uint head;
+        bool outside;
+        assembly ("memory-safe") {
+            head := calldataload(abs)
+            outside := or(lt(amount, calldataload(add(abs, 0x08))), gt(debt, calldataload(add(abs, 0x28))))
+        }
+        if (head >> 192 != Specs.Limits >> 192) revert InvalidBlock();
+        if (outside) revert AmountOutOfRange();
+    }
+
     // Five-word quote and position payloads
 
     /// @notice Decode a QUOTE at an in-bounds absolute calldata position.
@@ -1817,7 +2327,10 @@ library Blocks {
             value.length := len
         }
         if (uint32(head >> 224) != uint32(Keys.List)) revert InvalidBlock();
-        end = abs + Sizes.Header + len;
+        // len came from uint32: adding the header cannot overflow. One
+        // checked addition retains the original absolute-position overflow panic.
+        unchecked { len += Sizes.Header; }
+        end = abs + len;
     }
 
     /// @notice Decode one BYTES payload and its absolute end position.
@@ -1834,7 +2347,10 @@ library Blocks {
             value.length := len
         }
         if (uint32(head >> 224) != uint32(Keys.Bytes)) revert InvalidBlock();
-        end = abs + Sizes.Header + len;
+        // len came from uint32: adding the header cannot overflow. One
+        // checked addition retains the original absolute-position overflow panic.
+        unchecked { len += Sizes.Header; }
+        end = abs + len;
     }
 
     /// @notice Decode one STRING payload and its absolute end position.
@@ -1851,10 +2367,47 @@ library Blocks {
             value.length := len
         }
         if (uint32(head >> 224) != uint32(Keys.String)) revert InvalidBlock();
-        end = abs + Sizes.Header + len;
+        // len came from uint32: adding the header cannot overflow. One
+        // checked addition retains the original absolute-position overflow panic.
+        unchecked { len += Sizes.Header; }
+        end = abs + len;
     }
 
     // Composite blocks
+
+    /// @dev Validate the final BYTES child against the parent's known end.
+    /// Called only after validating a nonzero outer key. Fixed offsets are still
+    /// checked by the caller; a matching child header also implies its position
+    /// is in calldata. No logical-region bounds are added here.
+    function unpackTailBytes(uint abs, uint end) private pure returns (bytes calldata value) {
+        uint byteskey = uint32(Keys.Bytes);
+        bool valid;
+        assembly ("memory-safe") {
+            let body := add(abs, 8)
+            let len := sub(end, body)
+            valid := and(iszero(gt(len, 0xffffffff)),
+                eq(shr(192, calldataload(abs)), or(shl(32, byteskey), len)))
+            value.offset := body
+            value.length := len
+        }
+        if (!valid) revert InvalidBlock();
+    }
+
+    /// @dev STRING variant of unpackTailBytes. For SCHEMA, end excludes the
+    /// trailing name word; an underflowed end fails the uint32 length check.
+    function unpackTailString(uint abs, uint end) private pure returns (bytes calldata value) {
+        uint stringkey = uint32(Keys.String);
+        bool valid;
+        assembly ("memory-safe") {
+            let body := add(abs, 8)
+            let len := sub(end, body)
+            valid := and(iszero(gt(len, 0xffffffff)),
+                eq(shr(192, calldataload(abs)), or(shl(32, stringkey), len)))
+            value.offset := body
+            value.length := len
+        }
+        if (!valid) revert InvalidBlock();
+    }
 
     // One fixed word
 
@@ -1871,8 +2424,8 @@ library Blocks {
         assembly ("memory-safe") {
             entity := calldataload(abs)
         }
-        (stream, end) = unpackBytes(abs + 32);
-        if (end != limit) revert InvalidBlock();
+        stream = unpackTailBytes(abs + 32, limit);
+        end = limit;
     }
 
     /// @notice Decode one CONTEXT block and all nested byte blocks.
@@ -1890,8 +2443,8 @@ library Blocks {
             account := calldataload(abs)
         }
         (state, end) = unpackBytes(abs + 32);
-        (input, end) = unpackBytes(end);
-        if (end != limit) revert InvalidBlock();
+        input = unpackTailBytes(end, limit);
+        end = limit;
     }
 
     // Two fixed words
@@ -1911,8 +2464,8 @@ library Blocks {
             cmd := calldataload(abs)
             value := calldataload(add(abs, 0x20))
         }
-        (input, end) = unpackBytes(abs + 64);
-        if (end != limit) revert InvalidBlock();
+        input = unpackTailBytes(abs + 64, limit);
+        end = limit;
     }
 
     /// @notice Decode one CALL block and its nested payload.
@@ -1930,8 +2483,8 @@ library Blocks {
             target := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
         }
-        (payload, end) = unpackBytes(abs + 64);
-        if (end != limit) revert InvalidBlock();
+        payload = unpackTailBytes(abs + 64, limit);
+        end = limit;
     }
 
     /// @notice Decode one RELAY block and its nested input and continuation.
@@ -1945,8 +2498,8 @@ library Blocks {
         uint limit;
         (abs, limit) = enter(abs, Keys.Relay);
         (input, abs) = unpackBytes(abs);
-        (steps, end) = unpackBytes(abs);
-        if (end != limit) revert InvalidBlock();
+        steps = unpackTailBytes(abs, limit);
+        end = limit;
     }
 
     /// @notice Decode one DISPATCH block and its nested payload.
@@ -1964,8 +2517,8 @@ library Blocks {
             portal := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
         }
-        (payload, end) = unpackBytes(abs + 64);
-        if (end != limit) revert InvalidBlock();
+        payload = unpackTailBytes(abs + 64, limit);
+        end = limit;
     }
 
     /// @notice Decode one LABEL block and its nested name.
@@ -1980,8 +2533,8 @@ library Blocks {
             namespace := calldataload(abs)
         }
         bytes calldata value;
-        (value, end) = unpackString(abs + 32);
-        if (end != limit) revert InvalidBlock();
+        value = unpackTailString(abs + 32, limit);
+        end = limit;
         name = string(value);
     }
 
@@ -1998,8 +2551,10 @@ library Blocks {
             spec := calldataload(abs)
         }
         bytes calldata value;
-        (value, end) = unpackString(abs + 32);
-        if (end + 32 != limit) revert InvalidBlock();
+        // The final word follows the STRING child. A too-short parent is
+        // rejected by unpackTailString, including subtraction underflow.
+        unchecked { end = limit - 32; }
+        value = unpackTailString(abs + 32, end);
         assembly ("memory-safe") {
             name := calldataload(end)
         }
@@ -2026,8 +2581,8 @@ library Blocks {
             resources := calldataload(add(abs, 0x20))
             key := calldataload(add(abs, 0x40))
         }
-        (witness, end) = unpackBytes(abs + 96);
-        if (end != limit) revert InvalidBlock();
+        witness = unpackTailBytes(abs + 96, limit);
+        end = limit;
     }
 
     // -------------------------------------------------------------------------
@@ -2037,9 +2592,16 @@ library Blocks {
     /// @dev Allocate an exact-length result with one trailing scratch word for
     /// unchecked writers that store an eight-byte header with `mstore`.
     function allocate(uint len) private pure returns (bytes memory value) {
-        value = new bytes(len + 32);
+        // Every factory overwrites the complete logical result. Only initialize
+        // padding and the trailing scratch word, including when memory is dirty.
+        // Factory lengths are bounded by uint32 (plus a fixed header).
         assembly ("memory-safe") {
+            value := mload(0x40)
+            let padded := and(add(len, 31), not(31))
+            let tail := add(add(value, 0x20), padded)
+            mstore(0x40, add(tail, 0x20))
             mstore(value, len)
+            mstore(add(add(value, 0x20), len), 0)
         }
     }
 
@@ -2060,14 +2622,14 @@ library Blocks {
     function create(bytes4 key, bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(payload.length);
         value = allocate(Sizes.Header + len);
-        write(value, 0, key, payload);
+        writeSized(value, 0, key, payload, len);
     }
 
     /// @notice Encode a block by copying its raw payload from calldata.
     function createCopy(bytes4 key, bytes calldata payload) internal pure returns (bytes memory value) {
         uint len = max32(payload.length);
         value = allocate(Sizes.Header + len);
-        copy(value, 0, key, payload);
+        copySized(value, 0, key, payload, len);
     }
 
     // Dynamic leaf factories
@@ -2083,7 +2645,7 @@ library Blocks {
     function createListCopy(bytes calldata value) internal pure returns (bytes memory blockdata) {
         uint len = max32(value.length);
         blockdata = allocate(Sizes.Header + len);
-        copyList(blockdata, 0, value);
+        copySized(blockdata, 0, Keys.List, value, len);
     }
 
     /// @notice Encode a BYTES block with a raw payload.
@@ -2099,7 +2661,7 @@ library Blocks {
     function createBytesCopy(bytes calldata value) internal pure returns (bytes memory blockdata) {
         uint len = max32(value.length);
         blockdata = allocate(Sizes.Header + len);
-        copyBytes(blockdata, 0, value);
+        copySized(blockdata, 0, Keys.Bytes, value, len);
     }
 
     /// @notice Encode a STRING block with a UTF-8 payload.
@@ -2115,7 +2677,7 @@ library Blocks {
     function createStringCopy(string calldata value) internal pure returns (bytes memory blockdata) {
         uint len = max32(bytes(value).length);
         blockdata = allocate(Sizes.Header + len);
-        copyString(blockdata, 0, value);
+        copySized(blockdata, 0, Keys.String, bytes(value), len);
     }
 
     // Annotation factories
@@ -2127,7 +2689,7 @@ library Blocks {
     function createLabel(bytes32 namespace, string memory name) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + bytes(name).length);
         value = allocate(Sizes.Header + len);
-        writeLabel(value, 0, namespace, name);
+        writeLabelAllocated(value, namespace, name);
     }
 
     /// @notice Encode an ACTION annotation block.
@@ -2162,7 +2724,7 @@ library Blocks {
     function createSchema(uint spec, string memory body, bytes32 name) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + bytes(body).length);
         value = allocate(Sizes.Header + len);
-        writeSchema(value, 0, spec, body, name);
+        writeSchemaAllocated(value, spec, body, name);
     }
 
     // Fixed-width factories
@@ -2214,7 +2776,16 @@ library Blocks {
         writeCustody(value, 0, host, asset, amount);
     }
 
-    /// @notice Encode a QUOTE with minimum amount and maximum debt.
+    /// @notice Encode a LIMITS block with minimum amount and maximum debt.
+    /// @param amount Inclusive minimum asset amount.
+    /// @param debt Inclusive maximum liability debt.
+    /// @return value Encoded LIMITS block.
+    function createLimits(uint amount, uint debt) internal pure returns (bytes memory value) {
+        value = allocate(Sizes.Limits);
+        writeLimits(value, 0, amount, debt);
+    }
+
+    /// @notice Encode a QUOTE block.
     function createQuote(bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) internal pure returns (bytes memory value) {
         value = allocate(Sizes.Quote);
         writeQuote(value, 0, asset, amount, liability, debt, counterparty);
@@ -2264,14 +2835,14 @@ library Blocks {
     function createStep(uint cmd, uint value, bytes memory input) internal pure returns (bytes memory encoded) {
         uint len = max32(Sizes.Step + input.length);
         encoded = allocate(len);
-        writeStep(encoded, 0, cmd, value, input);
+        writeCompositeAllocated(encoded, Keys.Step, cmd, value, input);
     }
 
     /// @notice Encode a STEP block by copying its nested input from calldata.
     function createStepCopy(uint cmd, uint value, bytes calldata input) internal pure returns (bytes memory encoded) {
         uint len = max32(Sizes.Step + input.length);
         encoded = allocate(len);
-        copyStep(encoded, 0, cmd, value, input);
+        copyCompositeAllocated(encoded, Keys.Step, cmd, value, input);
     }
 
     /// @notice Encode a CALL block.
@@ -2282,14 +2853,14 @@ library Blocks {
     function createCall(uint target, uint resources, bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        writeCall(value, 0, target, resources, payload);
+        writeCompositeAllocated(value, Keys.Call, target, resources, payload);
     }
 
     /// @notice Encode a CALL block by copying its nested payload from calldata.
     function createCallCopy(uint target, uint resources, bytes calldata payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        copyCall(value, 0, target, resources, payload);
+        copyCompositeAllocated(value, Keys.Call, target, resources, payload);
     }
 
     /// @notice Encode a RELAY block.
@@ -2299,14 +2870,14 @@ library Blocks {
     function createRelay(bytes memory input, bytes memory steps) internal pure returns (bytes memory value) {
         uint len = max32(3 * Sizes.Header + input.length + steps.length);
         value = allocate(len);
-        writeRelay(value, 0, input, steps);
+        writeRelayAllocated(value, input, steps);
     }
 
     /// @notice Encode a RELAY block by copying its nested streams from calldata.
     function createRelayCopy(bytes calldata input, bytes calldata steps) internal pure returns (bytes memory value) {
         uint len = max32(3 * Sizes.Header + input.length + steps.length);
         value = allocate(len);
-        copyRelay(value, 0, input, steps);
+        copyRelayAllocated(value, input, steps);
     }
 
     /// @notice Encode a DISPATCH block.
@@ -2318,7 +2889,7 @@ library Blocks {
     function createDispatch(uint portal, uint resources, bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        writeDispatch(value, 0, portal, resources, payload);
+        writeCompositeAllocated(value, Keys.Dispatch, portal, resources, payload);
     }
 
     /// @notice Encode a DISPATCH block by copying its nested payload from calldata.
@@ -2329,7 +2900,7 @@ library Blocks {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        copyDispatch(value, 0, portal, resources, payload);
+        copyCompositeAllocated(value, Keys.Dispatch, portal, resources, payload);
     }
 
     /// @notice Encode a CONTEXT block.
@@ -2340,7 +2911,7 @@ library Blocks {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
         value = allocate(len);
-        writeContext(value, 0, account, state, input);
+        writeContextAllocated(value, account, state, input);
     }
 
     /// @notice Encode a CONTEXT block by copying its nested streams from calldata.
@@ -2351,7 +2922,7 @@ library Blocks {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
         value = allocate(len);
-        copyContext(value, 0, account, state, input);
+        copyContextAllocated(value, account, state, input);
     }
 
     /// @notice Encode a RECOVER block.
@@ -2363,7 +2934,7 @@ library Blocks {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
         value = allocate(len);
-        writeRecover(value, 0, handler, resources, recoverykey, witness);
+        writeRecoverAllocated(value, handler, resources, recoverykey, witness);
     }
 
     /// @notice Encode a RECOVER block by copying its nested witness from calldata.
@@ -2375,7 +2946,7 @@ library Blocks {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
         value = allocate(len);
-        copyRecover(value, 0, handler, resources, recoverykey, witness);
+        copyRecoverAllocated(value, handler, resources, recoverykey, witness);
     }
 }
 
@@ -2385,6 +2956,7 @@ library Blocks {
 /// comparison. Callers must obtain bounds with `bounds`, advance by the matching
 /// complete encoded block size, and stop at the returned end position.
 library Memory {
+    uint64 private constant LimitsHeader = (uint64(uint32(Keys.Limits)) << 32) | 64;
     uint64 private constant BalanceHeader = (uint64(uint32(Keys.Balance)) << 32) | 64;
     uint64 private constant PositionHeader = (uint64(uint32(Keys.Position)) << 32) | 160;
     uint64 private constant TransactionHeader = (uint64(uint32(Keys.Transaction)) << 32) | 128;
@@ -2405,6 +2977,25 @@ library Memory {
             end := add(abs, len)
         }
         if (remainder != 0) revert Blocks.InvalidBlock();
+    }
+
+    /// @notice Decode a LIMITS block at an in-bounds absolute memory position.
+    /// @param abs Absolute block position obtained from bounds.
+    /// @return amount Inclusive minimum asset amount.
+    /// @return debt Inclusive maximum liability debt.
+    function unpackLimits(uint abs) internal pure returns (uint amount, uint debt) {
+        uint64 actual;
+        assembly ("memory-safe") {
+            actual := shr(192, mload(abs))
+            amount := mload(add(abs, 0x08))
+            debt := mload(add(abs, 0x28))
+        }
+        if (actual != LimitsHeader) revert Blocks.InvalidBlock();
+    }
+
+    /// @notice Decode a LIMITS struct at an in-bounds absolute memory position.
+    function unpackLimitsValue(uint abs) internal pure returns (Limits memory limits) {
+        (limits.amount, limits.debt) = unpackLimits(abs);
     }
 
     /// @notice Decode a BALANCE block at an in-bounds absolute memory position.

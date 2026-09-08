@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Position, Tx} from "../core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Limits, Position, Tx} from "../core/Types.sol";
 import {Blocks} from "./Blocks.sol";
 import {Buffers} from "./Buffers.sol";
 import {Sizes, Specs} from "./Specs.sol";
@@ -31,16 +31,16 @@ library Writers {
     /// @param len Initial logical byte capacity of the writer.
     /// @return writer Unallocated writer positioned at index 0.
     function init(uint len) internal pure returns (Writer memory writer) {
-        writer.cur = Buffers.cursor(len, 0);
+        writer.cur = Buffers.cursor(len);
     }
 
-    /// @notice Initialize writer metadata for `groups` of blocks described by `spec`.
-    /// @param spec Packed block key, payload bounds, allocation hint, and flags.
-    /// @param groups Number of descriptor groups the writer is expected to encode.
+    /// @notice Initialize writer metadata for `count` blocks described by `spec`.
+    /// @param spec Packed block key, payload bounds, and allocation hint.
+    /// @param count Number of top-level blocks the writer is expected to encode.
     /// @return writer Unallocated writer with initial capacity derived from the specification.
-    function init(uint spec, uint groups) internal pure returns (Writer memory writer) {
-        uint capacity = Specs.allocation(spec, groups);
-        writer.cur = Buffers.cursor(capacity, Specs.stride(Specs.normalize(spec)));
+    function init(uint spec, uint count) internal pure returns (Writer memory writer) {
+        uint capacity = Specs.allocation(spec, count);
+        writer.cur = Buffers.cursor(capacity);
     }
 
     // -------------------------------------------------------------------------
@@ -81,7 +81,11 @@ library Writers {
     /// @param data Bytes to append.
     function append(Writer memory writer, bytes memory data) internal pure {
         uint i = reserve(writer, data.length, data.length);
-        Buffers.write(writer.dst, i, data);
+        bytes memory dst = writer.dst;
+        // reserve validates the full physical write range.
+        assembly ("memory-safe") {
+            mcopy(add(add(dst, 32), i), add(data, 32), mload(data))
+        }
     }
 
     /// @notice Append a raw 32-byte word without a block header.
@@ -90,7 +94,11 @@ library Writers {
     /// @param keep Number of bytes to keep from the word (1..32).
     function append32(Writer memory writer, bytes32 value, uint keep) internal pure {
         uint i = reserve(writer, keep, 32);
-        Buffers.write32(writer.dst, i, value);
+        bytes memory dst = writer.dst;
+        // reserve validates the full physical write range.
+        assembly ("memory-safe") {
+            mstore(add(add(dst, 32), i), value)
+        }
     }
 
     /// @notice Append two raw 32-byte words without a block header.
@@ -100,7 +108,13 @@ library Writers {
     /// @param keep Number of bytes to keep from the final word (1..32).
     function append64(Writer memory writer, bytes32 a, bytes32 b, uint keep) internal pure {
         uint i = reserve(writer, 32 + keep, 64);
-        Buffers.write64(writer.dst, i, a, b);
+        bytes memory dst = writer.dst;
+        // reserve validates the full physical write range.
+        assembly ("memory-safe") {
+            let p := add(add(dst, 32), i)
+            mstore(p, a)
+            mstore(add(p, 32), b)
+        }
     }
 
     /// @notice Append three raw 32-byte words without a block header.
@@ -111,7 +125,14 @@ library Writers {
     /// @param keep Number of bytes to keep from the final word (1..32).
     function append96(Writer memory writer, bytes32 a, bytes32 b, bytes32 c, uint keep) internal pure {
         uint i = reserve(writer, 64 + keep, 96);
-        Buffers.write96(writer.dst, i, a, b, c);
+        bytes memory dst = writer.dst;
+        // reserve validates the full physical write range.
+        assembly ("memory-safe") {
+            let p := add(add(dst, 32), i)
+            mstore(p, a)
+            mstore(add(p, 32), b)
+            mstore(add(p, 64), c)
+        }
     }
 
     /// @notice Append a dynamic protocol block.
@@ -122,7 +143,7 @@ library Writers {
         Specs.validate(spec, data.length);
         uint size = Sizes.Header + data.length;
         uint i = reserve(writer, size, size);
-        Blocks.write(writer.dst, i, Specs.key(spec), data);
+        Blocks.writeSized(writer.dst, i, Specs.key(spec), data, data.length);
     }
 
     /// @notice Append a custom fixed block with up to 32 payload bytes.
@@ -315,6 +336,19 @@ library Writers {
         Blocks.writeHostAccountAsset(writer.dst, i, host, account, asset);
     }
 
+    /// @notice Append a LIMITS block with minimum amount and maximum debt.
+    /// @param amount Inclusive minimum asset amount.
+    /// @param debt Inclusive maximum liability debt.
+    function appendLimits(Writer memory writer, uint amount, uint debt) internal pure {
+        uint i = reserve(writer, Sizes.Limits);
+        Blocks.writeLimits(writer.dst, i, amount, debt);
+    }
+
+    /// @notice Append a structured LIMITS value.
+    function appendLimits(Writer memory writer, Limits memory limits) internal pure {
+        appendLimits(writer, limits.amount, limits.debt);
+    }
+
     /// @notice Append a QUOTE with minimum amount and maximum debt.
     function appendQuote(Writer memory writer, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) internal pure {
         uint i = reserve(writer, Sizes.Quote);
@@ -420,7 +454,7 @@ library Writers {
     function appendStep(Writer memory writer, uint cmd, uint value, bytes memory input) internal pure {
         uint size = Sizes.Step + input.length;
         uint i = reserve(writer, size);
-        Blocks.writeStep(writer.dst, i, cmd, value, input);
+        Blocks.writeCompositeSized(writer.dst, i, bytes4(uint32(Specs.Step >> 224)), cmd, value, input, size);
     }
 
     /// @notice Append a CALL block.
@@ -431,7 +465,7 @@ library Writers {
     function appendCall(Writer memory writer, uint target, uint resources, bytes memory payload) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(writer, size);
-        Blocks.writeCall(writer.dst, i, target, resources, payload);
+        Blocks.writeCompositeSized(writer.dst, i, bytes4(uint32(Specs.Call >> 224)), target, resources, payload, size);
     }
 
     /// @notice Append a RELAY block.
@@ -441,7 +475,7 @@ library Writers {
     function appendRelay(Writer memory writer, bytes memory input, bytes memory steps) internal pure {
         uint size = 3 * Sizes.Header + input.length + steps.length;
         uint i = reserve(writer, size);
-        Blocks.writeRelay(writer.dst, i, input, steps);
+        Blocks.writeRelaySized(writer.dst, i, input, steps, size);
     }
 
     /// @notice Append a DISPATCH block.
@@ -452,7 +486,7 @@ library Writers {
     function appendDispatch(Writer memory writer, uint portal, uint resources, bytes memory payload) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(writer, size);
-        Blocks.writeDispatch(writer.dst, i, portal, resources, payload);
+        Blocks.writeCompositeSized(writer.dst, i, bytes4(uint32(Specs.Dispatch >> 224)), portal, resources, payload, size);
     }
 
     /// @notice Append a CONTEXT block.
@@ -468,7 +502,7 @@ library Writers {
     ) internal pure {
         uint size = Sizes.B32 + 2 * Sizes.Header + state.length + input.length;
         uint i = reserve(writer, size);
-        Blocks.writeContext(writer.dst, i, account, state, input);
+        Blocks.writeContextSized(writer.dst, i, account, state, input, size);
     }
 
     /// @notice Append a RECOVER block.
@@ -486,7 +520,7 @@ library Writers {
     ) internal pure {
         uint size = Sizes.B96 + Sizes.Header + witness.length;
         uint i = reserve(writer, size);
-        Blocks.writeRecover(writer.dst, i, handler, resources, recoverykey, witness);
+        Blocks.writeRecoverSized(writer.dst, i, handler, resources, recoverykey, witness, size);
     }
 
     /// @notice Append a LABEL block.
@@ -500,7 +534,7 @@ library Writers {
     ) internal pure {
         uint size = Sizes.B32 + Sizes.Header + bytes(name).length;
         uint i = reserve(writer, size);
-        Blocks.writeLabel(writer.dst, i, namespace, name);
+        Blocks.writeLabelSized(writer.dst, i, namespace, name, size);
     }
 
     /// @notice Append a SCHEMA block.
@@ -511,7 +545,7 @@ library Writers {
     function appendSchema(Writer memory writer, uint spec, string memory body, bytes32 name) internal pure {
         uint size = Sizes.B64 + Sizes.Header + bytes(body).length;
         uint i = reserve(writer, size);
-        Blocks.writeSchema(writer.dst, i, spec, body, name);
+        Blocks.writeSchemaSized(writer.dst, i, spec, body, name, size);
     }
 
     // -------------------------------------------------------------------------
@@ -523,7 +557,11 @@ library Writers {
     /// @param data Calldata bytes to append.
     function copy(Writer memory writer, bytes calldata data) internal pure {
         uint i = reserve(writer, data.length, data.length);
-        Buffers.copy(writer.dst, i, data);
+        bytes memory dst = writer.dst;
+        // reserve validates the full physical write range.
+        assembly ("memory-safe") {
+            calldatacopy(add(add(dst, 32), i), data.offset, data.length)
+        }
     }
 
     /// @notice Append a custom block by copying its payload from calldata.
@@ -531,56 +569,56 @@ library Writers {
         Specs.validate(spec, data.length);
         uint size = Sizes.Header + data.length;
         uint i = reserve(writer, size);
-        Blocks.copy(writer.dst, i, Specs.key(spec), data);
+        Blocks.copySized(writer.dst, i, Specs.key(spec), data, data.length);
     }
 
     /// @notice Append a LIST block by copying its payload from calldata.
     function copyList(Writer memory writer, bytes calldata value) internal pure {
         uint size = Sizes.Header + value.length;
         uint i = reserve(writer, size);
-        Blocks.copyList(writer.dst, i, value);
+        Blocks.copySized(writer.dst, i, bytes4(uint32(Specs.List >> 224)), value, value.length);
     }
 
     /// @notice Append a BYTES block by copying its payload from calldata.
     function copyBytes(Writer memory writer, bytes calldata value) internal pure {
         uint size = Sizes.Header + value.length;
         uint i = reserve(writer, size);
-        Blocks.copyBytes(writer.dst, i, value);
+        Blocks.copySized(writer.dst, i, bytes4(uint32(Specs.Bytes >> 224)), value, value.length);
     }
 
     /// @notice Append a STRING block by copying its payload from calldata.
     function copyString(Writer memory writer, string calldata value) internal pure {
         uint size = Sizes.Header + bytes(value).length;
         uint i = reserve(writer, size);
-        Blocks.copyString(writer.dst, i, value);
+        Blocks.copySized(writer.dst, i, bytes4(uint32(Specs.String >> 224)), bytes(value), bytes(value).length);
     }
 
     /// @notice Append a STEP block by copying its nested input from calldata.
     function copyStep(Writer memory writer, uint cmd, uint value, bytes calldata input) internal pure {
         uint size = Sizes.Step + input.length;
         uint i = reserve(writer, size);
-        Blocks.copyStep(writer.dst, i, cmd, value, input);
+        Blocks.copyCompositeSized(writer.dst, i, bytes4(uint32(Specs.Step >> 224)), cmd, value, input, size);
     }
 
     /// @notice Append a CALL block by copying its nested payload from calldata.
     function copyCall(Writer memory writer, uint target, uint resources, bytes calldata payload) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(writer, size);
-        Blocks.copyCall(writer.dst, i, target, resources, payload);
+        Blocks.copyCompositeSized(writer.dst, i, bytes4(uint32(Specs.Call >> 224)), target, resources, payload, size);
     }
 
     /// @notice Append a RELAY block by copying its nested streams from calldata.
     function copyRelay(Writer memory writer, bytes calldata input, bytes calldata steps) internal pure {
         uint size = 3 * Sizes.Header + input.length + steps.length;
         uint i = reserve(writer, size);
-        Blocks.copyRelay(writer.dst, i, input, steps);
+        Blocks.copyRelaySized(writer.dst, i, input, steps, size);
     }
 
     /// @notice Append a DISPATCH block by copying its nested payload from calldata.
     function copyDispatch(Writer memory writer, uint portal, uint resources, bytes calldata payload) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(writer, size);
-        Blocks.copyDispatch(writer.dst, i, portal, resources, payload);
+        Blocks.copyCompositeSized(writer.dst, i, bytes4(uint32(Specs.Dispatch >> 224)), portal, resources, payload, size);
     }
 
     /// @notice Append a CONTEXT block by copying its nested streams from calldata.
@@ -592,7 +630,7 @@ library Writers {
     ) internal pure {
         uint size = Sizes.B32 + 2 * Sizes.Header + state.length + input.length;
         uint i = reserve(writer, size);
-        Blocks.copyContext(writer.dst, i, account, state, input);
+        Blocks.copyContextSized(writer.dst, i, account, state, input, size);
     }
 
     /// @notice Append a RECOVER block by copying its nested witness from calldata.
@@ -605,7 +643,7 @@ library Writers {
     ) internal pure {
         uint size = Sizes.B96 + Sizes.Header + witness.length;
         uint i = reserve(writer, size);
-        Blocks.copyRecover(writer.dst, i, handler, resources, recoverykey, witness);
+        Blocks.copyRecoverSized(writer.dst, i, handler, resources, recoverykey, witness, size);
     }
 
     // -------------------------------------------------------------------------

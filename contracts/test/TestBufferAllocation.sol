@@ -25,8 +25,8 @@ contract TestBufferAllocation {
             workload == 1 ? Specs.Position : Specs.Balance,
             0
         );
-        // Artificial zero group size exercises lazy/fallback behavior.
-        if (workload == 8) descriptor &= ~(uint(type(uint32).max) << 64);
+        // Artificial zero block size exercises lazy/fallback behavior.
+        if (workload == 8) descriptor &= ~(uint(type(uint32).max) << 96);
         bytes memory output;
         uint startMemory;
         assembly ("memory-safe") { startMemory := mload(0x40) }
@@ -50,14 +50,14 @@ contract TestBufferAllocation {
             // Same decoder initialization as openInput, without the hint scan.
             uint decoders;
             assembly ("memory-safe") {
-                decoders := or(or(input.offset, shl(32, add(input.offset, input.length))), shl(64, byte(9, descriptor)))
+                decoders := or(input.offset, shl(32, add(input.offset, input.length)))
             }
             exec.decoders = decoders;
             uint capacity = strategy == 0 ? scannedCapacity(input, descriptor)
                 : strategy == 6 ? ceilingCapacity(input.length, descriptor)
                 : strategy == 5 ? hintedCapacity(input, descriptor)
                 : strategy == 1 ? 0 : input.length * (1 << (strategy - 2));
-            exec.writer = Buffers.cursor(capacity, uint8(descriptor >> 136));
+            exec.writer = Buffers.cursor(capacity);
         }
         uint index;
         while (exec.more()) {
@@ -81,32 +81,30 @@ contract TestBufferAllocation {
     }
 
     function hintedCapacity(bytes calldata input, uint descriptor) private pure returns (uint) {
-        uint sourceStride = uint8(descriptor >> 96);
-        uint groupSize = uint32(descriptor >> 64);
+        uint blockSize = uint32(descriptor >> 96);
         uint count;
-        if (groupSize != 0 && input.length % groupSize == 0) {
-            count = input.length / groupSize;
-        } else if (sourceStride != 0) {
+        if (blockSize != 0 && input.length % blockSize == 0) {
+            count = input.length / blockSize;
+        } else {
             uint start;
             assembly ("memory-safe") { start := input.offset }
-            count = Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 104))) / sourceStride;
+            count = Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128)));
         }
-        return count * uint32(descriptor >> 32);
+        return count * uint32(descriptor >> 64);
     }
 
     function ceilingCapacity(uint length, uint descriptor) private pure returns (uint) {
-        uint groupSize = uint32(descriptor >> 64);
-        if (groupSize == 0) return 0;
-        uint groups = length / groupSize;
-        if (length % groupSize != 0) ++groups;
-        return groups * uint32(descriptor >> 32);
+        uint blockSize = uint32(descriptor >> 96);
+        if (blockSize == 0) return 0;
+        uint count = length / blockSize;
+        if (length % blockSize != 0) ++count;
+        return count * uint32(descriptor >> 64);
     }
 
     function scannedCapacity(bytes calldata input, uint descriptor) private pure returns (uint) {
         uint start;
         assembly ("memory-safe") { start := input.offset }
-        return (Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 104)))
-            / uint8(descriptor >> 96)) * uint32(descriptor >> 32);
+        return Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128))) * uint32(descriptor >> 64);
     }
 
 }

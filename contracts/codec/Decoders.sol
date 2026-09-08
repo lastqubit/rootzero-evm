@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, Position, Tx} from "../core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, Limits, Position, Tx} from "../core/Types.sol";
 import {Blocks} from "./Blocks.sol";
 import {Sizes, Specs} from "./Specs.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
-import {UnconsumedData} from "../utils/Errors.sol";
+import {OutOfBounds, UnconsumedData} from "../utils/Errors.sol";
 
 using Decoders for Cur;
 
@@ -13,6 +13,14 @@ using Decoders for Cur;
 /// @notice Mutable calldata block decoding through a Cur memory cursor.
 library Decoders {
     using Cursors for uint;
+
+    /// @dev Only for positions returned by block decoding from a uint32 cursor.
+    /// A header plus a uint32 payload cannot move backward or overflow uint256.
+    /// Keep the upper bound and all cursor metadata; general seek stays checked.
+    function seekAfterBlock(uint state, uint next) private pure returns (uint) {
+        if (next > uint32(state >> 32)) revert OutOfBounds();
+        return (state & ~uint(type(uint32).max)) | next;
+    }
 
     // -------------------------------------------------------------------------
     // Cur memory adapters
@@ -52,7 +60,7 @@ library Decoders {
     /// @return end Absolute position immediately after the payload.
     function consume(Cur memory cur, uint spec) internal pure returns (uint body, uint end) {
         (body, end) = Blocks.enter(cur.state.position(), spec);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Validate a known key and consume the next block from a cursor.
@@ -64,7 +72,7 @@ library Decoders {
     /// @return end Absolute position immediately after the payload.
     function consume(Cur memory cur, bytes4 key) internal pure returns (uint body, uint end) {
         (body, end) = Blocks.enter(cur.state.position(), key);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Consume a matching empty block from a cursor when present.
@@ -75,7 +83,7 @@ library Decoders {
         (uint position, uint end) = cur.state.bounds();
         (bytes4 current, uint len) = Blocks.peek(position, end);
         if (current != key || len != 0) return false;
-        cur.state = cur.state.seek(position + Sizes.Header);
+        cur.state = seekAfterBlock(cur.state, position + Sizes.Header);
         return true;
     }
 
@@ -88,7 +96,10 @@ library Decoders {
     /// @return body Absolute position of the first payload byte.
     /// @return end Absolute position immediately after the payload.
     function enter(Cur memory cur, uint spec) internal pure returns (uint body, uint end) {
-        return enter(cur, spec, 0);
+        uint state = cur.state;
+        (body, end) = Blocks.enter(uint32(state), spec);
+        if (body > uint32(state >> 32)) revert OutOfBounds();
+        cur.state = (state & ~uint(type(uint32).max)) | body;
     }
 
     /// @notice Validate and enter the payload of the next keyed block in a cursor.
@@ -99,7 +110,10 @@ library Decoders {
     /// @return body Absolute position of the first payload byte.
     /// @return end Absolute position immediately after the payload.
     function enter(Cur memory cur, bytes4 key) internal pure returns (uint body, uint end) {
-        return enter(cur, key, 0);
+        uint state = cur.state;
+        (body, end) = Blocks.enter(uint32(state), key);
+        if (body > uint32(state >> 32)) revert OutOfBounds();
+        cur.state = (state & ~uint(type(uint32).max)) | body;
     }
 
     /// @notice Validate a parent block and advance over a fixed payload prefix.
@@ -111,9 +125,11 @@ library Decoders {
     /// @return body Absolute position of the first payload byte.
     /// @return end Absolute position immediately after the payload.
     function enter(Cur memory cur, uint spec, uint amount) internal pure returns (uint body, uint end) {
+        uint state = cur.state;
         uint next;
-        (body, next, end) = Blocks.enter(cur.state.position(), spec, amount);
-        cur.state = cur.state.seek(next);
+        (body, next, end) = Blocks.enter(uint32(state), spec, amount);
+        if (next > uint32(state >> 32)) revert OutOfBounds();
+        cur.state = (state & ~uint(type(uint32).max)) | next;
     }
 
     /// @notice Validate a keyed parent block and advance over a fixed payload prefix.
@@ -125,9 +141,11 @@ library Decoders {
     /// @return body Absolute position of the first payload byte.
     /// @return end Absolute position immediately after the payload.
     function enter(Cur memory cur, bytes4 key, uint amount) internal pure returns (uint body, uint end) {
+        uint state = cur.state;
         uint next;
-        (body, next, end) = Blocks.enter(cur.state.position(), key, amount);
-        cur.state = cur.state.seek(next);
+        (body, next, end) = Blocks.enter(uint32(state), key, amount);
+        if (next > uint32(state >> 32)) revert OutOfBounds();
+        cur.state = (state & ~uint(type(uint32).max)) | next;
     }
 
     /// @notice Advance a cursor by a raw byte count.
@@ -279,7 +297,7 @@ library Decoders {
     /// @return items Cursor spanning the list payload.
     function list(Cur memory cur, uint spec) internal pure returns (Cur memory items) {
         (uint abs, uint end) = consume(cur, spec);
-        items.state = Cursors.create(abs, end, 0, 0);
+        items.state = Cursors.create(abs, end, 0);
     }
 
     /// @notice Consume one block with `key` and return its complete encoded region.
@@ -289,7 +307,7 @@ library Decoders {
     function takeBlock(Cur memory cur, bytes4 key) internal pure returns (Cur memory out) {
         uint abs = cur.state.position();
         (, uint end) = consume(cur, key);
-        out.state = Cursors.create(abs, end, 0, 0);
+        out.state = Cursors.create(abs, end, 0);
     }
 
     // -------------------------------------------------------------------------
@@ -303,7 +321,7 @@ library Decoders {
     function unpackRaw(Cur memory cur, uint spec) internal pure returns (bytes calldata data) {
         uint end;
         (data, end) = Blocks.unpackRaw(cur.state.position(), spec);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one BYTES block.
@@ -312,7 +330,7 @@ library Decoders {
     function unpackBytes(Cur memory cur) internal pure returns (bytes calldata data) {
         uint end;
         (data, end) = Blocks.unpackBytes(cur.state.position());
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one STRING block.
@@ -323,7 +341,7 @@ library Decoders {
         uint end;
         (value, end) = Blocks.unpackString(cur.state.position());
         data = string(value);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     // -------------------------------------------------------------------------
@@ -374,7 +392,9 @@ library Decoders {
     function unpack32(Cur memory cur, uint spec) internal pure returns (bytes32 value) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.B32);
-        if (Blocks.header(abs, Specs.key(spec)) != 32) revert Blocks.InvalidBlock();
+        uint head;
+        assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
+        if (head != ((uint(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
         assembly ("memory-safe") {
             value := calldataload(add(abs, 0x08))
         }
@@ -541,7 +561,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (target, resources, data, end) = Blocks.unpackCall(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one ANNOTATION block.
@@ -554,7 +574,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (entity, data, end) = Blocks.unpackAnnotation(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one CONTEXT block.
@@ -568,7 +588,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (account, state, input, end) = Blocks.unpackContext(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one DISPATCH block.
@@ -582,7 +602,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (portal, resources, payload, end) = Blocks.unpackDispatch(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one LABEL block.
@@ -593,7 +613,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (namespace, name, end) = Blocks.unpackLabel(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one SCHEMA block.
@@ -605,7 +625,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (spec, body, name, end) = Blocks.unpackSchema(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one RECOVER block.
@@ -620,7 +640,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (handler, resources, key, witness, end) = Blocks.unpackRecover(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     // -------------------------------------------------------------------------
@@ -725,6 +745,30 @@ library Decoders {
         (value.host, value.asset, value.amount) = unpackCustody(cur);
     }
 
+    /// @notice Decode and consume one LIMITS block.
+    /// @return amount Inclusive minimum asset amount.
+    /// @return debt Inclusive maximum liability debt.
+    function unpackLimits(Cur memory cur) internal pure returns (uint amount, uint debt) {
+        uint abs;
+        (cur.state, abs) = cur.state.consume(Sizes.Limits);
+        (amount, debt) = Blocks.unpackLimits(abs);
+    }
+
+    /// @notice Decode and consume one LIMITS block into its structured value.
+    function unpackLimitsValue(Cur memory cur) internal pure returns (Limits memory limits) {
+        (limits.amount, limits.debt) = unpackLimits(cur);
+    }
+
+    /// @notice Consume one LIMITS block and require quantities to satisfy it.
+    /// @param cur Source cursor to advance by one complete LIMITS block.
+    /// @param amount Actual asset amount; must be at least the encoded minimum.
+    /// @param debt Actual liability debt; must not exceed the encoded maximum.
+    function requireLimits(Cur memory cur, uint amount, uint debt) internal pure {
+        uint abs;
+        (cur.state, abs) = cur.state.consume(Sizes.Limits);
+        Blocks.requireLimits(abs, amount, debt);
+    }
+
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
     function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
         uint abs;
@@ -769,7 +813,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (cmd, value, input, end) = Blocks.unpackStep(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
     /// @notice Decode and consume one RELAY block.
@@ -782,7 +826,7 @@ library Decoders {
         uint abs = cur.state.position();
         uint end;
         (input, steps, end) = Blocks.unpackRelay(abs);
-        cur.state = cur.state.seek(end);
+        cur.state = seekAfterBlock(cur.state, end);
     }
 
 }

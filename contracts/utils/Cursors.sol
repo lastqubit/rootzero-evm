@@ -13,8 +13,7 @@ struct Cur {
 /// @dev Each cursor uses the following layout:
 /// bits  0-31  current source position
 /// bits 32-63  source exclusive end
-/// bits 64-71  stride (optional blocks per group)
-/// bits 72-79  flags (consumer-defined)
+/// bits 64-71  flags (consumer-defined)
 ///
 /// For memory buffers, positions are relative to the buffer's zero origin, so
 /// the same layout stores the current write offset and logical capacity.
@@ -28,13 +27,12 @@ library Cursors {
     /// @notice Create a cursor over source range `[pos, end)`.
     /// @param pos Initial source position.
     /// @param end Source exclusive end.
-    /// @param stride Optional blocks per group associated with the region.
     /// @param flags Consumer-defined flags.
     /// @return cur Packed cursor.
-    function create(uint pos, uint end, uint8 stride, uint8 flags) internal pure returns (uint cur) {
+    function create(uint pos, uint end, uint8 flags) internal pure returns (uint cur) {
         if (pos > end) revert OutOfBounds();
         if (end > type(uint32).max) revert ValueOverflow();
-        cur = pos | (end << 32) | (uint(stride) << 64) | (uint(flags) << 72);
+        cur = pos | (end << 32) | (uint(flags) << 64);
     }
 
     /// @notice Return the absolute calldata position where `source` begins.
@@ -87,12 +85,6 @@ library Cursors {
         return uint32(cur >> 32);
     }
 
-    /// @notice Decode the optional stride and consumer flags.
-    function meta(uint cur) internal pure returns (uint8 stride, uint8 flags) {
-        stride = uint8(cur >> 64);
-        flags = uint8(cur >> 72);
-    }
-
     /// @notice Return whether the cursor has bytes remaining.
     function more(uint cur) internal pure returns (bool) {
         return uint32(cur) < uint32(cur >> 32);
@@ -105,7 +97,7 @@ library Cursors {
 
     /// @notice Return whether the cursor contains `flag`.
     function flagged(uint cur, uint8 flag) internal pure returns (bool) {
-        return uint8(cur >> 72) & flag != 0;
+        return uint8(cur >> 64) & flag != 0;
     }
 
     // Navigation
@@ -121,7 +113,8 @@ library Cursors {
         uint pos = uint32(cur);
         uint end = uint32(cur >> 32);
         if (amount > end - pos) revert OutOfBounds();
-        updated = cur + amount;
+        // The bound above prevents a carry out of the position lane.
+        unchecked { updated = cur + amount; }
     }
 
     /// @notice Replace the cursor's source exclusive end.
@@ -145,6 +138,7 @@ library Cursors {
         abs = uint32(cur);
         uint end = uint32(cur >> 32);
         if (amount > end - abs) revert OutOfBounds();
-        updated = cur + amount;
+        // The bound above prevents a carry out of the position lane.
+        unchecked { updated = cur + amount; }
     }
 }
