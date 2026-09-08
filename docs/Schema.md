@@ -88,7 +88,8 @@ also valid: { bytes32 asset, uint amount }
 ```
 
 Consumers must remove one matching pair of outer braces, when present, before
-parsing the comma-separated item sequence. Unmatched braces and additional
+parsing the item sequence. Only commas outside alias-list parentheses separate
+sibling items. Unmatched braces and additional
 outer brace layers are invalid.
 
 A block body can reference another block alias as a child item with `#`:
@@ -117,6 +118,43 @@ significant.
 ```txt
 { #amount, maybe #account as recipient }
 ```
+
+### Repeated-reference shorthand
+
+A schema reference may declare two or more aliases in parentheses:
+
+```txt
+#accountAmount as (debit, credit)
+```
+
+This is syntax sugar for consecutive child references, in the same order:
+
+```txt
+#accountAmount as debit, #accountAmount as credit
+```
+
+Consumers expand this form before schema resolution, layout calculation, and
+projection. Each alias produces one child with the referenced schema's original
+key. The parentheses introduce no block, list, tuple value, or extra header.
+The surrounding custom parent and its wire encoding are identical for both forms.
+Schema annotations may publish either spelling; they are not rewritten onchain.
+
+The shorthand applies only to an unmodified `#schema` reference, which must
+resolve in the active schema context. It does not apply to inline field types
+such as `uint`. The alias list must contain at least two ordinary alias paths,
+separated by commas; dotted paths follow the existing field-path rules.
+Empty or single-alias lists, empty entries, trailing commas, nested parentheses,
+and duplicate or colliding alias paths are invalid. Use `#schema as alias` for
+one alias. Use the expanded form for `maybe`, `many`, or per-item `at` modifiers.
+
+For example, this is valid alongside ordinary sibling items:
+
+```txt
+uint id, #bytes as (source.payload, destination.payload), #account as owner
+```
+
+Commas inside the parentheses separate aliases, not schema items. After
+expansion, all ordinary sibling validation and presentation rules apply.
 
 ## Payload Layout
 
@@ -259,23 +297,49 @@ This convention gives a top-level list a discoverable, context-local type while
 retaining the generic `#list` key for lists whose type is supplied by an
 enclosing schema.
 
-## Endpoint Lanes
+## Fixed Compositions
 
-Endpoint descriptors identify each lane with a block key and group size. In
-Solidity, endpoint definition helpers accept block specs such as `Specs.Amount`.
-A zero group is interpreted as group size 1, while `Specs.Empty` means the
-endpoint has no blocks in that lane. Use `group(spec, size)` when a lane needs
-an explicit group size other than 1.
-
-The packed descriptor uses these lane layouts:
+Use ordinary child references to describe a fixed composition inside a custom
+parent block. Each child has its existing schema key and may have a role alias:
 
 ```txt
-state   [key:4][group:1]
-input   [key:4][group:1]
-output  [key:4][min:4][max:4][hint:3][group:1]
-reserve [reserved:5]
-flags   [flags:1]
+schema key:  0x00000001 (local key published by the host)
+schema name: zero (unnamed)
+schema body: #accountAmount as (debit, credit)
+expanded:    #accountAmount as debit, #accountAmount as credit
+wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
 ```
+
+The parent schema identifies one complete operation. Batching repeats the parent
+block; there is no separate group expression or generic group wrapper.
+`portExchange` leaves the schema unnamed. Consumers resolve its local key from
+the descriptor and schema annotation; it does not define a `#exchange` alias.
+
+`portExchange` publishes this schema with an exact 208-byte payload spec and uses
+that same spec in its descriptor. Two complete 104-byte children
+plus the parent header occupy 216 bytes on the wire. With this exact spec,
+`exec.enter(spec)` followed by two fixed-width unpackers lands at the next parent
+without an extra end check. Variable-width compositions still require bounded
+traversal and complete-consumption checks.
+
+## Endpoint Lanes
+
+Endpoint descriptors identify each lane with a top-level block key. Each block
+represents one operation; fixed compositions use a custom parent block.
+Solidity endpoint helpers accept specs such as `Specs.Amount`, while
+`Specs.Empty` declares an absent lane. There is no stride or group multiplier.
+
+The packed descriptor uses this layout, from most to least significant byte:
+
+```txt
+[state key:4][input key:4][output key:4][source key:4]
+[source block size:4][output block size:4][source shift:1][lanes:1][reserved:5][flags:1]
+```
+
+The allocation source is declared state when present, otherwise input. Its shift
+is 64 for state and zero for input or no source. Block sizes include the header.
+The lanes byte precomputes state presence in bit 0 and input presence in bit 1.
+Opening copies it into decoder bits 128-135; input-only opening copies only bit 1.
 
 Solidity code constructs this metadata with `Executions.describe`. The same
 library initializes an `Execution` through `exec.open` or `exec.openInput`;
@@ -288,8 +352,8 @@ both opening helpers pure and supports callers that forward an existing budget.
 Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
 
 Standalone `Cur` values use a separate compact generic cursor containing only
-an absolute current position, absolute exclusive end, stride, and flags. They
-do not retain a source offset or expose a relative `decode` view. Low-level
+an absolute current position (bits 0-31), absolute exclusive end (bits 32-63),
+and flags (bits 64-71). They do not retain a source offset or expose a relative `decode` view. Low-level
 `seek`, `expect`, `slice`, `raw`, `peek`, `hasAt`, and `find` positions are
 absolute calldata positions; `past` and `find` also return absolute positions.
 The cursor is forward-only, so explicit ranges must remain within its unread
@@ -300,17 +364,19 @@ Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
 the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
 behavior, and bits 2 through 5 remain reserved for future protocol flags.
 
-Each lane directly identifies its top-level block key. Output lanes retain their
-size bounds and allocation hint so execution can reconstruct the output spec and
-initialize its writer directly. Four descriptor-level bytes are reserved after
-the lane metadata. The Solidity output decoder returns a left-aligned,
-writer-ready spec that retains its encoded group and clears its reserved fields.
-`Specs.group(spec, n)` assigns an explicit block stride. `Specs.normalize`
-resolves an encoded zero stride to one for a non-empty spec.
+Execution packs input current/end in bits 0-63 and state current/end in bits
+64-127. Bits 128 and 129 record whether state and input are declared, preserving
+EMPTY-lane behavior for raw forwarding. Buffer writers use only bits 0-63.
+
+Specs pack `[key:4][min:4][max:4][hint:3][reserved:17]` from most to least
+significant byte. `Specs.blockSize` adds the header to the payload hint;
+`Specs.allocation(spec, count)` reserves that size for each top-level block.
+Descriptors retain precomputed block sizes rather than full specs.
 
 Any non-empty lane resolves its key to a block alias and schema body through the
 active schema context. A top-level list lane uses the key of its emitted custom
-`many` schema; the descriptor treats it like every other direct lane spec.
+`many` schema; a fixed-composition lane similarly uses its custom parent key.
+Each parent is one operation, and its children retain their own keys.
 
 The lane key is the prime item. Prime items may repeat at the top level for
 batching. Later top-level items are globals for the whole batch and are not
@@ -321,9 +387,10 @@ marker. The header remains present, so empty prime blocks still participate in
 run counting and batching.
 
 Execution cursor opening wraps the supplied state and input calldata without
-validating their descriptor keys or strides. Those fields remain discovery
+validating their descriptor keys. Those fields remain discovery
 metadata. When output is declared, writer pre-sizing may count the consecutive
-prime-block run from input, or from state when input is absent; this scan is an
+prime-block run from declared state, or input when state is absent. Divisible
+source lengths use the precomputed block size directly; the fallback scan is an
 allocation hint only. The writer remains resizable. Block schema and boundary
 checks happen when command code consumes each block, and execution finalization
 rejects any unread state or input bytes. Command decoding and loop structure
@@ -391,7 +458,7 @@ only as a position with `asset = 0, amount = 0`. `#balance` remains available
 for asset-only state.
 
 `counterparty` is a 32-byte identifier. Generic position writers and unpackers
-preserve it. Zero names Rootzero and uses the existing settlement path.
+preserve it. Zero names Rootzero and uses the booking path.
 `unpackPosition` returns all five fields without a counterparty check;
 settlement and realization hooks validate the counterparty.
 The payload is 160 bytes (168 bytes including its header). The old 128-byte
@@ -403,7 +470,7 @@ The counterparty identifies who stands on the other side of the position:
 
 | Counterparty | Command | Intended behavior |
 | --- | --- | --- |
-| `0` (Rootzero) | `settle` | Apply the existing settlement semantics for the active account. |
+| `0` (Rootzero) | `book` | Debit the active account's liability and credit its asset. |
 | Account ID | `settle` | Debit the asset amount from that account and credit the active account; debit the liability amount from the active account and credit the counterparty. Both transfers are atomic and require the host's applicable authorization. |
 | Host account ID | `settle` or `realize` | Settle against this account's balances on the executing host, or route to its host for realization. The realization hook matches `Accounts.toHost(host)` and returns counterparty zero after fulfillment. |
 
@@ -418,22 +485,28 @@ not fulfillment.
 **Current stage:** codecs support any counterparty. `settle`, `settlePayable`,
 and `ExecuteSettle` pass the complete `Position` struct to the hook. Calldata
 commands use `unpackPositionValue`; the memory adapter uses
-`Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position)` and
-`settle(account, position, funds)` for funded settlement. The command does not
-check the counterparty's type or value. The hook must validate that it is
-Rootzero (`0`) or an accepted account and authorize the resulting exchange.
-The default `Settlement` hook uses `Accounts.counterparty` to accept Rootzero
-or an account-category ID and reject other categories with `InvalidAccount()`.
+`Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position, limits)` and
+`settle(account, position, limits, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
+The default `Settlement.settle` hook uses `Accounts.account` to require an
+account-category ID, rejecting zero and other categories with `InvalidAccount()`.
 It debits the active account for the liability and credits the counterparty,
 then debits the counterparty for the asset and credits the active account.
-Zero skips the counterparty operations, preserving Rootzero settlement. Zero
-amounts skip their entire side. Any failure reverts the exchange. The category
+Zero amounts skip their entire side. Any failure reverts the exchange. The category
 check does not authorize debits; trusted callers and account hooks remain
 responsible for authorization.
 
+`book` consumes POSITION state with empty input and output. Both `Book` and
+the pipeline memory adapter `ExecuteBook` reject nonzero counterparties before
+calling `book(account, position)`. `BookHook` is defined in
+`core/Settlement.sol`; its default `Settlement` implementation debits the
+account's exact liability amount, then credits its exact asset amount. Zero
+amounts skip their account hooks, and any failure reverts the whole operation.
+Booking takes no quote, adds no fees, and returns no state or budget credit.
+
 `realize` passes the complete position to its hook, which validates its host account
 counterparty and fulfills the obligation before returning counterparty zero.
-The command takes one QUOTE input per position.
+The command takes one LIMITS input per position and checks the returned quantities
+with `exec.requireLimits`. Identifier and counterparty correctness belong to the hook.
 
 ### Position Transformations
 
@@ -441,7 +514,8 @@ The position layout is flat, with both sides followed by the counterparty;
 it is not a nested Solidity struct. The asset side represents
 value acquired or controlled, and the liability side represents value owed or
 required. Commands may preserve or replace either side and return a new
-position. The terminal `settle` command consumes the pair. Positions, including
+position. The terminal `book` command consumes a pair with zero counterparty;
+`settle` consumes a pair with an account counterparty. Positions, including
 liability-only positions, are transient state; rewriting them does not by itself create,
 discharge, or replace an obligation persisted by a host or external protocol.
 The responsible command hook must perform or verify those effects. A command
@@ -449,7 +523,7 @@ must not ignore supplied position state: it must explicitly consume,
 transform, forward, or reject it, so an obligation cannot disappear
 accidentally.
 
-`settle` and `settlePayable` consume positions, including liability-only
+`book`, `settle`, and `settlePayable` consume positions, including liability-only
 positions, and return empty state. To repay, use a POSITION with zero asset and
 amount. There are no separate repayment commands or repayment hooks. Default
 settlement debits the liability directly through `debitAccount`; a position with
@@ -457,17 +531,44 @@ an asset side also settles that side instead of returning a BALANCE block.
 The single `realize` command calls one hook:
 
 ```solidity
-function realize(Position memory position, Position memory quote) internal virtual returns (Position memory);
+function realize(bytes32 account, Position memory position) internal virtual returns (Position memory);
 ```
 
 The hook fulfills both sides in their existing asset and liability denominations.
 It validates the counterparty, chooses its internal operation order, and returns
 the complete realized position with counterparty zero. It must fulfill the entire
 obligation or revert: no source remainder is emitted, and fees or rounding must
-not silently discard debt. The command passes the paired quote to the hook,
-which must enforce its exact identifiers and inclusive limits before returning.
+not silently discard debt. The command checks the returned quantities against
+the paired LIMITS input; identifier and counterparty correctness remain the
+hook's responsibility.
 
-Each `#position` is paired with one `#quote` input:
+The standalone `#limits { uint amount, uint debt }` schema carries only quantity
+constraints: `amount` is an inclusive minimum asset amount, and `debt` is an
+inclusive maximum liability debt. Its payload is 64 bytes (72 with the header).
+It identifies no asset, liability, or counterparty. Scalar codec helpers preserve
+both values, including zero and the maximum uint; they do not enforce the bounds.
+`Blocks.requireLimits(abs, amount, debt)` validates the header and checks the
+inclusive bounds directly against calldata, reverting with `InvalidBlock` or
+`AmountOutOfRange`. Its caller must ensure the block is in bounds. Cursor and
+execution `requireLimits(amount, debt)` helpers check bounds and consume one block.
+`Limits` in `core/Types.sol` represents these two fields. `unpackLimitsValue`
+helpers decode it from cursor, execution, or memory sources; writer and execution
+output helpers also accept the struct.
+
+`settle` and `settlePayable` require one LIMITS input per POSITION. `ExecuteSettle`
+pairs memory-backed positions with calldata limits. Commands decode the limits before invoking the hook, which validates and
+authorizes the counterparty. The hook must enforce
+`net amount >= limits.amount` and `total debt <= limits.debt`, including fees.
+The default `Settlement.settle` adds no fees and checks the position's amount and
+debt before any account operations. Missing, extra, or malformed limits revert.
+
+For realization, each POSITION is paired with one LIMITS input. The command calls
+`realize(account, position)`, then `exec.requireLimits(result.amount, result.debt)` before
+outputting the result. A failed quantity check or malformed LIMITS input reverts
+all hook changes. The hook must preserve asset and liability identifiers and
+return counterparty zero after fulfillment; the command does not check those fields.
+
+The QUOTE schema remains available independently:
 
 ```txt
 #quote { bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty }
@@ -480,20 +581,12 @@ The quote has five words (160 payload bytes, 168 bytes including the header),
 matching the POSITION field layout. Counterparty zero requires Rootzero backing;
 it is not a wildcard. It is an input schema, not live position state.
 
-Before calling the hook, the command uses `exec.unpackQuoteValue()` to decode
-the paired QUOTE into a `Position memory quote`; the decoder still requires
-the QUOTE block key. Validation of the result belongs to the hook. Hosts can
-call `Positions.requireQuoted(position, quote)`, exported through `Utils.sol`,
-to enforce the standard checks. Identifier mismatches revert with
-`UnexpectedValue()`; limit violations revert with `AmountOutOfRange()`.
-Cursor and execution helpers decode quotes with `unpackQuoteValue()` before
-validation through `Positions.requireQuoted`.
-The quote constrains the returned position counterparty, not the realizing host.
-A hook that clears the counterparty therefore requires a quote with counterparty zero.
-The command emits the complete returned position without checking it against
-the quote again. Missing or malformed quotes are rejected before invoking the
-paired hook. Failed comparisons and later decode or hook failures revert all
-earlier hook changes.
+Cursor and execution helpers decode quotes with `unpackQuoteValue()`. Callers
+can use `Positions.requireQuoted(position, quote)`, exported through `Utils.sol`,
+to enforce exact identifiers and counterparty plus inclusive quantity bounds.
+Realize does not consume QUOTE input. Code that independently validates a
+Rootzero-backed result against a quote must require counterparty zero in that
+quote. Failed comparisons revert the enclosing call and its earlier changes.
 
 This representation supports ordinary forward transformations as well as
 backward composition. For example, an exact-output route can carry its desired
@@ -503,7 +596,7 @@ asset while successive hops replace the upstream liability:
 position(C, 100, C, 100, 0)
 → position(C, 100, B, 50, 0)
 → position(C, 100, A, 25, 0)
-→ settle
+→ book
 ```
 
 “Backward” describes how requirements are composed from the desired result

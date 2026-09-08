@@ -8,13 +8,14 @@ pragma solidity ^0.8.33;
 import {CashinHook, CashoutHook} from "./core/Cash.sol";
 import {Flags} from "./utils/Flags.sol";
 import {ExecuteHook, PipeHook} from "./core/Pipeline.sol";
-import {CreditAccountHook, DebitAccountHook, PostHook, SettleHook} from "./core/Settlement.sol";
+import {BookHook, CreditAccountHook, DebitAccountHook, PostHook, SettleHook} from "./core/Settlement.sol";
 
 // Commands
 import {CommandBase} from "./commands/Base.sol";
 import {Allocate, AllocateHook} from "./commands/Allocate.sol";
 import {Burn, BurnHook} from "./commands/Burn.sol";
 import {Bootstrap} from "./commands/Bootstrap.sol";
+import {Book, ExecuteBook} from "./commands/Book.sol";
 import {Cashout, ExecuteCashout} from "./commands/Cashout.sol";
 import {CreditAccount, ExecuteCreditAccount} from "./commands/Credit.sol";
 import {DebitAccount, ExecuteDebitAccount} from "./commands/Debit.sol";
@@ -22,10 +23,7 @@ import {Deposit, DepositHook, DepositPayable, DepositPayableHook} from "./comman
 import {Payout, PayoutHook} from "./commands/Payout.sol";
 import {Provision, ProvisionHook, ProvisionPayable, ProvisionPayableHook} from "./commands/Provision.sol";
 import {RecoverPayable, RecoverPayableHook} from "./commands/Recover.sol";
-import {
-    Realize,
-    RealizeHook
-} from "./commands/Realize.sol";
+import {Realize, RealizeHook} from "./commands/Realize.sol";
 import {RelayPayable, RelayBalancePayable, RelayPayableHook} from "./commands/Relay.sol";
 import {Settle, SettlePayable, SettlePayableHook, ExecuteSettle} from "./commands/Settle.sol";
 import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";
@@ -47,6 +45,7 @@ import {PortBase} from "./ports/Base.sol";
 import {AllowAssetsPort, DenyAssetsPort, RequestAssetPort, RequestAssetHook} from "./ports/Assets.sol";
 import {RequestAllowancePort} from "./ports/Allowance.sol";
 import {CreditAccountPort} from "./ports/Credit.sol";
+import {ExchangePort} from "./ports/Exchange.sol";
 import {DebitAccountPort} from "./ports/Debit.sol";
 import {PipePayablePort, PortPipePayableSelector} from "./ports/Pipe.sol";
 import {DispatchPayablePort, DispatchPayableHook} from "./ports/Dispatch.sol";
@@ -59,7 +58,4 @@ import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
 // Query endpoints
 import {QueryBase} from "./queries/Base.sol";
 import {AssetStatus, AssetStatusHook} from "./queries/Assets.sol";
-import {
-    GetBalances,
-    GetBalancesHook
-} from "./queries/Balances.sol";
+import {GetBalances, GetBalancesHook} from "./queries/Balances.sol";

@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, hostId } from "./helpers/setup.js";
 import {
-  concat, encodeHostAccount, encodeContextBlock, encodePositionBlock, encodeQuoteBlock, encodeStepBlock, encodeUserAccount,
+  encodeLimitsBlock, concat, encodeHostAccount, encodeContextBlock, encodePositionBlock,  encodeStepBlock, encodeUserAccount,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -11,7 +11,7 @@ describe("Counterparty pipeline", () => {
   const counterparty = encodeUserAccount("0x22");
   const asset = ethers.toBeHex(1n, 32);
   const liability = ethers.toBeHex(2n, 32);
-  const quote = encodeQuoteBlock(asset, 100n, liability, 40n);
+  const limits = encodeLimitsBlock(100n, 40n);
 
   for (const memory of [false, true]) {
     describe(memory ? "memory settlement" : "calldata settlement", () => {
@@ -20,6 +20,7 @@ describe("Counterparty pipeline", () => {
       let state: string;
       let realizeId: bigint;
       let settleId: bigint;
+      let bookId: bigint;
 
       beforeEach(async () => {
         host = await deploy("TestCounterpartyPipeline", memory);
@@ -27,12 +28,13 @@ describe("Counterparty pipeline", () => {
         state = encodePositionBlock(asset, 100n, liability, 40n, hostCounterparty);
         realizeId = await commandId("realize(bytes)", host);
         settleId = await commandId("settle(bytes)", host);
+        bookId = await commandId("book(bytes)", host);
         await host.seedHost(asset, 200n);
         await host.seedAccount(account, liability, 80n);
       });
 
-      function steps(input = quote) {
-        return concat(encodeStepBlock(realizeId, 0n, input), encodeStepBlock(settleId, 0n, "0x"));
+      function steps(input = limits) {
+        return concat(encodeStepBlock(realizeId, 0n, input), encodeStepBlock(bookId, 0n, "0x"));
       }
 
       async function snapshot() {
@@ -59,6 +61,7 @@ describe("Counterparty pipeline", () => {
           expect(failure.args.addr).to.equal(await host.getAddress());
           expect(failure.args.selector).to.be.oneOf([
             ethers.id("realize(bytes)").slice(0, 10), ethers.id("settle(bytes)").slice(0, 10),
+            ethers.id("book(bytes)").slice(0, 10),
           ]);
           data = failure.args.err;
         }
@@ -74,16 +77,16 @@ describe("Counterparty pipeline", () => {
         expect(await snapshot()).to.deep.equal(before);
       }
 
-      it("fulfills the executing host's position and settles both ledgers", async () => {
-        const result = await host.realize.staticCall(encodeContextBlock(account, state, quote));
+      it("fulfills the executing host's position and books the result", async () => {
+        const result = await host.realize.staticCall(encodeContextBlock(account, state, limits));
         expect(result).to.deep.equal([encodePositionBlock(asset, 100n, liability, 40n), 0n]);
         expect(await host.run.staticCall(account, state, steps())).to.equal(0n);
         await host.run(account, state, steps());
         expect(await snapshot()).to.deep.equal([100n, 40n, 100n, 40n, 0n, 0n, 1n, memory ? 1n : 0n]);
       });
 
-      it("processes multiple positions and quotes without losing or duplicating amounts", async () => {
-        await host.run(account, concat(state, state), steps(concat(quote, quote)));
+      it("processes multiple positions and limits without losing or duplicating amounts", async () => {
+        await host.run(account, concat(state, state), steps(concat(limits, limits)));
         expect(await snapshot()).to.deep.equal([0n, 80n, 200n, 0n, 0n, 0n, 2n, memory ? 1n : 0n]);
       });
 
@@ -98,16 +101,24 @@ describe("Counterparty pipeline", () => {
       }
 
       it("can settle the same host-account position directly when its account is funded", async () => {
-        await host.run(account, state, encodeStepBlock(settleId, 0n, "0x"));
+        await host.run(account, state, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
         expect(await snapshot()).to.deep.equal([100n, 40n, 100n, 40n, 0n, 0n, 0n, memory ? 1n : 0n]);
+      });
+
+      it("rejects zero-counterparty settlement and rolls back prior realization", async () => {
+        await rejectsUnchanged(encodePositionBlock(asset, 100n, liability, 40n),
+          encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)), "InvalidAccount");
+        await rejectsUnchanged(state,
+          concat(encodeStepBlock(realizeId, 0n, limits), encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256))),
+          "InvalidAccount");
       });
 
       it("uses a host account for settlement on another host when funded there", async () => {
         const remote = encodeHostAccount(await hostId("0x0000000000000000000000000000000000000033"));
         const remoteState = encodePositionBlock(asset, 100n, liability, 40n, remote);
-        await rejectsUnchanged(remoteState, encodeStepBlock(settleId, 0n, "0x"), "InsufficientFunds");
+        await rejectsUnchanged(remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)), "InsufficientFunds");
         await host.seedAccount(remote, asset, 100n);
-        await host.run(account, remoteState, encodeStepBlock(settleId, 0n, "0x"));
+        await host.run(account, remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
         expect(await host.accountBalance(remote, asset)).to.equal(0n);
         expect(await host.accountBalance(remote, liability)).to.equal(40n);
         expect(await host.accountBalance(account, asset)).to.equal(100n);
@@ -117,7 +128,7 @@ describe("Counterparty pipeline", () => {
       it("settles an account counterparty directly through the pipeline", async () => {
         await host.seedAccount(counterparty, asset, 100n);
         const accountState = encodePositionBlock(asset, 100n, liability, 40n, counterparty);
-        await host.run(account, accountState, encodeStepBlock(settleId, 0n, "0x"));
+        await host.run(account, accountState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
         expect(await snapshot()).to.deep.equal([200n, 0n, 100n, 40n, 0n, 40n, 0n, memory ? 1n : 0n]);
       });
 
@@ -125,44 +136,41 @@ describe("Counterparty pipeline", () => {
         await host.seedAccount(counterparty, asset, 100n);
         const accountState = encodePositionBlock(asset, 100n, liability, 40n, counterparty);
         await rejectsUnchanged(concat(accountState, accountState),
-          encodeStepBlock(settleId, 0n, "0x"), "InsufficientFunds");
+          encodeStepBlock(settleId, 0n, concat(encodeLimitsBlock(0n, ethers.MaxUint256), encodeLimitsBlock(0n, ethers.MaxUint256))), "InsufficientFunds");
       });
 
-      it("rolls back realization and earlier settlement when a later liability cannot be paid", async () => {
+      it("rolls back realization and earlier booking when a later liability cannot be paid", async () => {
         const second = encodePositionBlock(asset, 100n, liability, 41n, hostCounterparty);
-        const secondQuote = encodeQuoteBlock(asset, 100n, liability, 41n);
-        await rejectsUnchanged(concat(state, second), steps(concat(quote, secondQuote)), "InsufficientFunds");
+        const secondLimits = encodeLimitsBlock(100n, 41n);
+        await rejectsUnchanged(concat(state, second), steps(concat(limits, secondLimits)), "InsufficientFunds");
       });
 
       it("rolls back earlier realizations when the host runs out of backing", async () => {
-        await rejectsUnchanged(concat(state, state, state), steps(concat(quote, quote, quote)), "InsufficientFunds");
+        await rejectsUnchanged(concat(state, state, state), steps(concat(limits, limits, limits)), "InsufficientFunds");
       });
 
-      for (const [label, invalidQuote, error] of [
-        ["asset minimum", encodeQuoteBlock(asset, 101n, liability, 40n), "AmountOutOfRange"],
-        ["debt maximum", encodeQuoteBlock(asset, 100n, liability, 39n), "AmountOutOfRange"],
-        ["asset identifier", encodeQuoteBlock(liability, 100n, liability, 40n), "UnexpectedValue"],
-        ["liability identifier", encodeQuoteBlock(asset, 100n, asset, 40n), "UnexpectedValue"],
-        ["counterparty", encodeQuoteBlock(asset, 100n, liability, 40n, account), "UnexpectedValue"],
-        ["truncated quote", ethers.dataSlice(quote, 0, 167), "OutOfBounds"],
+      for (const [label, invalidLimits, error] of [
+        ["asset minimum", encodeLimitsBlock(101n, 40n), "AmountOutOfRange"],
+        ["debt maximum", encodeLimitsBlock(100n, 39n), "AmountOutOfRange"],
+        ["truncated limits", ethers.dataSlice(limits, 0, 71), "OutOfBounds"],
       ]) {
         it(`rolls back backing changes for a later invalid ${label}`, async () => {
-          await rejectsUnchanged(concat(state, state), steps(concat(quote, invalidQuote)), error);
+          await rejectsUnchanged(concat(state, state), steps(concat(limits, invalidLimits)), error);
         });
       }
 
       it("rolls back realization if the pipeline ends with an unsettled position", async () => {
-        await rejectsUnchanged(state, encodeStepBlock(realizeId, 0n, quote), "UnexpectedState");
+        await rejectsUnchanged(state, encodeStepBlock(realizeId, 0n, limits), "UnexpectedState");
       });
 
       for (const debtOnly of [false, true]) {
-        it(`realizes and settles a ${debtOnly ? "liability" : "asset"}-only position`, async () => {
+        it(`realizes and books a ${debtOnly ? "liability" : "asset"}-only position`, async () => {
           const a = debtOnly ? ethers.ZeroHash : asset;
           const l = debtOnly ? liability : ethers.ZeroHash;
           const amount = debtOnly ? 0n : 100n;
           const debt = debtOnly ? 40n : 0n;
           await host.run(account, encodePositionBlock(a, amount, l, debt, hostCounterparty),
-            steps(encodeQuoteBlock(a, amount, l, debt)));
+            steps(encodeLimitsBlock(amount, debt)));
           expect(await snapshot()).to.deep.equal([
             200n - amount, debt, amount, 80n - debt, 0n, 0n, 1n, memory ? 1n : 0n,
           ]);

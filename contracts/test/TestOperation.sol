@@ -8,15 +8,13 @@ using Executions for Execution;
 
 contract TestOperation {
 
-    function testCheckCursorRatio(
+    function testOpenSources(
         bytes calldata state,
-        uint stateStride,
-        bytes calldata input,
-        uint inputStride
+        bytes calldata input
     ) external pure returns (bool) {
         uint descriptor = Executions.describe(
-            Specs.group(Specs.Balance, uint8(stateStride)),
-            Specs.group(Specs.Amount, uint8(inputStride)),
+            Specs.Balance,
+            Specs.Amount,
             Specs.Empty,
             0
         );

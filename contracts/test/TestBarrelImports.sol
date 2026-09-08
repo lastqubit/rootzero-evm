@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Limits as CoreLimits} from "../Core.sol";
+import {Limits as CodecLimits} from "../Codec.sol";
+
 import {UnexpectedValue} from "../Utils.sol";
 import {Positions} from "../Utils.sol";
+import {Book, ExecuteBook, BookHook} from "../Endpoints.sol";
+import {BookHook as CoreBookHook} from "../Core.sol";
 
 // Compile-time coverage for public symbols that were previously omitted from
 // their package barrels.
@@ -25,6 +30,7 @@ import {
     RequestAssetHook,
     RequestAssetPort,
     RequestAllowancePort,
+    ExchangePort,
     PortPipePayableSelector,
     RevokeAllowance,
     RevokeAsset,

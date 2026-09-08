@@ -10,32 +10,30 @@ using Executions for Execution;
 
 /// @notice Hook implemented by hosts that fulfill an entire position.
 abstract contract RealizeHook {
-    /// @notice Fulfill a position and return a result satisfying its paired quote.
-    /// @dev Validate the counterparty against the host account and fulfill both sides in their existing
-    /// denominations before returning a position with counterparty zero.
-    /// Fulfill the entire obligation or revert; no source remainder is emitted.
-    /// The host chooses its internal operation order and must validate the result
-    /// against the quote or revert: asset, liability, and counterparty must match,
-    /// amount must meet the minimum, and debt must not exceed the maximum.
-    /// The command does not validate the returned result against the quote.
+    /// @notice Fulfill a position in its existing asset and liability denominations.
+    /// @dev Validate and authorize the source counterparty and fulfill the entire
+    /// obligation before returning counterparty zero. The host chooses its internal
+    /// operation order and must preserve the asset and liability identifiers.
+    /// The command validates only the returned quantity limits;
+    /// any failure reverts the hook's changes.
+    /// @param account Account whose position is being realized.
     /// @param position Source position to fulfill completely.
-    /// @param quote Required identifiers and counterparty, minimum amount, and maximum debt.
-    /// @return Complete realized position satisfying the quote.
-    function realize(Position memory position, Position memory quote) internal virtual returns (Position memory);
+    /// @return Complete realized position with unchanged asset and liability and zero counterparty.
+    function realize(bytes32 account, Position memory position) internal virtual returns (Position memory);
 }
 
-/// @notice Pass each POSITION and paired QUOTE to the realization hook.
+/// @notice Realize each POSITION and enforce its paired LIMITS on the result.
 abstract contract Realize is CommandBase, RealizeHook, Action {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
-        (id, descriptor) = command("realize", Specs.Position, Specs.Quote, Specs.Position, 0);
+        (id, descriptor) = command("realize", Specs.Position, Specs.Limits, Specs.Position, 0);
         action(id, Actions.Realize);
     }
 
-    /// @notice Realize POSITION state blocks as their paired requested shapes.
-    /// @param context Command context carrying POSITION state and one QUOTE input per position.
+    /// @notice Realize POSITION state blocks within their paired quantity limits.
+    /// @param context Command context carrying POSITION state and one LIMITS input per position.
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.
     function realize(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
@@ -43,8 +41,8 @@ abstract contract Realize is CommandBase, RealizeHook, Action {
 
         while (exec.more()) {
             Position memory position = exec.unpackPositionValue();
-            Position memory quote = exec.unpackQuoteValue();
-            position = realize(position, quote);
+            position = realize(exec.account, position);
+            exec.requireLimits(position.amount, position.debt);
             exec.outputPosition(position);
         }
 

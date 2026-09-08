@@ -21,4 +21,5 @@ library Actions {
     uint32 constant Cashout = 15;
     uint32 constant Cashin = 16;
     uint32 constant Realize = 17;
+    uint32 constant Book = 18;
 }

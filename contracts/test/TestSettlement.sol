@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Settlement} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
-import {Position} from "../core/Types.sol";
+import {Limits, Position} from "../core/Types.sol";
 
 contract TestSettlement is Settlement, Balances {
     function seed(bytes32 account, bytes32 asset, uint amount) external {
@@ -15,7 +15,11 @@ contract TestSettlement is Settlement, Balances {
     }
 
     function applyPosition(bytes32 account, Position memory position) external {
-        settle(account, position);
+        settle(account, position, Limits(0, type(uint).max));
+    }
+
+    function applyLimitedPosition(bytes32 account, Position memory position, Limits memory limits) external {
+        settle(account, position, limits);
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {

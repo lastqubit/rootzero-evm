@@ -356,7 +356,7 @@ describe("Port Entrypoints", () => {
     const asset = ethers.zeroPadValue("0x42", 32);
     const liability = ethers.zeroPadValue("0x43", 32);
 
-    it("credits the asset and debits the liability of a position", async () => {
+    it("rejects a position with zero counterparty", async () => {
       const position = {
         asset,
         amount: 100n,
@@ -365,9 +365,8 @@ describe("Port Entrypoints", () => {
         counterparty: ethers.ZeroHash,
       };
 
-      const tx = await host.testSettle(account, position);
-      await expect(tx).to.emit(host, "PortCreditAccountCalled").withArgs(account, asset, 100n);
-      await expect(tx).to.emit(host, "PortDebitAccountCalled").withArgs(account, liability, 40n);
+      await expect(host.testSettle(account, position))
+        .to.be.revertedWithCustomError(host, "InvalidAccount");
     });
 
     it("settles the asset and liability in opposite directions with an account counterparty", async () => {
@@ -388,12 +387,13 @@ describe("Port Entrypoints", () => {
     });
 
     it("skips zero sides of a position", async () => {
+      const counterparty = encodeUserAccount("0x44");
       const tx = await host.testSettle(account, {
         asset,
         amount: 0n,
         liability,
         debt: 40n,
-        counterparty: ethers.ZeroHash,
+        counterparty,
       });
 
       const receipt = await tx.wait();
@@ -405,8 +405,9 @@ describe("Port Entrypoints", () => {
         }
       });
 
-      expect(names).to.not.include("PortCreditAccountCalled");
+      expect(names).to.deep.equal(["PortDebitAccountCalled", "PortCreditAccountCalled"]);
       await expect(tx).to.emit(host, "PortDebitAccountCalled").withArgs(account, liability, 40n);
+      await expect(tx).to.emit(host, "PortCreditAccountCalled").withArgs(counterparty, liability, 40n);
     });
   });
 

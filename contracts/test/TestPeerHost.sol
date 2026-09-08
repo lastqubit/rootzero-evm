@@ -7,14 +7,15 @@ import { CreditAccountPort } from "../ports/Credit.sol";
 import { DebitAccountPort } from "../ports/Debit.sol";
 import { PipePayablePort } from "../ports/Pipe.sol";
 import { DispatchPayablePort } from "../ports/Dispatch.sol";
+import { ExchangePort } from "../ports/Exchange.sol";
 import { PostPort } from "../ports/Post.sol";
 import { RequestAssetPort } from "../ports/Assets.sol";
 import { Settlement } from "../core/Settlement.sol";
 import { Pipeline } from "../core/Pipeline.sol";
-import { Position } from "../core/Types.sol";
+import { Limits, Position } from "../core/Types.sol";
 import { Execution } from "../execution/Execution.sol";
 
-contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, CreditAccountPort, DebitAccountPort, PostPort, RequestAssetPort, PipePayablePort, DispatchPayablePort {
+contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, CreditAccountPort, DebitAccountPort, ExchangePort, PostPort, RequestAssetPort, PipePayablePort, DispatchPayablePort {
     event PortRequestAllowanceCalled(uint peer, bytes32 asset, uint amount);
     event PortDebitAccountCalled(bytes32 account, bytes32 asset, uint amount);
     event PortCreditAccountCalled(bytes32 account, bytes32 asset, uint amount);
@@ -55,7 +56,7 @@ contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, Credi
     }
 
     function testSettle(bytes32 account, Position calldata position) external {
-        settle(account, position);
+        settle(account, position, Limits(0, type(uint).max));
     }
 
     function dispatchTo(uint portal, uint resources, bytes memory payload, Execution memory funds) internal override {

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Position} from "./Types.sol";
 import {Accounts} from "../utils/Accounts.sol";
+import {AmountOutOfRange} from "../utils/Errors.sol";
+
+import {Limits, Position} from "./Types.sol";
 
 /// @title DebitAccountHook
 /// @notice Hook for exactly debiting externally managed account funds.
@@ -43,6 +45,18 @@ abstract contract PostHook {
     function post(bytes32 from, bytes32 to, bytes32 asset, uint amount) internal virtual;
 }
 
+/// @title BookHook
+/// @notice Hook for applying a Rootzero-backed position to an account.
+abstract contract BookHook {
+    /// @notice Book a position's exact liability and asset amounts for `account`.
+    /// @dev The command requires a zero counterparty. Successful return asserts
+    /// that the full debt was debited and the full amount credited, or the hook
+    /// must revert. No fees or source remainder are added by this operation.
+    /// @param account Account whose position is booked.
+    /// @param position Rootzero-backed position to apply completely.
+    function book(bytes32 account, Position memory position) internal virtual;
+}
+
 /// @title SettleHook
 /// @notice Hook for fully settling one asset-liability position.
 abstract contract SettleHook {
@@ -52,13 +66,14 @@ abstract contract SettleHook {
     /// no debt remainder. Revert if the complete quantity cannot be satisfied. Fees
     /// and sourcing costs must be paid in addition to, and must not reduce, `debt`.
     /// @param account Account whose position is settled.
-    /// @param position Full position; the hook validates and authorizes its counterparty.
-    function settle(bytes32 account, Position memory position) internal virtual;
+    /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
+    /// @param limits Minimum net asset amount and maximum total debt, including fees; enforced by the hook.
+    function settle(bytes32 account, Position memory position, Limits memory limits) internal virtual;
 }
 
 /// @title Settlement
-/// @notice Default account-hook implementation for transaction posting and position settlement.
-abstract contract Settlement is PostHook, DebitAccountHook, CreditAccountHook, SettleHook {
+/// @notice Default account-hook implementation for booking, transaction posting and position settlement.
+abstract contract Settlement is PostHook, DebitAccountHook, CreditAccountHook, BookHook, SettleHook {
     /// @notice Post one transaction by debiting its source and crediting its destination.
     /// Returns without calling either hook when `amount` is zero and skips either
     /// operation when the corresponding account is zero.
@@ -72,23 +87,35 @@ abstract contract Settlement is PostHook, DebitAccountHook, CreditAccountHook, S
         if (to != 0) creditAccount(to, asset, amount);
     }
 
+    /// @notice Book a position by debiting its liability and crediting its asset.
+    /// @dev The caller must require a zero counterparty. Zero amounts skip their
+    /// respective account hooks. Any failure reverts both sides.
+    /// @param account Account whose position is booked.
+    /// @param position Rootzero-backed position with exact amounts.
+    function book(bytes32 account, Position memory position) internal virtual override {
+        if (position.debt != 0) debitAccount(account, position.liability, position.debt);
+        if (position.amount != 0) creditAccount(account, position.asset, position.amount);
+    }
+
     /// @notice Settle the liability from account to counterparty and the asset in the opposite direction.
-    /// @dev Zero counterparty skips its debit and credit, preserving Rootzero settlement.
-    /// Nonzero counterparties must have the account category. The trusted caller and
-    /// account hooks remain responsible for authorization.
+    /// @dev Requires an account-category counterparty, rejecting zero.
+    /// The trusted caller and account hooks remain responsible for authorization.
+    /// This implementation adds no fees and checks both limits before account operations.
     /// @dev A successful return means the complete exact-net `debt` was satisfied.
     /// Skips either operation when its corresponding amount is zero, including position
     /// sides encoded as absent with a zero identifier and quantity.
     /// @param account Account whose position is settled.
-    /// @param position Full position; the hook validates and authorizes its counterparty.
-    function settle(bytes32 account, Position memory position) internal virtual override {
-        bytes32 counterparty = Accounts.counterparty(position.counterparty);
+    /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
+    /// @param limits Minimum net asset amount and maximum total debt, including fees; enforced by the hook.
+    function settle(bytes32 account, Position memory position, Limits memory limits) internal virtual override {
+        bytes32 counterparty = Accounts.account(position.counterparty);
+        if (position.amount < limits.amount || position.debt > limits.debt) revert AmountOutOfRange();
         if (position.debt != 0) {
             debitAccount(account, position.liability, position.debt);
-            if (counterparty != 0) creditAccount(counterparty, position.liability, position.debt);
+            creditAccount(counterparty, position.liability, position.debt);
         }
         if (position.amount != 0) {
-            if (counterparty != 0) debitAccount(counterparty, position.asset, position.amount);
+            debitAccount(counterparty, position.asset, position.amount);
             creditAccount(account, position.asset, position.amount);
         }
     }

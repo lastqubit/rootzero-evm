@@ -24,6 +24,18 @@ describe("Settlement ledger", () => {
     ]);
   }
 
+  it("enforces inclusive limits before changing balances", async () => {
+    const position = [asset, 100n, liability, 40n, counterparty];
+    for (const limits of [[101n, 40n], [100n, 39n]]) {
+      const before = await balances();
+      await expect(ledger.applyLimitedPosition(account, position, limits))
+        .to.be.revertedWithCustomError(ledger, "AmountOutOfRange");
+      expect(await balances()).to.deep.equal(before);
+    }
+    await ledger.applyLimitedPosition(account, position, [100n, 40n]);
+    expect(await balances()).to.deep.equal([100n, 0n, 0n, 40n]);
+  });
+
   it("exchanges both sides exactly", async () => {
     await ledger.applyPosition(account, [asset, 100n, liability, 40n, counterparty]);
     expect(await balances()).to.deep.equal([100n, 0n, 0n, 40n]);
@@ -44,10 +56,14 @@ describe("Settlement ledger", () => {
       .to.be.revertedWithCustomError(ledger, "InvalidAccount");
   });
 
-  it("preserves Rootzero settlement without touching another account", async () => {
-    await ledger.applyPosition(account, [asset, 100n, liability, 40n, ethers.ZeroHash]);
-    expect(await balances()).to.deep.equal([100n, 0n, 100n, 0n]);
-  });
+  for (const [amount, debt] of [[100n, 40n], [0n, 0n]]) {
+    it(`rejects zero counterparty (${amount}, ${debt}) without changing balances`, async () => {
+      const before = await balances();
+      await expect(ledger.applyPosition(account, [asset, amount, liability, debt, ethers.ZeroHash]))
+        .to.be.revertedWithCustomError(ledger, "InvalidAccount");
+      expect(await balances()).to.deep.equal(before);
+    });
+  }
 
   for (const [amount, debt] of [[101n, 40n], [100n, 41n]]) {
     it(`rolls back both sides when funds are insufficient (${amount}, ${debt})`, async () => {

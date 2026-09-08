@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import {
-  concat, encodeHostAccount, encodeQuoteBlock, encodeAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
+  encodeLimitsBlock, concat, encodeHostAccount, encodeQuoteBlock,  encodeAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
   encodePositionBlock, encodeContextBlock,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
@@ -13,7 +13,7 @@ describe("Realization failure atomicity", () => {
   const to = ethers.zeroPadValue("0x33", 32);
   const balance = encodeBalanceBlock(asset, 10n);
   let position: string;
-  const positionInput = encodeQuoteBlock(asset, 0n, liability, ethers.MaxUint256);
+  const positionInput = encodeLimitsBlock(0n, ethers.MaxUint256);
   const context = (state: string, input: string) => encodeContextBlock(ethers.ZeroHash, state, input);
   let helper: Awaited<ReturnType<typeof deploy>>;
 
@@ -43,17 +43,16 @@ describe("Realization failure atomicity", () => {
     beforeEach(() => { state = position; });
     const input = positionInput;
     const wrongStates = [balance];
-    it("passes each complete decoded quote to its paired hook", async () => {
-      const first = encodeQuoteBlock(asset, 9n, liability, 8n);
-      const second = encodeQuoteBlock(asset, 10n, liability, 7n);
-      const tx = await helper.realize(context(concat(state, state), concat(first, second)));
-      await expect(tx).to.emit(helper, "QuoteReceived").withArgs(asset, 9n, liability, 8n, ethers.ZeroHash);
-      await expect(tx).to.emit(helper, "QuoteReceived").withArgs(asset, 10n, liability, 7n, ethers.ZeroHash);
+    it("checks each result against its paired limits", async () => {
+      const first = encodeLimitsBlock(9n, 8n);
+      const second = encodeLimitsBlock(10n, 7n);
+      await helper.realize(context(concat(state, state), concat(first, second)));
+      expect(await committedState()).to.deep.equal([3n, 3n, 30n, 21n]);
     });
 
-    it("decodes a quote before invoking a failing hook", async () => {
+    it("invokes the hook before checking limits", async () => {
       await (await helper.failAt(0n, 2n)).wait();
-      await rejectsWithoutChanges(method, state, "0x", "OutOfBounds");
+      await rejectsWithoutChanges(method, state, "0x", "DebtFailure");
     });
 
     it("rolls back earlier positions when a later counterparty is not the host account", async () => {
@@ -61,8 +60,13 @@ describe("Realization failure atomicity", () => {
       await rejectsWithoutChanges(method, concat(state, invalid), concat(input, input), "UnexpectedValue");
     });
 
+    it("rejects QUOTE input and rolls back the hook", async () => {
+      await rejectsWithoutChanges(method, state,
+        encodeQuoteBlock(asset, 0n, liability, ethers.MaxUint256), "InvalidBlock");
+    });
+
     it("rejects the old ASSET_LIABILITY input shape", async () => {
-      await rejectsWithoutChanges(method, state, encodeAssetLiabilityBlock(to, liability), "OutOfBounds");
+      await rejectsWithoutChanges(method, state, encodeAssetLiabilityBlock(to, liability), "InvalidBlock");
     });
 
     it("passes the complete counterparty to the hook and emits its fulfilled result", async () => {
@@ -71,20 +75,12 @@ describe("Realization failure atomicity", () => {
       expect(result).to.equal(encodePositionBlock(asset, 10n, liability, 7n));
     });
 
-    for (const side of ["asset", "liability"]) {
-      it(`rejects a mismatched ${side} and rolls back the hook`, async () => {
-        const invalid = encodeQuoteBlock(side === "asset" ? to : asset, 0n,
-          side === "liability" ? to : liability, ethers.MaxUint256);
-        await rejectsWithoutChanges(method, concat(state, state), concat(input, invalid), "UnexpectedValue");
-      });
-    }
-
     for (const pair of [1, 2]) {
       for (const side of ["asset", "debt"]) {
         it(`rolls back all hooks when position ${pair} violates its ${side} limit`, async () => {
           const invalid = side === "asset"
-            ? encodeQuoteBlock(asset, 11n, liability, ethers.MaxUint256)
-            : encodeQuoteBlock(asset, 0n, liability, 6n);
+            ? encodeLimitsBlock(11n, ethers.MaxUint256)
+            : encodeLimitsBlock(0n, 6n);
           await rejectsWithoutChanges(method, concat(state, state),
             pair === 1 ? concat(invalid, input) : concat(input, invalid),
             "AmountOutOfRange");
@@ -95,7 +91,7 @@ describe("Realization failure atomicity", () => {
 
     it("rejects the old two-AMOUNT input shape and rolls back the hook", async () => {
       const legacy = concat(encodeAmountBlock(to, ethers.MaxUint256), encodeAmountBlock(to, 0n));
-      await rejectsWithoutChanges(method, state, legacy, "OutOfBounds");
+      await rejectsWithoutChanges(method, state, legacy, "InvalidBlock");
     });
 
     it("rolls back a completed pair when nonempty state outnumbers input", async () => {

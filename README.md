@@ -151,8 +151,8 @@ An input is not a single struct; it is a run of blocks. One `#amount` block
 asks for one deposit, five blocks ask for five, and the code path is identical
 — every endpoint parses with a cursor and loops until the stream is exhausted.
 The descriptor lane key is the prime item: it is the block type that may repeat
-for batching. Descriptor decoding interprets a zero group byte as group size 1
-when the lane is non-empty.
+for batching. Each top-level block represents one operation; fixed compositions
+use a custom parent block.
 
 Off-chain, building a batch is concatenation. Using the reference encoders from
 [`test/helpers/blocks.ts`](test/helpers/blocks.ts):
@@ -333,13 +333,14 @@ next. Balance carries `{ asset, amount }`,
 custody carries `{ host, asset, amount }`, and position carries the flat
 position `{ asset, amount, liability, debt, counterparty }`. The counterparty
 field identifies the settlement counterparty. Zero identifies Rootzero and
-preserves existing settlement behavior. Generic codecs preserve the field;
-`settle` passes all five fields as a `Position memory` struct and leaves
-counterparty validation and authorization to its hook. Settlement hooks take
-`(account, position)`, plus `Execution memory funds` for funded settlement. The default `Settlement` hook accepts Rootzero (`0`) or an account-category
-counterparty. For an account, it transfers liability from the active account to
-the counterparty, then transfers the asset in the opposite direction. Zero
-skips the counterparty debit and credit.
+is handled by `book`. Generic codecs preserve the field;
+`settle` passes all five fields as a `Position memory` struct to its hook for
+counterparty validation and authorization. Settlement hooks take
+`(account, position, limits)`, plus `Execution memory funds` for funded settlement.
+Each POSITION is paired with one LIMITS input. The hook enforces its minimum net
+asset amount and maximum total debt, including fees. The default `Settlement.settle` hook requires an account-category
+counterparty through `Accounts.account`, rejecting zero. It transfers liability from the active account to
+the counterparty, then transfers the asset in the opposite direction.
 
 Every nonzero position counterparty is an account, including host accounts.
 `settle` can exchange balances with any account counterparty on the executing
@@ -360,7 +361,8 @@ value can also use the narrower `#balance` block.
 lending-specific debt record. Its liability side carries value owed or required; it
 pairs that liability with value acquired or controlled. A command may preserve
 or replace either side and return the resulting state for the next step;
-`settle` terminally consumes a position pair. This supports swaps,
+`book` terminally consumes a position pair with zero counterparty, while
+`settle` consumes one with an account counterparty. This supports swaps,
 borrowing, refinancing, collateral changes, callback obligations, cross-host
 claims, fees, netting, and other multi-step operations. Positions are
 transient representations and do not themselves create or erase an obligation
@@ -397,7 +399,7 @@ function deposit(
 
 A command announces itself when the host is deployed. Its constructor emits a
 discovery event carrying a packed descriptor with the input, state, and output
-lanes, derived group sizes, and flags, plus a human-readable label:
+lanes, derived block sizes, and flags, plus a human-readable label:
 
 ```solidity
 abstract contract MyCommand is CommandBase {
@@ -413,7 +415,7 @@ abstract contract MyCommand is CommandBase {
         Execution memory exec = openCommand(context, descriptor);
         while (exec.more()) {
             (bytes32 asset, uint amount) = exec.unpackAmount();
-            // Apply command-specific behavior for this group.
+            // Apply command-specific behavior for this block.
             exec.outputBalance(asset, amount);
         }
         return exec.close();
@@ -443,13 +445,15 @@ an initial balance and native-value budget), `cashout` (withdraw native
 `depositPayable` (external funds in), `settlePayable` (funded settlement),
 `withdraw` and `burn` (funds out),
 `debitAccount` and `creditAccount` (internal movements), `payout` (deliver
-state to other accounts), `realize` (pass each position and decoded QUOTE to
-`realize(position, quote)`; the hook validates the returned identifiers and
-counterparty, minimum asset amount, and maximum debt, using
-`Positions.requireQuoted(position, quote)` for the standard checks),
+state to other accounts), `realize` (pass each position to
+`realize(account, position)`; the hook fulfills it in the existing denominations and
+returns counterparty zero, then the command checks the returned quantities
+against the paired LIMITS input using `requireLimits`),
 `allocate` (turn balance state
 into custody),
-`provision` (provision custody from an external allocation), `settle` (consume
+`provision` (provision custody from an external allocation), `book` (consume
+positions with zero counterparty, debiting the exact liability and crediting
+the exact asset amount through `BookHook` in `core/Settlement.sol`), `settle` (consume
 asset-liability position state, including liability-only positions),
 `relayPayable` (relay a pipeline without
 state), and `relayBalancePayable` (relay balance state and a pipeline to another
@@ -586,7 +590,7 @@ position:
 position(C, 100, C, 100)
 → position(C, 100, B, 50)
 → position(C, 100, A, 25)
-→ settle
+→ book
 ```
 
 This is backward composition, not backward execution: `#step` blocks still
@@ -645,6 +649,13 @@ The central ports are batches all the way down:
 - `portRequestAllowance` consumes the same amount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
+- `portExchange` consumes unnamed custom parent blocks with local key `1`, each containing two
+  `accountAmount` children: debit account/liability/debt first, then credit
+  account/asset/amount. It publishes `#accountAmount as (debit, credit)`
+  with the same exact 208-byte payload spec used by its descriptor.
+  Both accounts may be the same for booking. It returns empty bytes, and any
+  invalid parent, child, or account-hook failure reverts the entire batch.
+  Zero amounts are passed to the hooks.
 - `portCreditAccount` and `portDebitAccount` consume `accountAmount` blocks
   and apply the operation to the specified account. To credit or debit a host,
   pass `Accounts.toHost(host)` as that account. The same account hooks handle both.

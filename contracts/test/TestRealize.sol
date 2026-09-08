@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 
 import {Accounts} from "../utils/Accounts.sol";
-import {Positions} from "../utils/Positions.sol";
 
 import {Realize} from "../commands/Realize.sol";
 import {Position} from "../core/Types.sol";
@@ -13,7 +12,6 @@ import {Runtime} from "../core/Runtime.sol";
 contract TestRealize is Realize {
     error AssetFailure(uint assetCalls, uint debtCalls);
     error DebtFailure(uint assetCalls, uint debtCalls);
-    event QuoteReceived(bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty);
 
     uint public assetCalls;
     uint public debtCalls;
@@ -33,8 +31,7 @@ contract TestRealize is Realize {
         return caller;
     }
 
-    function realize(Position memory position, Position memory quote) internal override returns (Position memory) {
-        emit QuoteReceived(quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty);
+    function realize(bytes32 account, Position memory position) internal override returns (Position memory) {
         if (position.counterparty != Accounts.toHost(host)) revert UnexpectedValue();
         // This host chooses debt first; the command does not prescribe the order.
         ++debtCalls;
@@ -44,7 +41,6 @@ contract TestRealize is Realize {
         realizedAssets += position.amount;
         if (assetCalls == failAssetAt) revert AssetFailure(assetCalls, debtCalls);
         position.counterparty = bytes32(0);
-        Positions.requireQuoted(position, quote);
         return position;
     }
 }
