@@ -56,6 +56,26 @@ contract TestCommandCalls is Pipeline {
         return tryRawCallCopy(selector, target, value, input);
     }
 
+    function testTryRawCallGas(
+        bytes4 selector,
+        address target,
+        uint value,
+        uint gasLimit,
+        bytes memory input
+    ) external payable returns (bool) {
+        return tryRawCall(selector, target, value, gasLimit, input);
+    }
+
+    function testTryRawCallCopyGas(
+        bytes4 selector,
+        address target,
+        uint value,
+        uint gasLimit,
+        bytes calldata input
+    ) external payable returns (bool) {
+        return tryRawCallCopy(selector, target, value, gasLimit, input);
+    }
+
     function testRawCall(
         bytes4 selector,
         address target,

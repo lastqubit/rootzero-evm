@@ -20,18 +20,42 @@ abstract contract ForwardHook {
 /// @title Portal
 /// @notice Base contract that forwards incoming contexts to its commander's pipeline.
 abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent {
+    /// @dev Fixed recovery allowance; derived constructors may increase it for transport work.
+    uint internal immutable gasReserve = 35_000;
+
     error BadWitness();
 
     mapping(bytes32 key => bytes32 digest) internal unresolved;
 
+    /// @dev Return the pipe gas budget, or zero to skip delivery and try storage.
+    /// Reserve call preparation, a cold CALL, fresh digest storage, the failure
+    /// event, and return. Value overhead assumes an existing commander.
+    /// Charge full memory cost conservatively, including already allocated memory.
+    function forwardGas(uint length, uint value) internal view returns (uint gas) {
+        uint free;
+        assembly ("memory-safe") {
+            free := mload(0x40)
+        }
+        uint words = (length + 31) / 32;
+        // ABI header, padded message, and trailing zero write in tryRawCallCopy.
+        uint endWords = (free + 68 + words * 32 + 32 + 31) / 32;
+        // Two calldata copies and KECCAK cost 12 gas per message word.
+        uint reserve = gasReserve + 12 * words + 3 * endWords + (endWords * endWords) / 512;
+        if (value != 0) reserve += 9_000;
+        gas = gasleft();
+        gas = gas > reserve ? gas - reserve : 0;
+    }
+
     /// @notice Try to forward `message` to the commander's payable pipeline port.
-    /// @dev Records and returns `keccak256(message)` under `key` only when forwarding fails.
+    /// @dev Records the digest when forwarding fails or is skipped for lack of gas.
+    /// Recording itself still reverts if the remaining gas is insufficient.
     /// @param key Forwarding/recovery lookup key.
     /// @param message Encoded CONTEXT block stream to forward.
     /// @param value Native EVM value assigned to the forwarding attempt.
     /// @return miss Message digest recorded for recovery when forwarding fails; zero on success.
     function forward(bytes32 key, bytes calldata message, uint value) internal override returns (bytes32 miss) {
-        if (tryRawCallCopy(PortPipePayableSelector, commanderAddr, value, message)) return bytes32(0);
+        uint gas = forwardGas(message.length, value);
+        if (gas > 0 && tryRawCallCopy(PortPipePayableSelector, commanderAddr, value, gas, message)) return bytes32(0);
 
         miss = keccak256(message);
         unresolved[key] = miss;

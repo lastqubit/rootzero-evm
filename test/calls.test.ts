@@ -163,6 +163,31 @@ describe("Command calls", () => {
       .to.equal(false);
   });
 
+  for (const method of ["testTryRawCallGas", "testTryRawCallCopyGas"]) {
+    it(`${method} limits call gas while preserving input and value forwarding`, async () => {
+      const helper = await deploy("TestCommandCalls");
+      const target = await helper.getAddress();
+      const selector = helper.interface.getFunction("echoBytes")!.selector;
+      const input = "0x" + "ab".repeat(33);
+      expect(await helper[method].staticCall(selector, target, 0n, 0n, input))
+        .to.equal(false);
+      expect(await helper[method].staticCall(selector, target, 0n, 50_000n, input))
+        .to.equal(true);
+      const tx = await helper[method](selector, target, 7n, 50_000n, input, { value: 7n });
+      await expect(tx).to.emit(helper, "BytesCalled").withArgs(input, 7n);
+    });
+
+    it(`${method} returns false when a capped callee runs out of gas`, async () => {
+      const helper = await deploy("TestCommandCalls");
+      const pipe = await deploy("TestOutOfGasPipe");
+      const result = await helper[method].staticCall(
+        pipe.interface.getFunction("portPipePayable")!.selector,
+        await pipe.getAddress(), 0n, 30_000n, "0x", { gasLimit: 100_000n },
+      );
+      expect(result).to.equal(false);
+    });
+  }
+
   it("uses less gas when copying the bytes argument directly from calldata", async () => {
     const helper = await deploy("TestCommandCalls");
     const selector = helper.interface.getFunction("echoBytes")!.selector;

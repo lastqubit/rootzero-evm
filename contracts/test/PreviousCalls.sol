@@ -15,13 +15,13 @@ error FailedCall(address addr, bytes4 selector, bytes err);
 /// @param value Native value to forward in wei.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @return success True when the low-level call succeeded.
-function tryRawCall(
+function previousTryRawCall(
     bytes4 selector,
     address addr,
     uint value,
     bytes memory input
 ) returns (bool success) {
-    return tryRawCall(selector, addr, value, gasleft(), input);
+    return previousTryRawCall(selector, addr, value, gasleft(), input);
 }
 
 /// @notice Try a memory-backed call with an explicit gas budget.
@@ -35,7 +35,7 @@ function tryRawCall(
 /// @param gasLimit Requested CALL gas, excluding the value-transfer stipend.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @return success True when the low-level call succeeded.
-function tryRawCall(
+function previousTryRawCall(
     bytes4 selector,
     address addr,
     uint value,
@@ -64,13 +64,13 @@ function tryRawCall(
 /// @param value Native value to forward in wei.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @return success True when the low-level call succeeded.
-function tryRawCallCopy(
+function previousTryRawCallCopy(
     bytes4 selector,
     address addr,
     uint value,
     bytes calldata input
 ) returns (bool success) {
-    return tryRawCallCopy(selector, addr, value, gasleft(), input);
+    return previousTryRawCallCopy(selector, addr, value, gasleft(), input);
 }
 
 /// @notice Try a calldata-backed call with an explicit gas budget.
@@ -84,7 +84,7 @@ function tryRawCallCopy(
 /// @param gasLimit Requested CALL gas, excluding the value-transfer stipend.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @return success True when the low-level call succeeded.
-function tryRawCallCopy(
+function previousTryRawCallCopy(
     bytes4 selector,
     address addr,
     uint value,
@@ -117,7 +117,7 @@ function tryRawCallCopy(
 /// @param input Raw contents of the function's `bytes` argument.
 /// @param expectEmpty Whether the decoded result must be empty.
 /// @return out Decoded `bytes` returned by the target.
-function rawCall(
+function previousRawCall(
     bytes4 selector,
     address addr,
     uint value,
@@ -137,24 +137,19 @@ function rawCall(
         success := call(gas(), addr, value, data, add(0x44, and(add(len, 0x1f), not(0x1f))), 0, 0)
 
         let size := returndatasize()
-        switch success
-        case 0 {
-            // Failure needs a bytes wrapper for FailedCall's raw revert data.
-            out := data
-            mstore(out, size)
-            returndatacopy(add(out, 0x20), 0, size)
-            mstore(add(add(out, 0x20), size), 0)
-            mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
-        }
-        default {
-            // Successful ABI returndata already contains the bytes length word.
-            let encoded := data
-            returndatacopy(encoded, 0, size)
+        out := data
+        mstore(out, size)
+        returndatacopy(add(out, 0x20), 0, size)
+        mstore(add(add(out, 0x20), size), 0)
+        mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
+
+        if success {
+            let encoded := add(data, 0x20)
             if or(lt(size, 0x40), iszero(eq(mload(encoded), 0x20))) {
                 revert(0, 0)
             }
             let outputLen := mload(add(encoded, 0x20))
-            if and(expectEmpty, iszero(iszero(outputLen))) {
+            if and(expectEmpty, outputLen) {
                 revert(0, 0)
             }
             let padded := and(add(outputLen, 0x1f), not(0x1f))
@@ -162,9 +157,6 @@ function rawCall(
                 revert(0, 0)
             }
             out := add(encoded, 0x20)
-            // Validated ABI size is word-aligned; reserve exactly the copied data.
-            mstore(add(data, size), 0)
-            mstore(0x40, add(data, size))
         }
     }
     if (!success) revert FailedCall(addr, selector, out);
@@ -181,7 +173,7 @@ function rawCall(
 /// @param input Raw contents of the function's `bytes` argument.
 /// @param expectEmpty Whether the decoded result must be empty.
 /// @return out Decoded `bytes` returned by the target.
-function rawCallCopy(
+function previousRawCallCopy(
     bytes4 selector,
     address addr,
     uint value,
@@ -201,24 +193,19 @@ function rawCallCopy(
         success := call(gas(), addr, value, data, add(0x44, and(add(len, 0x1f), not(0x1f))), 0, 0)
 
         let size := returndatasize()
-        switch success
-        case 0 {
-            // Failure needs a bytes wrapper for FailedCall's raw revert data.
-            out := data
-            mstore(out, size)
-            returndatacopy(add(out, 0x20), 0, size)
-            mstore(add(add(out, 0x20), size), 0)
-            mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
-        }
-        default {
-            // Successful ABI returndata already contains the bytes length word.
-            let encoded := data
-            returndatacopy(encoded, 0, size)
+        out := data
+        mstore(out, size)
+        returndatacopy(add(out, 0x20), 0, size)
+        mstore(add(add(out, 0x20), size), 0)
+        mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
+
+        if success {
+            let encoded := add(data, 0x20)
             if or(lt(size, 0x40), iszero(eq(mload(encoded), 0x20))) {
                 revert(0, 0)
             }
             let outputLen := mload(add(encoded, 0x20))
-            if and(expectEmpty, iszero(iszero(outputLen))) {
+            if and(expectEmpty, outputLen) {
                 revert(0, 0)
             }
             let padded := and(add(outputLen, 0x1f), not(0x1f))
@@ -226,9 +213,6 @@ function rawCallCopy(
                 revert(0, 0)
             }
             out := add(encoded, 0x20)
-            // Validated ABI size is word-aligned; reserve exactly the copied data.
-            mstore(add(data, size), 0)
-            mstore(0x40, add(data, size))
         }
     }
     if (!success) revert FailedCall(addr, selector, out);
@@ -242,7 +226,7 @@ function rawCallCopy(
 /// @param addr Target contract address.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @return out Decoded `bytes` returned by the target.
-function rawQuery(
+function previousRawQuery(
     bytes4 selector,
     address addr,
     bytes memory input
@@ -260,19 +244,14 @@ function rawQuery(
         success := staticcall(gas(), addr, data, add(0x44, and(add(len, 0x1f), not(0x1f))), 0, 0)
 
         let size := returndatasize()
-        switch success
-        case 0 {
-            // Failure needs a bytes wrapper for FailedCall's raw revert data.
-            out := data
-            mstore(out, size)
-            returndatacopy(add(out, 0x20), 0, size)
-            mstore(add(add(out, 0x20), size), 0)
-            mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
-        }
-        default {
-            // Successful ABI returndata already contains the bytes length word.
-            let encoded := data
-            returndatacopy(encoded, 0, size)
+        out := data
+        mstore(out, size)
+        returndatacopy(add(out, 0x20), 0, size)
+        mstore(add(add(out, 0x20), size), 0)
+        mstore(0x40, and(add(add(add(out, 0x20), size), 0x1f), not(0x1f)))
+
+        if success {
+            let encoded := add(data, 0x20)
             if or(lt(size, 0x40), iszero(eq(mload(encoded), 0x20))) {
                 revert(0, 0)
             }
@@ -282,9 +261,6 @@ function rawQuery(
                 revert(0, 0)
             }
             out := add(encoded, 0x20)
-            // Validated ABI size is word-aligned; reserve exactly the copied data.
-            mstore(add(data, size), 0)
-            mstore(0x40, add(data, size))
         }
     }
     if (!success) revert FailedCall(addr, selector, out);

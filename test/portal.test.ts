@@ -83,7 +83,8 @@ describe("Portal", () => {
     const commanderAddr = await commander.getAddress();
     const before = BigInt(await provider.send("eth_getBalance", [commanderAddr, "latest"]));
 
-    const tx = await portal.testForward(key, message, 7n, { value: 7n });
+    // Estimation may select the cheaper direct-storage path; budget for delivery.
+    const tx = await portal.testForward(key, message, 7n, { value: 7n, gasLimit: 500_000 });
     await tx.wait();
 
     const after = BigInt(await provider.send("eth_getBalance", [commanderAddr, "latest"]));
