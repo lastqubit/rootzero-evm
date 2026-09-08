@@ -8,6 +8,74 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.37.0
+
+### Breaking Changes
+
+- Remove stride/group metadata from block specs, endpoint descriptors, execution
+  sources, and cursors. Each top-level block now represents one operation;
+  fixed compositions use a custom parent block. Re-encode packed metadata and
+  update offchain descriptor/cursor readers to the layouts in `docs/Schema.md`.
+- Remove `Specs.stride`, `normalize`, `lane`, `count`, `groupSize`, and `group`,
+  and remove `Cursors.meta`. Use `Specs.blockSize`, block-count allocation,
+  `Cursors.create(pos, end, flags)`, and `Buffers.cursor(capacity)`; cursor flags
+  move to bits 64-71.
+- `Realize` consumes one LIMITS input per POSITION instead of QUOTE and calls
+  `realize(account, position)`. The command enforces returned quantity limits;
+  the hook must preserve asset/liability identifiers, authorize and fulfill the
+  counterparty obligation, and return counterparty zero.
+- `Settle`, `SettlePayable`, and `ExecuteSettle` require one LIMITS input per
+  POSITION. Settlement hooks now accept `Limits memory limits`, before the
+  execution budget argument for payable settlement, and must enforce inclusive
+  minimum net amount and maximum total debt, including fees.
+- Default `Settlement.settle` now requires an account-category counterparty and
+  rejects zero. Use `Book`/`ExecuteBook` for Rootzero-backed positions with zero
+  counterparty. Self-settlement remains supported.
+
+### Added
+
+- Add LIMITS (`uint amount, uint debt`), its structured `Limits` type, scalar and
+  structured codecs, and calldata `requireLimits` helpers. QUOTE codecs and
+  `Positions.requireQuoted` remain available independently.
+- Add `Book`, `ExecuteBook`, and `BookHook`, with the `Actions.Book` annotation.
+  Default booking debits the exact liability then credits the exact asset amount,
+  skips zero quantities, and reverts atomically on failure.
+- Add `ExchangePort.portExchange` for trusted peers. Each local-key-1 parent has
+  an exact 208-byte payload containing debit and credit ACCOUNT_AMOUNT children.
+  Empty batches are accepted; invalid parents, children, or hooks revert the batch.
+- Add schema-reference shorthand `#schema as (first, second)` for unmodified
+  references with distinct aliases. It preserves child keys and wire layout.
+- Add `Executions.enterNext`, combining both-source traversal checks with input
+  parent entry through shared `Blocks.enter`; use it in ExchangePort.
+- Add explicit gas-limit overloads of `tryRawCall` and `tryRawCallCopy`, grouping
+  `value, gasLimit` before `input` and retaining the existing overloads.
+
+### Fixed
+
+- Reserve recovery gas in `Portal.forward` for copying, hashing, memory expansion,
+  call/value overhead, and unresolved-message storage after pipe out-of-gas.
+  When no pipe budget remains, attempt digest storage directly. Recording can
+  still revert if even that work cannot be funded. The fixed immutable reserve
+  defaults to 35,000 and can be increased by derived constructors.
+- Make `rawCall` and `rawCallCopy` reject every nonempty output when `expectEmpty`
+  is set, including even lengths previously accepted by the bitwise check.
+
+### Performance and Verification
+
+- Reuse validated lengths and reserved buffer sizes in block factories, Writers,
+  and execution output helpers. Avoid full zero initialization when factories
+  overwrite their payload, while retaining allocation size and clean padding.
+- Reduce repeated bounds arithmetic, fixed-header checks, and cursor work in
+  Blocks, Decoders, Executions, Buffers, and Cursors. Centralize spec validation
+  in `Blocks.enter`; retain the normal entry wrappers to limit deployed size.
+- Precompute endpoint lane-presence bits, streamline raw source access and
+  BALANCE-stream consumption, and remove proven-redundant budget subtraction checks.
+- Remove the extra successful-returndata wrapper from raw call/query helpers,
+  saving one allocated memory word per successful call.
+- Add frozen-baseline differential tests, gas and deployed-size measurements,
+  malformed-input and overflow cases, dirty-memory and allocation checks, and
+  forwarding/recovery, LIMITS, booking, and exchange regressions.
+
 ## 1.36.0
 
 - Add `Accounts.account(value)` to validate only the account category and return
