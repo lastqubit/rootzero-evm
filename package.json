@@ -21,7 +21,9 @@
   },
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test",
+    "test": "node scripts/run-tests.mjs test",
+    "bench": "node scripts/run-tests.mjs bench",
+    "test:all": "hardhat test",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm test",
     "prepare:package": "node scripts/prepare-package.mjs",
