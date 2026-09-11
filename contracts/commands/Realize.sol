@@ -9,6 +9,8 @@ import {Actions} from "../utils/Actions.sol";
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that fulfill an entire position.
+/// @dev Intended for hosts without their own account balance ledger. Ledger hosts
+/// use SettleHook instead; production hosts choose one position-fulfillment model.
 abstract contract RealizeHook {
     /// @notice Fulfill a position in its existing asset and liability denominations.
     /// @dev Validate and authorize the source counterparty and fulfill the entire

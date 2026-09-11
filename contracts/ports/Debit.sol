@@ -21,7 +21,8 @@ abstract contract DebitAccountPort is PortBase, DebitAccountHook {
     /// @notice Execute the port-debit call.
     /// @param data ACCOUNT_AMOUNT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portDebitAccount(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portDebitAccount(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
         while (exec.more()) {
@@ -29,6 +30,6 @@ abstract contract DebitAccountPort is PortBase, DebitAccountHook {
             debitAccount(account, asset, amount);
         }
         
-        return "";
+        return exec.close();
     }
 }

@@ -6,7 +6,7 @@ import {Settlement, BookHook} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Runtime} from "../core/Runtime.sol";
-import {Position} from "../core/Types.sol";
+import {Limits, Position} from "../core/Types.sol";
 import {Nodes} from "../utils/Nodes.sol";
 import {AccessDenied} from "../core/Access.sol";
 
@@ -44,9 +44,16 @@ contract TestBook is ExecuteBook, Settlement, Balances, Pipeline {
         return executeBook(account, state, input, value);
     }
 
-    function book(bytes32 account, Position memory position) internal override(Settlement, BookHook) {
-        emit BookCalled(account);
-        Settlement.book(account, position);
+    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
+        internal override(Settlement, BookHook)
+    {
+        emit BookCalled(from);
+        Settlement.book(from, to, asset, amount, liability, debt);
+    }
+
+    /// @dev This fixture only supports booking, not settlement.
+    function settle(bytes32, Position memory, Limits memory) internal pure override {
+        revert AccessDenied();
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {

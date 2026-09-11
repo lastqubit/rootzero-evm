@@ -26,7 +26,7 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
         receiveMessage(key, message, value);
     }
 
-    function testCallPortMemory(uint port, bytes calldata input, uint value) external payable returns (bytes memory) {
+    function testCallPortMemory(uint port, bytes calldata input, uint value) external payable returns (bytes memory, uint) {
         bytes memory data = input;
         (bytes4 selector, address target) = enforcePort(port);
         return rawCall(selector, target, value, data, true);
@@ -45,7 +45,8 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
     ) internal override {
         bytes calldata resolved = resolve(key, witness);
         (bytes4 selector, address target) = enforcePort(handler);
-        rawCallCopy(selector, target, funds.useResourceValue(resources), resolved, true);
+        (, uint credit) = rawCallCopy(selector, target, funds.useResourceValue(resources), resolved, true);
+        funds.addValue(credit);
         emit Resolved(host, key);
     }
 }

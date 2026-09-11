@@ -101,8 +101,10 @@ describe("Counterparty pipeline", () => {
       }
 
       it("can settle the same host-account position directly when its account is funded", async () => {
-        await host.run(account, state, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
-        expect(await snapshot()).to.deep.equal([100n, 40n, 100n, 40n, 0n, 0n, 0n, memory ? 1n : 0n]);
+        await host.seedHost(asset, 800n);
+        const feeState = encodePositionBlock(asset, 1_000n, liability, 40n, hostCounterparty);
+        await host.run(account, feeState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, 40n)));
+        expect(await snapshot()).to.deep.equal([2n, 40n, 998n, 40n, 0n, 0n, 0n, memory ? 1n : 0n]);
       });
 
       it("rejects zero-counterparty settlement and rolls back prior realization", async () => {
@@ -115,28 +117,28 @@ describe("Counterparty pipeline", () => {
 
       it("uses a host account for settlement on another host when funded there", async () => {
         const remote = encodeHostAccount(await hostId("0x0000000000000000000000000000000000000033"));
-        const remoteState = encodePositionBlock(asset, 100n, liability, 40n, remote);
-        await rejectsUnchanged(remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)), "InsufficientFunds");
-        await host.seedAccount(remote, asset, 100n);
-        await host.run(account, remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
+        const remoteState = encodePositionBlock(asset, 1_000n, liability, 40n, remote);
+        await rejectsUnchanged(remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, 40n)), "InsufficientFunds");
+        await host.seedAccount(remote, asset, 1_000n);
+        await host.run(account, remoteState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, 40n)));
         expect(await host.accountBalance(remote, asset)).to.equal(0n);
         expect(await host.accountBalance(remote, liability)).to.equal(40n);
-        expect(await host.accountBalance(account, asset)).to.equal(100n);
+        expect(await host.accountBalance(account, asset)).to.equal(999n);
         expect(await host.realizations()).to.equal(0n);
       });
 
       it("settles an account counterparty directly through the pipeline", async () => {
-        await host.seedAccount(counterparty, asset, 100n);
-        const accountState = encodePositionBlock(asset, 100n, liability, 40n, counterparty);
-        await host.run(account, accountState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, ethers.MaxUint256)));
-        expect(await snapshot()).to.deep.equal([200n, 0n, 100n, 40n, 0n, 40n, 0n, memory ? 1n : 0n]);
+        await host.seedAccount(counterparty, asset, 1_000n);
+        const accountState = encodePositionBlock(asset, 1_000n, liability, 40n, counterparty);
+        await host.run(account, accountState, encodeStepBlock(settleId, 0n, encodeLimitsBlock(0n, 40n)));
+        expect(await snapshot()).to.deep.equal([201n, 0n, 999n, 40n, 0n, 40n, 0n, memory ? 1n : 0n]);
       });
 
       it("rolls back an earlier account settlement when a later counterparty cannot pay", async () => {
-        await host.seedAccount(counterparty, asset, 100n);
-        const accountState = encodePositionBlock(asset, 100n, liability, 40n, counterparty);
+        await host.seedAccount(counterparty, asset, 1_000n);
+        const accountState = encodePositionBlock(asset, 1_000n, liability, 40n, counterparty);
         await rejectsUnchanged(concat(accountState, accountState),
-          encodeStepBlock(settleId, 0n, concat(encodeLimitsBlock(0n, ethers.MaxUint256), encodeLimitsBlock(0n, ethers.MaxUint256))), "InsufficientFunds");
+          encodeStepBlock(settleId, 0n, concat(encodeLimitsBlock(0n, 40n), encodeLimitsBlock(0n, 40n))), "InsufficientFunds");
       });
 
       it("rolls back realization and earlier booking when a later liability cannot be paid", async () => {

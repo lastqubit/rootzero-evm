@@ -312,10 +312,10 @@ wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
 
 The parent schema identifies one complete operation. Batching repeats the parent
 block; there is no separate group expression or generic group wrapper.
-`portExchange` leaves the schema unnamed. Consumers resolve its local key from
+`portBook` leaves the schema unnamed. Consumers resolve its local key from
 the descriptor and schema annotation; it does not define a `#exchange` alias.
 
-`portExchange` publishes this schema with an exact 208-byte payload spec and uses
+`portBook` publishes this schema with an exact 208-byte payload spec and uses
 that same spec in its descriptor. Two complete 104-byte children
 plus the parent header occupy 216 bytes on the wire. With this exact spec,
 `exec.enter(spec)` followed by two fixed-width unpackers lands at the next parent
@@ -487,21 +487,32 @@ and `ExecuteSettle` pass the complete `Position` struct to the hook. Calldata
 commands use `unpackPositionValue`; the memory adapter uses
 `Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position, limits)` and
 `settle(account, position, limits, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
-The default `Settlement.settle` hook uses `Accounts.account` to require an
-account-category ID, rejecting zero and other categories with `InvalidAccount()`.
-It debits the active account for the liability and credits the counterparty,
-then debits the counterparty for the asset and credits the active account.
-Zero amounts skip their entire side. Any failure reverts the exchange. The category
-check does not authorize debits; trusted callers and account hooks remain
-responsible for authorization.
+`Settlement` inherits `SettleHook` without implementing it. A host using its
+internal helpers validates an account-category ID with `Accounts.account`,
+rejecting zero and other categories with `InvalidAccount()`, and authorizes the
+position. It calls `repay` for the liability followed by `collect` for the asset.
+Zero amounts skip transfers on their side but still participate in limit and
+pending-fee checks. Any failure reverts the exchange. The category check alone
+does not authorize debits.
 
 `book` consumes POSITION state with empty input and output. Both `Book` and
 the pipeline memory adapter `ExecuteBook` reject nonzero counterparties before
-calling `book(account, position)`. `BookHook` is defined in
-`core/Settlement.sol`; its default `Settlement` implementation debits the
-account's exact liability amount, then credits its exact asset amount. Zero
+calling `book(account, account, asset, amount, liability, debt)`. `BookHook` is
+defined in `core/Settlement.sol`; its default `Settlement` implementation debits
+the source account's exact liability amount, then credits the destination
+account's exact asset amount. Both accounts are the active account for `book`. Zero
 amounts skip their account hooks, and any failure reverts the whole operation.
 Booking takes no quote, adds no fees, and returns no state or budget credit.
+
+The same `BookHook` is used directly by `portBook` and the
+`repay` / `collect` helpers for their transfers. Separate fee credits call
+`creditAccount` directly. The `BookHook` signature is
+`book(from, to, asset, amount, liability, debt)`. It must apply both exact legs
+or revert, skip zero-amount legs, and preserve debit-first funding requirements
+even when accounts or assets match. It does not net legs or interpret a zero
+account as an absent side. Callers encode zero debt or amount to omit a leg.
+`portBook` decodes both input legs
+before calling the hook, so malformed credit data is rejected before debiting.
 
 `realize` passes the complete position to its hook, which validates its host account
 counterparty and fulfills the obligation before returning counterparty zero.
@@ -525,9 +536,10 @@ accidentally.
 
 `book`, `settle`, and `settlePayable` consume positions, including liability-only
 positions, and return empty state. To repay, use a POSITION with zero asset and
-amount. There are no separate repayment commands or repayment hooks. Default
-settlement debits the liability directly through `debitAccount`; a position with
-an asset side also settles that side instead of returning a BALANCE block.
+amount. There are no separate repayment commands or repayment hooks. Hosts
+implement settlement; the `repay` helper routes the liability transfer through
+`BookHook.book`. A position with an asset side also settles that side instead
+of returning a BALANCE block.
 The single `realize` command calls one hook:
 
 ```solidity
@@ -559,8 +571,48 @@ output helpers also accept the struct.
 pairs memory-backed positions with calldata limits. Commands decode the limits before invoking the hook, which validates and
 authorizes the counterparty. The hook must enforce
 `net amount >= limits.amount` and `total debt <= limits.debt`, including fees.
-The default `Settlement.settle` adds no fees and checks the position's amount and
-debt before any account operations. Missing, extra, or malformed limits revert.
+`Settlement` provides internal, non-virtual `repay` and `collect` helpers, but no
+`settle` implementation or fixed fee policy. The host implements `SettleHook`,
+validates the counterparty, authorizes the position, and chooses its rate. For
+example, a host may use 20 bps for its own liquidity and 2 bps for external positions:
+
+```solidity
+function settle(bytes32 account, Position memory position, Limits memory limits)
+    internal override
+{
+    bytes32 counterparty = Accounts.account(position.counterparty);
+    uint16 bps = counterparty == hostAccount ? 20 : 2;
+    bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
+    collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
+}
+```
+
+This example assumes the host has already authorized the position. `repay` first
+tries a debt surcharge and returns zero bps only after collecting the fee, otherwise
+returning the input rate. The host must pass that result to `collect`, which tries
+an asset deduction and reverts with `ZeroFee` if a pending nonzero rate cannot be
+satisfied. Zero bps explicitly requests no fee. Fees round up to whole raw units
+and accrue to `hostAccount`. Each helper checks its base limit before transfers;
+zero debt can return immediately because it cannot exceed an unsigned maximum.
+Any failure reverts both sides. Hosts may instead implement specialized settlement
+without these helpers while respecting the original hook contract.
+
+Missing, extra, or malformed limits revert.
+
+Host implementations choose a position-fulfillment model: hosts that maintain
+account balances use `settle`, while hosts without their own account balance
+ledger implement `realize` and return the fulfilled position to the caller.
+A production host is not intended to expose both as alternative routes for the
+same operation. `Settlement` provides reusable mechanics for ledger hosts;
+each host implements its own `settle` hook. The combined
+realize/settle test host exercises both interfaces for integration coverage.
+
+When the payer is `hostAccount`, the helpers still apply the host-selected
+rate and limit rules. A fee credited back to the host is not new host revenue.
+A debt fee requires the full debt plus fee to be available at debit time, even
+when the fee is subsequently credited back. When payer and counterparty both
+equal `hostAccount`, successful transfers leave balances unchanged, but limits
+and nonzero-fee requirements still apply.
 
 For realization, each POSITION is paired with one LIMITS input. The command calls
 `realize(account, position)`, then `exec.requireLimits(result.amount, result.debt)` before

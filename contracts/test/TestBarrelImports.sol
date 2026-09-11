@@ -2,9 +2,11 @@
 pragma solidity ^0.8.33;
 
 import {Limits as CoreLimits} from "../Core.sol";
+import {HostAccount} from "../Core.sol";
 import {Limits as CodecLimits} from "../Codec.sol";
 
 import {UnexpectedValue} from "../Utils.sol";
+import {ZeroFee} from "../Utils.sol";
 import {Positions} from "../Utils.sol";
 import {Book, ExecuteBook, BookHook} from "../Endpoints.sol";
 import {BookHook as CoreBookHook} from "../Core.sol";
@@ -30,7 +32,7 @@ import {
     RequestAssetHook,
     RequestAssetPort,
     RequestAllowancePort,
-    ExchangePort,
+    BookPort,
     PortPipePayableSelector,
     RevokeAllowance,
     RevokeAsset,
@@ -52,12 +54,15 @@ import {HostAsset as CoreHostAsset} from "../Core.sol";
 import {AssetLiability as CoreAssetLiability} from "../Core.sol";
 import {Balances as CoreBalances} from "../Core.sol";
 import {Flags as EndpointFlags} from "../Endpoints.sol";
-import {ResolvedEvent, UnresolvedEvent} from "../Events.sol";
+import {ResolvedEvent, UnresolvedEvent, SettledEvent, ActionEvent} from "../Events.sol";
 import {
     AccessDenied,
     CashinHook as CoreCashinHook,
     CashoutHook as CoreCashoutHook,
+    ActionAnnot,
     CounterpartyAnnot,
+    LabelAnnot,
+    SchemaAnnot,
     CommandAccess,
     ExecuteHook as CoreExecuteHook,
     PipeHook as CorePipeHook,

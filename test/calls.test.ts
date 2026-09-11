@@ -59,7 +59,7 @@ describe("Command calls", () => {
 
   it("calls a selector with one memory bytes argument and forwards value", async () => {
     const helper = await deploy("TestCommandCalls");
-    const selector = helper.interface.getFunction("echoBytes")!.selector;
+    const selector = helper.interface.getFunction("echoPort")!.selector;
     const input = "0xaabbcc";
     const value = 9n;
 
@@ -71,32 +71,32 @@ describe("Command calls", () => {
       false,
       { value },
     );
-    expect(out).to.equal(input);
+    expect(out).to.deep.equal([input, value]);
   });
 
   it("returns decoded bytes when copying call input from calldata", async () => {
     const helper = await deploy("TestCommandCalls");
     const input = ethers.hexlify(ethers.randomBytes(33));
     const out = await helper.testRawCallCopy.staticCall(
-      helper.interface.getFunction("echoBytes")!.selector,
+      helper.interface.getFunction("echoPort")!.selector,
       await helper.getAddress(),
       0n,
       input,
       false,
     );
 
-    expect(out).to.equal(input);
+    expect(out).to.deep.equal([input, 0n]);
   });
 
   it("optionally requires empty decoded call output", async () => {
     const helper = await deploy("TestCommandCalls");
-    const selector = helper.interface.getFunction("echoBytes")!.selector;
+    const selector = helper.interface.getFunction("echoPort")!.selector;
     const target = await helper.getAddress();
 
     expect(await helper.testRawCall.staticCall(selector, target, 0n, "0x", true))
-      .to.equal("0x");
+      .to.deep.equal(["0x", 0n]);
     expect(await helper.testRawCallCopy.staticCall(selector, target, 0n, "0x", true))
-      .to.equal("0x");
+      .to.deep.equal(["0x", 0n]);
     for (const call of [
       () => helper.testRawCall.staticCall(selector, target, 0n, "0x01", true),
       () => helper.testRawCallCopy.staticCall(selector, target, 0n, "0x01", true),
@@ -113,16 +113,16 @@ describe("Command calls", () => {
 
   it("handles bytes lengths around ABI word boundaries", async () => {
     const helper = await deploy("TestCommandCalls");
-    const selector = helper.interface.getFunction("echoBytes")!.selector;
+    const selector = helper.interface.getFunction("echoPort")!.selector;
     const target = await helper.getAddress();
 
     for (const length of [0, 1, 31, 32, 33, 63, 64, 65]) {
       const input = ethers.hexlify(ethers.randomBytes(length));
 
       expect(await helper.testRawCall.staticCall(selector, target, 0n, input, false))
-        .to.equal(input);
+        .to.deep.equal([input, 0n]);
       expect(await helper.testRawCallCopy.staticCall(selector, target, 0n, input, false))
-        .to.equal(input);
+        .to.deep.equal([input, 0n]);
       expect(await helper.testTryRawCall.staticCall(selector, target, 0n, input))
         .to.equal(true);
       expect(await helper.testTryRawCallCopy.staticCall(selector, target, 0n, input))

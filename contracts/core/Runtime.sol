@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Assets} from "../utils/Assets.sol";
+import {Accounts} from "../utils/Accounts.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
 /// @title ChainAsset
@@ -9,6 +10,13 @@ import {Nodes} from "../utils/Nodes.sol";
 abstract contract ChainAsset {
     /// @dev Asset ID for the chain coin/token, bound to the current chain at deployment.
     bytes32 internal immutable chainAsset = Assets.toChain();
+}
+
+/// @title HostAccount
+/// @notice Shared host account identity for host helpers.
+abstract contract HostAccount {
+    /// @notice This contract's host account, bound to its address and chain at deployment.
+    bytes32 public immutable hostAccount = Accounts.toHost(address(this));
 }
 
 /// @title Runtime

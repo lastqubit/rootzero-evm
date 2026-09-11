@@ -85,7 +85,9 @@ describe("Portal", () => {
 
     // Estimation may select the cheaper direct-storage path; budget for delivery.
     const tx = await portal.testForward(key, message, 7n, { value: 7n, gasLimit: 500_000 });
-    await tx.wait();
+    await expect(tx).to.emit(commander, "CashinCalled").withArgs(await portal.getAdminAccount(), 7n);
+    const receipt = await tx.wait();
+    expect(receipt!.logs).to.have.length(1);
 
     const after = BigInt(await provider.send("eth_getBalance", [commanderAddr, "latest"]));
     expect(after).to.equal(before + 7n);
@@ -104,9 +106,9 @@ describe("Portal", () => {
     await authorize(target, await portal.host());
 
     const message = encodeDispatchBlock(0n, 2n, "0x1234");
-    const result: string = await portal.testCallPortMemory.staticCall(handler, message, 0n);
+    const result = await portal.testCallPortMemory.staticCall(handler, message, 0n);
 
-    expect(result).to.equal("0x");
+    expect(result).to.deep.equal(["0x", 0n]);
   });
 
   it("records unresolved messages when forwarding fails", async () => {
@@ -134,6 +136,12 @@ describe("Portal", () => {
     await portal.testForward(key, witness, 0n);
 
     const input = encodeRecoverBlock(recoveryHandler, 5n, key, witness);
+    const callData = portal.interface.encodeFunctionData(
+      "recoverPayable", await commandCtx(portal, input),
+    );
+    const returned = await commander.testCall.staticCall(await portal.getAddress(), callData, { value: 5n });
+    expect(portal.interface.decodeFunctionResult("recoverPayable", returned))
+      .to.deep.equal(["0x", 5n]);
     const tx = await recoverPortal(commander, portal, input, 5n);
 
     await expect(tx).to.emit(recoveryTarget, "PortDispatchCalled").withArgs(0n, "0xcafe", 9n, 5n);
@@ -142,6 +150,29 @@ describe("Portal", () => {
     const second = encodeRecoverBlock(recoveryHandler, 0n, key, witness);
     await expect(recoverPortal(commander, portal, second))
       .to.be.revertedWithCustomError(portal, "BadWitness");
+  });
+
+  it("settles pipeline recovery value to its context without also returning it as credit", async () => {
+    const target = await deployPortHost();
+    const handler = await portId("portPipePayable(bytes)", target);
+    const { portal, commander } = await deployPortal();
+    await authorizePortal(commander, portal, handler);
+    await authorize(target, await portal.host());
+
+    const key = ethers.zeroPadValue("0x06", 32);
+    // The recovered subject differs from the account paying for recovery.
+    const witness = encodeContextBlock(ethers.zeroPadValue("0xab", 32), "0x", "0x");
+    await portal.testForward(key, witness, 0n);
+    const input = encodeRecoverBlock(handler, 5n, key, witness);
+    const data = portal.interface.encodeFunctionData("recoverPayable", await commandCtx(portal, input));
+    // Two wei stay in the command budget; the port settles the other five.
+    const returned = await commander.testCall.staticCall(await portal.getAddress(), data, { value: 7n });
+    expect(portal.interface.decodeFunctionResult("recoverPayable", returned))
+      .to.deep.equal(["0x", 2n]);
+    const tx = await recoverPortal(commander, portal, input, 7n);
+    await expect(tx).to.emit(target, "CashinCalled").withArgs(ethers.zeroPadValue("0xab", 32), 5n);
+    await expect(tx)
+      .to.emit(portal, "Resolved").withArgs(await portal.host(), key);
   });
 
   it("restores the unresolved witness when the recovery handler fails", async () => {

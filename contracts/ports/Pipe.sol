@@ -27,10 +27,12 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
     /// @dev All contexts share the peer call's native-value budget. Any remainder
     /// is credited through `cashin` to the last context's account after all pipes.
     /// Empty input with value passes the zero account to `cashin`.
-    /// Account validation belongs to the hook.
+    /// Account validation belongs to the hook. Settlement consumes the remainder,
+    /// so no native budget credit is returned to the peer.
     /// @param data CONTEXT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portPipePayable(bytes calldata data) external payable onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portPipePayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
         uint budget = exec.drainBudget();
 
@@ -44,6 +46,6 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
 
         if (budget != 0) cashin(account, budget);
 
-        return "";
+        return exec.close();
     }
 }

@@ -22,7 +22,8 @@ abstract contract AllowAssetsPort is PortBase, AllowAssetsHook {
     /// @notice Execute the allow-assets peer call.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portAllowAssets(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portAllowAssets(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
         while (exec.more()) {
@@ -30,7 +31,7 @@ abstract contract AllowAssetsPort is PortBase, AllowAssetsHook {
             allowAsset(asset);
         }
 
-        return "";
+        return exec.close();
     }
 }
 
@@ -47,7 +48,8 @@ abstract contract DenyAssetsPort is PortBase, DenyAssetsHook {
     /// @notice Execute the deny-assets peer call.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portDenyAssets(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portDenyAssets(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
         while (exec.more()) {
@@ -55,7 +57,7 @@ abstract contract DenyAssetsPort is PortBase, DenyAssetsHook {
             denyAsset(asset);
         }
 
-        return "";
+        return exec.close();
     }
 }
 
@@ -85,7 +87,8 @@ abstract contract RequestAssetPort is PortBase, RequestAssetHook {
     /// @notice Request assets for the calling peer.
     /// @param data AMOUNT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portRequestAsset(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portRequestAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
         uint peer = caller();
 
@@ -94,6 +97,6 @@ abstract contract RequestAssetPort is PortBase, RequestAssetHook {
             requestAsset(peer, asset, amount);
         }
 
-        return "";
+        return exec.close();
     }
 }

@@ -7,15 +7,15 @@ import { CreditAccountPort } from "../ports/Credit.sol";
 import { DebitAccountPort } from "../ports/Debit.sol";
 import { PipePayablePort } from "../ports/Pipe.sol";
 import { DispatchPayablePort } from "../ports/Dispatch.sol";
-import { ExchangePort } from "../ports/Exchange.sol";
-import { PostPort } from "../ports/Post.sol";
+import { BookPort } from "../ports/Book.sol";
 import { RequestAssetPort } from "../ports/Assets.sol";
 import { Settlement } from "../core/Settlement.sol";
 import { Pipeline } from "../core/Pipeline.sol";
 import { Limits, Position } from "../core/Types.sol";
 import { Execution } from "../execution/Execution.sol";
+import { Accounts } from "../utils/Accounts.sol";
 
-contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, CreditAccountPort, DebitAccountPort, ExchangePort, PostPort, RequestAssetPort, PipePayablePort, DispatchPayablePort {
+contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, CreditAccountPort, DebitAccountPort, BookPort, RequestAssetPort, PipePayablePort, DispatchPayablePort {
     event PortRequestAllowanceCalled(uint peer, bytes32 asset, uint amount);
     event PortDebitAccountCalled(bytes32 account, bytes32 asset, uint amount);
     event PortCreditAccountCalled(bytes32 account, bytes32 asset, uint amount);
@@ -57,6 +57,13 @@ contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, Credi
 
     function testSettle(bytes32 account, Position calldata position) external {
         settle(account, position, Limits(0, type(uint).max));
+    }
+
+    /// @dev Port-hook tests use an explicit zero-fee settlement policy.
+    function settle(bytes32 account, Position memory position, Limits memory limits) internal override {
+        bytes32 counterparty = Accounts.account(position.counterparty);
+        uint16 bps = repay(account, counterparty, position.liability, position.debt, 0, limits.debt);
+        collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
     }
 
     function dispatchTo(uint portal, uint resources, bytes memory payload, Execution memory funds) internal override {

@@ -22,7 +22,8 @@ abstract contract RequestAllowancePort is PortBase, AllowanceHook {
     /// @notice Set asset allowances for the calling peer.
     /// @param data AMOUNT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portRequestAllowance(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portRequestAllowance(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
         uint peer = caller();
 
@@ -31,6 +32,6 @@ abstract contract RequestAllowancePort is PortBase, AllowanceHook {
             allowance(peer, asset, amount);
         }
 
-        return "";
+        return exec.close();
     }
 }

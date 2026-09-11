@@ -21,7 +21,8 @@ abstract contract CreditAccountPort is PortBase, CreditAccountHook {
     /// @notice Execute the port-credit call.
     /// @param data ACCOUNT_AMOUNT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portCreditAccount(bytes calldata data) external onlyPeer returns (bytes memory) {
+    /// @return Zero native budget credit.
+    function portCreditAccount(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
         while (exec.more()) {
@@ -29,6 +30,6 @@ abstract contract CreditAccountPort is PortBase, CreditAccountHook {
             creditAccount(account, asset, amount);
         }
         
-        return "";
+        return exec.close();
     }
 }

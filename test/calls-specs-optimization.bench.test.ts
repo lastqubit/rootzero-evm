@@ -14,10 +14,16 @@ async function outcome(call: () => Promise<any>) {
   }
 }
 
+// Adapt frozen bytes-only return fixtures to the current call tuple ABI.
+const withCredit = (data: string) => ethers.dataLength(data) < 32 ? data : ethers.concat([
+  ethers.toBeHex((BigInt(ethers.dataSlice(data, 0, 32)) + 32n) & ethers.MaxUint256, 32),
+  ethers.ZeroHash, ethers.dataSlice(data, 32),
+]);
+
 describe("Calls and Specs optimization", function () {
   this.timeout(120_000);
 
-  it("reduces successful call gas and allocation while preserving retained outputs", async () => {
+  it("compares tuple calls and bytes queries with the frozen bytes-only baseline", async () => {
     const helper = await deploy("TestCallsSpecsOptimization");
     const target = await deploy("TestRawReturndata");
     const rows: any[] = [];
@@ -29,13 +35,13 @@ describe("Calls and Specs optimization", function () {
           const cfg = { mode, count, target: await target.getAddress(),
             selector: target.interface.getFunction("returnRaw")!.selector, expectEmpty: size === 0 };
           const before = await helper.measure.staticCall(false, cfg, input);
-          const after = await helper.measure.staticCall(true, cfg, input);
+          const after = await helper.measure.staticCall(true, cfg, mode === 2 || cfg.selector === target.interface.getFunction("revertRaw")!.selector ? input : withCredit(input));
           expect(after.output).to.equal(output);
           expect(after.first).to.equal(output);
           expect(after.output).to.equal(before.output);
           expect(after.first).to.equal(before.first);
-          expect(before.footprint - after.footprint).to.equal(32n * BigInt(count));
-          expect(after.usedGas).to.be.lessThan(before.usedGas);
+          expect(before.footprint - after.footprint).to.equal((mode === 2 ? 32n : 0n) * BigInt(count));
+          if (mode === 2) expect(after.usedGas).to.be.lessThan(before.usedGas);
           rows.push({ mode, count, size, before: Number(before.usedGas), after: Number(after.usedGas),
             saved: Number(before.usedGas - after.usedGas) });
         }
@@ -65,7 +71,7 @@ describe("Calls and Specs optimization", function () {
             selector: target.interface.getFunction(method)!.selector, expectEmpty };
           for (const input of cases) {
             const before = await outcome(() => helper.measure.staticCall(false, cfg, input));
-            const after = await outcome(() => helper.measure.staticCall(true, cfg, input));
+            const after = await outcome(() => helper.measure.staticCall(true, cfg, mode === 2 || cfg.selector === target.interface.getFunction("revertRaw")!.selector ? input : withCredit(input)));
             // The frozen baseline accepted even nonzero lengths with expectEmpty.
             const expected = mode !== 2 && expectEmpty && before.output !== undefined && before.output !== "0x"
               ? { error: "0x" } : before;
@@ -88,7 +94,7 @@ describe("Calls and Specs optimization", function () {
         for (const expectEmpty of [false, true]) {
           const cfg = { mode, count: 1, target: await target.getAddress(),
             selector: target.interface.getFunction("returnRaw")!.selector, expectEmpty };
-          const result = await outcome(() => helper.measure.staticCall(true, cfg, input));
+          const result = await outcome(() => helper.measure.staticCall(true, cfg, mode === 2 || cfg.selector === target.interface.getFunction("revertRaw")!.selector ? input : withCredit(input)));
           expect(result).to.deep.equal(expectEmpty && size > 0
             ? { error: "0x" } : { first: output, output });
         }
@@ -103,7 +109,8 @@ describe("Calls and Specs optimization", function () {
       const cfg = { mode, count: 1, target: await target.getAddress(),
         selector: target.interface.getFunction("returnValue")!.selector, expectEmpty: false };
       for (const optimized of [false, true]) {
-        const r = await helper.measure.staticCall(optimized, cfg, "0x", { value: 123 });
+        const callCfg = { ...cfg, selector: target.interface.getFunction(optimized ? "returnValueCredit" : "returnValue")!.selector };
+        const r = await helper.measure.staticCall(optimized, callCfg, "0x", { value: 123 });
         expect(r.output).to.equal(abi.encode(["uint"], [123]));
       }
     }

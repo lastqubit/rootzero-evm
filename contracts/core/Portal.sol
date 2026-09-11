@@ -49,6 +49,9 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
     /// @notice Try to forward `message` to the commander's payable pipeline port.
     /// @dev Records the digest when forwarding fails or is skipped for lack of gas.
     /// Recording itself still reverts if the remaining gas is insufficient.
+    /// Successful return data is ignored. The commander's pipeline port settles
+    /// any remainder to the last context's account and returns zero credit;
+    /// this transport does not decode the message or perform account settlement.
     /// @param key Forwarding/recovery lookup key.
     /// @param message Encoded CONTEXT block stream to forward.
     /// @param value Native EVM value assigned to the forwarding attempt.

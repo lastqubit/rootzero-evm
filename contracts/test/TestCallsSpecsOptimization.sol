@@ -29,10 +29,10 @@ contract TestCallsSpecsOptimization {
         uint initial = gasleft();
         for (uint j; j < cfg.count; j++) {
             if (cfg.mode == 0) {
-                if (optimized) r.output = rawCall(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
+                if (optimized) (r.output, ) = rawCall(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
                 else r.output = previousRawCall(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
             } else if (cfg.mode == 1) {
-                if (optimized) r.output = rawCallCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
+                if (optimized) (r.output, ) = rawCallCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
                 else r.output = previousRawCallCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
             } else {
                 if (optimized) r.output = rawQuery(cfg.selector, cfg.target, data);
@@ -83,6 +83,10 @@ contract TestRawReturndata {
             calldatacopy(p, input.offset, input.length)
             revert(p, input.length)
         }
+    }
+
+    function returnValueCredit(bytes calldata) external payable returns (bytes memory, uint) {
+        return (abi.encode(msg.value), 0);
     }
 
     function returnValue(bytes calldata) external payable returns (bytes memory) {

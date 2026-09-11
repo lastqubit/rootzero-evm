@@ -7,7 +7,7 @@ import {Runtime} from "../core/Runtime.sol";
 /// @dev Exhausts the child frame's gas through unaffordable memory expansion.
 /// Unlike REVERT, this exceptional halt returns none of the forwarded gas.
 contract TestOutOfGasPipe {
-    function portPipePayable(bytes calldata) external payable returns (bytes memory) {
+    function portPipePayable(bytes calldata) external payable returns (bytes memory, uint) {
         assembly ("memory-safe") {
             return(0, 0x100000000)
         }

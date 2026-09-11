@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Accounts} from "../utils/Accounts.sol";
-import {AmountOutOfRange} from "../utils/Errors.sol";
-
+import {AmountOutOfRange, ZeroFee} from "../utils/Errors.sol";
+import {Fees} from "../utils/Fees.sol";
 import {Limits, Position} from "./Types.sol";
+import {HostAccount} from "./Runtime.sol";
 
 /// @title DebitAccountHook
 /// @notice Hook for exactly debiting externally managed account funds.
@@ -31,30 +31,21 @@ abstract contract CreditAccountHook {
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal virtual;
 }
 
-/// @title PostHook
-/// @notice Hook for posting one transaction between accounts.
-abstract contract PostHook {
-    /// @notice Override to post one transaction.
-    /// @dev Returning successfully asserts that the complete transaction was posted.
-    /// The hook must revert if it cannot apply the complete amount according to
-    /// its account and zero-account policy.
-    /// @param from Source account identifier, or zero when no debit side exists.
-    /// @param to Destination account identifier, or zero when no credit side exists.
-    /// @param asset Asset identifier.
-    /// @param amount Exact amount to post.
-    function post(bytes32 from, bytes32 to, bytes32 asset, uint amount) internal virtual;
-}
-
 /// @title BookHook
-/// @notice Hook for applying a Rootzero-backed position to an account.
+/// @notice Hook for applying one exact liability debit and one exact asset credit.
 abstract contract BookHook {
-    /// @notice Book a position's exact liability and asset amounts for `account`.
-    /// @dev The command requires a zero counterparty. Successful return asserts
-    /// that the full debt was debited and the full amount credited, or the hook
-    /// must revert. No fees or source remainder are added by this operation.
-    /// @param account Account whose position is booked.
-    /// @param position Rootzero-backed position to apply completely.
-    function book(bytes32 account, Position memory position) internal virtual;
+    /// @notice Debit `debt` from `from`, then credit `amount` to `to`.
+    /// @dev Apply both exact legs or revert. Zero amounts skip their legs; a zero
+    /// account alone does not skip a nonzero leg. Callers define account policy,
+    /// validate counterparties, and enforce limits and fees. Preserve debit-first
+    /// funding requirements even when accounts or assets match; do not net the legs.
+    /// @param from Account debited for the liability.
+    /// @param to Account credited with the asset.
+    /// @param asset Asset identifier for the credit.
+    /// @param amount Exact quantity to credit.
+    /// @param liability Asset identifier for the debit.
+    /// @param debt Exact quantity to debit.
+    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt) internal virtual;
 }
 
 /// @title SettleHook
@@ -72,51 +63,89 @@ abstract contract SettleHook {
 }
 
 /// @title Settlement
-/// @notice Default account-hook implementation for booking, transaction posting and position settlement.
-abstract contract Settlement is PostHook, DebitAccountHook, CreditAccountHook, BookHook, SettleHook {
-    /// @notice Post one transaction by debiting its source and crediting its destination.
-    /// Returns without calling either hook when `amount` is zero and skips either
-    /// operation when the corresponding account is zero.
-    /// @param from Source account identifier, or zero to skip the debit.
-    /// @param to Destination account identifier, or zero to skip the credit.
-    /// @param asset Asset identifier.
-    /// @param amount Exact amount to post.
-    function post(bytes32 from, bytes32 to, bytes32 asset, uint amount) internal virtual override {
+/// @notice Default application of debit/credit legs plus reusable settlement mechanics.
+/// @dev Intended for hosts that maintain account balances. Hosts without their own
+/// balance ledger implement RealizeHook instead; a production host chooses one
+/// position-fulfillment model. Hosts implement SettleHook themselves and choose
+/// their fee policy; this contract inherits SettleHook without implementing it.
+abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook, BookHook, SettleHook {
+    /// @notice Apply exact legs through the account hooks, debiting before crediting.
+    /// @dev Zero amounts skip their hooks. Matching accounts or assets are not
+    /// netted: the full debit must succeed before the credit. Failure reverts both.
+    function book(
+        bytes32 from,
+        bytes32 to,
+        bytes32 asset,
+        uint amount,
+        bytes32 liability,
+        uint debt
+    ) internal virtual override {
+        if (debt != 0) debitAccount(from, liability, debt);
+        if (amount != 0) creditAccount(to, asset, amount);
+    }
+
+    /// @notice Repay exact debt and collect a surcharge when it fits the limit.
+    /// @dev The caller validates the counterparty and authorizes the position.
+    /// Call collect afterward with the returned bps to enforce any pending fee.
+    /// Zero debt returns immediately;
+    /// nonzero debt is checked against the limit before account operations. Failed account
+    /// operations revert repayment and fee collection together.
+    /// @param account Account paying the debt and fee.
+    /// @param counterparty Account receiving the exact debt.
+    /// @param liability Asset used to repay the debt and pay the fee.
+    /// @param debt Exact quantity owed to the counterparty.
+    /// @param bps Surcharge rate applied to the debt.
+    /// @param limit Inclusive maximum total debit, including the fee.
+    /// @return remainingBps Zero after collecting a nonzero fee, otherwise the input bps.
+    function repay(
+        bytes32 account,
+        bytes32 counterparty,
+        bytes32 liability,
+        uint debt,
+        uint16 bps,
+        uint limit
+    ) internal returns (uint16 remainingBps) {
+        if (debt == 0) return bps;
+        if (debt > limit) revert AmountOutOfRange();
+        uint fee = Fees.addable(debt, bps, limit);
+        bool combined = counterparty == hostAccount;
+        book(account, counterparty, liability, combined ? debt + fee : debt, liability, debt + fee);
+        if (fee != 0 && !combined) creditAccount(hostAccount, liability, fee);
+        return fee == 0 ? bps : 0;
+    }
+
+    /// @notice Collect the asset amount and any fee left pending by repayment.
+    /// @dev The caller validates the counterparty and authorizes the position.
+    /// Call after repay, passing its returned bps to complete fee enforcement.
+    /// Checks the base asset limit before
+    /// the zero-amount return or account operations. Failed account
+    /// operations revert collection and fee payment together.
+    /// When the counterparty receives the fee, only the net amount is debited;
+    /// account hooks must support this net transfer rather than require gross flows.
+    /// Reverts with ZeroFee before transfers if nonzero bps yields no fee,
+    /// including when the asset amount is zero.
+    /// @param account Account receiving the asset amount after the fee.
+    /// @param counterparty Account providing the full asset amount.
+    /// @param asset Asset being collected and used to pay the fee.
+    /// @param amount Full quantity provided by the counterparty.
+    /// @param bps Remaining fee rate from repay; zero means no further fee is required.
+    /// @param limit Inclusive minimum net amount credited to the account.
+    function collect(
+        bytes32 account,
+        bytes32 counterparty,
+        bytes32 asset,
+        uint amount,
+        uint16 bps,
+        uint limit
+    ) internal {
+        if (amount < limit) revert AmountOutOfRange();
+        uint fee = Fees.deductible(amount, bps, limit);
+        if (bps != 0 && fee == 0) revert ZeroFee();
         if (amount == 0) return;
-        if (from != 0) debitAccount(from, asset, amount);
-        if (to != 0) creditAccount(to, asset, amount);
-    }
-
-    /// @notice Book a position by debiting its liability and crediting its asset.
-    /// @dev The caller must require a zero counterparty. Zero amounts skip their
-    /// respective account hooks. Any failure reverts both sides.
-    /// @param account Account whose position is booked.
-    /// @param position Rootzero-backed position with exact amounts.
-    function book(bytes32 account, Position memory position) internal virtual override {
-        if (position.debt != 0) debitAccount(account, position.liability, position.debt);
-        if (position.amount != 0) creditAccount(account, position.asset, position.amount);
-    }
-
-    /// @notice Settle the liability from account to counterparty and the asset in the opposite direction.
-    /// @dev Requires an account-category counterparty, rejecting zero.
-    /// The trusted caller and account hooks remain responsible for authorization.
-    /// This implementation adds no fees and checks both limits before account operations.
-    /// @dev A successful return means the complete exact-net `debt` was satisfied.
-    /// Skips either operation when its corresponding amount is zero, including position
-    /// sides encoded as absent with a zero identifier and quantity.
-    /// @param account Account whose position is settled.
-    /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
-    /// @param limits Minimum net asset amount and maximum total debt, including fees; enforced by the hook.
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal virtual override {
-        bytes32 counterparty = Accounts.account(position.counterparty);
-        if (position.amount < limits.amount || position.debt > limits.debt) revert AmountOutOfRange();
-        if (position.debt != 0) {
-            debitAccount(account, position.liability, position.debt);
-            creditAccount(counterparty, position.liability, position.debt);
-        }
-        if (position.amount != 0) {
-            debitAccount(counterparty, position.asset, position.amount);
-            creditAccount(account, position.asset, position.amount);
-        }
+        bool combined = counterparty == hostAccount;
+        uint net = amount - fee;
+        uint debit = combined ? net : amount;
+        book(counterparty, account, asset, net, asset, debit);
+        if (fee != 0 && !combined) creditAccount(hostAccount, asset, fee);
     }
 }

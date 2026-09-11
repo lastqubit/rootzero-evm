@@ -370,14 +370,19 @@ operation-validity checks, not a second peer authorization layer.
 In EVM today, the entrypoint is:
 
 ```solidity
-function portPipePayable(bytes calldata input) external payable onlyPeer returns (bytes memory)
+function portPipePayable(bytes calldata input) external payable onlyPeer returns (bytes memory, uint)
 ```
 
 The non-EVM ports should provide the same logical endpoint, even if the native name differs:
 
 ```rust
-fn peer_pipe(input: &[u8], attached_value: NativeValue) -> Result<Vec<u8>>
+fn peer_pipe(input: &[u8], attached_value: NativeValue) -> Result<(Vec<u8>, NativeValue)>
 ```
+
+Ports return output bytes and trusted native budget credit. The EVM dispatch
+port returns its unspent budget; the pipeline port settles its remainder through
+`cashin` and returns zero credit. Returning credit is accounting,
+not an automatic native transfer back to the caller.
 
 The bridge adapter is the only component that cares about remote chain identity. The host only sees a trusted local caller and a byte payload.
 
@@ -634,25 +639,25 @@ authorized as trusted local nodes before using the local chain's call mechanism.
 `ports/Pipe.sol` is the cross-chain execution pattern to preserve. The port pipe entrypoint consumes raw CONTEXT blocks from a trusted local caller, then forwards the nested STEP stream into `pipe()`.
 
 All contexts share one native-value budget. After the loop, `portPipePayable`
-credits any nonzero remaining budget to the **last context's account** through
-`cashin(account, amount)`. The sender controls the recipient through context
-ordering; the remainder is not split between accounts. Hosts must implement
-`CashinHook` to credit the full amount and validate the account, including their
-zero-account policy. Empty input with native value passes the zero account to
-`cashin`; empty input without value skips the hook.
+credits any nonzero remainder to the last context's account through `cashin`
+and returns zero native credit. Context ordering determines the recipient.
+Empty input with value passes the zero account to the host's `CashinHook`,
+which owns account validation. A zero remainder skips the hook.
+`Portal.forward` ignores successful return data; settlement belongs to the
+pipeline port, so the portal does not decode the message to infer an account.
 
 This means the bridge does not need a special "execute remote command" API. It only needs to deliver bytes to the destination host's port pipe. From that point onward, execution is identical to local pipeline execution.
 
-#### Port Posting
+#### Port Booking
 
-`ports/Post.sol` ports directly at the logic level:
+`ports/Book.sol` implements `portBook` with portable bookkeeping logic:
 
-1. Iterate TRANSACTION blocks.
-2. For each `(from, to, asset, amount)`, debit the source balance.
-3. Credit the destination balance.
+1. Iterate parents containing debit and credit ACCOUNT_AMOUNT blocks.
+2. Decode both legs and call `BookHook.book` with their accounts, assets, and amounts.
+3. The default implementation debits the source before crediting the destination, skipping zero amounts.
 4. Let chain-specific hooks perform actual asset movement where needed.
 
-The posting logic is portable because `from`, `to`, and `asset` are protocol IDs. Do not resolve account IDs just to update balances. Asset custody and transfer hooks are local, and those hooks may resolve IDs when native asset movement requires it.
+For transfers, use the same asset and amount on both legs. Set an omitted leg's amount to zero for single-sided entries. The booking logic is portable because account and asset values are protocol IDs. Do not resolve account IDs just to update balances. Asset custody and transfer hooks are local, and those hooks may resolve IDs when native asset movement requires it.
 
 ### Layer 3 - Chain Adapters
 

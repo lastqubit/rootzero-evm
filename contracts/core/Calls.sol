@@ -107,23 +107,25 @@ function tryRawCallCopy(
     }
 }
 
-/// @notice Call `addr` with `selector(input)` and return its decoded `bytes` result.
+/// @notice Call `addr` with `selector(input)` and return its decoded `(bytes, uint)` result.
 /// @dev Encodes memory `input` as the sole `bytes` argument, reverts with `FailedCall`
-/// on call failure, and rejects invalid successful `bytes` returndata. The caller
+/// on call failure, and rejects invalid successful `(bytes, uint)` returndata. The caller
 /// is responsible for authorization and selector/target validation.
-/// @param selector Selector of a `bytes -> bytes` function.
+/// @param selector Selector of a `bytes -> (bytes, uint)` port.
 /// @param addr Target contract address.
 /// @param value Native value to forward in wei.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @param expectEmpty Whether the decoded result must be empty.
-/// @return out Decoded `bytes` returned by the target.
+/// @return out Decoded output bytes returned by the target.
+/// @return credit Trusted native budget credit. No ETH is transferred back by this helper.
+/// The caller must ensure backing is available before adding credit to its budget.
 function rawCall(
     bytes4 selector,
     address addr,
     uint value,
     bytes memory input,
     bool expectEmpty
-) returns (bytes memory out) {
+) returns (bytes memory out, uint credit) {
     bool success;
     assembly ("memory-safe") {
         let data := mload(0x40)
@@ -150,18 +152,19 @@ function rawCall(
             // Successful ABI returndata already contains the bytes length word.
             let encoded := data
             returndatacopy(encoded, 0, size)
-            if or(lt(size, 0x40), iszero(eq(mload(encoded), 0x20))) {
+            if or(lt(size, 0x60), iszero(eq(mload(encoded), 0x40))) {
                 revert(0, 0)
             }
-            let outputLen := mload(add(encoded, 0x20))
+            credit := mload(add(encoded, 0x20))
+            let outputLen := mload(add(encoded, 0x40))
             if and(expectEmpty, iszero(iszero(outputLen))) {
                 revert(0, 0)
             }
             let padded := and(add(outputLen, 0x1f), not(0x1f))
-            if or(gt(outputLen, sub(size, 0x40)), iszero(eq(size, add(0x40, padded)))) {
+            if or(gt(outputLen, sub(size, 0x60)), iszero(eq(size, add(0x60, padded)))) {
                 revert(0, 0)
             }
-            out := add(encoded, 0x20)
+            out := add(encoded, 0x40)
             // Validated ABI size is word-aligned; reserve exactly the copied data.
             mstore(add(data, size), 0)
             mstore(0x40, add(data, size))
@@ -170,24 +173,26 @@ function rawCall(
     if (!success) revert FailedCall(addr, selector, out);
 }
 
-/// @notice Call `addr` with `selector(input)` copied from calldata and return decoded bytes.
+/// @notice Call `addr` with `selector(input)` copied from calldata and return decoded output and credit.
 /// @dev Encodes calldata `input` as the sole `bytes` argument without an intermediate
 /// memory copy, reverts with `FailedCall` on call failure, and rejects invalid
-/// successful `bytes` returndata. The caller is responsible for authorization and
+/// successful `(bytes, uint)` returndata. The caller is responsible for authorization and
 /// selector/target validation.
-/// @param selector Selector of a `bytes -> bytes` function.
+/// @param selector Selector of a `bytes -> (bytes, uint)` port.
 /// @param addr Target contract address.
 /// @param value Native value to forward in wei.
 /// @param input Raw contents of the function's `bytes` argument.
 /// @param expectEmpty Whether the decoded result must be empty.
-/// @return out Decoded `bytes` returned by the target.
+/// @return out Decoded output bytes returned by the target.
+/// @return credit Trusted native budget credit. No ETH is transferred back by this helper.
+/// The caller must ensure backing is available before adding credit to its budget.
 function rawCallCopy(
     bytes4 selector,
     address addr,
     uint value,
     bytes calldata input,
     bool expectEmpty
-) returns (bytes memory out) {
+) returns (bytes memory out, uint credit) {
     bool success;
     assembly ("memory-safe") {
         let data := mload(0x40)
@@ -214,18 +219,19 @@ function rawCallCopy(
             // Successful ABI returndata already contains the bytes length word.
             let encoded := data
             returndatacopy(encoded, 0, size)
-            if or(lt(size, 0x40), iszero(eq(mload(encoded), 0x20))) {
+            if or(lt(size, 0x60), iszero(eq(mload(encoded), 0x40))) {
                 revert(0, 0)
             }
-            let outputLen := mload(add(encoded, 0x20))
+            credit := mload(add(encoded, 0x20))
+            let outputLen := mload(add(encoded, 0x40))
             if and(expectEmpty, iszero(iszero(outputLen))) {
                 revert(0, 0)
             }
             let padded := and(add(outputLen, 0x1f), not(0x1f))
-            if or(gt(outputLen, sub(size, 0x40)), iszero(eq(size, add(0x40, padded)))) {
+            if or(gt(outputLen, sub(size, 0x60)), iszero(eq(size, add(0x60, padded)))) {
                 revert(0, 0)
             }
-            out := add(encoded, 0x20)
+            out := add(encoded, 0x40)
             // Validated ABI size is word-aligned; reserve exactly the copied data.
             mstore(add(data, size), 0)
             mstore(0x40, add(data, size))

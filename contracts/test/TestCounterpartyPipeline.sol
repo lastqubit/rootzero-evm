@@ -74,12 +74,17 @@ contract TestCounterpartyPipeline is Realize, ExecuteSettle, ExecuteBook, Settle
         return result;
     }
 
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(Settlement, SettleHook) {
-        Settlement.settle(account, position, limits);
+    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(SettleHook) {
+        bytes32 counterparty = Accounts.account(position.counterparty);
+        uint16 bps = counterparty == hostAccount ? 20 : 2;
+        bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
+        collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
     }
 
-    function book(bytes32 account, Position memory position) internal override(Settlement, BookHook) {
-        Settlement.book(account, position);
+    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
+        internal override(Settlement, BookHook)
+    {
+        Settlement.book(from, to, asset, amount, liability, debt);
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {

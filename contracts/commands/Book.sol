@@ -13,7 +13,7 @@ import {UnexpectedInput, UnexpectedValue} from "../utils/Errors.sol";
 using Executions for Execution;
 
 /// @title Book
-/// @notice Consume Rootzero-backed POSITION state through the booking hook.
+/// @notice Consume Rootzero-backed POSITION state through the book hook.
 abstract contract Book is CommandBase, BookHook, ActionAnnot {
     uint private immutable descriptor;
     uint private immutable id;
@@ -36,9 +36,9 @@ abstract contract Book is CommandBase, BookHook, ActionAnnot {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            if (position.counterparty != 0) revert UnexpectedValue();
-            book(exec.account, position);
+            (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) = exec.unpackPosition();
+            if (counterparty != 0) revert UnexpectedValue();
+            book(exec.account, exec.account, asset, amount, liability, debt);
         }
 
         return exec.close();
@@ -69,7 +69,7 @@ abstract contract ExecuteBook is Book {
         while (abs < end) {
             Position memory position = Memory.unpackPositionValue(abs);
             if (position.counterparty != 0) revert UnexpectedValue();
-            book(account, position);
+            book(account, account, position.asset, position.amount, position.liability, position.debt);
             unchecked {
                 abs += Sizes.Position;
             }

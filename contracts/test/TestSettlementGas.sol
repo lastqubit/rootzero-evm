@@ -6,17 +6,8 @@ import {Accounts} from "../utils/Accounts.sol";
 import {Balances} from "../core/Balances.sol";
 import {Limits, Position} from "../core/Types.sol";
 
-contract TestSettlement is Settlement, Balances {
-    event AccountOperation(bool debit, bytes32 account, bytes32 asset, uint amount);
-    event Applied(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt);
-
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
-        internal override
-    {
-        emit Applied(from, to, asset, amount, liability, debt);
-        Settlement.book(from, to, asset, amount, liability, debt);
-    }
-
+/// @dev Benchmark ledger without instrumentation in the account hooks.
+contract TestSettlementGas is Settlement, Balances {
     function seed(bytes32 account, bytes32 asset, uint amount) external {
         creditTo(account, asset, amount);
     }
@@ -25,11 +16,7 @@ contract TestSettlement is Settlement, Balances {
         return balances[account][asset];
     }
 
-    function applyPosition(bytes32 account, Position memory position) external {
-        settle(account, position, Limits(0, type(uint).max));
-    }
-
-    function applyLimitedPosition(bytes32 account, Position memory position, Limits memory limits) external {
+    function applyPosition(bytes32 account, Position memory position, Limits memory limits) external {
         settle(account, position, limits);
     }
 
@@ -42,11 +29,9 @@ contract TestSettlement is Settlement, Balances {
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         debitFrom(account, asset, amount);
-        emit AccountOperation(true, account, asset, amount);
     }
 
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         creditTo(account, asset, amount);
-        emit AccountOperation(false, account, asset, amount);
     }
 }

@@ -33,10 +33,12 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
 
     /// @notice Forward peer-supplied dispatches to the host-defined dispatch hook.
     /// @dev Dispatch hooks receive the shared top-level source value
-    ///      budget. Any `msg.value` not spent by the hook remains on this host.
+    ///      budget. Any value not spent by the hook is returned as trusted budget
+    ///      credit; this does not transfer ETH back to the peer.
     /// @param data DISPATCH block stream supplied by the trusted peer.
     /// @return Empty response bytes.
-    function portDispatchPayable(bytes calldata data) external payable onlyPeer returns (bytes memory) {
+    /// @return Remaining native budget credit.
+    function portDispatchPayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
         while (exec.more()) {
@@ -44,6 +46,6 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
             dispatchTo(portal, resources, payload, exec);
         }
         
-        return "";
+        return exec.close();
     }
 }

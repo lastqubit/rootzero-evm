@@ -25,6 +25,10 @@ error UnauthorizedAsset();
 /// @dev Thrown when a required nonzero amount is zero.
 error ZeroAmount();
 
+/// @dev No nonzero fee could be collected within the limits when a fee was required.
+/// Zero-bps operations do not require a fee and do not trigger this error.
+error ZeroFee();
+
 /// @dev Thrown when an amount falls outside its allowed range.
 error AmountOutOfRange();
 

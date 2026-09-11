@@ -82,7 +82,7 @@ contract TestCommandCalls is Pipeline {
         uint value,
         bytes memory input,
         bool expectEmpty
-    ) external payable returns (bytes memory) {
+    ) external payable returns (bytes memory, uint) {
         return rawCall(selector, target, value, input, expectEmpty);
     }
 
@@ -92,8 +92,21 @@ contract TestCommandCalls is Pipeline {
         uint value,
         bytes calldata input,
         bool expectEmpty
-    ) external payable returns (bytes memory) {
+    ) external payable returns (bytes memory, uint) {
         return rawCallCopy(selector, target, value, input, expectEmpty);
+    }
+
+    function echoPort(bytes calldata data) external payable returns (bytes memory, uint) {
+        emit BytesCalled(data, msg.value);
+        return (data, msg.value);
+    }
+
+    function returnRaw(bytes calldata data) external pure {
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            calldatacopy(ptr, data.offset, data.length)
+            return(ptr, data.length)
+        }
     }
 
     function testRawQuery(

@@ -19,7 +19,7 @@ import { Realize } from "../commands/Realize.sol";
 import { ExecuteSettle, SettlePayable } from "../commands/Settle.sol";
 import { Pipeline } from "../core/Pipeline.sol";
 import { Settlement, SettleHook } from "../core/Settlement.sol";
-import { PostPort } from "../ports/Post.sol";
+import { BookPort } from "../ports/Book.sol";
 import { AllowAssets } from "../commands/admin/AllowAssets.sol";
 import { DenyAssets } from "../commands/admin/DenyAssets.sol";
 import { Allowance } from "../commands/admin/Allowance.sol";
@@ -53,7 +53,7 @@ contract TestHost is
     SettlePayable,
     Settlement,
     Pipeline,
-    PostPort,
+    BookPort,
     AllowAssets,
     DenyAssets,
     Allowance,
@@ -152,7 +152,7 @@ contract TestHost is
 
     event SettleLimitsCalled(uint amount, uint debt);
 
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(Settlement, SettleHook) {
+    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(SettleHook) {
         checkSettleCounterparty(position.counterparty);
         if (position.amount < limits.amount || position.debt > limits.debt) revert AmountOutOfRange();
         emit SettleLimitsCalled(limits.amount, limits.debt);
@@ -273,7 +273,7 @@ contract TestHost is
         exec.budget = pipe(account, state, steps, budget);
         uint credit;
         (, credit) = exec.close();
-        post(bytes32(0), account, chainAsset, credit);
+        book(bytes32(0), account, chainAsset, credit, bytes32(0), 0);
     }
 
     function getAdminAccount() external view returns (bytes32) {
