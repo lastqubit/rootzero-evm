@@ -1,5 +1,10 @@
 # Shared versus direct enter validation
 
+Historical report: `Executions.enterNext` has since been removed in favor of
+separate `more` and `enter` calls. Combined-entry implementations remain only in
+benchmark fixtures. The measurements below predate that removal; rerunning the
+benchmarks compares the current separate loop against the frozen implementations.
+
 The shared validation improvement is now adopted in production Blocks.enter.
 Executions and Decoders retain their wrappers. enterNext now also delegates to
 Blocks.enter to centralize validation, accepting its measured gas and bytecode

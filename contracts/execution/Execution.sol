@@ -295,26 +295,6 @@ library Executions {
         data = msg.data[abs - Sizes.Header:end];
     }
 
-    /// @notice Enter the next input parent if either execution source has unread bytes.
-    /// @dev Equivalent to checking more() and then calling enter(spec). Unread state
-    /// still triggers input entry, so exhausted input cannot silently end iteration
-    /// while state remains. Malformed input reverts instead of returning false.
-    /// Like enter, this preserves the input frame and checks the payload start,
-    /// not the parent end. Callers must prove complete child consumption.
-    /// @param exec Execution whose input cursor advances over the parent header.
-    /// @param spec Expected parent block specification.
-    /// @return True after entry; false when neither source has unread bytes.
-    function enterNext(Execution memory exec, uint spec) internal pure returns (bool) {
-        uint decoders = exec.decoders;
-        uint current = uint32(decoders);
-        uint limit = uint32(decoders >> 32);
-        if (current >= limit && uint32(decoders >> 64) >= uint32(decoders >> 96)) return false;
-        (uint body,) = Blocks.enter(current, spec);
-        if (body > limit) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
-        return true;
-    }
-
     /// @notice Validate and enter the payload of the next execution input block.
     /// @dev The input cursor remains in its existing frame so callers can decode
     /// child blocks in place. Callers should prove complete payload consumption

@@ -4,8 +4,8 @@ import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import { concat, encodeBlock, exactSpec, Keys } from "./helpers/blocks.js";
 
-describe("Shared validation in shorter enterNext", function () {
-  it("compares the original loop, current enterNext, and shortened shared validation", async () => {
+describe("Separate entry versus historical combined entry", function () {
+  it("compares the original loop, current more/enter, and frozen combined entry", async () => {
     const spec = exactSpec(Keys.Bytes, 208);
     const child = encodeBlock(Keys.AccountAmount, "0x" + "11".repeat(96));
     const parent = encodeBlock(Keys.Bytes, concat(child, child));

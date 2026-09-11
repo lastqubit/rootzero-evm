@@ -1,5 +1,32 @@
 # enterNext benchmark
 
+Historical measurements: `Executions.enterNext` has been removed. Production
+callers now use `while (exec.more()) { exec.enter(spec); ... }`. The benchmark
+fixtures retain frozen combined-entry implementations for comparison; the
+`TestEnterNextCurrent` fixture measures today's separate `more`/`enter` loop.
+The tables below describe the earlier implementation, not current gas costs.
+
+## Separate entry after removal
+
+Rerunning `npm run bench -- test/enter-next.bench.test.ts
+test/shared-enter-next.bench.test.ts` after removal gives:
+
+| Parents | Current more/enter | Frozen shared combined entry |
+| ---: | ---: | ---: |
+| 0 | 219 | 276 |
+| 1 | 2,263 | 2,273 |
+| 8 | 16,571 | 16,252 |
+| 32 | 65,627 | 64,180 |
+| 128 | 261,851 | 255,892 |
+
+The current separate loop retains the improved `Blocks.enter` validation. The
+older baseline below predates that improvement, so its gas numbers overstate
+the cost of returning to separate calls. Differential checks passed for errors,
+both-source exhaustion, child decoding, and packed metadata preservation.
+These are isolated fixture measurements, not full `BookPort` transaction costs.
+
+## Historical adoption
+
 Executions now exposes enterNext, and ExchangePort uses it for parent iteration.
 The production helper delegates parent validation to Blocks.enter. This keeps
 validation centralized at the cost measured below. The differential fixture

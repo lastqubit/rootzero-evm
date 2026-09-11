@@ -86,12 +86,15 @@ contract TestEnterNextBaseline is EnterNextHarness {
 contract TestEnterNextCurrent is EnterNextHarness {
     constructor(uint spec) EnterNextHarness(spec) {}
     function loop(Execution memory exec, uint spec) internal pure override returns (uint checksum) {
-        while (Executions.enterNext(exec, spec)) {
+        while (Executions.more(exec)) {
+            Executions.enter(exec, spec);
             checksum ^= readPair(exec);
         }
     }
     function step(Execution memory exec, uint spec) internal pure override returns (bool) {
-        return Executions.enterNext(exec, spec);
+        if (!Executions.more(exec)) return false;
+        Executions.enter(exec, spec);
+        return true;
     }
 }
 
