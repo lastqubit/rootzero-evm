@@ -72,6 +72,16 @@ event Endpoint(uint indexed host, uint id, uint descriptor)
   Hosts may publish additional schema claims later through the admin `annotate`
   command.
 
+Annotation helpers use the `Annot` contract suffix: `ActionAnnot`,
+`CounterpartyAnnot`, `LabelAnnot`, and `SchemaAnnot`. Their functions are
+`annotateAction`, `annotateCounterparty`, `label`, and `schema`, respectively.
+
+`ActionEvent` (exported by `Events.sol`) provides
+`Action(bytes32 indexed account, uint32 action)` for hosts to identify an account
+action while recording its effects through balance or other events. Hosts choose
+where to emit it and must document any ordering used to associate those effects;
+the event itself carries no correlation identifier or position details.
+
 Names arrive as annotations. Each standard mixin emits a canonical label block
 at construction, and the admin `annotate` command publishes mutable annotations
 later:
@@ -201,7 +211,8 @@ host conventions.
 
 ```txt
 event Balance(bytes32 indexed account, bytes32 asset, uint balance, int change)
-event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, uint32 action)
+event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint32 action)
+event Settled(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
 event Received(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
 event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
 event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
@@ -231,10 +242,15 @@ Its mutation helpers leave event emission to the host. There is no separate
 host balance event or ledger.
 
 **Positions.** An action that exposes a resulting live position may emit
-`Positioned` with both the asset and liability sides and the primary `Actions`
+`Positioned` with both the asset and liability sides, the counterparty, and the primary `Actions`
 code that produced them. The event records the emitting host's observation of
 the transient pipeline position; it does not by itself prove that either side
 was persisted or settled.
+
+After fully settling a position, a host may emit `Settled` with the account,
+counterparty, and settled asset and debt quantities. Only `account` is indexed.
+Emit it once per position after the settlement hook succeeds; additional fees
+are recorded separately. Hosts opt into emission through `SettledEvent`.
 
 **Flows.** Operations that move value emit one flow event per affected amount,
 with the matching `Actions` code:
@@ -248,7 +264,6 @@ with the matching `Actions` code:
 | debitAccount               | `Spent`    | `Actions.Transfer` |
 | payout                     | `Spent` / `Received` | `Actions.Payout` |
 | realize                    | host-defined | `Actions.Realize` |
-| portPost                   | `Spent` / `Received` | `Actions.Post` |
 | final pipeline budget      | `Received` | host posting action |
 | provision (lock custody)   | `Locked`   | per operation      |
 | custody release            | `Unlocked` | per operation      |

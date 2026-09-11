@@ -4,10 +4,10 @@ pragma solidity ^0.8.33;
 // Aggregator: re-exports the core host, runtime, access, ledger, settlement, pipeline, node-call, and validation layer.
 // Import this file to bring the full rootzero host base layer into scope.
 
-import { Action } from "./annotations/Action.sol";
-import { Counterparty } from "./annotations/Counterparty.sol";
-import { Label } from "./annotations/Label.sol";
-import { Schema } from "./annotations/Schema.sol";
+import { ActionAnnot } from "./annotations/Action.sol";
+import { CounterpartyAnnot } from "./annotations/Counterparty.sol";
+import { LabelAnnot } from "./annotations/Label.sol";
+import { SchemaAnnot } from "./annotations/Schema.sol";
 import { AccessDenied, AdminAccess, CallerAccess, CommandAccess, enforceSender, GuardianAccess, NodeAccess, PeerAccess, PortAccess } from "./core/Access.sol";
 import { Balances, InsufficientFunds } from "./core/Balances.sol";
 import { CashinHook, CashoutHook } from "./core/Cash.sol";

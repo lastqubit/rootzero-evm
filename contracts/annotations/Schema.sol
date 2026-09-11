@@ -6,11 +6,11 @@ import {Specs} from "../codec/Specs.sol";
 import {AnnotationEvent} from "../events/Annotation.sol";
 import {Runtime} from "../core/Runtime.sol";
 
-/// @title Schema
+/// @title SchemaAnnot
 /// @notice Emits standard block-schema annotations for the current host.
 /// @dev Schema annotations accumulate for distinct block keys. For a trusted
 /// emitter, the latest schema for the same block key replaces the earlier claim.
-abstract contract Schema is Runtime, AnnotationEvent {
+abstract contract SchemaAnnot is Runtime, AnnotationEvent {
     /// @notice Construct and publish a context-local block specification without an explicit name.
     /// @param key Context-local key value.
     /// @param min Minimum accepted payload length.

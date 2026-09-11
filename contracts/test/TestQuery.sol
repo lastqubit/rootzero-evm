@@ -6,7 +6,7 @@ import {Blocks} from "../codec/Blocks.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {QueryBase} from "../queries/Base.sol";
-import {Schema} from "../annotations/Schema.sol";
+import {SchemaAnnot} from "../annotations/Schema.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 using Executions for Execution;
@@ -69,7 +69,7 @@ contract TestKeyedLocalQuery is QueryBase {
     }
 }
 
-contract TestQualifiedSchema is Schema {
+contract TestQualifiedSchema is SchemaAnnot {
     constructor() Runtime(0) {
         uint32 size = 64;
         schema(

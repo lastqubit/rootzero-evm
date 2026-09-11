@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Position} from "../core/Types.sol";
 import {BookHook} from "../core/Settlement.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 import {Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
@@ -14,13 +14,13 @@ using Executions for Execution;
 
 /// @title Book
 /// @notice Consume Rootzero-backed POSITION state through the booking hook.
-abstract contract Book is CommandBase, BookHook, Action {
+abstract contract Book is CommandBase, BookHook, ActionAnnot {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
         (id, descriptor) = command("book", Specs.Position, Specs.Empty, Specs.Empty, 0);
-        action(id, Actions.Book);
+        annotateAction(id, Actions.Book);
     }
 
     /// @notice Return the registered BOOK command ID.

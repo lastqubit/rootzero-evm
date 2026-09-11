@@ -3,14 +3,14 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions} from "../execution/Execution.sol";
 import {EndpointEvent} from "../events/Endpoint.sol";
-import {Label} from "../annotations/Label.sol";
-import {Schema} from "../annotations/Schema.sol";
+import {LabelAnnot} from "../annotations/Label.sol";
+import {SchemaAnnot} from "../annotations/Schema.sol";
 
 using Executions for Execution;
 
 /// @title EndpointBase
 /// @notice Shared endpoint metadata helpers.
-abstract contract EndpointBase is EndpointEvent, Label, Schema {
+abstract contract EndpointBase is EndpointEvent, LabelAnnot, SchemaAnnot {
     /// @notice Create and publish endpoint metadata with a default label.
     /// @param id Endpoint node ID.
     /// @param name Default human-readable endpoint label.

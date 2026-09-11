@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Position} from "../core/Types.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 
 using Executions for Execution;
@@ -23,13 +23,13 @@ abstract contract RealizeHook {
 }
 
 /// @notice Realize each POSITION and enforce its paired LIMITS on the result.
-abstract contract Realize is CommandBase, RealizeHook, Action {
+abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
         (id, descriptor) = command("realize", Specs.Position, Specs.Limits, Specs.Position, 0);
-        action(id, Actions.Realize);
+        annotateAction(id, Actions.Realize);
     }
 
     /// @notice Realize POSITION state blocks within their paired quantity limits.

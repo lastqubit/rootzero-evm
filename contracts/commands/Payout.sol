@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 
 using Executions for Execution;
@@ -21,13 +21,13 @@ abstract contract PayoutHook {
 /// @title Payout
 /// @notice Command that sinks BALANCE state blocks to matching ACCOUNT input blocks.
 /// Each BALANCE block is paired with one ACCOUNT block at the same position.
-abstract contract Payout is CommandBase, PayoutHook, Action {
+abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
         (id, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, 0);
-        action(id, Actions.Payout);
+        annotateAction(id, Actions.Payout);
     }
 
     /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.

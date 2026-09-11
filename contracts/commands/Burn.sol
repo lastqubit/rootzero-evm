@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import { Execution, Executions, CommandBase, Specs } from "./Base.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 using Executions for Execution;
 
@@ -20,13 +20,13 @@ abstract contract BurnHook {
 /// @title Burn
 /// @notice Command that irreversibly destroys each BALANCE state block via a virtual hook.
 /// Produces no output state.
-abstract contract Burn is CommandBase, BurnHook, Action {
+abstract contract Burn is CommandBase, BurnHook, ActionAnnot {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
         (id, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        action(id, Actions.Burn);
+        annotateAction(id, Actions.Burn);
     }
 
     /// @notice Burn each BALANCE block from the command state.

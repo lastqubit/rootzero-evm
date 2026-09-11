@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 import {Limits, Position} from "../core/Types.sol";
 import {SettleHook} from "../core/Settlement.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 import {Blocks, Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
@@ -29,13 +29,13 @@ abstract contract SettlePayableHook {
 
 /// @title Settle
 /// @notice Command that consumes POSITION state blocks through a virtual hook.
-abstract contract Settle is CommandBase, SettleHook, Action {
+abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
         (id, descriptor) = command("settle", Specs.Position, Specs.Limits, Specs.Empty, 0);
-        action(id, Actions.Settle);
+        annotateAction(id, Actions.Settle);
     }
 
     /// @notice Return the registered SETTLE command ID.
@@ -62,13 +62,13 @@ abstract contract Settle is CommandBase, SettleHook, Action {
 
 /// @title SettlePayable
 /// @notice Funded command that consumes POSITION state blocks through a virtual hook.
-abstract contract SettlePayable is CommandBase, SettlePayableHook, Action {
+abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
         (id, descriptor) = command("settlePayable", Specs.Position, Specs.Limits, Specs.Empty, Flags.Funded);
-        action(id, Actions.Settle);
+        annotateAction(id, Actions.Settle);
     }
 
     /// @notice Settle each POSITION block with access to a shared native-value budget.

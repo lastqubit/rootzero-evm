@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 using Executions for Execution;
 
@@ -20,13 +20,13 @@ abstract contract WithdrawHook {
 /// @notice Command that delivers BALANCE state blocks to an external destination.
 /// Use `withdraw` for assets being sent outside the protocol (e.g. ERC-20 transfers, ETH sends).
 /// For internal balance credits, use `creditAccount` instead.
-abstract contract Withdraw is CommandBase, WithdrawHook, Action {
+abstract contract Withdraw is CommandBase, WithdrawHook, ActionAnnot {
     uint private immutable descriptor;
 
     constructor() {
         uint id;
         (id, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        action(id, Actions.Withdraw);
+        annotateAction(id, Actions.Withdraw);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.

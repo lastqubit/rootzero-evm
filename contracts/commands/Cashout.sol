@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
-import {Action} from "../annotations/Action.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 import {InvalidAsset, UnexpectedInput} from "../utils/Errors.sol";
 import {CashoutHook} from "../core/Cash.sol";
@@ -13,13 +13,13 @@ using Executions for Execution;
 
 /// @title Cashout
 /// @notice Command that withdraws requested chain-asset amounts from its account.
-abstract contract Cashout is CommandBase, CashoutHook, Action {
+abstract contract Cashout is CommandBase, CashoutHook, ActionAnnot {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
         (id, descriptor) = command("cashout", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        action(id, Actions.Cashout);
+        annotateAction(id, Actions.Cashout);
     }
 
     /// @notice Return the registered CASHOUT command ID.

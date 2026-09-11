@@ -57,7 +57,7 @@ import {
     AccessDenied,
     CashinHook as CoreCashinHook,
     CashoutHook as CoreCashoutHook,
-    Counterparty,
+    CounterpartyAnnot,
     CommandAccess,
     ExecuteHook as CoreExecuteHook,
     PipeHook as CorePipeHook,

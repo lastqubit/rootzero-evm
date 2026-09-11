@@ -11,14 +11,14 @@ import {Execution, Executions} from "../execution/Execution.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 import {Budget, Budgets} from "../core/Budget.sol";
-import {Action} from "../annotations/Action.sol";
-import {Counterparty} from "../annotations/Counterparty.sol";
+import {ActionAnnot} from "../annotations/Action.sol";
+import {CounterpartyAnnot} from "../annotations/Counterparty.sol";
 
 using Writers for Writer;
 using Budgets for Budget;
 using Executions for Execution;
 
-contract TestBlocksHelper is Action, Counterparty {
+contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     bytes4 private constant TestKey = bytes4(uint32(1));
 
     function openInput(
@@ -62,11 +62,11 @@ contract TestBlocksHelper is Action, Counterparty {
     }
 
     function publishAction(uint entity, uint value) external {
-        action(entity, value);
+        annotateAction(entity, value);
     }
 
     function publishCounterparty(uint entity, bytes32 account) external {
-        counterparty(entity, account);
+        annotateCounterparty(entity, account);
     }
 
     function blockCapacity() external pure returns (uint) {

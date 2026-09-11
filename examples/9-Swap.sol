@@ -26,13 +26,13 @@ pragma solidity ^0.8.33;
 //       #bytes as hookData
 //   }
 
-import {Host, Schema} from "../contracts/Core.sol";
+import {Host, SchemaAnnot} from "../contracts/Core.sol";
 import {Blocks, CommandBase, Cur, Decoders, Execution, Executions, Position, Specs} from "../contracts/Commands.sol";
 
 using Decoders for Cur;
 using Executions for Execution;
 
-abstract contract SwapHopInput is Schema {
+abstract contract SwapHopInput is SchemaAnnot {
     string private constant INPUT = "{ bytes32 asset, uint32 fee, int32 tickSpacing, uint hook, #bytes as hookData }";
 
     uint private immutable inputSpec;
@@ -62,7 +62,7 @@ abstract contract SwapHopInput is Schema {
     }
 }
 
-abstract contract SwapInput is Schema {
+abstract contract SwapInput is SchemaAnnot {
     string private constant INPUT =
         "{ uint32 fee, int32 tickSpacing, uint hook, #bytes as hookData, bytes32 asset, uint amount, bytes32 liability, uint debt, many #swapHop }";
 
