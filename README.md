@@ -338,9 +338,10 @@ is handled by `book`. Generic codecs preserve the field;
 counterparty validation and authorization. Settlement hooks take
 `(account, position, limits)`, plus `Execution memory funds` for funded settlement.
 Each POSITION is paired with one LIMITS input. The hook enforces its minimum net
-asset amount and maximum total debt, including fees. The default `Settlement.settle` hook requires an account-category
-counterparty through `Accounts.account`, rejecting zero. It transfers liability from the active account to
-the counterparty, then transfers the asset in the opposite direction.
+asset amount and maximum total debt, including fees. Each host implements its own
+`settle` hook and fee policy. `Settlement` provides internal `repay` and `collect`
+helpers: validate the counterparty with `Accounts.account`, authorize the position,
+then pass the remaining basis points from `repay` to `collect`.
 
 Every nonzero position counterparty is an account, including host accounts.
 `settle` can exchange balances with any account counterparty on the executing
@@ -348,6 +349,11 @@ host. A host account can instead be realized by its host, whose hook compares
 against `Accounts.toHost(host)` and fulfills the obligation before returning zero.
 The subtype identifies the account, not the route: offchain metadata and available
 balances determine where to settle or realize. See [counterparty semantics](docs/Schema.md#counterparty-semantics).
+
+Hosts that maintain account balances implement `settle`; hosts without their own
+balance ledger implement `realize`. A production host chooses one model rather
+than exposing both for the same operation. `Settlement` supplies reusable ledger
+mechanics without a default `settle` implementation or fixed fee rates.
 
 Either side of a position may be absent. An absent asset side is encoded as
 `asset = 0, amount = 0`; an absent liability side is encoded as
@@ -504,13 +510,11 @@ the remaining budget after every step has executed. The enclosing entrypoint
 settles that final value once.
 
 `portPipePayable` shares one native-value budget across all supplied CONTEXT
-blocks. After every context has executed, it calls `cashin(account, amount)`
-once for any nonzero remainder, crediting the **last context's account**.
-Context ordering therefore determines who receives the remaining budget; it
-is not split between accounts. Hosts implement `CashinHook` to credit the full
-amount and validate the account, including their zero-account policy. Empty
-input with native value passes the zero account to `cashin`; without value,
-the hook is skipped.
+blocks. After all contexts execute, it calls `cashin` once for any nonzero
+remainder, crediting the last context's account, and returns zero native credit.
+Context ordering determines the recipient. Empty input with value passes the
+zero account to `cashin`; account validation belongs to the host's `CashinHook`.
+An exhausted or zero budget skips the hook.
 
 The EVM pipeline is deliberately coupled to the canonical wire layout for gas
 efficiency. It extracts command selectors, targets, and flags directly from
@@ -616,6 +620,25 @@ the descriptor's lanes through the published block schemas.
 
 ## Ports
 
+The book command and port share `BookHook` from `core/Settlement.sol`:
+`book(from, to, asset, amount, liability, debt)`. `Settlement` implements it by
+debiting `debt` from `from` before crediting `amount` to `to`, skipping zero
+amounts. Matching accounts or assets are not netted. Hosts may implement the
+hook directly while preserving those exact-leg and funding requirements.
+The settlement helpers also call it for their transfers. Separate fee credits
+call `creditAccount` directly.
+
+`rawCall` and `rawCallCopy` (from `Core.sol`) call ports returning
+`(bytes output, uint credit)`, using memory and calldata input respectively.
+They take `(selector, target, value, input, expectEmpty)`, strictly decode the
+tuple, and preserve target failures in `FailedCall`. `expectEmpty` constrains
+the output bytes only. Callers authorize the target and must ensure returned
+credit is backed before adding it to their budget; the helpers do not transfer
+ETH back. All ports return this tuple. Nonpayable ports return zero credit;
+`portDispatchPayable` returns its unspent budget. `portPipePayable` settles its
+remainder through `cashin` and returns zero credit.
+`rawQuery` continues to decode bytes-only query results.
+
 Ports are the host-to-host surfaces, callable only by trusted peer hosts.
 **A trusted peer is a fully trusted extension of the receiving host.** Admitting
 a peer authorizes it to use every port the host exposes. Peer trust is not a
@@ -640,22 +663,23 @@ with the full port surface must not be admitted as a trusted peer.
 
 The central ports are batches all the way down:
 
-- `portPost` consumes `transaction { bytes32 from, bytes32 to, bytes32 asset,
-  uint amount }` blocks, debiting `from` and crediting `to` per
-  block — how two hosts post transactions between their ledgers.
 - `portRequestAsset` consumes `amount { bytes32 asset, uint amount }` blocks and
   passes the authenticated peer, asset, and amount to a host hook. The hook
   validates asset support and applies the host's request and transfer policy.
 - `portRequestAllowance` consumes the same amount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
-- `portExchange` consumes unnamed custom parent blocks with local key `1`, each containing two
+- `portBook` consumes unnamed custom parent blocks with local key `1`, each containing two
   `accountAmount` children: debit account/liability/debt first, then credit
   account/asset/amount. It publishes `#accountAmount as (debit, credit)`
   with the same exact 208-byte payload spec used by its descriptor.
-  Both accounts may be the same for booking. It returns empty bytes, and any
+  Both accounts may be the same for booking. It returns empty bytes and zero credit, and any
   invalid parent, child, or account-hook failure reverts the entire batch.
-  Zero amounts are passed to the hooks.
+  Both legs are decoded before calling `BookHook`; zero amounts skip their legs.
+  For transfers, use the same asset and amount on both sides. For a single-sided
+  entry, explicitly set the omitted leg to zero debt or amount; a zero account
+  alone does not omit a leg. The `Tx` struct and transaction helpers
+  remain available, but this port consumes paired `accountAmount` blocks.
 - `portCreditAccount` and `portDebitAccount` consume `accountAmount` blocks
   and apply the operation to the specified account. To credit or debit a host,
   pass `Accounts.toHost(host)` as that account. The same account hooks handle both.
@@ -668,8 +692,11 @@ This is also the cross-portal mechanism. `relayPayable` and
 own destination and resource input and forward an already constructed command
 context, while `portDispatchPayable` dispatches an explicit portal payload. A
 `Portal` forwards ordinary incoming CONTEXT streams directly to its commander
-host's `portPipePayable` endpoint. Failed messages are retained by digest and
-may be replayed through a separately selected trusted recovery-handler port. A
+host's `portPipePayable` endpoint. The pipeline port settles any remainder to
+the last context's account and returns zero credit. The portal ignores successful
+return data and does not decode the message or perform account settlement.
+Failed messages are retained by digest and may be replayed through a separately
+selected trusted recovery-handler port. A
 bridge adapter moves the **raw
 bytes**; the destination host parses them with the same cursor rules and runs
 the same pipeline loop. Nothing in the payload is EVM-specific — step commands
@@ -698,6 +725,19 @@ and flow events (`Received`,
 `Spent`, `Locked`, `Unlocked`) for value movement, each tagged with the endpoint that
 caused it. An indexer can reconstruct the entire repository — endpoints,
 names, access sets, balances — from logs alone, with no artifact files.
+
+## Development
+
+For repository development, `npm test` runs regular tests without the
+`*.bench.test.ts` suites. Run a focused test with
+`npm test -- test/peer.test.ts`, or filter the regular suite with
+`npm test -- --grep "Port Entrypoints"`.
+
+Run `npm run bench` for benchmarks, or
+`npm run bench -- test/settlement.bench.test.ts` for a specific benchmark.
+Use benchmarks for performance changes, baseline updates, and release checks.
+`npm run test:all` runs the complete suite. `npm run typecheck` checks TypeScript.
+Use `npm test -- --list` or `npm run bench -- --list` to inspect suite selection.
 
 ## Using the Library
 

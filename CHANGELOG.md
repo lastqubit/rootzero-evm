@@ -8,6 +8,77 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.38.0
+
+### Breaking Changes
+
+- Remove `Executions.enterNext`; use `while (exec.more())` followed by
+  `exec.enter(spec)`. `BookPort` now uses the separate traversal and entry helpers.
+- Rename annotation contracts to `ActionAnnot`, `CounterpartyAnnot`, `LabelAnnot`,
+  and `SchemaAnnot`, keeping their existing file paths. Rename the action and
+  counterparty helpers to `annotateAction` and `annotateCounterparty`; `label`
+  and `schema` retain their names.
+- Remove `PostPort.portPost`; use `BookPort.portBook` for transfers and
+  single-sided entries, explicitly setting omitted legs to zero amounts.
+  Keep the `Tx` struct and transaction encoding/decoding helpers.
+- Rename `ExchangePort.portExchange` to `BookPort.portBook` and move its import
+  to `ports/Book.sol`. The selector changes; callers must use the new endpoint.
+  The input schema is unchanged. Hook routing, zero-amount handling, and decode
+  ordering change as described below.
+- Generalize `BookHook` to `book(from, to, asset, amount, liability, debt)` and
+  remove `PostHook` and the internal `post` helper. Book commands, book ports,
+  and settlement transfers use this shared hook directly.
+  `Settlement.book` preserves debit-first funding and skips zero amounts.
+  The book port now decodes both legs before invoking the hook and skips zero-amount
+  account operations, which can change error precedence and hook observations.
+- Change all port return types and the existing `rawCall` / `rawCallCopy` helpers
+  to `(bytes, uint credit)`. Callers must decode the tuple and handle trusted
+  credit; this return-type change preserves selectors, so old bytes-only callers
+  are incompatible even without a selector change.
+  Dispatch ports return unspent budget. `PipePayablePort` preserves its final
+  `cashin` to the last context's account and returns zero credit. `Portal.forward`
+  continues to ignore successful return data. Query results remain bytes-only.
+- Remove the default `Settlement.settle` implementation, leaving its inherited
+  `SettleHook` abstract. Hosts implement their own settlement hook and fee policy using
+  the internal `repay` and `collect` helpers. Existing overrides should no longer
+  name `Settlement` as a settle implementation.
+- Add unindexed `counterparty` after `debt` and before `action` in `Positioned`.
+  Update emitters and indexers for the new event signature.
+- Move `PositionedEvent` from `events/Positioned.sol` to `events/Position.sol`,
+  alongside `SettledEvent`. Imports through `Events.sol` remain unchanged.
+
+### Added
+
+- Add `ActionEvent` with `Action(bytes32 indexed account, uint32 action)` and
+  deployment-time ABI discovery, exported through `Events.sol`.
+- Separate regular tests from benchmarks: `npm test` excludes `*.bench.test.ts`,
+  `npm run bench` runs them explicitly, and `npm run test:all` runs the full suite.
+  Explicit test-file selection remains supported.
+- Document the intended realize/settle host models, add host-payer settlement
+  coverage, and benchmark the four fee paths with empty and existing recipient
+  balances. Results and reproduction instructions are in `docs/SettlementGas.md`.
+- Add shared `ZeroFee` in `utils/Errors.sol`, exported through `Utils.sol`, for
+  required fees that cannot be collected within the limits.
+- Add reusable `HostAccount` in `core/Runtime.sol`, exported through `Core.sol`.
+  `Settlement` inherits its immutable host account identity.
+- Add internal settlement helpers without fixed fee rates. Fees go to the immutable
+  `hostAccount`, derived from the settlement contract address. The
+  `repay` helper tries a liability surcharge; `collect` falls back to an asset-side
+  deduction. `repay` returns the input basis points until a nonzero fee is
+  collected, then zero. `collect` reverts with `ZeroFee` if it cannot
+  collect a pending fee and has no return value.
+  Each helper enforces its own base amount limit before transfers; zero debt
+  returns immediately since it cannot exceed an unsigned maximum.
+  When the counterparty is the fee recipient, repayment combines its credits and
+  collection debits only the net asset amount, omitting a separate fee credit.
+- Add `Fees.deductible` and `Fees.addable` through `Utils.sol`. They return
+  rounded-up basis-point fees only when the full fee fits the inclusive limit,
+  otherwise zero, with overflow-safe calculation.
+- Add `Fees.calculate` with signed `int16` basis points: positive adds, negative
+  deducts, and the returned fee quantity is unsigned.
+- Add `SettledEvent`, exported from `Events.sol`, for fully settled positions
+  with only `account` indexed.
+
 ## 1.37.0
 
 ### Breaking Changes
