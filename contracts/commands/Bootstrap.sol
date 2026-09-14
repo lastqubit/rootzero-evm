@@ -62,9 +62,8 @@ abstract contract Bootstrap is CommandBase, DebitAccountHook {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        if (input.length % Sizes.Bootstrap != 0) revert Blocks.InvalidBlock();
 
-        (uint abs, uint end) = Cursors.bounds(input);
+        (uint abs, uint end) = Cursors.bounds(input, Sizes.Bootstrap);
         output = new bytes(input.length / Sizes.Bootstrap * Sizes.Balance);
         credit = value;
         uint i;
@@ -78,6 +77,7 @@ abstract contract Bootstrap is CommandBase, DebitAccountHook {
                 i += Sizes.Balance;
             }
         }
-        handled = true;
+
+        return (true, output, credit);
     }
 }

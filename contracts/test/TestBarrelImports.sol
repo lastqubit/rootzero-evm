@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Limits as CoreLimits} from "../Core.sol";
+import {Headers as CodecHeaders} from "../Codec.sol";
+import {Headers as CommandHeaders} from "../Commands.sol";
+
+import {Quote as CoreQuote} from "../Core.sol";
+import {Quote as CodecQuote} from "../Codec.sol";
 import {HostAccount} from "../Core.sol";
-import {Limits as CodecLimits} from "../Codec.sol";
 
 import {UnexpectedValue} from "../Utils.sol";
-import {ZeroFee} from "../Utils.sol";
 import {Positions} from "../Utils.sol";
-import {Book, ExecuteBook, BookHook} from "../Endpoints.sol";
+import {BookHook} from "../Endpoints.sol";
 import {BookHook as CoreBookHook} from "../Core.sol";
 
 // Compile-time coverage for public symbols that were previously omitted from

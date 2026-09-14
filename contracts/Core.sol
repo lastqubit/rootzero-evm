@@ -21,7 +21,7 @@ import { Budget, Budgets } from "./core/Budget.sol";
 import { BookHook, CreditAccountHook, DebitAccountHook, SettleHook, Settlement } from "./core/Settlement.sol";
 import { UnexpectedAmount } from "./utils/Errors.sol";
 import { ForwardHook, Portal } from "./core/Portal.sol";
-import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Limits, Position, Tx } from "./core/Types.sol";
+import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Quote, Position, Tx } from "./core/Types.sol";
 import { Validator } from "./core/Validator.sol";
 
 

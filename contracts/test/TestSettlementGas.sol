@@ -2,9 +2,9 @@
 pragma solidity ^0.8.33;
 
 import {Settlement} from "../core/Settlement.sol";
-import {Accounts} from "../utils/Accounts.sol";
 import {Balances} from "../core/Balances.sol";
-import {Limits, Position} from "../core/Types.sol";
+import {Position} from "../core/Types.sol";
+import {Positions} from "../utils/Positions.sol";
 
 /// @dev Benchmark ledger without instrumentation in the account hooks.
 contract TestSettlementGas is Settlement, Balances {
@@ -16,16 +16,11 @@ contract TestSettlementGas is Settlement, Balances {
         return balances[account][asset];
     }
 
-    function applyPosition(bytes32 account, Position memory position, Limits memory limits) external {
-        settle(account, position, limits);
+    function applyPosition(bytes32 account, Position memory position, uint limits) external {
+        Positions.requireLimits(position, limits);
+        settle(account, position);
     }
 
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override {
-        bytes32 counterparty = Accounts.account(position.counterparty);
-        uint16 bps = counterparty == hostAccount ? 20 : 2;
-        bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
-        collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
-    }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         debitFrom(account, asset, amount);

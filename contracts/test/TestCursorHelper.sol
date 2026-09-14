@@ -28,6 +28,10 @@ contract TestCursorHelper {
         return Cursors.create(10, 30, 0).seek(15).bounds();
     }
 
+    function testCalldataBounds(bytes calldata source, uint size) external pure returns (uint abs, uint end) {
+        return Cursors.bounds(source, size);
+    }
+
     /// @notice Exercise cursor consumption and report the resulting position.
     function testCursorNavigation(
         uint offset,

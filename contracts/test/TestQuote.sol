@@ -1,35 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Blocks, Cur, Decoders, Position, Specs, Writer, Writers} from "../Codec.sol";
+import {Blocks, Cur, Decoders, Quote, Position, Specs, Writer, Writers} from "../Codec.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Positions} from "../utils/Positions.sol";
+import {Sizes} from "../codec/Specs.sol";
+import {Schemas} from "../codec/Schema.sol";
 
 contract TestQuote {
     using Decoders for Cur;
     using Writers for Writer;
     using Executions for Execution;
 
-    function check(bytes calldata input, Position memory position) external pure returns (Position memory next) {
+    function metadata() external pure returns (uint, uint, string memory) {
+        return (Specs.Quote, Sizes.Quote, Schemas.Quote);
+    }
+
+    function check(bytes calldata input, Position memory position) external pure returns (Quote memory next) {
         Cur memory cur = Decoders.open(input);
         Positions.requireQuoted(position, cur.unpackQuoteValue());
         return cur.unpackQuoteValue();
     }
 
-    function create(Position memory quote) external pure returns (bytes memory) {
-        return Blocks.createQuote(quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty);
+    function create(Quote memory quote) external pure returns (bytes memory) {
+        return Blocks.createQuote(quote.asset, quote.liability, quote.counterparty, quote.limits);
     }
 
-    function write(Position memory quote, bool scalar) external pure returns (bytes memory) {
+    function write(Quote memory quote, bool scalar) external pure returns (bytes memory) {
         Writer memory writer = Writers.init(Specs.Quote, 1);
-        if (scalar) writer.appendQuote(quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty);
+        if (scalar) writer.appendQuote(quote.asset, quote.liability, quote.counterparty, quote.limits);
         else writer.appendQuote(quote);
         return writer.finish();
     }
 
-    function decode(bytes calldata input, bool scalar) external pure returns (Position memory quote) {
+    function decode(bytes calldata input, bool scalar) external pure returns (Quote memory quote) {
         Cur memory cur = Decoders.open(input);
-        if (scalar) (quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty) = cur.unpackQuote();
+        if (scalar) (quote.asset, quote.liability, quote.counterparty, quote.limits) = cur.unpackQuote();
         else quote = cur.unpackQuoteValue();
     }
 
@@ -39,8 +45,8 @@ contract TestQuote {
         while (exec.more()) {
             exec.unpackPosition();
             if (scalar) {
-                (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) = exec.unpackQuote();
-                exec.outputQuote(asset, amount, liability, debt, counterparty);
+                (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) = exec.unpackQuote();
+                exec.outputQuote(asset, liability, counterparty, limits);
             } else {
                 exec.outputQuote(exec.unpackQuoteValue());
             }

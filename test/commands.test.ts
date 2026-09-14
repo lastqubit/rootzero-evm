@@ -9,7 +9,7 @@ import {
   encodeBootstrapBlock,
   encodeAssetBlock,
   encodeAmountBlock,
-  encodeLimitsBlock,  encodeHostAccount,
+  MaxUint128, encodeLimitsBlock,  encodeHostAccount,
   encodeBalanceBlock, encodeLiabilityPosition, encodePositionBlock, encodeAllocationBlock, encodeCustodyBlock,
   encodeAccountBlock, encodeNodeBlock, encodeStepBlock, encodeUserAccount,
   encodeActionBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
@@ -78,7 +78,7 @@ describe("Commands", () => {
   }
 
   function settlementLimits(count = 1) {
-    return concat(...Array.from({ length: count }, () => encodeLimitsBlock(0n, ethers.MaxUint256)));
+    return concat(...Array.from({ length: count }, () => encodeLimitsBlock(0n, MaxUint128)));
   }
 
   function settleCtx(overrides: { state: string; input?: string }) {
@@ -481,19 +481,20 @@ describe("Commands", () => {
           ? cmd("settle").then(id => callAs(0, "testPipe", userAccount, state, encodeStepBlock(id, 0n, input)))
           : callAs(0, method, ctx({ state, input }), method === "settlePayable" ? { value: 280n } : {});
       }
-      it("passes distinct limits for each position to the override", async () => {
-        const tx = run(concat(encodeLimitsBlock(100n, 40n), encodeLimitsBlock(90n, 50n)), true);
-        await expect(tx).to.emit(host, "SettleLimitsCalled").withArgs(100n, 40n);
-        await expect(tx).to.emit(host, "SettleLimitsCalled").withArgs(90n, 50n);
+      it("checks distinct limits for each position before the override", async () => {
+        await expect(run(concat(encodeLimitsBlock(100n, 40n), encodeLimitsBlock(90n, 50n)), true))
+          .to.emit(host, method === "settlePayable" ? "SettlePayableCalled" : "SettleCalled");
       });
-      it("lets the hook reject violated limits", async () => {
+      it("rejects violated limits before invoking the hook", async () => {
         for (const limits of [encodeLimitsBlock(101n, 40n), encodeLimitsBlock(100n, 39n)]) {
-          await expect(run(limits)).to.be.revertedWithCustomError(host, "AmountOutOfRange");
+          await expect(run(limits)).to.be.revertedWithCustomError(host, "OutOfRange");
         }
       });
       it("rejects missing and truncated LIMITS", async () => {
-        for (const input of ["0x", ethers.dataSlice(encodeLimitsBlock(0n, 100n), 0, 71)]) {
-          await expect(run(input)).to.be.revertedWithCustomError(host, "OutOfBounds");
+        for (const input of ["0x", ethers.dataSlice(encodeLimitsBlock(0n, 100n), 0, 39)]) {
+          const error = method === "memory"
+            ? (input === "0x" ? "UnconsumedData" : "InvalidBlock") : "OutOfBounds";
+          await expect(run(input)).to.be.revertedWithCustomError(host, error);
         }
       });
       it("rejects extra LIMITS", async () => {
@@ -545,7 +546,7 @@ describe("Commands", () => {
         .withArgs(
           await host.host(),
           await cmd("settle"),
-          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 64 }),
+          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 32 }),
         );
     });
 
@@ -614,7 +615,7 @@ describe("Commands", () => {
         .withArgs(
           await host.host(),
           await cmd("settlePayable"),
-          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 64, funded: true }),
+          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 32, funded: true }),
         );
     });
 
@@ -726,7 +727,7 @@ describe("Commands", () => {
   // â”€â”€ CreditTo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe("realize", () => {
-    function positionInput(minimum = 0n, maximum = ethers.MaxUint256) {
+    function positionInput(minimum = 0n, maximum = MaxUint128) {
       return encodeLimitsBlock(minimum, maximum);
     }
     const asset = ethers.zeroPadValue("0x21", 32);
@@ -744,7 +745,7 @@ describe("Commands", () => {
           await cmd("realize"),
           endpointDescriptor({
             state: Keys.Position, stateHint: 160,
-            input: Keys.Limits, inputHint: 64,
+            input: Keys.Limits, inputHint: 32,
             output: exactSpec(Keys.Position, 160),
           }),
         );
@@ -813,7 +814,7 @@ describe("Commands", () => {
       await expect(callAs(0, "realize", ctx({
         state: encodePositionBlock(asset, 1n, liability, 1n, encodeHostAccount(await host.host())),
         input: encodeAssetBlock(toAsset),
-      }))).to.be.revertedWithCustomError(host, "OutOfBounds");
+      }))).to.be.revertedWithCustomError(host, "InvalidBlock");
       await expect(callAs(0, "realize", ctx({
         input: positionInput(),
       }))).to.be.revertedWithCustomError(host, "OutOfBounds");
@@ -828,17 +829,18 @@ describe("Commands", () => {
         ? encodePositionBlock(asset, amount, ethers.ZeroHash, 0n)
         : encodeLiabilityPosition(asset, amount);
       const encodeInput = (limit: bigint) => side === "asset"
-        ? encodeLimitsBlock(limit, ethers.MaxUint256)
+        ? encodeLimitsBlock(limit, MaxUint128)
         : encodeLimitsBlock(0n, limit);
       for (const [amount, limit] of [
-        [10n, 9n], [10n, 10n], [10n, 11n], [10n, 0n], [10n, ethers.MaxUint256],
-        [0n, 0n], [0n, 1n], [ethers.MaxUint256, ethers.MaxUint256],
+        [10n, 9n], [10n, 10n], [10n, 11n], [10n, 0n], [10n, MaxUint128],
+        [0n, 0n], [0n, 1n], [MaxUint128, MaxUint128],
+        [MaxUint128 + 1n, MaxUint128], [ethers.MaxUint256, MaxUint128],
       ]) {
         it(`${side} checks limit ${limit} against output ${amount}`, async () => {
           const args = ctx({ state: encodePositionBlock(side === "asset" ? from : ethers.ZeroHash, side === "asset" ? amount : 0n, side === "debt" ? from : ethers.ZeroHash, side === "debt" ? amount : 0n, encodeHostAccount(await host.host())), input: encodeInput(limit) });
           const fails = side === "asset" ? amount < limit : amount > limit;
           if (fails) {
-            await expect(callAs(0, "realize", args)).to.be.revertedWithCustomError(host, "AmountOutOfRange");
+            await expect(callAs(0, "realize", args)).to.be.revertedWithCustomError(host, "OutOfRange");
           } else {
             expect(await host.realize.staticCall(...args)).to.deep.equal([encodeState(to, amount), 0n]);
           }
@@ -853,7 +855,7 @@ describe("Commands", () => {
             .to.deep.equal([encodeState(to, 96n), 0n]);
           const limit = side === "asset" ? 97n : 95n;
           await expect(callAs(0, "realize", ctx({ state, input: encodeInput(limit) })))
-            .to.be.revertedWithCustomError(host, "AmountOutOfRange");
+            .to.be.revertedWithCustomError(host, "OutOfRange");
         });
       });
     }
@@ -1513,6 +1515,42 @@ describe("Commands", () => {
   });
 
   describe("pipeline", () => {
+    for (const [method, hook] of [
+      ["debitAccount", "DebitFromCalled"],
+      ["creditAccount", "CreditToCalled"],
+      ["settle", "SettleCalled"],
+    ]) {
+      it(`accepts an empty local ${method} batch without calling its hook`, async () => {
+        const steps = encodeStepBlock(await cmd(method), 0n, "0x");
+        const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps)).wait();
+        expect(receipt.logs.map((log: any) => log.topics[0]))
+          .not.to.include(host.interface.getEvent(hook)!.topicHash);
+      });
+
+      it(`returns assigned value for an empty local ${method} batch`, async () => {
+        const steps = encodeStepBlock(await cmd(method), 1n, "0x");
+        await expect(callAs(0, "testPipe", userAccount, "0x", steps, { value: 1n }))
+          .to.emit(host, "CreditToCalled").withArgs(userAccount, await utils.testToChain(), 1n, 1n);
+      });
+
+      it(`rejects a partial block in local ${method}`, async () => {
+        const state = method === "debitAccount" ? "0x" : "0x01";
+        const input = method === "debitAccount" ? "0x01" : "0x";
+        const steps = encodeStepBlock(await cmd(method), 0n, input);
+        await expect(callAs(0, "testPipe", userAccount, state, steps))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      });
+    }
+
+    it("still rejects undeclared sources for empty local debit and credit batches", async () => {
+      await expect(callAs(0, "testPipe", userAccount, "0x01",
+        encodeStepBlock(await cmd("debitAccount"), 0n, "0x")))
+        .to.be.revertedWithCustomError(host, "UnexpectedState");
+      await expect(callAs(0, "testPipe", userAccount, "0x",
+        encodeStepBlock(await cmd("creditAccount"), 0n, "0x01")))
+        .to.be.revertedWithCustomError(host, "UnexpectedInput");
+    });
+
     it("executes cashout batches through optimized local execution", async () => {
       const chainAsset = await utils.testToChain();
       const state = concat(
@@ -1544,13 +1582,13 @@ describe("Commands", () => {
         .withArgs(userAccount, amount);
     });
 
-    it("rejects step value and input for local cashout", async () => {
+    it("returns step value but rejects input for local cashout", async () => {
       const command = await cmd("cashout");
       const chainAsset = await utils.testToChain();
       const state = encodeBalanceBlock(chainAsset, 1n);
       const valued = encodeStepBlock(command, 1n, "0x");
       await expect(callAs(0, "testPipe", userAccount, state, valued, { value: 1n }))
-        .to.be.revertedWithCustomError(host, "ValueNotAllowed");
+        .to.emit(host, "CreditToCalled").withArgs(userAccount, chainAsset, 1n, 1n);
 
       const step = encodeStepBlock(command, 0n, encodeBalanceBlock(chainAsset, 1n));
       await expect(callAs(0, "testPipe", userAccount, state, step))
@@ -1866,7 +1904,7 @@ describe("Commands", () => {
       }
     });
 
-    it("rejects value assigned to every local non-funded command", async () => {
+    it("returns unused value from populated local commands exactly once", async () => {
       const asset = ethers.zeroPadValue("0xc1", 32);
       const liability = ethers.zeroPadValue("0xc2", 32);
       const cases = [
@@ -1882,26 +1920,45 @@ describe("Commands", () => {
         },
         {
           command: "settle",
-          state: encodePositionBlock(asset, 1n, liability, 1n),
-          input: "0x",
+          state: encodePositionBlock(asset, 1n, liability, 1n, userAccount),
+          input: encodeLimitsBlock(1n, 1n),
         },
         {
           command: "settle",
-          state: encodeLiabilityPosition(liability, 1n),
-          input: "0x",
+          state: encodePositionBlock(ethers.ZeroHash, 0n, liability, 1n, userAccount),
+          input: encodeLimitsBlock(0n, 1n),
         },
       ];
 
       for (const testCase of cases) {
-        const steps = encodeStepBlock(
+        let steps = encodeStepBlock(
           await cmd(testCase.command),
           1n,
           testCase.input,
         );
+        if (testCase.command === "debitAccount") {
+          steps = concat(steps, encodeStepBlock(await cmd("creditAccount"), 1n, "0x"));
+        }
         await expect(
           callAs(0, "testPipe", userAccount, testCase.state, steps, { value: 1n }),
-        ).to.be.revertedWithCustomError(host, "ValueNotAllowed");
+        ).to.emit(host, "CreditToCalled").withArgs(userAccount, await utils.testToChain(), 1n, 1n);
       }
+    });
+
+    it("preserves assigned value across empty adapters for a later funded step", async () => {
+      const steps = concat(
+        ...await Promise.all(["debitAccount", "creditAccount", "settle", "cashout"]
+          .map(async method => encodeStepBlock(await cmd(method), 7n, "0x"))),
+        encodeStepBlock(await remoteCmd("noop"), 7n, "0x"),
+      );
+      const tx = await callAs(0, "testPipe", userAccount, "0x", steps, { value: 7n });
+      await expect(tx).to.emit(remote, "CommandCalled")
+        .withArgs(remote.interface.getFunction("noop")!.selector, 7n);
+      const receipt = await tx.wait();
+      expect(receipt.logs.map((log: any) => log.topics[0]))
+        .not.to.include(host.interface.getEvent("CreditToCalled")!.topicHash);
+      await expect(callAs(0, "testPipe", userAccount, "0x", steps, { value: 6n }))
+        .to.be.revertedWithCustomError(host, "InsufficientValue");
     });
 
     it("executes trusted remote STEP commands directly", async () => {
@@ -2093,6 +2150,3 @@ describe("Commands", () => {
     });
   });
 });
-
-
-

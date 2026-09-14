@@ -53,20 +53,20 @@ abstract contract ExecuteCashout is Cashout {
     /// @param account Account whose chain asset is withdrawn.
     /// @param state BALANCE block stream held in pipeline memory.
     /// @param input Empty input required by the command schema.
-    /// @param value Native value assigned to this command; must be zero.
+    /// @param value Native value assigned to this command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
-    /// @return credit Zero native budget credit.
+    /// @return credit Unused assigned native value.
     function executeCashout(
         bytes32 account,
         bytes memory state,
         bytes calldata input,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (value != 0) revert ValueNotAllowed();
         if (input.length != 0) revert UnexpectedInput();
 
         (uint abs, uint end) = Memory.bounds(state, Sizes.Balance);
+
         while (abs < end) {
             (bytes32 asset, uint amount) = Memory.unpackBalance(abs);
             if (asset != chainAsset) revert InvalidAsset();
@@ -75,6 +75,7 @@ abstract contract ExecuteCashout is Cashout {
                 abs += Sizes.Balance;
             }
         }
-        return (true, "", 0);
+
+        return (true, "", value);
     }
 }

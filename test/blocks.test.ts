@@ -74,6 +74,81 @@ describe("Cursors", () => {
       expect(await blocksHelper.read32AsUint(source, 3)).to.equal(amount);
     });
 
+    it("reads equal words at distinct unaligned or identical positions", async () => {
+      const word = ethers.hexlify(Uint8Array.from({ length: 32 }, (_, i) => i + 1));
+      const source = concat("0xaabbcc", word, word);
+      expect(await blocksHelper.readEqualAt32(source, 3, 35)).to.equal(word);
+      expect(await blocksHelper.readEqualAt32(source, 35, 3)).to.equal(word);
+      expect(await blocksHelper.readEqualAt32(source, 3, 3)).to.equal(word);
+    });
+
+    it("reverts with UnexpectedValue when any byte differs", async () => {
+      const word = new Uint8Array(32).fill(0xab);
+      for (let i = 0; i < 32; ++i) {
+        const other = word.slice();
+        other[i] ^= 1;
+        await expect(blocksHelper.readEqualAt32(concat(ethers.hexlify(word), ethers.hexlify(other)), 0, 32))
+          .to.be.revertedWithCustomError(blocksHelper, "UnexpectedValue");
+      }
+    });
+
+    it("preserves unchecked zero-padding for equal-word reads", async () => {
+      const word = "0xab" + "00".repeat(31);
+      expect(await blocksHelper.readEqualAt32(concat(word, "0xab"), 0, 32)).to.equal(word);
+      expect(await blocksHelper.readEqualAt32("0x", 1024, 2048)).to.equal(ethers.ZeroHash);
+      await expect(blocksHelper.readEqualAt32(word, 0, 1024))
+        .to.be.revertedWithCustomError(blocksHelper, "UnexpectedValue");
+    });
+
+    describe("Comparison reads", () => {
+      const comparisons: [string, (a: bigint, b: bigint) => boolean][] = [
+        ["readEqualAt32", (a, b) => a === b],
+        ["readNotEqualAt32", (a, b) => a !== b],
+        ["readLtAt32", (a, b) => a < b],
+        ["readLeAt32", (a, b) => a <= b],
+        ["readGtAt32", (a, b) => a > b],
+        ["readGeAt32", (a, b) => a >= b],
+      ];
+
+      for (const [name, compare] of comparisons) {
+        const error = name === "readEqualAt32" || name === "readNotEqualAt32"
+          ? "UnexpectedValue" : "OutOfRange";
+        async function check(source: string, i: number, j: number, a: bigint, b: bigint) {
+          const result = blocksHelper[name](source, i, j);
+          if (compare(a, b)) {
+            if (name === "readEqualAt32") expect(await result).to.equal(pad32(a));
+            else expect([...(await result)]).to.deep.equal([pad32(a), pad32(b)]);
+          }
+          else {
+            // Assembly-only reverts are not necessarily included in the compiler's ABI.
+            await result.then(
+              () => expect.fail(`Expected ${error}()`),
+              (revert: { data: string }) => expect(revert.data).to.equal(ethers.id(`${error}()`).slice(0, 10)),
+            );
+          }
+        }
+
+        it(`${name} compares unsigned words and returns values in argument order at unaligned positions`, async () => {
+          const values = [0n, 1n, (1n << 255n) - 1n, 1n << 255n, ethers.MaxUint256];
+          for (const a of values) {
+            for (const b of values) {
+              await check(concat("0xaabbcc", pad32(a), pad32(b)), 3, 35, a, b);
+              await check(concat("0xaabbcc", pad32(a), pad32(b)), 35, 3, b, a);
+            }
+          }
+        });
+
+        it(`${name} handles identical positions and unchecked zero-padding`, async () => {
+          await check(pad32(7n), 0, 0, 7n, 7n);
+          await check("0x", 1024, 2048, 0n, 0n);
+          await check(pad32(1n), 0, 1024, 1n, 0n);
+          await check(pad32(1n), 1024, 0, 0n, 1n);
+          const partial = 0xabn << 248n;
+          await check(concat(pad32(partial), "0xab"), 0, 32, partial, partial);
+        });
+      }
+    });
+
     it("reads every power-of-two byte width from absolute calldata positions", async () => {
       const prefix = "0xaabbcc";
       const word = ethers.hexlify(Uint8Array.from({ length: 32 }, (_, i) => i + 1));
@@ -991,6 +1066,26 @@ describe("Cursors", () => {
 
     it("returns the unread absolute cursor bounds", async () => {
       expect(await helper.testCursorBounds()).to.deep.equal([15n, 30n]);
+    });
+
+    it("returns calldata bounds for empty and whole-block streams", async () => {
+      for (const size of [40, 168]) {
+        for (const count of [0, 1, 3]) {
+          const source = ethers.hexlify(new Uint8Array(size * count));
+          // The selector, two arguments, and bytes length precede the payload.
+          expect(await helper.testCalldataBounds(source, size))
+            .to.deep.equal([100n, 100n + BigInt(size * count)]);
+        }
+      }
+    });
+
+    it("rejects partial calldata blocks at either side of a complete block", async () => {
+      for (const size of [40, 168]) {
+        for (const length of [1, size - 1, size + 1, size * 2 - 1]) {
+          await expect(helper.testCalldataBounds(ethers.hexlify(new Uint8Array(length)), size))
+            .to.be.revertedWithCustomError(helper, "InvalidBlock");
+        }
+      }
     });
 
     it("advances packed cursors while returning the pre-advance absolute position", async () => {

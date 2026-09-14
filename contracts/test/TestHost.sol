@@ -24,11 +24,11 @@ import { AllowAssets } from "../commands/admin/AllowAssets.sol";
 import { DenyAssets } from "../commands/admin/DenyAssets.sol";
 import { Allowance } from "../commands/admin/Allowance.sol";
 import { RevokeAllowance, RevokeAsset } from "../guards/Revoke.sol";
-import { HostAmount, Limits, Position } from "../core/Types.sol";
+import { HostAmount, Position } from "../core/Types.sol";
 import { Execution, Executions } from "../execution/Execution.sol";
 import { Blocks } from "../codec/Blocks.sol";
 import { Specs } from "../codec/Specs.sol";
-import { AmountOutOfRange, UnexpectedValue } from "../utils/Errors.sol";
+import { UnexpectedValue } from "../utils/Errors.sol";
 
 using Executions for Execution;
 
@@ -150,19 +150,13 @@ contract TestHost is
         emit WithdrawCalled(account, asset, amount);
     }
 
-    event SettleLimitsCalled(uint amount, uint debt);
-
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(SettleHook) {
+    function settle(bytes32 account, Position memory position) internal override(Settlement, SettleHook) {
         checkSettleCounterparty(position.counterparty);
-        if (position.amount < limits.amount || position.debt > limits.debt) revert AmountOutOfRange();
-        emit SettleLimitsCalled(limits.amount, limits.debt);
         emit SettleCalled(account, position.asset, position.amount, position.liability, position.debt);
     }
 
-    function settle(bytes32 account, Position memory position, Limits memory limits, Execution memory funds) internal override {
+    function settle(bytes32 account, Position memory position, Execution memory funds) internal override {
         checkSettleCounterparty(position.counterparty);
-        if (position.amount < limits.amount || position.debt > limits.debt) revert AmountOutOfRange();
-        emit SettleLimitsCalled(limits.amount, limits.debt);
         funds.useValue(position.amount + position.debt);
         emit SettlePayableCalled(account, position.asset, position.amount, position.liability, position.debt, funds.budget);
     }
@@ -320,8 +314,8 @@ contract TestHost is
         return isGuardian(addr);
     }
 
-}
 
+}
 
 
 

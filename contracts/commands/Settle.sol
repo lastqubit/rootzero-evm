@@ -2,29 +2,29 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
-import {Limits, Position} from "../core/Types.sol";
+import {Position} from "../core/Types.sol";
 import {SettleHook} from "../core/Settlement.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 import {Blocks, Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
-import {Cur, Decoders} from "../codec/Decoders.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {UnconsumedData} from "../utils/Errors.sol";
 
 using Executions for Execution;
-using Decoders for Cur;
 
 /// @notice Hook implemented by hosts that fully settle positions using native value.
 abstract contract SettlePayableHook {
     /// @notice Override to settle one position for `account` with a shared value budget.
-    /// @dev Returning successfully asserts that the complete exact-net `debt` was
+    /// @dev Returning successfully asserts that the complete final `debt` was
     /// satisfied. Partial fulfillment is invalid because the consuming command emits
-    /// no debt remainder. Revert if the complete quantity cannot be satisfied. Fees
-    /// and sourcing costs must be paid in addition to, and must not reduce, `debt`.
+    /// no debt remainder. Producers handle fees before creating the position:
+    /// `amount` is the final net receipt and `debt` the final total payment.
+    /// Callers enforce limits before invoking the hook. Apply both quantities exactly, without extra fees.
     /// @param account Account whose position is being settled.
     /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
-    /// @param limits Minimum net asset amount and maximum total debt, including fees; enforced by the hook.
     /// @param funds Mutable execution used only for its remaining native-value budget.
-    function settle(bytes32 account, Position memory position, Limits memory limits, Execution memory funds) internal virtual;
+    function settle(bytes32 account, Position memory position, Execution memory funds) internal virtual;
 }
 
 /// @title Settle
@@ -52,8 +52,8 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            settle(exec.account, position, exec.unpackLimitsValue());
+            Position memory position = exec.unpackLimitedPosition();
+            settle(exec.account, position);
         }
 
         return exec.close();
@@ -80,8 +80,8 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            settle(exec.account, position, exec.unpackLimitsValue(), exec);
+            Position memory position = exec.unpackLimitedPosition();
+            settle(exec.account, position, exec);
         }
 
         return exec.close();
@@ -98,30 +98,28 @@ abstract contract ExecuteSettle is Settle {
     /// @param account Account for which each position is settled.
     /// @param state POSITION block stream held in pipeline memory.
     /// @param input One LIMITS input block per POSITION.
-    /// @param value Native value assigned to the command; must be zero.
+    /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
-    /// @return credit Zero native budget credit.
+    /// @return credit Unused assigned native value.
     function executeSettle(
         bytes32 account,
         bytes memory state,
         bytes calldata input,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (value != 0) revert ValueNotAllowed();
-        if (state.length == 0) revert Blocks.EmptyRun();
-        Cur memory limits = Decoders.open(input);
+        (uint pos, uint posEnd) = Memory.bounds(state, Sizes.Position);
+        (uint lim, uint limEnd) = Cursors.bounds(input, Sizes.Limits);
 
-        (uint abs, uint end) = Memory.bounds(state, Sizes.Position);
-        while (abs < end) {
-            Position memory position = Memory.unpackPositionValue(abs);
-            settle(account, position, limits.unpackLimitsValue());
+        while (pos < posEnd && lim < limEnd) {
+            settle(account, Memory.unpackLimitedPosition(pos, lim));
             unchecked {
-                abs += Sizes.Position;
+                pos += Sizes.Position;
+                lim += Sizes.Limits;
             }
         }
 
-        limits.close();
-        return (true, "", 0);
+        if (pos != posEnd || lim != limEnd) revert UnconsumedData();
+        return (true, "", value);
     }
 }

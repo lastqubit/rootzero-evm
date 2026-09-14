@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
+import {Positions} from "../utils/Positions.sol";
 import {Position} from "../core/Types.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
@@ -44,7 +45,7 @@ abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
         while (exec.more()) {
             Position memory position = exec.unpackPositionValue();
             position = realize(exec.account, position);
-            exec.requireLimits(position.amount, position.debt);
+            Positions.requireLimits(position, exec.unpackLimits());
             exec.outputPosition(position);
         }
 

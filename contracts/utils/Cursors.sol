@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {OutOfBounds, UnexpectedPosition, ValueOverflow} from "./Errors.sol";
+import {Blocks} from "../codec/Blocks.sol";
 
 /// @notice Mutable memory wrapper around a packed cursor.
 struct Cur {
@@ -48,6 +49,23 @@ library Cursors {
             abs := source.offset
             end := add(abs, source.length)
         }
+    }
+
+    /// @notice Return absolute bounds for a fixed-stride calldata block stream.
+    /// @dev DANGER: Empty streams are valid and `size` must be nonzero. The size
+    /// must include the complete block header and payload. Does not validate headers.
+    /// @param source Calldata block stream.
+    /// @param size Complete encoded size of each block.
+    /// @return abs Absolute calldata position of the first block header.
+    /// @return end Absolute calldata position immediately after the source.
+    function bounds(bytes calldata source, uint size) internal pure returns (uint abs, uint end) {
+        uint remainder;
+        assembly ("memory-safe") {
+            remainder := mod(source.length, size)
+            abs := source.offset
+            end := add(abs, source.length)
+        }
+        if (remainder != 0) revert Blocks.InvalidBlock();
     }
 
     /// @notice Return the cursor's unread source range.

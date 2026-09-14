@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Limits, Position, Tx} from "../core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Position, Tx} from "../core/Types.sol";
 import {Blocks} from "../codec/Blocks.sol";
 import {Buffers} from "../codec/Buffers.sol";
 import {Sizes, Specs} from "../codec/Specs.sol";

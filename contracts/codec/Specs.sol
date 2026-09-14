@@ -37,11 +37,11 @@ library Sizes {
 
     // Input and structural blocks
 
-    /// @dev LIMITS block: 8 header + 32 amount + 32 debt = 72 bytes.
-    uint constant Limits = B64;
+    /// @dev LIMITS block: 8 header + 32 packed limits = 40 bytes.
+    uint constant Limits = B32;
 
-    /// @dev QUOTE block: 8 header + five-word outcome = 168 bytes.
-    uint constant Quote = B160;
+    /// @dev QUOTE block: 8 header + four-word outcome = 136 bytes.
+    uint constant Quote = B128;
 
     /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
     uint constant Bootstrap = B96;
@@ -95,8 +95,8 @@ library Specs {
 
     // Input and value blocks
 
-    uint constant Limits = uint(bytes32(Keys.Limits)) | Exact64;
-    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact160;
+    uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
+    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;
@@ -233,4 +233,31 @@ library Specs {
     function allocation(uint spec, uint count) internal pure returns (uint capacity) {
         capacity = count * blockSize(spec);
     }
+}
+
+/// @notice Right-aligned eight-byte headers for exact-size built-in blocks.
+/// @dev High 32 bits contain the key; low 32 bits contain the payload length.
+/// Derived from Specs so each block layout has a single definition.
+library Headers {
+    uint64 constant Account = uint64(Specs.Account >> 192);
+    uint64 constant Asset = uint64(Specs.Asset >> 192);
+    uint64 constant Node = uint64(Specs.Node >> 192);
+    uint64 constant Status = uint64(Specs.Status >> 192);
+    uint64 constant Amount = uint64(Specs.Amount >> 192);
+    uint64 constant Balance = uint64(Specs.Balance >> 192);
+    uint64 constant AssetLiability = uint64(Specs.AssetLiability >> 192);
+    uint64 constant AccountAsset = uint64(Specs.AccountAsset >> 192);
+    uint64 constant Bootstrap = uint64(Specs.Bootstrap >> 192);
+    uint64 constant Allocation = uint64(Specs.Allocation >> 192);
+    uint64 constant Allowance = uint64(Specs.Allowance >> 192);
+    uint64 constant Custody = uint64(Specs.Custody >> 192);
+    uint64 constant AccountAmount = uint64(Specs.AccountAmount >> 192);
+    uint64 constant HostAmount = uint64(Specs.HostAmount >> 192);
+    uint64 constant HostAccountAsset = uint64(Specs.HostAccountAsset >> 192);
+    uint64 constant Limits = uint64(Specs.Limits >> 192);
+    uint64 constant Quote = uint64(Specs.Quote >> 192);
+    uint64 constant Position = uint64(Specs.Position >> 192);
+    uint64 constant HostAsset = uint64(Specs.HostAsset >> 192);
+    uint64 constant Transaction = uint64(Specs.Transaction >> 192);
+    uint64 constant HostAccountAmount = uint64(Specs.HostAccountAmount >> 192);
 }

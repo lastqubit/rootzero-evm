@@ -20,7 +20,7 @@ async function outcome(call: () => Promise<any>) {
 
 describe("Separate more/enter versus historical enterNext", function () {
   this.timeout(120_000);
-  it("benchmarks Book-style parent loops in separate contracts without a timed variant branch", async () => {
+  it("benchmarks parent loops in separate contracts without a timed variant branch", async () => {
     const baseline = await deploy("TestEnterNextBaseline", spec);
     const candidate = await deploy("TestEnterNextCurrent", spec);
     const inlineVersion = await deploy("TestEnterNextInline", spec);

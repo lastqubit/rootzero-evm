@@ -351,7 +351,7 @@ describe("Port Entrypoints", () => {
     const asset = ethers.zeroPadValue("0x42", 32);
     const liability = ethers.zeroPadValue("0x43", 32);
 
-    it("rejects a position with zero counterparty", async () => {
+    it("books a position with zero counterparty without fees", async () => {
       const position = {
         asset,
         amount: 100n,
@@ -360,8 +360,9 @@ describe("Port Entrypoints", () => {
         counterparty: ethers.ZeroHash,
       };
 
-      await expect(host.testSettle(account, position))
-        .to.be.revertedWithCustomError(host, "InvalidAccount");
+      const tx = await host.testSettle(account, position);
+      await expect(tx).to.emit(host, "PortDebitAccountCalled").withArgs(account, liability, 40n);
+      await expect(tx).to.emit(host, "PortCreditAccountCalled").withArgs(account, asset, 100n);
     });
 
     it("settles the asset and liability in opposite directions with an account counterparty", async () => {
@@ -375,10 +376,11 @@ describe("Port Entrypoints", () => {
       await expect(tx).to.emit(host, "PortCreditAccountCalled").withArgs(account, asset, 100n);
     });
 
-    it("rejects host node IDs in the host's settlement hook", async () => {
-      await expect(host.testSettle(account, {
-        asset, amount: 100n, liability, debt: 40n, counterparty: ethers.toBeHex(await host.host(), 32),
-      })).to.be.revertedWithCustomError(host, "InvalidAccount");
+    it("passes counterparty IDs unchanged to the host's account hooks", async () => {
+      const counterparty = ethers.toBeHex(await host.host(), 32);
+      const tx = host.testSettle(account, { asset, amount: 100n, liability, debt: 40n, counterparty });
+      await expect(tx).to.emit(host, "PortCreditAccountCalled").withArgs(counterparty, liability, 40n);
+      await expect(tx).to.emit(host, "PortDebitAccountCalled").withArgs(counterparty, asset, 100n);
     });
 
     it("skips zero sides of a position", async () => {

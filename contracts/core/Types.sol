@@ -75,26 +75,26 @@ struct HostAccountAmount {
     uint amount;
 }
 
-/// @notice Inclusive quantity bounds without asset or counterparty identifiers.
-struct Limits {
-    /// @dev Minimum asset amount received after fees.
-    uint amount;
-    /// @dev Maximum liability debt paid including fees.
-    uint debt;
+/// @notice Exact position identifiers and inclusive packed quantity bounds.
+struct Quote {
+    bytes32 asset;
+    bytes32 liability;
+    /// @dev Exact counterparty requirement; zero requires Rootzero backing.
+    bytes32 counterparty;
+    /// @dev High 128 bits: minimum asset amount; low 128 bits: literal maximum debt.
+    uint limits;
 }
 
 /// @notice Asset and liability pair threaded as live pipeline state.
-/// Also represents decoded QUOTE fields: amount is a minimum, debt a maximum,
-/// and asset, liability, and counterparty are exact requirements.
 /// Either side may be absent by setting both its identifier and quantity to zero.
 struct Position {
     /// @dev Identifier for the asset side.
     bytes32 asset;
-    /// @dev Quantity on the asset side.
+    /// @dev Final net asset receipt for settlement; producer fees are already accounted for.
     uint amount;
     /// @dev Identifier for the liability side.
     bytes32 liability;
-    /// @dev Quantity owed on the liability side.
+    /// @dev Final total liability payment for settlement; producer fees are already accounted for.
     uint debt;
     /// @dev Settlement counterparty: Rootzero (zero) or an account ID, including a host account.
     bytes32 counterparty;

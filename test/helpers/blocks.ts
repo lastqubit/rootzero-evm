@@ -163,13 +163,23 @@ export function encodeCustodyBlock(host: bigint, asset: string, amount: bigint):
   return encodeBlock(Keys.Custody, ethers.concat([pad32(host), pad32(asset), pad32(amount)]));
 }
 
-/** Expected outcome: amount is a minimum and debt is a maximum. */
-export function encodeLimitsBlock(amount: bigint, debt: bigint): string {
-  return encodeBlock(Keys.Limits, ethers.concat([pad32(amount), pad32(debt)]));
+export const MaxUint128 = (1n << 128n) - 1n;
+
+/** Literal uint128 minimum asset amount and maximum total debt. */
+export function packLimits(amount: bigint, debt: bigint): bigint {
+  if (amount < 0n || amount > MaxUint128 || debt < 0n || debt > MaxUint128) {
+    throw new RangeError("Limits must fit uint128 lanes");
+  }
+  return (amount << 128n) | debt;
 }
 
-export function encodeQuoteBlock(asset: string, amount: bigint, liability: string, debt: bigint, counterparty = ethers.ZeroHash): string {
-  return encodeBlock(Keys.Quote, ethers.concat([pad32(asset), pad32(amount), pad32(liability), pad32(debt), pad32(counterparty)]));
+/** Expected outcome: amount is a minimum and debt is a maximum. */
+export function encodeLimitsBlock(amount: bigint, debt: bigint): string {
+  return encodeBlock(Keys.Limits, pad32(packLimits(amount, debt)));
+}
+
+export function encodeQuoteBlock(asset: string, liability: string, counterparty: string, limits: bigint): string {
+  return encodeBlock(Keys.Quote, ethers.concat([pad32(asset), pad32(liability), pad32(counterparty), pad32(limits)]));
 }
 
 export function encodePositionBlock(

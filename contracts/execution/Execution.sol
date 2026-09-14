@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Blocks} from "../codec/Blocks.sol";
 import {Buffers} from "../codec/Buffers.sol";
-import {Sizes, Specs} from "../codec/Specs.sol";
+import {Sizes, Specs, Headers} from "../codec/Specs.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
 import {InsufficientValue, OutOfBounds, UnexpectedPosition, UnconsumedData} from "../utils/Errors.sol";
 import {Budget} from "../core/Budget.sol";
@@ -15,8 +15,7 @@ import {
     AccountAmount,
     HostAmount,
     HostAccountAsset,
-    Limits,
-    Position,
+    Quote, Position,
     Tx
 } from "../core/Types.sol";
 
@@ -196,12 +195,12 @@ library Executions {
         uint abs;
         uint end;
         assembly ("memory-safe") { abs := data.offset end := add(abs, data.length) }
-        uint expected = uint(Specs.Balance >> 192);
+        uint64 expected = Headers.Balance;
         while (abs < end) {
             // Check each remaining block before its header, matching unpackBalance's
             // error order even when an earlier bad key precedes a truncated tail.
             unchecked { if (end - abs < Sizes.Balance) revert OutOfBounds(); }
-            uint head;
+            uint64 head;
             assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
             if (head != expected) revert Blocks.InvalidBlock();
             unchecked { abs += Sizes.Balance; }
@@ -479,9 +478,9 @@ library Executions {
     /// @return value Decoded payload word.
     function unpack32(Execution memory exec, uint spec) internal pure returns (bytes32 value) {
         uint abs = take(exec, Sizes.B32);
-        uint head;
+        uint64 head;
         assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
-        if (head != ((uint(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
+        if (head != ((uint64(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
         assembly ("memory-safe") {
             value := calldataload(add(abs, 0x08))
         }
@@ -522,38 +521,23 @@ library Executions {
     }
 
     /// @notice Decode and consume one LIMITS block.
-    /// @return amount Inclusive minimum asset amount.
-    /// @return debt Inclusive maximum liability debt.
-    function unpackLimits(Execution memory exec) internal pure returns (uint amount, uint debt) {
+    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    function unpackLimits(Execution memory exec) internal pure returns (uint limits) {
         uint abs = take(exec, Sizes.Limits);
-        (amount, debt) = Blocks.unpackLimits(abs);
-    }
-
-    /// @notice Decode and consume one LIMITS block into its structured value.
-    function unpackLimitsValue(Execution memory exec) internal pure returns (Limits memory limits) {
-        (limits.amount, limits.debt) = unpackLimits(exec);
-    }
-
-    /// @notice Consume one LIMITS block and require quantities to satisfy it.
-    /// @param exec Source cursor to advance by one complete LIMITS block.
-    /// @param amount Actual asset amount; must be at least the encoded minimum.
-    /// @param debt Actual liability debt; must not exceed the encoded maximum.
-    function requireLimits(Execution memory exec, uint amount, uint debt) internal pure {
-        uint abs = take(exec, Sizes.Limits);
-        Blocks.requireLimits(abs, amount, debt);
+        limits = Blocks.unpackLimits(abs);
     }
 
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
     function unpackQuote(
         Execution memory exec
-    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
+    ) internal pure returns (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) {
         uint abs = take(exec, Sizes.Quote);
-        (asset, amount, liability, debt, counterparty) = Blocks.unpackQuote(abs);
+        (asset, liability, counterparty, limits) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
-    function unpackQuoteValue(Execution memory exec) internal pure returns (Position memory quote) {
-        (quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty) = unpackQuote(exec);
+    function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
+        (quote.asset, quote.liability, quote.counterparty, quote.limits) = unpackQuote(exec);
     }
 
     /// @notice Decode and consume one ASSET_LIABILITY block from input.
@@ -674,6 +658,15 @@ library Executions {
     /// @return value Decoded asset and liability position.
     function unpackPositionValue(Execution memory exec) internal pure returns (Position memory value) {
         (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(exec);
+    }
+
+    /// @notice Consume a POSITION from state and enforce LIMITS from input.
+    /// @param exec Execution whose state and input cursors are advanced.
+    /// @return position Decoded position satisfying the inclusive packed limits.
+    function unpackLimitedPosition(Execution memory exec) internal pure returns (Position memory position) {
+        uint pos = takeState(exec, Sizes.Position);
+        uint lim = take(exec, Sizes.Limits);
+        position = Blocks.unpackLimitedPosition(pos, lim);
     }
 
     /// @notice Decode and consume one BALANCE block from state and associate it with `host`.
@@ -1023,34 +1016,27 @@ library Executions {
     }
 
     /// @notice Append a LIMITS block with minimum amount and maximum debt.
-    /// @param amount Inclusive minimum asset amount.
-    /// @param debt Inclusive maximum liability debt.
-    function outputLimits(Execution memory exec, uint amount, uint debt) internal pure {
+    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    function outputLimits(Execution memory exec, uint limits) internal pure {
         uint i = reserve(exec, Sizes.Limits);
-        Blocks.writeLimits(exec.output, i, amount, debt);
-    }
-
-    /// @notice Append a structured LIMITS value.
-    function outputLimits(Execution memory exec, Limits memory limits) internal pure {
-        outputLimits(exec, limits.amount, limits.debt);
+        Blocks.writeLimits(exec.output, i, limits);
     }
 
     /// @notice Append a QUOTE with minimum amount and maximum debt.
     function outputQuote(
         Execution memory exec,
         bytes32 asset,
-        uint amount,
         bytes32 liability,
-        uint debt,
-        bytes32 counterparty
+        bytes32 counterparty,
+        uint limits
     ) internal pure {
         uint i = reserve(exec, Sizes.Quote);
-        Blocks.writeQuote(exec.output, i, asset, amount, liability, debt, counterparty);
+        Blocks.writeQuote(exec.output, i, asset, liability, counterparty, limits);
     }
 
     /// @notice Append a structured QUOTE.
-    function outputQuote(Execution memory exec, Position memory quote) internal pure {
-        outputQuote(exec, quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty);
+    function outputQuote(Execution memory exec, Quote memory quote) internal pure {
+        outputQuote(exec, quote.asset, quote.liability, quote.counterparty, quote.limits);
     }
 
     /// @notice Append a POSITION block to execution output.

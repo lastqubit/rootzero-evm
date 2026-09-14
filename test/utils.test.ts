@@ -419,8 +419,8 @@ describe("Utils", () => {
       expect(await utils.testResolveAmount(50n, 10n, 100n)).to.equal(50n);
     });
 
-    it("resolveAmount reverts AmountOutOfRange when below min", async () => {
-      await expectCustomError(utils.testResolveAmount(5n, 10n, 100n), "AmountOutOfRange");
+    it("resolveAmount reverts OutOfRange when below min", async () => {
+      await expectCustomError(utils.testResolveAmount(5n, 10n, 100n), "OutOfRange");
     });
 
     it("ensureAmount reverts ZeroAmount on zero", async () => {
@@ -431,9 +431,9 @@ describe("Utils", () => {
       expect(await utils.testEnsureAmount(42n)).to.equal(42n);
     });
 
-    it("ensureAmount with range reverts AmountOutOfRange when out of range", async () => {
-      await expectCustomError(utils.testEnsureAmountRange(0n, 1n, 10n), "AmountOutOfRange");
-      await expectCustomError(utils.testEnsureAmountRange(11n, 1n, 10n), "AmountOutOfRange");
+    it("ensureAmount with range reverts OutOfRange when out of range", async () => {
+      await expectCustomError(utils.testEnsureAmountRange(0n, 1n, 10n), "OutOfRange");
+      await expectCustomError(utils.testEnsureAmountRange(11n, 1n, 10n), "OutOfRange");
     });
 
     it("localErc20Addr extracts token address from ERC20 asset", async () => {

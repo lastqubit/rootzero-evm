@@ -4,9 +4,9 @@ pragma solidity ^0.8.33;
 // Aggregator: re-exports the complete block encoding and decoding surface.
 // Import this file for low-level codec extensions and direct stream processing.
 
-import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Limits, Position, Tx } from "./core/Types.sol";
+import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Quote, Position, Tx } from "./core/Types.sol";
 import { Keys } from "./codec/Keys.sol";
-import { Sizes, Specs } from "./codec/Specs.sol";
+import { Sizes, Specs, Headers } from "./codec/Specs.sol";
 import { Execution, Executions } from "./execution/Execution.sol";
 import { Flags } from "./utils/Flags.sol";
 import { Schemas } from "./codec/Schema.sol";

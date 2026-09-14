@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, Limits, Position, Tx} from "../core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, Quote, Position, Tx} from "../core/Types.sol";
 import {Blocks} from "./Blocks.sol";
 import {Sizes, Specs} from "./Specs.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
@@ -392,9 +392,9 @@ library Decoders {
     function unpack32(Cur memory cur, uint spec) internal pure returns (bytes32 value) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.B32);
-        uint head;
+        uint64 head;
         assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
-        if (head != ((uint(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
+        if (head != ((uint64(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
         assembly ("memory-safe") {
             value := calldataload(add(abs, 0x08))
         }
@@ -746,39 +746,23 @@ library Decoders {
     }
 
     /// @notice Decode and consume one LIMITS block.
-    /// @return amount Inclusive minimum asset amount.
-    /// @return debt Inclusive maximum liability debt.
-    function unpackLimits(Cur memory cur) internal pure returns (uint amount, uint debt) {
+    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    function unpackLimits(Cur memory cur) internal pure returns (uint limits) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.Limits);
-        (amount, debt) = Blocks.unpackLimits(abs);
-    }
-
-    /// @notice Decode and consume one LIMITS block into its structured value.
-    function unpackLimitsValue(Cur memory cur) internal pure returns (Limits memory limits) {
-        (limits.amount, limits.debt) = unpackLimits(cur);
-    }
-
-    /// @notice Consume one LIMITS block and require quantities to satisfy it.
-    /// @param cur Source cursor to advance by one complete LIMITS block.
-    /// @param amount Actual asset amount; must be at least the encoded minimum.
-    /// @param debt Actual liability debt; must not exceed the encoded maximum.
-    function requireLimits(Cur memory cur, uint amount, uint debt) internal pure {
-        uint abs;
-        (cur.state, abs) = cur.state.consume(Sizes.Limits);
-        Blocks.requireLimits(abs, amount, debt);
+        limits = Blocks.unpackLimits(abs);
     }
 
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
-    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
+    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.Quote);
-        (asset, amount, liability, debt, counterparty) = Blocks.unpackQuote(abs);
+        (asset, liability, counterparty, limits) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
-    function unpackQuoteValue(Cur memory cur) internal pure returns (Position memory quote) {
-        (quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty) = unpackQuote(cur);
+    function unpackQuoteValue(Cur memory cur) internal pure returns (Quote memory quote) {
+        (quote.asset, quote.liability, quote.counterparty, quote.limits) = unpackQuote(cur);
     }
 
     /// @notice Decode and consume one POSITION block.

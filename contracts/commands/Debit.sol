@@ -55,22 +55,19 @@ abstract contract ExecuteDebitAccount is DebitAccount {
     /// @param account Account whose funds are debited.
     /// @param state Empty pipeline state required by the command schema.
     /// @param input AMOUNT block stream.
-    /// @param value Native value assigned to the command; must be zero.
+    /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output BALANCE block stream matching the debited amounts.
-    /// @return credit Zero native budget credit.
+    /// @return credit Unused assigned native value.
     function executeDebitAccount(
         bytes32 account,
         bytes memory state,
         bytes calldata input,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (value != 0) revert ValueNotAllowed();
         if (state.length != 0) revert UnexpectedState();
-        if (input.length == 0) revert Blocks.EmptyRun();
-        if (input.length % Sizes.Amount != 0) revert Blocks.InvalidBlock();
 
-        (uint abs, uint end) = Cursors.bounds(input);
+        (uint abs, uint end) = Cursors.bounds(input, Sizes.Amount);
         output = new bytes(input.length);
         uint i;
 
@@ -84,6 +81,6 @@ abstract contract ExecuteDebitAccount is DebitAccount {
             }
         }
 
-        return (true, output, 0);
+        return (true, output, value);
     }
 }

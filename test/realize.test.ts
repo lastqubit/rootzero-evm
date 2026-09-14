@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import {
-  encodeLimitsBlock, concat, encodeHostAccount, encodeQuoteBlock,  encodeAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
+  MaxUint128, encodeLimitsBlock, concat, encodeHostAccount, encodeQuoteBlock,  encodeAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
   encodePositionBlock, encodeContextBlock,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
@@ -13,7 +13,7 @@ describe("Realization failure atomicity", () => {
   const to = ethers.zeroPadValue("0x33", 32);
   const balance = encodeBalanceBlock(asset, 10n);
   let position: string;
-  const positionInput = encodeLimitsBlock(0n, ethers.MaxUint256);
+  const positionInput = encodeLimitsBlock(0n, MaxUint128);
   const context = (state: string, input: string) => encodeContextBlock(ethers.ZeroHash, state, input);
   let helper: Awaited<ReturnType<typeof deploy>>;
 
@@ -62,7 +62,7 @@ describe("Realization failure atomicity", () => {
 
     it("rejects QUOTE input and rolls back the hook", async () => {
       await rejectsWithoutChanges(method, state,
-        encodeQuoteBlock(asset, 0n, liability, ethers.MaxUint256), "InvalidBlock");
+        encodeQuoteBlock(asset, liability, ethers.ZeroHash, MaxUint128), "InvalidBlock");
     });
 
     it("rejects the old ASSET_LIABILITY input shape", async () => {
@@ -79,11 +79,11 @@ describe("Realization failure atomicity", () => {
       for (const side of ["asset", "debt"]) {
         it(`rolls back all hooks when position ${pair} violates its ${side} limit`, async () => {
           const invalid = side === "asset"
-            ? encodeLimitsBlock(11n, ethers.MaxUint256)
+            ? encodeLimitsBlock(11n, MaxUint128)
             : encodeLimitsBlock(0n, 6n);
           await rejectsWithoutChanges(method, concat(state, state),
             pair === 1 ? concat(invalid, input) : concat(input, invalid),
-            "AmountOutOfRange");
+            "OutOfRange");
         });
       }
 

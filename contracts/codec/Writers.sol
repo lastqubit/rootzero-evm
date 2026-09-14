@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Limits, Position, Tx} from "../core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAmount, HostAmount, Quote, Position, Tx} from "../core/Types.sol";
 import {Blocks} from "./Blocks.sol";
 import {Buffers} from "./Buffers.sol";
 import {Sizes, Specs} from "./Specs.sol";
@@ -337,27 +337,21 @@ library Writers {
     }
 
     /// @notice Append a LIMITS block with minimum amount and maximum debt.
-    /// @param amount Inclusive minimum asset amount.
-    /// @param debt Inclusive maximum liability debt.
-    function appendLimits(Writer memory writer, uint amount, uint debt) internal pure {
+    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    function appendLimits(Writer memory writer, uint limits) internal pure {
         uint i = reserve(writer, Sizes.Limits);
-        Blocks.writeLimits(writer.dst, i, amount, debt);
-    }
-
-    /// @notice Append a structured LIMITS value.
-    function appendLimits(Writer memory writer, Limits memory limits) internal pure {
-        appendLimits(writer, limits.amount, limits.debt);
+        Blocks.writeLimits(writer.dst, i, limits);
     }
 
     /// @notice Append a QUOTE with minimum amount and maximum debt.
-    function appendQuote(Writer memory writer, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) internal pure {
+    function appendQuote(Writer memory writer, bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) internal pure {
         uint i = reserve(writer, Sizes.Quote);
-        Blocks.writeQuote(writer.dst, i, asset, amount, liability, debt, counterparty);
+        Blocks.writeQuote(writer.dst, i, asset, liability, counterparty, limits);
     }
 
     /// @notice Append a structured QUOTE.
-    function appendQuote(Writer memory writer, Position memory quote) internal pure {
-        appendQuote(writer, quote.asset, quote.amount, quote.liability, quote.debt, quote.counterparty);
+    function appendQuote(Writer memory writer, Quote memory quote) internal pure {
+        appendQuote(writer, quote.asset, quote.liability, quote.counterparty, quote.limits);
     }
 
     /// @notice Append a POSITION block.

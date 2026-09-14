@@ -632,6 +632,36 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         return Blocks.read32(position(source) + i);
     }
 
+    function readEqualAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32) {
+        uint abs = position(source);
+        return Blocks.readEqualAt32(abs + i, abs + j);
+    }
+
+    function readNotEqualAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
+        uint abs = position(source);
+        return Blocks.readNotEqualAt32(abs + i, abs + j);
+    }
+
+    function readLtAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
+        uint abs = position(source);
+        return Blocks.readLtAt32(abs + i, abs + j);
+    }
+
+    function readLeAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
+        uint abs = position(source);
+        return Blocks.readLeAt32(abs + i, abs + j);
+    }
+
+    function readGtAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
+        uint abs = position(source);
+        return Blocks.readGtAt32(abs + i, abs + j);
+    }
+
+    function readGeAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
+        uint abs = position(source);
+        return Blocks.readGeAt32(abs + i, abs + j);
+    }
+
     function readWidths(
         bytes calldata source,
         uint i

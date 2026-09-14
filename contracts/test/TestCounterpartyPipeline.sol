@@ -3,12 +3,11 @@ pragma solidity ^0.8.33;
 
 import {Realize} from "../commands/Realize.sol";
 import {ExecuteSettle} from "../commands/Settle.sol";
-import {ExecuteBook} from "../commands/Book.sol";
-import {Settlement, SettleHook, BookHook} from "../core/Settlement.sol";
+import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Runtime} from "../core/Runtime.sol";
-import {Limits, Position} from "../core/Types.sol";
+import {Position} from "../core/Types.sol";
 import {AccessDenied} from "../core/Access.sol";
 import {UnexpectedValue} from "../utils/Errors.sol";
 import {Accounts} from "../utils/Accounts.sol";
@@ -16,7 +15,7 @@ import {Nodes} from "../utils/Nodes.sol";
 
 /// @dev Test-only host backing positions with a reserve ledger. Realization
 /// commits reserves and records the receivable; booking collects it.
-contract TestCounterpartyPipeline is Realize, ExecuteSettle, ExecuteBook, Settlement, Balances, Pipeline {
+contract TestCounterpartyPipeline is Realize, ExecuteSettle, Settlement, Balances, Pipeline {
     address private immutable tester = msg.sender;
     bool private immutable memorySettlement;
     uint public realizations;
@@ -44,7 +43,7 @@ contract TestCounterpartyPipeline is Realize, ExecuteSettle, ExecuteBook, Settle
     }
 
     function enforceCommand(uint cmd) internal view override returns (bytes4, address) {
-        if (cmd != bookId() && cmd != settleId() && cmd != Nodes.toCommand("realize", address(this))) revert AccessDenied();
+        if (cmd != settleId() && cmd != Nodes.toCommand("realize", address(this))) revert AccessDenied();
         return Nodes.decode(cmd);
     }
 
@@ -55,11 +54,6 @@ contract TestCounterpartyPipeline is Realize, ExecuteSettle, ExecuteBook, Settle
             enforceCommand(cmd);
             ++memorySettlements;
             return executeSettle(account, state, input, value);
-        }
-        if (memorySettlement && cmd == bookId()) {
-            enforceCommand(cmd);
-            ++memorySettlements;
-            return executeBook(account, state, input, value);
         }
         return (false, state, 0);
     }
@@ -74,17 +68,11 @@ contract TestCounterpartyPipeline is Realize, ExecuteSettle, ExecuteBook, Settle
         return result;
     }
 
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override(SettleHook) {
-        bytes32 counterparty = Accounts.account(position.counterparty);
-        uint16 bps = counterparty == hostAccount ? 20 : 2;
-        bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
-        collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
-    }
 
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
-        internal override(Settlement, BookHook)
+    function settle(bytes32 account, Position memory position)
+        internal override(Settlement, SettleHook)
     {
-        Settlement.book(from, to, asset, amount, liability, debt);
+        Settlement.settle(account, position);
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {

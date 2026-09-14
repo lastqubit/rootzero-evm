@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Layout} from "./Layout.sol";
-import {AmountOutOfRange, InvalidAsset, UnauthorizedAsset, ZeroAmount} from "./Errors.sol";
+import {OutOfRange, InvalidAsset, UnauthorizedAsset, ZeroAmount} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
 import {ensureAddr, isFamily, matchesBase, toLocalBase} from "./Utils.sol";
 
@@ -167,7 +167,7 @@ library Amounts {
     /// @return The same `amount` value if valid.
     function ensure(uint amount, uint min, uint max) internal pure returns (uint) {
         if (amount < min || amount > max) {
-            revert AmountOutOfRange();
+            revert OutOfRange();
         }
         return amount;
     }
@@ -182,7 +182,7 @@ library Amounts {
     function resolve(uint available, uint min, uint max) internal pure returns (uint) {
         uint amount = available > max ? max : available;
         if (amount < min) {
-            revert AmountOutOfRange();
+            revert OutOfRange();
         }
         return amount;
     }

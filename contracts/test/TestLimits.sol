@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Blocks, Limits, Cur, Decoders, Specs, Writer, Writers} from "../Codec.sol";
+import {Blocks, Cur, Decoders, Specs, Writer, Writers} from "../Codec.sol";
 import {Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {Schemas} from "../codec/Schema.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
+import {Position} from "../core/Types.sol";
+import {Positions} from "../utils/Positions.sol";
 
 contract TestLimits {
     using Decoders for Cur;
@@ -16,32 +18,39 @@ contract TestLimits {
         return (Specs.Limits, Sizes.Limits, Schemas.Limits);
     }
 
-    function create(uint amount, uint debt) external pure returns (bytes memory) {
-        return Blocks.createLimits(amount, debt);
+    function create(uint limits) external pure returns (bytes memory) {
+        return Blocks.createLimits(limits);
     }
 
     function write(uint[] calldata values) external pure returns (bytes memory) {
         Writer memory writer = Writers.init(Specs.Limits, 1);
-        for (uint i; i < values.length; i += 2) writer.appendLimits(values[i], values[i + 1]);
+        for (uint i; i < values.length; i++) writer.appendLimits(values[i]);
         return writer.finish();
     }
 
-    function decode(bytes calldata input) external pure returns (uint amount, uint debt) {
+    function decode(bytes calldata input) external pure returns (uint limits) {
         Cur memory cur = Decoders.open(input);
         return cur.unpackLimits();
     }
 
+    function checkPosition(Position memory position, uint limits) external pure {
+        Positions.requireLimits(position, limits);
+    }
+
     function check(bytes calldata input, uint amount, uint debt, bool execution)
-        external pure returns (uint nextAmount, uint nextDebt)
+        external pure returns (uint nextLimits)
     {
+        Position memory position;
+        position.amount = amount;
+        position.debt = debt;
         if (execution) {
             Execution memory exec;
             exec.open(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, 0, input[:0], input);
-            exec.requireLimits(amount, debt);
+            Positions.requireLimits(position, exec.unpackLimits());
             return exec.unpackLimits();
         }
         Cur memory cur = Decoders.open(input);
-        cur.requireLimits(amount, debt);
+        Positions.requireLimits(position, cur.unpackLimits());
         return cur.unpackLimits();
     }
 
@@ -50,37 +59,14 @@ contract TestLimits {
         if (memorySource) {
             (uint abs, uint end) = Memory.bounds(input, Sizes.Limits);
             while (abs < end) {
-                (uint amount, uint debt) = Memory.unpackLimits(abs);
-                writer.appendLimits(amount, debt);
+                writer.appendLimits(Memory.unpackLimits(abs));
                 abs += Sizes.Limits;
             }
         } else {
             Cur memory cur = Decoders.open(input);
             while (cur.more()) {
-                (uint amount, uint debt) = cur.unpackLimits();
-                writer.appendLimits(amount, debt);
+                writer.appendLimits(cur.unpackLimits());
             }
-        }
-        return writer.finish();
-    }
-
-    function structured(bytes calldata input, uint mode) external pure returns (bytes memory) {
-        if (mode == 2) {
-            Execution memory exec;
-            exec.open(Executions.describe(Specs.Empty, Specs.Limits, Specs.Limits, 0), 0, 0, input[:0], input);
-            while (exec.more()) exec.outputLimits(exec.unpackLimitsValue());
-            return exec.finish();
-        }
-        Writer memory writer = Writers.init(Specs.Limits, 1);
-        if (mode == 1) {
-            (uint abs, uint end) = Memory.bounds(input, Sizes.Limits);
-            while (abs < end) {
-                writer.appendLimits(Memory.unpackLimitsValue(abs));
-                abs += Sizes.Limits;
-            }
-        } else {
-            Cur memory cur = Decoders.open(input);
-            while (cur.more()) writer.appendLimits(cur.unpackLimitsValue());
         }
         return writer.finish();
     }
@@ -89,8 +75,7 @@ contract TestLimits {
         Execution memory exec;
         exec.open(Executions.describe(Specs.Empty, Specs.Limits, Specs.Limits, 0), 0, 0, input[:0], input);
         while (exec.more()) {
-            (uint amount, uint debt) = exec.unpackLimits();
-            exec.outputLimits(amount, debt);
+            exec.outputLimits(exec.unpackLimits());
         }
         return exec.finish();
     }

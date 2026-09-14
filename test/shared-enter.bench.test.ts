@@ -31,7 +31,9 @@ describe("Shared versus direct enter validation", function () {
             const b = await shared[method](input, spec, 104, mode);
             const c = await direct[method](input, spec, 104, mode);
             expect(b[1]).to.equal(a[1]);
-            expect(a[0] - b[0]).to.equal(BigInt((mode % 2 === 0 ? 78 : 0) * count));
+            // Direct field extraction: spec-based entry saves 69 gas against the
+            // frozen baseline; key-only entry saves 7, for both cursor adapters.
+            expect(a[0] - b[0]).to.equal(BigInt((mode % 2 === 0 ? 69 : 7) * count));
             expect(c[1]).to.equal(a[1]);
             if (method === "measure") expect(a[1]).to.equal(BigInt(count * 208));
             rows.push({ kind, mode, method, count, current: Number(a[0]), shared: Number(b[0]), direct: Number(c[0]),

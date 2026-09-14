@@ -2,9 +2,10 @@
 pragma solidity ^0.8.33;
 
 import {Settlement} from "../core/Settlement.sol";
-import {Accounts} from "../utils/Accounts.sol";
 import {Balances} from "../core/Balances.sol";
-import {Limits, Position} from "../core/Types.sol";
+import {Position} from "../core/Types.sol";
+import {Positions} from "../utils/Positions.sol";
+import {Accounts} from "../utils/Accounts.sol";
 
 contract TestSettlement is Settlement, Balances {
     event AccountOperation(bool debit, bytes32 account, bytes32 asset, uint amount);
@@ -26,27 +27,34 @@ contract TestSettlement is Settlement, Balances {
     }
 
     function applyPosition(bytes32 account, Position memory position) external {
-        settle(account, position, Limits(0, type(uint).max));
+        Positions.requireLimits(position, type(uint128).max);
+        settle(account, position);
     }
 
-    function applyLimitedPosition(bytes32 account, Position memory position, Limits memory limits) external {
-        settle(account, position, limits);
+    function applyLimitedPosition(bytes32 account, Position memory position, uint limits) external {
+        Positions.requireLimits(position, limits);
+        settle(account, position);
     }
 
-    function settle(bytes32 account, Position memory position, Limits memory limits) internal override {
-        bytes32 counterparty = Accounts.account(position.counterparty);
-        uint16 bps = counterparty == hostAccount ? 20 : 2;
-        bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
-        collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
-    }
 
-    function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+    function debitAccount(bytes32 account, bytes32 asset, uint amount) internal virtual override {
         debitFrom(account, asset, amount);
         emit AccountOperation(true, account, asset, amount);
     }
 
-    function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+    function creditAccount(bytes32 account, bytes32 asset, uint amount) internal virtual override {
         creditTo(account, asset, amount);
         emit AccountOperation(false, account, asset, amount);
+    }
+}
+
+/// @dev A host that chooses the standard account format in its account hooks.
+contract TestValidatedSettlement is TestSettlement {
+    function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+        super.debitAccount(Accounts.account(account), asset, amount);
+    }
+
+    function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+        super.creditAccount(Accounts.account(account), asset, amount);
     }
 }

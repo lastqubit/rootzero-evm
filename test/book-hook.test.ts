@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { encodeContextBlock, encodePositionBlock, encodeBookPortBlock,
+import { encodeLimitsBlock, encodeContextBlock, encodePositionBlock, encodeBookPortBlock,
   encodeAccountAmountBlock, encodeUserAccount } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -14,7 +14,7 @@ describe("BookHook entrypoints", () => {
   before(async () => { host = await deploy("TestBookHook"); });
 
   it("books both position legs to the active account through a custom book hook", async () => {
-    await expect(host.book(encodeContextBlock(from, encodePositionBlock(asset, 100n, liability, 40n), "0x")))
+    await expect(host.settle(encodeContextBlock(from, encodePositionBlock(asset, 100n, liability, 40n), encodeLimitsBlock(100n, 40n))))
       .to.emit(host, "Applied").withArgs(from, from, asset, 100n, liability, 40n);
   });
 
@@ -37,8 +37,15 @@ describe("BookHook entrypoints", () => {
     ))).to.emit(host, "Applied").withArgs(from, to, asset, 100n, liability, 40n);
   });
 
-  it("keeps booking counterparty validation before the custom hook", async () => {
-    await expect(host.book(encodeContextBlock(from, encodePositionBlock(asset, 100n, liability, 40n, to), "0x")))
-      .to.be.revertedWithCustomError(host, "UnexpectedValue");
+  it("passes opaque account identifiers to the custom book hook", async () => {
+    const tx = host.settle(encodeContextBlock(from, encodePositionBlock(asset, 100n, liability, 40n, asset), encodeLimitsBlock(100n, 40n)));
+    await expect(tx).to.emit(host, "Applied").withArgs(from, asset, liability, 40n, liability, 40n);
+    await expect(tx).to.emit(host, "Applied").withArgs(asset, from, asset, 100n, asset, 100n);
+  });
+
+  it("enforces settlement limits before the custom book hook", async () => {
+    await expect(host.settle(encodeContextBlock(from,
+      encodePositionBlock(asset, 100n, liability, 40n), encodeLimitsBlock(101n, 40n))))
+      .to.be.revertedWithCustomError(host, "OutOfRange");
   });
 });

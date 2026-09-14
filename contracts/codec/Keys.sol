@@ -29,8 +29,9 @@ library Keys {
 
     // Input and value blocks
 
-    /// @dev Expected position outcome - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
+    /// @dev Packed quantity bounds - (uint limits): high 128 bits minimum amount, low 128 bits maximum debt.
     bytes4 constant Limits = bytes4(keccak256("#limits"));
+    /// @dev Expected position outcome - (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits)
     bytes4 constant Quote = bytes4(keccak256("#quote"));
 
     /// @dev Input amount - (bytes32 asset, uint amount)

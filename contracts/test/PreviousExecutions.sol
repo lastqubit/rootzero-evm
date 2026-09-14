@@ -15,7 +15,6 @@ import {
     AccountAmount,
     HostAmount,
     HostAccountAsset,
-    Limits,
     Position,
     Tx
 } from "../core/Types.sol";
