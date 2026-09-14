@@ -470,7 +470,7 @@ The counterparty identifies who stands on the other side of the position:
 
 | Counterparty | Command | Intended behavior |
 | --- | --- | --- |
-| `0` (Rootzero) | `book` | Debit the active account's liability and credit its asset. |
+| `0` (Rootzero) | `settle` | Debit the active account's liability and credit its asset. |
 | Account ID | `settle` | Debit the asset amount from that account and credit the active account; debit the liability amount from the active account and credit the counterparty. Both transfers are atomic and require the host's applicable authorization. |
 | Host account ID | `settle` or `realize` | Settle against this account's balances on the executing host, or route to its host for realization. The realization hook matches `Accounts.toHost(host)` and returns counterparty zero after fulfillment. |
 
@@ -484,29 +484,36 @@ not fulfillment.
 
 **Current stage:** codecs support any counterparty. `settle`, `settlePayable`,
 and `ExecuteSettle` pass the complete `Position` struct to the hook. Calldata
-commands use `unpackPositionValue`; the memory adapter uses
-`Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position, limits)` and
-`settle(account, position, limits, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
-`Settlement` inherits `SettleHook` without implementing it. A host using its
-internal helpers validates an account-category ID with `Accounts.account`,
-rejecting zero and other categories with `InvalidAccount()`, and authorizes the
-position. It calls `repay` for the liability followed by `collect` for the asset.
-Zero amounts skip transfers on their side but still participate in limit and
-pending-fee checks. Any failure reverts the exchange. The category check alone
-does not authorize debits.
+commands use `Executions.unpackLimitedPosition`; the memory adapter uses
+`Memory.unpackLimitedPosition` to decode and check the same struct. The hooks are `settle(account, position)` and
+`settle(account, position, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
+`Settlement` implements the unfunded hook. Commands check both limits before
+invoking it; it books zero-counterparty positions on the active account.
+Nonzero counterparties are passed unchanged to the account hooks when transferring
+the exact debt followed by the exact asset amount. Authorization remains with
+trusted position producers and host account hooks. Account format checks belong
+to `debitAccount` and `creditAccount`; a custom `BookHook` that bypasses those
+hooks must apply its own account policy. Empty exchanges skip the account hooks
+and do not validate the counterparty. Funded settlement still uses
+the host's separate hook with the same exact-quantity and limit requirements.
 
-`book` consumes POSITION state with empty input and output. Both `Book` and
-the pipeline memory adapter `ExecuteBook` reject nonzero counterparties before
-calling `book(account, account, asset, amount, liability, debt)`. `BookHook` is
-defined in `core/Settlement.sol`; its default `Settlement` implementation debits
-the source account's exact liability amount, then credits the destination
-account's exact asset amount. Both accounts are the active account for `book`. Zero
-amounts skip their account hooks, and any failure reverts the whole operation.
-Booking takes no quote, adds no fees, and returns no state or budget credit.
+`settle` consumes POSITION state with one LIMITS input per position and empty
+output. `ExecuteSettle` provides the same settlement hook for memory-backed
+pipeline state. For zero counterparties it calls
+`book(account, account, asset, amount, liability, debt)`. `BookHook` remains
+defined in `core/Settlement.sol`; its default implementation debits the exact
+liability amount and then credits the exact asset amount. Zero amounts skip
+account hooks, and any failure reverts the whole operation.
 
-The same `BookHook` is used directly by `portBook` and the
-`repay` / `collect` helpers for their transfers. Separate fee credits call
-`creditAccount` directly. The `BookHook` signature is
+The former `book` command is removed. All command-level position settlement
+now checks limits, including the literal uint128 debt cap. Unlike the old command,
+`settle` accepts account counterparties. Callers that require an already-realized
+position must explicitly check counterparty zero, for example with
+`Positions.requireQuoted` and a quote whose counterparty is zero. A trusted
+realization hook must return counterparty zero before handing the result onward.
+
+The same `BookHook` is used directly by `portBook` and settlement for its
+exact transfers. The `BookHook` signature is
 `book(from, to, asset, amount, liability, debt)`. It must apply both exact legs
 or revert, skip zero-amount legs, and preserve debit-first funding requirements
 even when accounts or assets match. It does not net legs or interpret a zero
@@ -517,7 +524,7 @@ before calling the hook, so malformed credit data is rejected before debiting.
 `realize` passes the complete position to its hook, which validates its host account
 counterparty and fulfills the obligation before returning counterparty zero.
 The command takes one LIMITS input per position and checks the returned quantities
-with `exec.requireLimits`. Identifier and counterparty correctness belong to the hook.
+with `Positions.requireLimits(position, limits)`. Identifier and counterparty correctness belong to the hook.
 
 ### Position Transformations
 
@@ -525,8 +532,8 @@ The position layout is flat, with both sides followed by the counterparty;
 it is not a nested Solidity struct. The asset side represents
 value acquired or controlled, and the liability side represents value owed or
 required. Commands may preserve or replace either side and return a new
-position. The terminal `book` command consumes a pair with zero counterparty;
-`settle` consumes a pair with an account counterparty. Positions, including
+position. The terminal `settle` command exchanges with an account counterparty
+or limit-checks a zero-counterparty booking. Positions, including
 liability-only positions, are transient state; rewriting them does not by itself create,
 discharge, or replace an obligation persisted by a host or external protocol.
 The responsible command hook must perform or verify those effects. A command
@@ -534,10 +541,10 @@ must not ignore supplied position state: it must explicitly consume,
 transform, forward, or reject it, so an obligation cannot disappear
 accidentally.
 
-`book`, `settle`, and `settlePayable` consume positions, including liability-only
+`settle` and `settlePayable` consume positions, including liability-only
 positions, and return empty state. To repay, use a POSITION with zero asset and
 amount. There are no separate repayment commands or repayment hooks. Hosts
-implement settlement; the `repay` helper routes the liability transfer through
+implement settlement, which routes the liability transfer through
 `BookHook.book`. A position with an asset side also settles that side instead
 of returning a BALANCE block.
 The single `realize` command calls one hook:
@@ -554,48 +561,49 @@ not silently discard debt. The command checks the returned quantities against
 the paired LIMITS input; identifier and counterparty correctness remain the
 hook's responsibility.
 
-The standalone `#limits { uint amount, uint debt }` schema carries only quantity
-constraints: `amount` is an inclusive minimum asset amount, and `debt` is an
-inclusive maximum liability debt. Its payload is 64 bytes (72 with the header).
-It identifies no asset, liability, or counterparty. Scalar codec helpers preserve
-both values, including zero and the maximum uint; they do not enforce the bounds.
-`Blocks.requireLimits(abs, amount, debt)` validates the header and checks the
-inclusive bounds directly against calldata, reverting with `InvalidBlock` or
-`AmountOutOfRange`. Its caller must ensure the block is in bounds. Cursor and
-execution `requireLimits(amount, debt)` helpers check bounds and consume one block.
-`Limits` in `core/Types.sol` represents these two fields. `unpackLimitsValue`
-helpers decode it from cursor, execution, or memory sources; writer and execution
-output helpers also accept the struct.
+The standalone `#limits { uint limits }` schema carries only quantity
+constraints in one packed word: the high 128 bits are the inclusive minimum net
+asset amount, and the low 128 bits are the inclusive maximum total liability debt,
+including fees. Its payload is 32 bytes (40 with the header). Both lanes are
+literal bounds: `type(uint128).max` is a cap, not an unlimited sentinel.
+It identifies no asset, liability, or counterparty. Position quantities remain
+full-width uints; output amounts may exceed 128 bits, but debt cannot exceed the cap.
+
+Pack with `(minAmount << 128) | maxDebt` after ensuring both inputs fit uint128.
+`unpackLimits` returns the packed uint from calldata, cursor, execution, or memory
+sources. Writers and execution outputs accept that same word. Codec helpers
+validate the block header and preserve the value without enforcing quantities.
+`Positions.requireLimits(position, limits)` checks the inclusive bounds and
+reverts with `OutOfRange`; it does not validate identifiers or counterparties.
+
+`Blocks.unpackLimitedPosition(pos, lim)` checks both exact block
+headers, compares the position quantities against the packed limits directly in
+calldata, then returns a `Position` struct. Its caller must establish bounds for
+both complete blocks. It does not advance streams or validate identifiers.
+`Executions.unpackLimitedPosition(exec)` bounds and consumes one POSITION from
+state and one LIMITS from input, then delegates to this helper.
+`Memory.unpackLimitedPosition(pos, lim)` performs the same checks
+with the POSITION in memory and LIMITS in calldata, returning an independent
+copy via `mcopy`. Both complete blocks must be in bounds. `ExecuteSettle` uses
+this helper with fixed-size bounds for both streams, advancing their positions
+together. It rejects unmatched blocks with `UnconsumedData` after the loop;
+partial blocks revert with `InvalidBlock` when establishing bounds.
 
 `settle` and `settlePayable` require one LIMITS input per POSITION. `ExecuteSettle`
-pairs memory-backed positions with calldata limits. Commands decode the limits before invoking the hook, which validates and
-authorizes the counterparty. The hook must enforce
-`net amount >= limits.amount` and `total debt <= limits.debt`, including fees.
-`Settlement` provides internal, non-virtual `repay` and `collect` helpers, but no
-`settle` implementation or fixed fee policy. The host implements `SettleHook`,
-validates the counterparty, authorizes the position, and chooses its rate. For
-example, a host may use 20 bps for its own liquidity and 2 bps for external positions:
+pairs memory-backed positions with calldata limits. Commands enforce the limits
+before invoking the hook, which validates and authorizes the counterparty. The commands require
+`net amount >= limits >> 128` and `total debt <= uint128(limits)`, including fees.
+`Settlement` supplies a default `settle` implementation without host fees.
+Producers handle fees before creating the position: `amount` is the final net
+asset receipt and `debt` is the final total payment. Settlement applies those
+quantities exactly, without surcharges, asset deductions, or separate host fee
+credits. Limits protect the encoded quantities, not separate charges outside
+the position. Producers must arrange any separate fee payments atomically.
 
-```solidity
-function settle(bytes32 account, Position memory position, Limits memory limits)
-    internal override
-{
-    bytes32 counterparty = Accounts.account(position.counterparty);
-    uint16 bps = counterparty == hostAccount ? 20 : 2;
-    bps = repay(account, counterparty, position.liability, position.debt, bps, limits.debt);
-    collect(account, counterparty, position.asset, position.amount, bps, limits.amount);
-}
-```
-
-This example assumes the host has already authorized the position. `repay` first
-tries a debt surcharge and returns zero bps only after collecting the fee, otherwise
-returning the input rate. The host must pass that result to `collect`, which tries
-an asset deduction and reverts with `ZeroFee` if a pending nonzero rate cannot be
-satisfied. Zero bps explicitly requests no fee. Fees round up to whole raw units
-and accrue to `hostAccount`. Each helper checks its base limit before transfers;
-zero debt can return immediately because it cannot exceed an unsigned maximum.
-Any failure reverts both sides. Hosts may instead implement specialized settlement
-without these helpers while respecting the original hook contract.
+For account counterparties, settlement calls `book` for the full liability
+transfer first, then for the full asset transfer. Zero-quantity transfers skip
+their hooks. Any failure reverts the entire exchange. Specialized hosts may
+override `settle` while preserving its exact-quantity and limit contract.
 
 Missing, extra, or malformed limits revert.
 
@@ -604,18 +612,16 @@ account balances use `settle`, while hosts without their own account balance
 ledger implement `realize` and return the fulfilled position to the caller.
 A production host is not intended to expose both as alternative routes for the
 same operation. `Settlement` provides reusable mechanics for ledger hosts;
-each host implements its own `settle` hook. The combined
+producers supply final quantities with fees already handled. The combined
 realize/settle test host exercises both interfaces for integration coverage.
 
-When the payer is `hostAccount`, the helpers still apply the host-selected
-rate and limit rules. A fee credited back to the host is not new host revenue.
-A debt fee requires the full debt plus fee to be available at debit time, even
-when the fee is subsequently credited back. When payer and counterparty both
-equal `hostAccount`, successful transfers leave balances unchanged, but limits
-and nonzero-fee requirements still apply.
+Host payers and host counterparties follow the same exact-quantity and limit
+rules as other accounts. Self-exchanges leave balances unchanged but still
+require funding for each debit before its matching credit. Matching assets are
+not netted, so incoming assets cannot fund the initial liability debit.
 
 For realization, each POSITION is paired with one LIMITS input. The command calls
-`realize(account, position)`, then `exec.requireLimits(result.amount, result.debt)` before
+`realize(account, position)`, then `Positions.requireLimits(result, exec.unpackLimits())` before
 outputting the result. A failed quantity check or malformed LIMITS input reverts
 all hook changes. The hook must preserve asset and liability identifiers and
 return counterparty zero after fulfillment; the command does not check those fields.
@@ -623,19 +629,24 @@ return counterparty zero after fulfillment; the command does not check those fie
 The QUOTE schema remains available independently:
 
 ```txt
-#quote { bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty }
+#quote { bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits }
 ```
 
 A QUOTE constrains the resulting position: `asset`, `liability`, and `counterparty` must match exactly,
-`amount` is the minimum asset output, and `debt` is the maximum debt. Limits are
-inclusive; zero is an unbounded minimum and max uint is an unbounded maximum.
-The quote has five words (160 payload bytes, 168 bytes including the header),
-matching the POSITION field layout. Counterparty zero requires Rootzero backing;
+`limits` packs the inclusive minimum asset output into its high 128 bits and
+the inclusive maximum debt into its low 128 bits. Both lanes are literal bounds,
+including `type(uint128).max`; there is no unlimited-debt sentinel. Actual asset
+output may exceed 128 bits, but quoted debt cannot exceed the cap.
+The quote has four words (128 payload bytes, 136 bytes including the header).
+It decodes into a distinct `Quote` struct exported through `Core.sol` and
+`Codec.sol`; positions retain their full-width actual quantities.
+Counterparty zero requires Rootzero backing;
 it is not a wildcard. It is an input schema, not live position state.
 
 Cursor and execution helpers decode quotes with `unpackQuoteValue()`. Callers
 can use `Positions.requireQuoted(position, quote)`, exported through `Utils.sol`,
-to enforce exact identifiers and counterparty plus inclusive quantity bounds.
+to enforce exact identifiers and counterparty, then check the inclusive quantity
+bounds through `Positions.requireLimits(position, quote.limits)`.
 Realize does not consume QUOTE input. Code that independently validates a
 Rootzero-backed result against a quote must require counterparty zero in that
 quote. Failed comparisons revert the enclosing call and its earlier changes.
@@ -648,7 +659,7 @@ asset while successive hops replace the upstream liability:
 position(C, 100, C, 100, 0)
 → position(C, 100, B, 50, 0)
 → position(C, 100, A, 25, 0)
-→ book
+→ settle(limits)
 ```
 
 “Backward” describes how requirements are composed from the desired result
@@ -928,6 +939,8 @@ custody            uint host, bytes32 asset, uint amount
 accountAmount      bytes32 account, bytes32 asset, uint amount
 hostAmount         uint host, bytes32 asset, uint amount
 hostAccountAsset   uint host, bytes32 account, bytes32 asset
+limits             uint limits
+quote              bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits
 position           bytes32 asset, uint amount, bytes32 liability, uint debt
 transaction        bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount  uint host, bytes32 account, bytes32 asset, uint amount

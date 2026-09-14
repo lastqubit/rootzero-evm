@@ -115,5 +115,18 @@ fixture and TestExchange, but is now adopted to centralize validation because
 this helper is expected to be used infrequently. The previous inline version is
 retained for differential benchmarks.
 
+## 1.39.0 follow-up
+
+Direct key and length extraction in `Blocks.enter` changes the shared-path
+comparison above. With Solidity 0.8.35, optimizer 200 runs, and Cancun, the
+current execution and decoder adapters save 69 gas per spec-based entry and
+7 gas per key-only entry against the frozen baseline. Relative to the earlier
+shared implementation, that is 9 more gas for spec entry and 7 less for key-only
+entry. Results hold with returned bounds used or discarded, for 1 and 32 blocks.
+The full malformed-input comparison still produces identical values and errors.
+
+The `enterNext` variants above are historical experiments; the production helper
+was removed in 1.38.0. The current API uses `more` followed by `enter`.
+
 Raw sizes: `.npm-cache/enter-bytecode-results.json`. The isolated standard-JSON
 compiler outputs are retained as `.npm-cache/enter-size-*.json`.

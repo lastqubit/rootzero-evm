@@ -196,14 +196,15 @@ the original arithmetic-overflow panic while avoiding a second checked addition.
 The payload slice still contains the original length, and key validation still
 occurs before the checked position arithmetic.
 
-`expectFixed` and `expectEmpty` compare the packed 64-bit header against the
-expected key and payload size. `expectFixed` remains private and only receives
-fixed sizes 32 through 160. `expectEmpty` retains checked position arithmetic,
+`enterFixed` and `enterEmpty` compare the packed 64-bit header against the
+expected key and payload size. `enterFixed` remains private and only receives
+fixed sizes 32 through 160. `enterEmpty` retains checked position arithmetic,
 including the zero-key, out-of-calldata cases that can reach an overflow panic.
 
 Run `npx hardhat test test/leaf-fixed.bench.test.ts`. Measured savings with the
-compiler settings above are 62 gas for each leaf decoder and 43 gas for each
-generic fixed-width decoder (`unpack32` through `unpack160`) and `expectEmpty`.
+compiler settings above, refreshed for 1.39.0, are 65 gas for each leaf decoder,
+38 gas for each generic fixed-width decoder (`unpack32` through `unpack160`),
+and 53 gas for `enterEmpty`.
 Leaf savings are constant across lengths 0, 1, 31, 32, 33, 256, and 4,096.
 Results include harness overhead and are written to
 `.npm-cache/leaf-fixed-results.json`.

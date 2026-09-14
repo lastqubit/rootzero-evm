@@ -333,15 +333,21 @@ next. Balance carries `{ asset, amount }`,
 custody carries `{ host, asset, amount }`, and position carries the flat
 position `{ asset, amount, liability, debt, counterparty }`. The counterparty
 field identifies the settlement counterparty. Zero identifies Rootzero and
-is handled by `book`. Generic codecs preserve the field;
+is handled by limit-checked booking through `Settlement.settle`. Generic codecs preserve the field;
 `settle` passes all five fields as a `Position memory` struct to its hook for
 counterparty validation and authorization. Settlement hooks take
-`(account, position, limits)`, plus `Execution memory funds` for funded settlement.
-Each POSITION is paired with one LIMITS input. The hook enforces its minimum net
-asset amount and maximum total debt, including fees. Each host implements its own
-`settle` hook and fee policy. `Settlement` provides internal `repay` and `collect`
-helpers: validate the counterparty with `Accounts.account`, authorize the position,
-then pass the remaining basis points from `repay` to `collect`.
+`(account, position)`, plus `Execution memory funds` for funded settlement.
+Each POSITION is paired with one LIMITS input containing `uint limits`: the high
+128 bits hold the minimum asset amount and the low 128 bits the maximum debt.
+Both are literal bounds; the payload is 32 bytes. The command enforces the minimum net
+asset amount and maximum total debt. Producers handle fees before supplying the
+position: `amount` is the final net receipt and `debt` is the final total payment.
+`Settlement` receives the checked position, books zero-counterparty positions on the active
+account, and passes nonzero counterparties to the account hooks when exchanging the
+exact debt and asset quantities. It adds no fees and makes no separate host
+fee credits. Account validation and authorization belong to the host's debit/credit
+hooks, or its custom `BookHook` if it bypasses them. Empty exchanges skip the
+account hooks, so they do not validate the counterparty.
 
 Every nonzero position counterparty is an account, including host accounts.
 `settle` can exchange balances with any account counterparty on the executing
@@ -353,7 +359,7 @@ balances determine where to settle or realize. See [counterparty semantics](docs
 Hosts that maintain account balances implement `settle`; hosts without their own
 balance ledger implement `realize`. A production host chooses one model rather
 than exposing both for the same operation. `Settlement` supplies reusable ledger
-mechanics without a default `settle` implementation or fixed fee rates.
+mechanics with a default `settle` implementation that applies final quantities exactly.
 
 Either side of a position may be absent. An absent asset side is encoded as
 `asset = 0, amount = 0`; an absent liability side is encoded as
@@ -367,14 +373,18 @@ value can also use the narrower `#balance` block.
 lending-specific debt record. Its liability side carries value owed or required; it
 pairs that liability with value acquired or controlled. A command may preserve
 or replace either side and return the resulting state for the next step;
-`book` terminally consumes a position pair with zero counterparty, while
-`settle` consumes one with an account counterparty. This supports swaps,
+`settle` terminally consumes the position, exchanging with an account
+counterparty or applying a zero-counterparty booking after checking limits. This supports swaps,
 borrowing, refinancing, collateral changes, callback obligations, cross-host
 claims, fees, netting, and other multi-step operations. Positions are
 transient representations and do not themselves create or erase an obligation
 recorded by an external system.
 
-The quantity in a debt side is an exact net obligation. A command that consumes
+At settlement, the debt side is the final total payment and the asset side is
+the final net receipt, with producer fees already accounted for. Limits protect
+these quantities; they do not cover separate charges outside the position.
+
+The quantity in a debt side is an exact obligation. A command that consumes
 `debt = 100` must deliver, make available, or otherwise satisfy all `100`, or
 revert. Transfer fees and other sourcing costs are paid in addition to the debt
 or reflected in the gross amount sourced upstream; they must not silently
@@ -454,13 +464,12 @@ an initial balance and native-value budget), `cashout` (withdraw native
 state to other accounts), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
 returns counterparty zero, then the command checks the returned quantities
-against the paired LIMITS input using `requireLimits`),
+against the paired LIMITS input using `Positions.requireLimits(position, limits)`),
 `allocate` (turn balance state
 into custody),
-`provision` (provision custody from an external allocation), `book` (consume
-positions with zero counterparty, debiting the exact liability and crediting
-the exact asset amount through `BookHook` in `core/Settlement.sol`), `settle` (consume
-asset-liability position state, including liability-only positions),
+`provision` (provision custody from an external allocation), `settle` (consume
+asset-liability position state with one LIMITS input per position, including
+Rootzero-backed and liability-only positions),
 `relayPayable` (relay a pipeline without
 state), and `relayBalancePayable` (relay balance state and a pipeline to another
 portal).
@@ -570,7 +579,7 @@ chain-specific `resources` fields for adapters that also need gas or runtime
 parameters. A `resources` word is never itself native value; EVM adapters use
 `useResourceValue` to extract its low 128-bit value lane before spending it.
 
-Hosts that implement a pipeline locally can inherit `Bootstrap`,
+Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
 `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
 `ExecuteSettle` to register canonical command metadata while executing
 their local command IDs through `executeBootstrap`, `executeCashout`,
@@ -582,7 +591,8 @@ returning true. Returning `handled = false` delegates a local command to its
 trusted normal external entrypoint. Pass the step value into each adapter.
 Bootstrap is pipeline-local rather than an
 externally callable command and may consume value for chain-asset balance;
-the other five reject nonzero value because those commands are non-funded.
+the other four return assigned value unused as pipeline credit. Their external
+command entrypoints remain nonpayable.
 
 Positions also support backward-composed pipelines. In an exact-output route,
 the asset side can represent the desired result while the liability side
@@ -594,7 +604,7 @@ position:
 position(C, 100, C, 100)
 → position(C, 100, B, 50)
 → position(C, 100, A, 25)
-→ book
+→ settle(limits)
 ```
 
 This is backward composition, not backward execution: `#step` blocks still
@@ -620,13 +630,12 @@ the descriptor's lanes through the published block schemas.
 
 ## Ports
 
-The book command and port share `BookHook` from `core/Settlement.sol`:
+Settlement and the book port share `BookHook` from `core/Settlement.sol`:
 `book(from, to, asset, amount, liability, debt)`. `Settlement` implements it by
 debiting `debt` from `from` before crediting `amount` to `to`, skipping zero
 amounts. Matching accounts or assets are not netted. Hosts may implement the
 hook directly while preserving those exact-leg and funding requirements.
-The settlement helpers also call it for their transfers. Separate fee credits
-call `creditAccount` directly.
+Settlement also calls it for both exact exchange transfers, liability first.
 
 `rawCall` and `rawCallCopy` (from `Core.sol`) call ports returning
 `(bytes output, uint credit)`, using memory and calldata input respectively.

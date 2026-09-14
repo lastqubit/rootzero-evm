@@ -249,8 +249,10 @@ was persisted or settled.
 
 After fully settling a position, a host may emit `Settled` with the account,
 counterparty, and settled asset and debt quantities. Only `account` is indexed.
-Emit it once per position after the settlement hook succeeds; additional fees
-are recorded separately. Hosts opt into emission through `SettledEvent`.
+Emit it once per position after the settlement hook succeeds. These are the
+final quantities supplied by the producer; settlement adds no host fee.
+Producers record any separate fee payments in their own flow events.
+Hosts opt into emission through `SettledEvent`.
 
 **Flows.** Operations that move value emit one flow event per affected amount,
 with the matching `Actions` code:

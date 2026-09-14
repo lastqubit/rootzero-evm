@@ -8,6 +8,98 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+### Breaking Changes
+
+- Rename the pipeline-local `Bootstrap` mixin to `ExecuteBootstrap`.
+
+- Rename `Executions.expectAbs` to `expect`, matching the position-checking
+  helpers in `Decoders` and `Cursors`.
+
+- Rename `Blocks.expectEmpty` to `Blocks.enterEmpty` and the private
+  `expectFixed` helper to `enterFixed`, matching the block-entry helper family.
+
+- Use fixed-size bounds in `ExecuteSettle` instead of a decoder. Partial LIMITS
+  blocks now revert with `InvalidBlock`; unmatched complete blocks revert with
+  `UnconsumedData` after the paired loop.
+
+- Remove `limits` from the settlement hooks. `Settle` and `SettlePayable` use
+  `Executions.unpackLimitedPosition` to consume and check POSITION state against
+  LIMITS input before invoking the hook. `ExecuteSettle` uses the memory helper.
+  Direct callers of `Settlement.settle` must enforce their own limits.
+
+- Delegate settlement account validation to `debitAccount` and `creditAccount`,
+  or a custom `BookHook`. Nonzero counterparties pass through unchanged;
+  empty exchanges skip account validation because they invoke no account hooks.
+
+- Remove the `book(bytes)` command and the `Book` / `ExecuteBook` mixins.
+  Use `settle` / `ExecuteSettle` with one packed LIMITS block per position,
+  including Rootzero-backed positions. Settlement accepts account counterparties
+  and applies a literal uint128 debt cap; callers requiring Rootzero backing
+  must validate counterparty zero explicitly. `BookHook`, `portBook`, and the
+  historical `Actions.Book` event identifier remain available.
+
+- Give QUOTE its own `Quote` struct and four-word payload: `asset`, `liability`,
+  `counterparty`, and packed `uint limits`. The high 128 bits hold the minimum
+  asset amount and the low 128 bits the literal maximum debt. QUOTE payloads
+  shrink from 160 to 128 bytes; codecs and `Positions.requireQuoted` use the new
+  type and layout. Identifier checks precede shared `requireLimits` validation.
+
+- Replace the `Limits` struct with packed `uint limits`: high 128 bits are the
+  minimum net asset amount; low 128 bits are the maximum fee-inclusive debt.
+  Both are literal bounds, without an unlimited sentinel. LIMITS now carries
+  `uint limits` in 32 payload bytes instead of two uint words; all LIMITS codec
+  helpers take or return the packed scalar. Remove structured
+  LIMITS overloads and codec `requireLimits` helpers; use
+  `Positions.requireLimits(position, limits)` for inclusive quantity validation.
+
+- Rename `AmountOutOfRange()` to `OutOfRange()`, changing its error selector.
+  Ordering read helpers (`readLtAt32`, `readLeAt32`, `readGtAt32`, `readGeAt32`) use
+  `OutOfRange()`; equality and inequality reads retain `UnexpectedValue()`.
+- Restore default `Settlement.settle` as exact settlement without host fees.
+  Producers supply the final net asset receipt and final total debt payment,
+  accounting for their own fees before settlement. Limits are still checked
+  before transfers, and account policy is enforced by the host's account hooks.
+  Zero-counterparty positions book on the active account.
+- Remove `repay`, `collect`, and the settlement-specific
+  `ZeroFee` error. Settlement routes both exact exchange legs through `BookHook`,
+  liability first, without extra host credits or fee deductions.
+
+### Added
+
+- Add `Cursors.bounds(source, size)` for calldata streams, matching the memory
+  overload's whole-block length validation and `InvalidBlock` error.
+
+- Add `Memory.unpackLimitedPosition(pos, lim)` for POSITION in
+  memory and LIMITS in calldata. It checks headers and packed quantity bounds,
+  then copies the position without aliasing its source. Used by `ExecuteSettle`.
+
+- Add `Blocks.unpackLimitedPosition(pos, lim)` to validate POSITION
+  and LIMITS headers, check packed bounds directly in calldata, and return the
+  position. Callers must establish bounds; `Executions.unpackLimitedPosition`
+  supplies bounded state and input positions for settlement commands.
+
+- Add grouped `Blocks.readEqualAt32`, `readNotEqualAt32`, `readLtAt32`, `readLeAt32`,
+  `readGtAt32`, and `readGeAt32` helpers to compare words at absolute calldata
+  positions. Equality returns the shared value; the other helpers return both
+  words in argument order. Ordering comparisons treat words as unsigned integers.
+
+### Changed
+
+- Return unused assigned value as credit from `ExecuteDebitAccount`,
+  `ExecuteCreditAccount`, `ExecuteSettle`, and `ExecuteCashout`. Local execution
+  accepts assigned value; external command entrypoints remain nonpayable.
+
+- Accept empty batches in `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
+  `ExecuteSettle`, matching their regular commands. Schema, partial-block,
+  and paired-stream checks still apply.
+
+- Standardize full-header comparisons as right-aligned `uint64` values across
+  calldata, memory, cursor, and execution helpers. Fixed-layout checks share
+  named `Headers` constants derived from `Specs`, exported through `Codec.sol`
+  and `Commands.sol`. Readers that need individual fields extract the key and
+  length directly in assembly: both `header` overloads, the direct `enter`
+  overloads, `runCount`, and LIST/BYTES/STRING unpackers.
+
 ## 1.38.0
 
 ### Breaking Changes
