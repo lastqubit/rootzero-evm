@@ -49,7 +49,7 @@ abstract contract MyCommand is CommandBase {
             status = uint(exec.unpack32(Specs.Status));
         }
 
-        exec.expectAbs(end);
+        exec.expect(end);
     }
 
     function myCommand(

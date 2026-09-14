@@ -176,7 +176,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         (, uint end) = exec.enter(Specs.List);
         (stateAsset, stateAmount) = exec.unpackBalance();
         (inputAsset, inputAmount) = exec.unpackAmount();
-        Executions.expectAbs(exec, end);
+        Executions.expect(exec, end);
     }
 
     /// @notice Gas baseline reproducing the removed tagged, relative two-lane cursor path.
@@ -332,7 +332,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         (, uint end) = exec.enter(Specs.List);
         first = exec.next32();
         second = exec.next32();
-        Executions.expectAbs(exec, end);
+        Executions.expect(exec, end);
     }
 
     function executionEnterKeyAdvance(
@@ -403,7 +403,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         d = exec.next8();
         e = exec.next16();
         f = exec.next32();
-        Executions.expectAbs(exec, end);
+        Executions.expect(exec, end);
     }
 
     function writerCopies(bytes calldata value) external pure returns (bytes memory) {

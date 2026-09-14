@@ -19,7 +19,7 @@ import {
     CommandBase,
     ExecuteCreditAccount,
     ExecuteDebitAccount,
-    Bootstrap,
+    ExecuteBootstrap,
     Cashout,
     CashinHook,
     CashoutHook,

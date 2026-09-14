@@ -165,13 +165,13 @@ contract TestLeafFixed {
         usedGas = initial - gasleft();
         output = abi.encode(value, end);
     }
-    function expectEmpty(bool optimized, bytes calldata data, uint start, bool absolute, bytes4 key)
+    function enterEmpty(bool optimized, bytes calldata data, uint start, bool absolute, bytes4 key)
         external view returns(uint usedGas, bytes memory output) {
         uint base; assembly ("memory-safe") { base := data.offset }
         uint abs = absolute ? start : base + start;
         uint end;
         uint initial = gasleft();
-        if (optimized) end = Blocks.expectEmpty(abs, key);
+        if (optimized) end = Blocks.enterEmpty(abs, key);
         else end = PreviousLeafFixed.expectEmpty(abs, key);
         usedGas = initial - gasleft();
         output = abi.encode(end);

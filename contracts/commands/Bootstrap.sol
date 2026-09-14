@@ -8,9 +8,9 @@ import {Cursors} from "../utils/Cursors.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
-/// @title Bootstrap
+/// @title ExecuteBootstrap
 /// @notice Pipeline-local command that atomically starts with BALANCE state and native-value budget.
-abstract contract Bootstrap is CommandBase, DebitAccountHook {
+abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {

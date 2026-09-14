@@ -297,7 +297,7 @@ library Executions {
     /// @notice Validate and enter the payload of the next execution input block.
     /// @dev The input cursor remains in its existing frame so callers can decode
     /// child blocks in place. Callers should prove complete payload consumption
-    /// with `exec.expectAbs(end)` after decoding the children from input.
+    /// with `exec.expect(end)` after decoding the children from input.
     /// Entry advances a uint32 cursor by a header and optional uint32-bounded
     /// payload prefix, so it cannot move backward or overflow uint256. The upper
     /// input-bound check also ensures the new position still fits uint32.
@@ -314,7 +314,7 @@ library Executions {
 
     /// @notice Validate and enter the payload of the next keyed execution input block.
     /// @dev Validates no payload-size constraint. Callers should prove complete
-    /// payload consumption with `exec.expectAbs(end)` after decoding.
+    /// payload consumption with `exec.expect(end)` after decoding.
     /// @param exec Execution whose input cursor advances over the block header.
     /// @param key Expected parent block key.
     /// @return body Absolute position of the first payload byte.
@@ -386,7 +386,7 @@ library Executions {
     /// @notice Require the active execution decoder to be at absolute position `abs`.
     /// @param exec Execution whose input position is validated.
     /// @param abs Expected absolute position.
-    function expectAbs(Execution memory exec, uint abs) internal pure {
+    function expect(Execution memory exec, uint abs) internal pure {
         if (uint32(exec.decoders) != abs) revert UnexpectedPosition();
     }
 

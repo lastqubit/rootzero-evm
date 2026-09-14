@@ -95,7 +95,7 @@ abstract contract SwapInput is SchemaAnnot {
         position.debt = uint(Blocks.read32(positionAbs + 96));
         hops = exec.list();
 
-        exec.expectAbs(end);
+        exec.expect(end);
     }
 }
 

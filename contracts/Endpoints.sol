@@ -14,7 +14,7 @@ import {BookHook, CreditAccountHook, DebitAccountHook, SettleHook} from "./core/
 import {CommandBase} from "./commands/Base.sol";
 import {Allocate, AllocateHook} from "./commands/Allocate.sol";
 import {Burn, BurnHook} from "./commands/Burn.sol";
-import {Bootstrap} from "./commands/Bootstrap.sol";
+import {ExecuteBootstrap} from "./commands/Bootstrap.sol";
 import {Cashout, ExecuteCashout} from "./commands/Cashout.sol";
 import {CreditAccount, ExecuteCreditAccount} from "./commands/Credit.sol";
 import {DebitAccount, ExecuteDebitAccount} from "./commands/Debit.sol";

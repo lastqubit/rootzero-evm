@@ -36,7 +36,7 @@ abstract contract MyCommand is CommandBase {
         peer = uint(Blocks.read32(abs));
         (asset, amount) = exec.unpackAmount();
 
-        exec.expectAbs(end);
+        exec.expect(end);
     }
 
     function myCommand(

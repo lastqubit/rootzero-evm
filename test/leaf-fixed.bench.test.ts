@@ -36,7 +36,7 @@ describe("Leaf decoding and fixed header optimization", function () {
     for (const size of [32, 64, 96, 128, 160]) {
       await compare("unpack" + size, encodeBlock(Keys.List, blob(size)), size, [exactSpec(Keys.List, size)]);
     }
-    await compare("expectEmpty", encodeBlock(Keys.List, "0x"), 0, [Keys.List]);
+    await compare("enterEmpty", encodeBlock(Keys.List, "0x"), 0, [Keys.List]);
     mkdirSync(".npm-cache", { recursive: true });
     writeFileSync(".npm-cache/leaf-fixed-results.json", JSON.stringify(rows, null, 2) + "\n");
     console.table(rows.filter(row => row.size === 0 || /^unpack\d/.test(row.operation)));
@@ -67,7 +67,7 @@ describe("Leaf decoding and fixed header optimization", function () {
     const helper = await deploy("TestLeafFixed");
     for (const key of [Keys.List, "0x00000000", "0xffffffff"]) {
       for (const size of [0, 32, 64, 96, 128, 160]) {
-        const method = helper[size ? "unpack" + size : "expectEmpty"];
+        const method = helper[size ? "unpack" + size : "enterEmpty"];
         // Fixed unpackers use only the spec key and enforce their own fixed size.
         const extra = size ? rangedSpec(key, 1, 2, 0) : key;
         const valid = encodeBlock(key, blob(size));

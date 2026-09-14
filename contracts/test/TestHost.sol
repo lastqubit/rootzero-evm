@@ -5,7 +5,7 @@ import {Accounts} from "../utils/Accounts.sol";
 
 import { Host } from "../core/Host.sol";
 import { Allocate } from "../commands/Allocate.sol";
-import { Bootstrap } from "../commands/Bootstrap.sol";
+import { ExecuteBootstrap } from "../commands/Bootstrap.sol";
 import { ExecuteCashout } from "../commands/Cashout.sol";
 import { Deposit, DepositPayable } from "../commands/Deposit.sol";
 import { Withdraw } from "../commands/Withdraw.sol";
@@ -35,7 +35,7 @@ using Executions for Execution;
 contract TestHost is
     Host,
     Allocate,
-    Bootstrap,
+    ExecuteBootstrap,
     ExecuteCashout,
     Deposit,
     DepositPayable,

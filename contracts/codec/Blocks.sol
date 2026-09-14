@@ -212,7 +212,7 @@ library Blocks {
     /// @param size Expected payload length.
     /// @return body Absolute position of the payload.
     /// @return end Absolute position after the payload.
-    function expectFixed(uint abs, bytes4 key, uint size) private pure returns (uint body, uint end) {
+    function enterFixed(uint abs, bytes4 key, uint size) private pure returns (uint body, uint end) {
         uint64 actual;
         assembly ("memory-safe") {
             actual := shr(192, calldataload(abs))
@@ -231,7 +231,7 @@ library Blocks {
     /// @param abs Absolute position of the block header.
     /// @param key Expected block key.
     /// @return end Absolute position immediately after the empty block header.
-    function expectEmpty(uint abs, bytes4 key) internal pure returns (uint end) {
+    function enterEmpty(uint abs, bytes4 key) internal pure returns (uint end) {
         uint64 actual;
         assembly ("memory-safe") {
             actual := shr(192, calldataload(abs))
@@ -1965,7 +1965,7 @@ library Blocks {
     /// @return a First payload word.
     /// @return end Absolute position after the block.
     function unpack32(uint abs, uint spec) internal pure returns (bytes32 a, uint end) {
-        (abs, end) = expectFixed(abs, Specs.key(spec), 32);
+        (abs, end) = enterFixed(abs, Specs.key(spec), 32);
         a = read32(abs);
     }
 
@@ -1976,7 +1976,7 @@ library Blocks {
     /// @return b Second payload word.
     /// @return end Absolute position after the block.
     function unpack64(uint abs, uint spec) internal pure returns (bytes32 a, bytes32 b, uint end) {
-        (abs, end) = expectFixed(abs, Specs.key(spec), 64);
+        (abs, end) = enterFixed(abs, Specs.key(spec), 64);
         assembly ("memory-safe") {
             a := calldataload(abs)
             b := calldataload(add(abs, 0x20))
@@ -1991,7 +1991,7 @@ library Blocks {
     /// @return c Third payload word.
     /// @return end Absolute position after the block.
     function unpack96(uint abs, uint spec) internal pure returns (bytes32 a, bytes32 b, bytes32 c, uint end) {
-        (abs, end) = expectFixed(abs, Specs.key(spec), 96);
+        (abs, end) = enterFixed(abs, Specs.key(spec), 96);
         assembly ("memory-safe") {
             a := calldataload(abs)
             b := calldataload(add(abs, 0x20))
@@ -2011,7 +2011,7 @@ library Blocks {
         uint abs,
         uint spec
     ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, uint end) {
-        (abs, end) = expectFixed(abs, Specs.key(spec), 128);
+        (abs, end) = enterFixed(abs, Specs.key(spec), 128);
         assembly ("memory-safe") {
             a := calldataload(abs)
             b := calldataload(add(abs, 0x20))
@@ -2033,7 +2033,7 @@ library Blocks {
         uint abs,
         uint spec
     ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, bytes32 e, uint end) {
-        (abs, end) = expectFixed(abs, Specs.key(spec), 160);
+        (abs, end) = enterFixed(abs, Specs.key(spec), 160);
         assembly ("memory-safe") {
             a := calldataload(abs)
             b := calldataload(add(abs, 0x20))
