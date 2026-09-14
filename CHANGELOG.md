@@ -6,7 +6,7 @@ breaking API changes. Breaking changes are called out explicitly.
 Add all changes made after a release to `Unreleased`. Published version
 sections are immutable and must continue to describe the tagged release.
 
-## Unreleased
+## 1.39.0
 
 ### Breaking Changes
 
