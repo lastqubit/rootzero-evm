@@ -54,9 +54,7 @@ abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
     /// @param context Command context carrying the AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
-    function deposit(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
+    function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
@@ -85,9 +83,7 @@ abstract contract DepositPayable is CommandBase, DepositPayableHook, ActionAnnot
     /// @param context Command context carrying the AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.
-    function depositPayable(
-        bytes calldata context
-    ) external payable onlyCommand returns (bytes memory, uint) {
+    function depositPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {

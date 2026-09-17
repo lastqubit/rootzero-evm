@@ -64,7 +64,6 @@ abstract contract ExecuteCashout is Cashout {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (input.length != 0) revert UnexpectedInput();
-
         (uint abs, uint end) = Memory.bounds(state, Sizes.Balance);
 
         while (abs < end) {

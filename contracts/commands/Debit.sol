@@ -66,7 +66,6 @@ abstract contract ExecuteDebitAccount is DebitAccount {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-
         (uint abs, uint end) = Cursors.bounds(input, Sizes.Amount);
         output = new bytes(input.length);
         uint i;
