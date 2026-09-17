@@ -4,6 +4,7 @@ pragma solidity ^0.8.33;
 // Aggregator: re-exports the core host, runtime, access, ledger, settlement, pipeline, node-call, and validation layer.
 // Import this file to bring the full rootzero host base layer into scope.
 
+import {GroupsAnnot} from "./annotations/Groups.sol";
 import { ActionAnnot } from "./annotations/Action.sol";
 import { CounterpartyAnnot } from "./annotations/Counterparty.sol";
 import { LabelAnnot } from "./annotations/Label.sol";
@@ -18,7 +19,7 @@ import { FailedCall, rawCall, rawCallCopy, rawQuery, tryRawCall, tryRawCallCopy 
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";
 import { ExecuteHook, PipeHook, Pipeline } from "./core/Pipeline.sol";
 import { Budget, Budgets } from "./core/Budget.sol";
-import { BookHook, CreditAccountHook, DebitAccountHook, SettleHook, Settlement } from "./core/Settlement.sol";
+import { BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook, Settlement } from "./core/Settlement.sol";
 import { UnexpectedAmount } from "./utils/Errors.sol";
 import { ForwardHook, Portal } from "./core/Portal.sol";
 import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Quote, Position, Tx } from "./core/Types.sol";

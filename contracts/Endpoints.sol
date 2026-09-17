@@ -8,7 +8,7 @@ pragma solidity ^0.8.33;
 import {CashinHook, CashoutHook} from "./core/Cash.sol";
 import {Flags} from "./utils/Flags.sol";
 import {ExecuteHook, PipeHook} from "./core/Pipeline.sol";
-import {BookHook, CreditAccountHook, DebitAccountHook, SettleHook} from "./core/Settlement.sol";
+import {BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook} from "./core/Settlement.sol";
 
 // Commands
 import {CommandBase} from "./commands/Base.sol";
@@ -23,6 +23,7 @@ import {Payout, PayoutHook} from "./commands/Payout.sol";
 import {Provision, ProvisionHook, ProvisionPayable, ProvisionPayableHook} from "./commands/Provision.sol";
 import {RecoverPayable, RecoverPayableHook} from "./commands/Recover.sol";
 import {Realize, RealizeHook} from "./commands/Realize.sol";
+import {Repay} from "./commands/Repay.sol";
 import {RelayPayable, RelayBalancePayable, RelayPayableHook} from "./commands/Relay.sol";
 import {Settle, SettlePayable, SettlePayableHook, ExecuteSettle} from "./commands/Settle.sol";
 import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";

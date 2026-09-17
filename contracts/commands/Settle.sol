@@ -6,10 +6,9 @@ import {Position} from "../core/Types.sol";
 import {SettleHook} from "../core/Settlement.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
-import {Blocks, Memory} from "../codec/Blocks.sol";
+import {Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
-import {Cursors} from "../utils/Cursors.sol";
-import {UnconsumedData} from "../utils/Errors.sol";
+import {UnexpectedInput} from "../utils/Errors.sol";
 
 using Executions for Execution;
 
@@ -20,7 +19,7 @@ abstract contract SettlePayableHook {
     /// satisfied. Partial fulfillment is invalid because the consuming command emits
     /// no debt remainder. Producers handle fees before creating the position:
     /// `amount` is the final net receipt and `debt` the final total payment.
-    /// Callers enforce limits before invoking the hook. Apply both quantities exactly, without extra fees.
+    /// Producers enforce limits before emitting positions. Apply both quantities exactly, without extra fees.
     /// @param account Account whose position is being settled.
     /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
     /// @param funds Mutable execution used only for its remaining native-value budget.
@@ -34,7 +33,7 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("settle", Specs.Position, Specs.Limits, Specs.Empty, 0);
+        (id, descriptor) = command("settle", Specs.Position, Specs.Empty, Specs.Empty, 0);
         annotateAction(id, Actions.Settle);
     }
 
@@ -45,14 +44,14 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
 
     /// @notice Settle each POSITION block from the command state.
     /// @dev The hook validates the counterparty and authorizes the exchange.
-    /// @param context Command context pairing each POSITION with one LIMITS input.
+    /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function settle(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
-            Position memory position = exec.unpackLimitedPosition();
+            Position memory position = exec.unpackPositionValue();
             settle(exec.account, position);
         }
 
@@ -67,20 +66,20 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
 
     constructor() {
         uint id;
-        (id, descriptor) = command("settlePayable", Specs.Position, Specs.Limits, Specs.Empty, Flags.Funded);
+        (id, descriptor) = command("settlePayable", Specs.Position, Specs.Empty, Specs.Empty, Flags.Funded);
         annotateAction(id, Actions.Settle);
     }
 
     /// @notice Settle each POSITION block with access to a shared native-value budget.
     /// @dev The hook validates the counterparty and authorizes the exchange.
-    /// @param context Command context pairing each POSITION with one LIMITS input.
+    /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function settlePayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
 
         while (exec.more()) {
-            Position memory position = exec.unpackLimitedPosition();
+            Position memory position = exec.unpackPositionValue();
             settle(exec.account, position, exec);
         }
 
@@ -97,7 +96,7 @@ abstract contract ExecuteSettle is Settle {
     /// @dev The hook validates the counterparty and authorizes the exchange.
     /// @param account Account for which each position is settled.
     /// @param state POSITION block stream held in pipeline memory.
-    /// @param input One LIMITS input block per POSITION.
+    /// @param input Empty command input.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
@@ -108,18 +107,16 @@ abstract contract ExecuteSettle is Settle {
         bytes calldata input,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        (uint pos, uint posEnd) = Memory.bounds(state, Sizes.Position);
-        (uint lim, uint limEnd) = Cursors.bounds(input, Sizes.Limits);
+        if (input.length != 0) revert UnexpectedInput();
+        (uint abs, uint end) = Memory.bounds(state, Sizes.Position);
 
-        while (pos < posEnd && lim < limEnd) {
-            settle(account, Memory.unpackLimitedPosition(pos, lim));
+        while (abs < end) {
+            settle(account, Memory.unpackPositionValue(abs));
             unchecked {
-                pos += Sizes.Position;
-                lim += Sizes.Limits;
+                abs += Sizes.Position;
             }
         }
 
-        if (pos != posEnd || lim != limEnd) revert UnconsumedData();
         return (true, "", value);
     }
 }

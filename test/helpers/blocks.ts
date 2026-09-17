@@ -310,9 +310,7 @@ export function encodeHostAccount(host: bigint): string {
     | (host & ((1n << 160n) - 1n)), 32);
 }
 
-// Unnamed local input schema published by BookPort in these test hosts.
-export const BookPortKey = localKey(1);
-
-export function encodeBookPortBlock(debit: string, credit: string): string {
-  return encodeBlock(BookPortKey, concat(debit, credit));
+// Flat debit/credit pair consumed by BookPort.
+export function encodeBookPortPair(debit: string, credit: string): string {
+  return concat(debit, credit);
 }

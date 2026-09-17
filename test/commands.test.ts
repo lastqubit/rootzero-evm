@@ -77,14 +77,6 @@ describe("Commands", () => {
     ] as const;
   }
 
-  function settlementLimits(count = 1) {
-    return concat(...Array.from({ length: count }, () => encodeLimitsBlock(0n, MaxUint128)));
-  }
-
-  function settleCtx(overrides: { state: string; input?: string }) {
-    return ctx({ ...overrides, input: overrides.input ?? settlementLimits(Math.ceil(ethers.dataLength(overrides.state) / 168)) });
-  }
-
   function callAs(signerIndex: number, method: string, ...args: unknown[]) {
     const promise = getSigner(signerIndex).then((signer) => {
       const callArgs = Array.isArray(args[0]) ? [...args[0], ...args.slice(1)] : args;
@@ -414,7 +406,7 @@ describe("Commands", () => {
     });
   });
 
-  it("does not advertise standalone debt commands", async () => {
+  it("omits optional repayment and legacy debt commands from this host", async () => {
     for (const method of ["repay", "repayPayable", "repayPosition", "repayPositionPayable", "realizeDebt", "realizePosition"]) {
       expect(host.interface.getFunction(`${method}(bytes)`)).to.equal(null);
     }
@@ -441,11 +433,11 @@ describe("Commands", () => {
         for (const amount of [0n, 10n]) {
           const state = encodePositionBlock(asset, amount, liability, amount, counterparty);
           for (const method of ["settle", "settlePayable"]) {
-            await expect(callAs(0, method, settleCtx({ state }), { value: method === "settlePayable" ? amount * 2n : 0n }))
+            await expect(callAs(0, method, ctx({ state }), { value: method === "settlePayable" ? amount * 2n : 0n }))
               .to.emit(host, "SettleCounterpartyChecked").withArgs(counterparty);
           }
           await expect(callAs(0, "testPipe", userAccount, state,
-            encodeStepBlock(await cmd("settle"), 0n, settlementLimits())))
+            encodeStepBlock(await cmd("settle"), 0n, "0x")))
             .to.emit(host, "SettleCounterpartyChecked").withArgs(counterparty);
         }
       } finally {
@@ -461,8 +453,8 @@ describe("Commands", () => {
       const state = encodePositionBlock(asset, 0n, liability, 0n, counterparty);
       for (const method of ["settle", "settlePayable", "testPipe"]) {
         const tx = method === "testPipe"
-          ? callAs(0, method, userAccount, state, encodeStepBlock(await cmd("settle"), 0n, settlementLimits()))
-          : callAs(0, method, settleCtx({ state }));
+          ? callAs(0, method, userAccount, state, encodeStepBlock(await cmd("settle"), 0n, "0x"))
+          : callAs(0, method, ctx({ state }));
         if (counterparty === userAccount) await expect(tx)
           .to.emit(host, "SettleCounterpartyChecked").withArgs(userAccount);
         else await expect(tx).to.be.revertedWithCustomError(host, "UnexpectedValue");
@@ -471,39 +463,24 @@ describe("Commands", () => {
   });
 
   for (const method of ["settle", "settlePayable", "memory"]) {
-    describe(`${method} limits`, () => {
+    describe(`${method} empty input`, () => {
       const asset = ethers.toBeHex(1, 32);
       const liability = ethers.toBeHex(2, 32);
-      function run(input: string, batch = false) {
+      function run(input: string) {
         const position = encodePositionBlock(asset, 100n, liability, 40n, userAccount);
-        const state = batch ? concat(position, position) : position;
+        const state = concat(position, position);
         return method === "memory"
           ? cmd("settle").then(id => callAs(0, "testPipe", userAccount, state, encodeStepBlock(id, 0n, input)))
           : callAs(0, method, ctx({ state, input }), method === "settlePayable" ? { value: 280n } : {});
       }
-      it("checks distinct limits for each position before the override", async () => {
-        await expect(run(concat(encodeLimitsBlock(100n, 40n), encodeLimitsBlock(90n, 50n)), true))
+      it("settles a batch without limits input", async () => {
+        await expect(run("0x"))
           .to.emit(host, method === "settlePayable" ? "SettlePayableCalled" : "SettleCalled");
       });
-      it("rejects violated limits before invoking the hook", async () => {
-        for (const limits of [encodeLimitsBlock(101n, 40n), encodeLimitsBlock(100n, 39n)]) {
-          await expect(run(limits)).to.be.revertedWithCustomError(host, "OutOfRange");
+      it("rejects any input", async () => {
+        for (const input of [encodeLimitsBlock(100n, 40n), "0x01", encodeAmountBlock(asset, 1n)]) {
+          await expect(run(input)).to.be.revertedWithCustomError(host, method === "memory" ? "UnexpectedInput" : "OutOfBounds");
         }
-      });
-      it("rejects missing and truncated LIMITS", async () => {
-        for (const input of ["0x", ethers.dataSlice(encodeLimitsBlock(0n, 100n), 0, 39)]) {
-          const error = method === "memory"
-            ? (input === "0x" ? "UnconsumedData" : "InvalidBlock") : "OutOfBounds";
-          await expect(run(input)).to.be.revertedWithCustomError(host, error);
-        }
-      });
-      it("rejects extra LIMITS", async () => {
-        await expect(run(concat(encodeLimitsBlock(0n, 100n), encodeLimitsBlock(0n, 100n))))
-          .to.be.revertedWithCustomError(host, method === "memory" ? "UnconsumedData" : "OutOfBounds");
-      });
-      it("rejects a wrong LIMITS header", async () => {
-        await expect(run(encodeAmountBlock(asset, 1n)))
-          .to.be.revertedWithCustomError(host, "InvalidBlock");
       });
     });
   }
@@ -511,26 +488,26 @@ describe("Commands", () => {
   it("settles liability-only positions through calldata and funded settlement", async () => {
     const liability = ethers.zeroPadValue("0x21", 32);
     const state = encodePositionBlock(ethers.ZeroHash, 0n, liability, 7n, userAccount);
-    await expect(callAs(0, "settle", settleCtx({ state }))).to.emit(host, "SettleCalled")
+    await expect(callAs(0, "settle", ctx({ state }))).to.emit(host, "SettleCalled")
       .withArgs(userAccount, ethers.ZeroHash, 0n, liability, 7n);
-    expect(await host.settle.staticCall(...settleCtx({ state }))).to.deep.equal(["0x", 0n]);
-    expect(await host.settlePayable.staticCall(...settleCtx({ state }), { value: 9n }))
+    expect(await host.settle.staticCall(...ctx({ state }))).to.deep.equal(["0x", 0n]);
+    expect(await host.settlePayable.staticCall(...ctx({ state }), { value: 9n }))
       .to.deep.equal(["0x", 2n]);
-    await expect(callAs(0, "settlePayable", settleCtx({ state }), { value: 6n }))
+    await expect(callAs(0, "settlePayable", ctx({ state }), { value: 6n }))
       .to.be.revertedWithCustomError(host, "InsufficientValue");
   });
 
   it("repays batches of liability-only positions through funded settlement", async () => {
     const liability = ethers.zeroPadValue("0x21", 32);
     const state = concat(encodePositionBlock(ethers.ZeroHash, 0n, liability, 7n, userAccount), encodePositionBlock(ethers.ZeroHash, 0n, liability, 8n, userAccount));
-    expect(await host.settlePayable.staticCall(...settleCtx({ state }), { value: 20n }))
+    expect(await host.settlePayable.staticCall(...ctx({ state }), { value: 20n }))
       .to.deep.equal(["0x", 5n]);
-    const tx = await callAs(0, "settlePayable", settleCtx({ state }), { value: 20n });
+    const tx = await callAs(0, "settlePayable", ctx({ state }), { value: 20n });
     await expect(tx).to.emit(host, "SettlePayableCalled")
       .withArgs(userAccount, ethers.ZeroHash, 0n, liability, 7n, 13n);
     await expect(tx).to.emit(host, "SettlePayableCalled")
       .withArgs(userAccount, ethers.ZeroHash, 0n, liability, 8n, 5n);
-    await expect(callAs(0, "settlePayable", settleCtx({ state }), { value: 14n }))
+    await expect(callAs(0, "settlePayable", ctx({ state }), { value: 14n }))
       .to.be.revertedWithCustomError(host, "InsufficientValue");
   });
 
@@ -538,7 +515,7 @@ describe("Commands", () => {
     const asset = ethers.zeroPadValue("0x20", 32);
     const liability = ethers.zeroPadValue("0x21", 32);
 
-    it("discovers POSITION state with LIMITS input and empty output", async () => {
+    it("discovers POSITION state with empty input and output", async () => {
       const deployment = host.deploymentTransaction();
       expect(deployment).to.not.equal(null);
 
@@ -546,18 +523,18 @@ describe("Commands", () => {
         .withArgs(
           await host.host(),
           await cmd("settle"),
-          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 32 }),
+          endpointDescriptor({ state: Keys.Position, stateHint: 160 }),
         );
     });
 
     it("passes each POSITION value and the acting account to the hook", async () => {
       const state = encodePositionBlock(asset, 100n, liability, 40n, userAccount);
-      const tx = await callAs(0, "settle", settleCtx({ state }));
+      const tx = await callAs(0, "settle", ctx({ state }));
 
       await expect(tx).to.emit(host, "SettleCalled")
         .withArgs(userAccount, asset, 100n, liability, 40n);
 
-      const [output, transactions] = await host.settle.staticCall(...settleCtx({ state }));
+      const [output, transactions] = await host.settle.staticCall(...ctx({ state }));
       expect(output).to.equal("0x");
       expect(transactions).to.equal(0n);
     });
@@ -569,7 +546,7 @@ describe("Commands", () => {
         encodePositionBlock(asset, 100n, liability, 40n, userAccount),
         encodePositionBlock(secondAsset, 200n, secondLiability, 75n, userAccount),
       );
-      const tx = await callAs(0, "settle", settleCtx({ state }));
+      const tx = await callAs(0, "settle", ctx({ state }));
 
       await expect(tx).to.emit(host, "SettleCalled")
         .withArgs(userAccount, asset, 100n, liability, 40n);
@@ -584,13 +561,13 @@ describe("Commands", () => {
     it("reverts OutOfBounds for truncated POSITION state", async () => {
       const full = encodePositionBlock(asset, 100n, liability, 40n, userAccount);
       const truncated = ethers.hexlify(ethers.getBytes(full).slice(0, -1));
-      await expect(callAs(0, "settle", settleCtx({ state: truncated })))
+      await expect(callAs(0, "settle", ctx({ state: truncated })))
         .to.be.revertedWithCustomError(host, "OutOfBounds");
     });
 
     it("reverts AccessDenied for an untrusted caller", async () => {
       const state = encodePositionBlock(asset, 100n, liability, 40n, userAccount);
-      await expect(callAs(1, "settle", settleCtx({ state })))
+      await expect(callAs(1, "settle", ctx({ state })))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
@@ -598,8 +575,8 @@ describe("Commands", () => {
       const state = encodePositionBlock(asset, 100n, liability, 40n, userAccount);
       const input = encodeAmountBlock(asset, 1n);
 
-      await expect(callAs(0, "settle", settleCtx({ state, input })))
-        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      await expect(callAs(0, "settle", ctx({ state, input })))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
     });
   });
 
@@ -615,7 +592,7 @@ describe("Commands", () => {
         .withArgs(
           await host.host(),
           await cmd("settlePayable"),
-          endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.Limits, inputHint: 32, funded: true }),
+          endpointDescriptor({ state: Keys.Position, stateHint: 160, funded: true }),
         );
     });
 
@@ -626,7 +603,7 @@ describe("Commands", () => {
         encodePositionBlock(asset, 100n, liability, 40n, userAccount),
         encodePositionBlock(secondAsset, 20n, secondLiability, 10n, userAccount),
       );
-      const tx = await callAs(0, "settlePayable", settleCtx({ state }), { value: 200n });
+      const tx = await callAs(0, "settlePayable", ctx({ state }), { value: 200n });
 
       await expect(tx).to.emit(host, "SettlePayableCalled")
         .withArgs(userAccount, asset, 100n, liability, 40n, 60n);
@@ -637,7 +614,7 @@ describe("Commands", () => {
     it("returns unspent command value as native budget credit", async () => {
       const state = encodePositionBlock(asset, 3n, liability, 2n, userAccount);
       const [output, transactions] = await host.settlePayable.staticCall(
-        ...settleCtx({ state }),
+        ...ctx({ state }),
         { value: 8n },
       );
 
@@ -648,7 +625,7 @@ describe("Commands", () => {
     it("reverts InsufficientValue when the hook overspends the budget", async () => {
       const state = encodePositionBlock(asset, 3n, liability, 2n, userAccount);
 
-      await expect(callAs(0, "settlePayable", settleCtx({ state }), { value: 4n }))
+      await expect(callAs(0, "settlePayable", ctx({ state }), { value: 4n }))
         .to.be.revertedWithCustomError(host, "InsufficientValue");
     });
 
@@ -659,7 +636,7 @@ describe("Commands", () => {
     it("reverts AccessDenied for an untrusted caller", async () => {
       const state = encodePositionBlock(asset, 3n, liability, 2n, userAccount);
 
-      await expect(callAs(1, "settlePayable", settleCtx({ state }), { value: 5n }))
+      await expect(callAs(1, "settlePayable", ctx({ state }), { value: 5n }))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
@@ -667,8 +644,8 @@ describe("Commands", () => {
       const state = encodePositionBlock(asset, 3n, liability, 2n, userAccount);
       const input = encodeAmountBlock(asset, 1n);
 
-      await expect(callAs(0, "settlePayable", settleCtx({ state, input }), { value: 5n }))
-        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      await expect(callAs(0, "settlePayable", ctx({ state, input }), { value: 5n }))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
     });
   });
 
@@ -803,6 +780,19 @@ describe("Commands", () => {
         encodePositionBlock(toAsset2, 20n, toLiability2, 16n),
       ));
       expect(credit).to.equal(0n);
+    });
+
+    it("validates LIMITS headers before quantities and bounds every input block", async () => {
+      const state = encodePositionBlock(asset, 0n, liability, 100n, encodeHostAccount(await host.host()));
+      const limits = encodeLimitsBlock(1n, 0n);
+      for (const input of ["0xffffffff" + limits.slice(10), limits.slice(0, 10) + "0000001f" + limits.slice(18)]) {
+        await expect(callAs(0, "realize", ctx({ state, input })))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      }
+      await expect(callAs(0, "realize", ctx({ state, input: ethers.dataSlice(limits, 0, 39) })))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
+      await expect(callAs(0, "realize", ctx({ state, input: concat(positionInput(), positionInput()) })))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
     });
 
     it("accepts empty streams and rejects malformed pairings", async () => {
@@ -1770,7 +1760,7 @@ describe("Commands", () => {
       const amount = 75n;
       const debt = 25n;
       const state = encodePositionBlock(asset, amount, liability, debt, userAccount);
-      const input = encodeStepBlock(await cmd("settle"), 0n, settlementLimits());
+      const input = encodeStepBlock(await cmd("settle"), 0n, "0x");
 
       const tx = await callAs(0, "testPipe", userAccount, state, input);
 
@@ -1783,7 +1773,7 @@ describe("Commands", () => {
       const liability = ethers.zeroPadValue("0xb3", 32);
       const debt = 25n;
       const state = encodePositionBlock(ethers.ZeroHash, 0n, liability, debt, userAccount);
-      const input = encodeStepBlock(await cmd("settle"), 0n, settlementLimits());
+      const input = encodeStepBlock(await cmd("settle"), 0n, "0x");
 
       const tx = await callAs(0, "testPipe", userAccount, state, input);
 
@@ -1842,7 +1832,7 @@ describe("Commands", () => {
           encodePositionBlock(asset, 3n, liability, 4n, userAccount),
           encodePositionBlock(asset, 5n, liability, 6n, userAccount),
         ),
-        encodeStepBlock(await cmd("settle"), 0n, settlementLimits(2)),
+        encodeStepBlock(await cmd("settle"), 0n, "0x"),
       );
       await expect(settleTx)
         .to.emit(host, "SettleCalled")
@@ -1853,7 +1843,7 @@ describe("Commands", () => {
         "testPipe",
         userAccount,
         concat(encodePositionBlock(ethers.ZeroHash, 0n, liability, 7n, userAccount), encodePositionBlock(ethers.ZeroHash, 0n, liability, 8n, userAccount)),
-        encodeStepBlock(await cmd("settle"), 0n, settlementLimits(2)),
+        encodeStepBlock(await cmd("settle"), 0n, "0x"),
       );
       await expect(repayTx)
         .to.emit(host, "SettleCalled")
@@ -1921,12 +1911,12 @@ describe("Commands", () => {
         {
           command: "settle",
           state: encodePositionBlock(asset, 1n, liability, 1n, userAccount),
-          input: encodeLimitsBlock(1n, 1n),
+          input: "0x",
         },
         {
           command: "settle",
           state: encodePositionBlock(ethers.ZeroHash, 0n, liability, 1n, userAccount),
-          input: encodeLimitsBlock(0n, 1n),
+          input: "0x",
         },
       ];
 

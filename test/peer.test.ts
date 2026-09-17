@@ -10,7 +10,7 @@ import {
   encodeBalanceBlock,
   encodeNodeBlock,
   encodeStepBlock,
-  encodeBookPortBlock,
+  encodeBookPortPair,
   encodeDispatchBlock,
   encodeLabelBlock,
   encodeUserAccount,
@@ -410,7 +410,7 @@ describe("Port Entrypoints", () => {
 
   describe("portBook", () => {
     function encodeTransfer(from: string, to: string, asset: string, amount: bigint) {
-      return encodeBookPortBlock(
+      return encodeBookPortPair(
         encodeAccountAmountBlock(from, asset, from === ethers.ZeroHash ? 0n : amount),
         encodeAccountAmountBlock(to, asset, to === ethers.ZeroHash ? 0n : amount),
       );

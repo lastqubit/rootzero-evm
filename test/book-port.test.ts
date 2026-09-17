@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, portId } from "./helpers/setup.js";
-import { concat, encodeBlock, encodeBookPortBlock, BookPortKey, encodeSchemaBlock, exactSpec, encodeAccountAmountBlock, encodeLabelBlock, encodeUserAccount, endpointDescriptor, Keys } from "./helpers/blocks.js";
+import { concat, encodeBlock, encodeBookPortPair, localKey, encodeStringBlock, encodeAccountAmountBlock, encodeLabelBlock, encodeUserAccount, endpointDescriptor, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("BookPort", () => {
@@ -11,7 +11,7 @@ describe("BookPort", () => {
   const liability = ethers.toBeHex(2, 32);
   const debit = encodeAccountAmountBlock(account, liability, 40n);
   const credit = encodeAccountAmountBlock(recipient, asset, 100n);
-  const booking = encodeBookPortBlock(debit, credit);
+  const booking = encodeBookPortPair(debit, credit);
   let host: Awaited<ReturnType<typeof deploy>>;
   let peer: any;
   beforeEach(async () => {
@@ -23,16 +23,15 @@ describe("BookPort", () => {
   async function balances() {
     return [await host.balance(account, liability), await host.balance(recipient, asset)];
   }
-  it("advertises an unnamed local input schema with one parent per operation and an empty response", async () => {
+  it("advertises ACCOUNT_AMOUNT input with grouped debit/credit roles and empty output", async () => {
     const id = await portId(host.interface.getFunction("portBook")!.selector, host, 0n);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ input: BookPortKey, inputHint: 208 }));
+      endpointDescriptor({ input: Keys.AccountAmount, inputHint: 96 }));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
       .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "portBook"));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
-      .withArgs(await host.host(), encodeSchemaBlock(exactSpec(BookPortKey, 208),
-        "#accountAmount as (debit, credit)", ethers.ZeroHash));
-    expect(ethers.dataLength(booking)).to.equal(216);
+      .withArgs(id, encodeBlock(ethers.id("#groups").slice(0, 10), encodeStringBlock("#input as (debit, credit)")));
+    expect(ethers.dataLength(booking)).to.equal(208);
     expect(await peer.portBook.staticCall(booking)).to.deep.equal(["0x", 0n]);
   });
   it("debits the first leg then credits the second for each pair", async () => {
@@ -42,55 +41,49 @@ describe("BookPort", () => {
     expect(await balances()).to.deep.equal([0n, 200n]);
   });
   it("supports booking both sides to the same account", async () => {
-    await peer.portBook(encodeBookPortBlock(debit, encodeAccountAmountBlock(account, asset, 100n)));
+    await peer.portBook(encodeBookPortPair(debit, encodeAccountAmountBlock(account, asset, 100n)));
     expect(await host.balance(account, liability)).to.equal(40n);
     expect(await host.balance(account, asset)).to.equal(100n);
   });
   it("requires funds before crediting even when both legs use the same account and asset", async () => {
-    await expect(peer.portBook(encodeBookPortBlock(encodeAccountAmountBlock(account, liability, 81n),
+    await expect(peer.portBook(encodeBookPortPair(encodeAccountAmountBlock(account, liability, 81n),
       encodeAccountAmountBlock(account, liability, 100n))))
       .to.be.revertedWithCustomError(host, "InsufficientFunds");
     expect(await balances()).to.deep.equal([80n, 0n]);
   });
   it("accepts empty batches and skips zero-amount legs", async () => {
     expect(await peer.portBook.staticCall("0x")).to.deep.equal(["0x", 0n]);
-    const tx = await peer.portBook(encodeBookPortBlock(encodeAccountAmountBlock(account, liability, 0n),
+    const tx = await peer.portBook(encodeBookPortPair(encodeAccountAmountBlock(account, liability, 0n),
       encodeAccountAmountBlock(recipient, asset, 0n)));
     expect((await tx.wait()).logs).to.have.length(0);
   });
-  for (const length of [0, 104, 207, 209, 312]) {
-    it(`rejects parent payload length ${length} without crossing into the next parent`, async () => {
-      const invalid = BookPortKey + ethers.toBeHex(length, 4).slice(2) + booking.slice(18);
-      await expect(peer.portBook(concat(booking, invalid, booking)))
+  for (const length of [1, 7, 8, 103, 104, 105, 207]) {
+    it(`rejects an incomplete pair of ${length} bytes and rolls back earlier pairs`, async () => {
+      await expect(peer.portBook(concat(booking, ethers.dataSlice(booking, 0, length))))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
+      expect(await balances()).to.deep.equal([80n, 0n]);
+    });
+  }
+  it("rejects list wrappers and the former custom parent", async () => {
+    for (const key of [Keys.List, localKey(1)]) {
+      await expect(peer.portBook(encodeBlock(key, booking)))
         .to.be.revertedWithCustomError(host, "InvalidBlock");
       expect(await balances()).to.deep.equal([80n, 0n]);
-    });
-  }
-  for (const length of [7, 8, 112, 215]) {
-    it(`rejects a truncated parent of ${length} bytes and rolls back earlier parents`, async () => {
-      await expect(peer.portBook(concat(booking, ethers.dataSlice(booking, 0, length))))
-        .to.be.revertedWithCustomError(host, length < 8 ? "InvalidBlock" : "OutOfBounds");
-      expect(await balances()).to.deep.equal([80n, 0n]);
-    });
-  }
-  it("rejects a wrong parent key and the old unwrapped pairs", async () => {
-    for (const invalid of [encodeBlock(Keys.List, concat(debit, credit)), concat(debit, credit)]) {
-      await expect(peer.portBook(invalid)).to.be.revertedWithCustomError(host, "InvalidBlock");
     }
   });
-  it("rejects malformed child headers before applying either leg", async () => {
+  it("rejects malformed ACCOUNT_AMOUNT headers before applying either leg", async () => {
     // This debit would fail if the hook ran before decoding the credit.
     const unfundedDebit = encodeAccountAmountBlock(account, liability, 81n);
     for (const invalid of ["0xffffffff" + credit.slice(10),
       credit.slice(0, 10) + "00000040" + credit.slice(18)]) {
-      await expect(peer.portBook(encodeBookPortBlock(unfundedDebit, invalid)))
+      await expect(peer.portBook(encodeBookPortPair(unfundedDebit, invalid)))
         .to.be.revertedWithCustomError(host, "InvalidBlock");
       expect(await balances()).to.deep.equal([80n, 0n]);
     }
   });
-  it("rejects extra children instead of treating them as another operation", async () => {
-    await expect(peer.portBook(concat(booking, encodeBlock(BookPortKey, concat(debit, credit, credit)))))
-      .to.be.revertedWithCustomError(host, "InvalidBlock");
+  it("rejects an unmatched final ACCOUNT_AMOUNT block", async () => {
+    await expect(peer.portBook(concat(booking, debit)))
+      .to.be.revertedWithCustomError(host, "OutOfBounds");
     expect(await balances()).to.deep.equal([80n, 0n]);
   });
   it("rolls back earlier pairs when a later debit fails", async () => {
