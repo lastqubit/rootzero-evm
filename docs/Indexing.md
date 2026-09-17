@@ -33,36 +33,28 @@ contains its full endpoint catalog:
 event Endpoint(uint indexed host, uint id, uint descriptor)
 ```
 
-- `descriptor` packs `[state key:4][stride:1]`, `[input key:4][stride:1]`,
-  `[output key:4][stride:1]`, `[source key:4][stride:1]`,
-  `[source group size:4][output group size:4]`, `[source shift:1]`,
-  two reserved bytes, and one flags byte.
-  From the least significant bit, the field offsets are: flags 0, reserved 8,
-  source shift 24, output group size 32, source group size 64,
-  source stride 96, source key 104,
-  output stride 136, output key 144, input stride 176, input key 184,
-  state stride 216, and state key 224.
+- `descriptor` packs `[state key:4][input key:4][output key:4][source key:4]`,
+  `[source block size:4][output block size:4][source shift:1][lanes:1]`,
+  `[reserved:5][flags:1]`.
+  From the least significant bit, the offsets are: flags 0, reserved 8,
+  lanes 48, source shift 56, output block size 64,
+  source block size 96, source key 128, output key 160, input key 192,
+  and state key 224.
   Flag bits 0 and 1 mean `funded` and `admin`; bit 7 means `handoff`, bit 6 is
   reserved for endpoint-defined behavior, and bits 2 through 5 remain reserved
   for future protocol flags.
-  Strides are normalized during construction: present schemas default to one
-  block per group; absent lanes have zero stride. `Specs.group` assigns an explicit stride.
-  Source shift 128 selects state; 0 selects input or no source. A zero source
-  stride identifies no source. Execution shifts the packed decoders by this byte. Declared state
-  takes precedence over input even when the supplied state is empty.
-  The source lane copies the selected state or input key and normalized stride,
-  allowing allocation to read both directly.
-  Group sizes are allocation estimates computed as `(payload hint + 8) * stride`.
-  When the source byte length divides its nonzero group size exactly, execution
-  estimates groups by division; otherwise it counts the leading matching block run
-  and divides by source stride. Output capacity is groups times output group size.
-  With no declared source, capacity defaults to one output group. A declared but
-  empty source still estimates zero groups. Buffer allocation remains lazy.
-  These estimates do not validate or control consumption; normal decoding validates
-  the stream and the output buffer can grow. Output min/max bounds are no longer
-  included in the descriptor; schema annotations retain the full spec metadata.
-  This layout replaces the previous output min/max/hint lane; indexers must decode
-  descriptors according to the emitting deployment's format.
+  Source shift 64 selects state; 0 selects input or no source. A zero source key
+  identifies no source. Declared state takes precedence over input even when empty.
+  Lane bits 0 and 1 indicate declared state and input, respectively.
+  Block sizes are allocation estimates including the eight-byte header.
+  When source length divides its nonzero block size exactly, execution estimates
+  block count by division; otherwise it counts the leading matching block run.
+  Output capacity is source block count times output block size. With no declared
+  source, capacity defaults to one output block. An empty declared source estimates
+  zero blocks. Allocation is lazy; commands may adjust the hint with `scaleOutput`.
+  These estimates do not validate consumption; decoding validates the stream and
+  the output buffer can grow. Schema annotations retain the full spec metadata.
+  Indexers must decode descriptors according to the emitting deployment's format.
   A top-level list uses a context-local input key whose published schema body
   consists of one `many #item`, optionally wrapped in braces; nested lists in a
   body with sibling items continue to use the generic `#list` key.
@@ -72,9 +64,18 @@ event Endpoint(uint indexed host, uint id, uint descriptor)
   Hosts may publish additional schema claims later through the admin `annotate`
   command.
 
+An endpoint may publish `#groups { #string as description }` on its endpoint ID:
+`#state as (debit, credit), #output as (receipt, change)`. Only grouped lanes are
+listed. These endpoint-local references resolve through descriptor schemas; empty
+lanes take precedence and their hints are ignored. Alias order and count describe
+blocks per loop iteration. Omitted lanes remain unspecified. This annotation does
+not change the descriptor, block encoding, allocation, or execution. The latest
+trusted description replaces the whole earlier description; empty clears it.
+See `Schema.md` for the grammar and invalid-hint handling.
+
 Annotation helpers use the `Annot` contract suffix: `ActionAnnot`,
-`CounterpartyAnnot`, `LabelAnnot`, and `SchemaAnnot`. Their functions are
-`annotateAction`, `annotateCounterparty`, `label`, and `schema`, respectively.
+`CounterpartyAnnot`, `GroupsAnnot`, `LabelAnnot`, and `SchemaAnnot`. Their functions are
+`annotateAction`, `annotateCounterparty`, `annotateGroups`, `label`, and `schema`, respectively.
 
 `ActionEvent` (exported by `Events.sol`) provides
 `Action(bytes32 indexed account, uint32 action)` for hosts to identify an account
@@ -261,6 +262,7 @@ with the matching `Actions` code:
 | -------------------------- | ---------- | ------------------ |
 | deposit / depositPayable   | `Received` | `Actions.Deposit`  |
 | withdraw                   | `Spent`    | `Actions.Withdraw` |
+| cashout (default hook)     | `Spent`    | `Actions.Cashout`  |
 | burn                       | `Spent`    | `Actions.Burn`     |
 | creditAccount              | `Received` | `Actions.Transfer` |
 | debitAccount               | `Spent`    | `Actions.Transfer` |
@@ -269,6 +271,11 @@ with the matching `Actions` code:
 | final pipeline budget      | `Received` | host posting action |
 | provision (lock custody)   | `Locked`   | per operation      |
 | custody release            | `Unlocked` | per operation      |
+
+The default `CashoutHook` inherits `ChainAsset` and `SpentEvent`, advertising the
+event ABI at deployment. It emits `Spent` after each successful nonzero native
+transfer with the chain asset, `Actions.Cashout`, and context zero. Zero payouts
+emit nothing. Overrides are responsible for their own event emission.
 
 `Balance` and flow events are complementary, not redundant: flow events record
 that value moved and why; balance events record the resulting total, which gives

@@ -310,17 +310,12 @@ expanded:    #accountAmount as debit, #accountAmount as credit
 wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
 ```
 
-The parent schema identifies one complete operation. Batching repeats the parent
-block; there is no separate group expression or generic group wrapper.
-`portBook` leaves the schema unnamed. Consumers resolve its local key from
-the descriptor and schema annotation; it does not define a `#exchange` alias.
-
-`portBook` publishes this schema with an exact 208-byte payload spec and uses
-that same spec in its descriptor. Two complete 104-byte children
-plus the parent header occupy 216 bytes on the wire. With this exact spec,
-`exec.enter(spec)` followed by two fixed-width unpackers lands at the next parent
-without an extra end check. Variable-width compositions still require bounded
-traversal and complete-consumption checks.
+The parent schema identifies one complete operation; batching repeats that parent.
+This remains available for custom compositions, but `portBook` uses a flat stream
+instead: its descriptor declares ACCOUNT_AMOUNT input and its `#groups` annotation
+on the port ID is `#input as (debit, credit)`. Each pair occupies 208 bytes with no
+parent header. Two bounded reads enforce complete pairs before calling the hook;
+a missing second block or malformed header reverts the whole batch.
 
 ## Endpoint Lanes
 
@@ -335,6 +330,36 @@ The packed descriptor uses this layout, from most to least significant byte:
 [state key:4][input key:4][output key:4][source key:4]
 [source block size:4][output block size:4][source shift:1][lanes:1][reserved:5][flags:1]
 ```
+
+Endpoint loop grouping is described separately by a `#groups` annotation on the
+endpoint ID. Its payload schema is `#string as description`. For example:
+
+```txt
+#state as (debit, credit), #output as (receipt, change)
+```
+
+This is a dedicated annotation language, not a block payload schema. Only
+`#state`, `#input`, and `#output` are lane references; each resolves to the
+corresponding descriptor schema. An entry is a lane reference followed by `as`
+and a parenthesized list of at least two aliases. Commas outside parentheses
+separate entries. Each lane may appear once. Aliases use the ordinary schema
+alias-path rules; duplicate or colliding aliases within a lane are invalid.
+Alias order describes consecutive blocks within one loop iteration. No wrapper
+or extra block header is added, and no global schema aliases are introduced.
+
+Only grouped lanes are listed; omitted lanes have no grouping hint. Descriptor
+schemas take precedence: entries for empty lanes are ignored and cannot create
+blocks. Group counts are implied by the alias lists, not stored in descriptors.
+Annotations affect neither decoding, allocation, nor runtime enforcement;
+commands may separately call `scaleOutput` to adjust their allocation hints.
+Indexers can use the description to interpret repeated loop groups; incompatible
+streams should be reported as inconsistent hints, not reinterpreted as new encoding.
+
+`GroupsAnnot.annotateGroups(endpointId, description)` publishes the string without
+on-chain syntax validation. The latest annotation from a trusted emitter replaces
+the previous whole description; an empty string clears the hints. Invalid selected
+annotations should be reported by tooling rather than silently falling back to an
+older description. Trust remains the consumer's responsibility.
 
 The allocation source is declared state when present, otherwise input. Its shift
 is 64 for state and zero for input or no source. Block sizes include the header.
@@ -484,30 +509,31 @@ not fulfillment.
 
 **Current stage:** codecs support any counterparty. `settle`, `settlePayable`,
 and `ExecuteSettle` pass the complete `Position` struct to the hook. Calldata
-commands use `Executions.unpackLimitedPosition`; the memory adapter uses
-`Memory.unpackLimitedPosition` to decode and check the same struct. The hooks are `settle(account, position)` and
+commands use `Executions.unpackPositionValue`; the memory adapter uses
+`Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position)` and
 `settle(account, position, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
-`Settlement` implements the unfunded hook. Commands check both limits before
-invoking it; it books zero-counterparty positions on the active account.
+`Settlement` implements the unfunded hook. Producers enforce limits before
+emitting positions; settlement books zero-counterparty positions on the active
+account.
 Nonzero counterparties are passed unchanged to the account hooks when transferring
 the exact debt followed by the exact asset amount. Authorization remains with
 trusted position producers and host account hooks. Account format checks belong
 to `debitAccount` and `creditAccount`; a custom `BookHook` that bypasses those
 hooks must apply its own account policy. Empty exchanges skip the account hooks
 and do not validate the counterparty. Funded settlement still uses
-the host's separate hook with the same exact-quantity and limit requirements.
+the host's separate hook with the same exact-quantity requirements.
 
-`settle` consumes POSITION state with one LIMITS input per position and empty
-output. `ExecuteSettle` provides the same settlement hook for memory-backed
+`settle` consumes POSITION state with empty input and output. `ExecuteSettle`
+provides the same settlement hook for memory-backed
 pipeline state. For zero counterparties it calls
 `book(account, account, asset, amount, liability, debt)`. `BookHook` remains
 defined in `core/Settlement.sol`; its default implementation debits the exact
 liability amount and then credits the exact asset amount. Zero amounts skip
 account hooks, and any failure reverts the whole operation.
 
-The former `book` command is removed. All command-level position settlement
-now checks limits, including the literal uint128 debt cap. Unlike the old command,
-`settle` accepts account counterparties. Callers that require an already-realized
+The former `book` command is removed. `settle` accepts account counterparties and
+applies final quantities without checking limits; producers must enforce their
+quantity constraints. Callers that require an already-realized
 position must explicitly check counterparty zero, for example with
 `Positions.requireQuoted` and a quote whose counterparty is zero. A trusted
 realization hook must return counterparty zero before handing the result onward.
@@ -576,6 +602,12 @@ validate the block header and preserve the value without enforcing quantities.
 `Positions.requireLimits(position, limits)` checks the inclusive bounds and
 reverts with `OutOfRange`; it does not validate identifiers or counterparties.
 
+`Blocks.requireLimits(abs, amount, debt)` checks the LIMITS header and compares
+full-width quantities directly against its calldata payload. The caller must bound
+the complete block. `Executions.requireLimits(exec, amount, debt)` bounds and
+consumes one LIMITS input before delegating to it. `Realize` uses this helper on
+the returned position, without unpacking limits into a Solidity value.
+
 `Blocks.unpackLimitedPosition(pos, lim)` checks both exact block
 headers, compares the position quantities against the packed limits directly in
 calldata, then returns a `Position` struct. Its caller must establish bounds for
@@ -584,15 +616,16 @@ both complete blocks. It does not advance streams or validate identifiers.
 state and one LIMITS from input, then delegates to this helper.
 `Memory.unpackLimitedPosition(pos, lim)` performs the same checks
 with the POSITION in memory and LIMITS in calldata, returning an independent
-copy via `mcopy`. Both complete blocks must be in bounds. `ExecuteSettle` uses
-this helper with fixed-size bounds for both streams, advancing their positions
-together. It rejects unmatched blocks with `UnconsumedData` after the loop;
-partial blocks revert with `InvalidBlock` when establishing bounds.
+copy via `mcopy`. Both complete blocks must be in bounds. These limited-position
+helpers remain available for commands that need paired quantity checks.
 
-`settle` and `settlePayable` require one LIMITS input per POSITION. `ExecuteSettle`
-pairs memory-backed positions with calldata limits. Commands enforce the limits
-before invoking the hook, which validates and authorizes the counterparty. The commands require
-`net amount >= limits >> 128` and `total debt <= uint128(limits)`, including fees.
+`settle` and `settlePayable` consume any number of POSITION blocks with empty
+input. `ExecuteSettle` rejects nonempty input with `UnexpectedInput`, establishes
+fixed-size memory bounds, and iterates the position stream. Partial blocks revert
+with `InvalidBlock` when establishing bounds. The settlement hook validates and
+authorizes the counterparty. Producers enforce `net amount >= limits >> 128` and
+`total debt <= uint128(limits)` on their final outputs where those limits apply.
+`Realize` already checks its returned position against its paired LIMITS input.
 `Settlement` supplies a default `settle` implementation without host fees.
 Producers handle fees before creating the position: `amount` is the final net
 asset receipt and `debt` is the final total payment. Settlement applies those
@@ -603,9 +636,20 @@ the position. Producers must arrange any separate fee payments atomically.
 For account counterparties, settlement calls `book` for the full liability
 transfer first, then for the full asset transfer. Zero-quantity transfers skip
 their hooks. Any failure reverts the entire exchange. Specialized hosts may
-override `settle` while preserving its exact-quantity and limit contract.
+override `settle` while preserving its exact-quantity contract.
 
-Missing, extra, or malformed limits revert.
+Commands that consume LIMITS reject missing, extra, or malformed limits.
+Settlement rejects all nonempty input.
+
+`repay` accepts POSITION state and empty input and returns one POSITION per
+source position, preserving every field except `debt`, which becomes zero.
+It publishes `Actions.Repay` (11). The unfunded `RepayHook` must satisfy the
+complete exact debt or revert and must not mutate its position argument; the
+command clears debt only after the hook succeeds. `Settlement.repay` routes
+payment through `BookHook`: zero counterparty debits the active account only,
+while an account counterparty receives the same liability quantity. Zero debt
+skips booking and account validation. The asset leg remains unsettled.
+A subsequent `settle` processes the remaining asset leg.
 
 Host implementations choose a position-fulfillment model: hosts that maintain
 account balances use `settle`, while hosts without their own account balance
@@ -659,7 +703,7 @@ asset while successive hops replace the upstream liability:
 position(C, 100, C, 100, 0)
 → position(C, 100, B, 50, 0)
 → position(C, 100, A, 25, 0)
-→ settle(limits)
+→ settle()
 ```
 
 “Backward” describes how requirements are composed from the desired result
@@ -953,6 +997,7 @@ recover            uint handler, uint resources, bytes32 key, #bytes as witness
 annotation         uint entity, #bytes as data
 action             uint action
 counterparty      bytes32 account
+groups             #string as description
 label              bytes32 namespace, #string as name
 schema             uint spec, #string as body, bytes32 name
 ```

@@ -333,21 +333,27 @@ next. Balance carries `{ asset, amount }`,
 custody carries `{ host, asset, amount }`, and position carries the flat
 position `{ asset, amount, liability, debt, counterparty }`. The counterparty
 field identifies the settlement counterparty. Zero identifies Rootzero and
-is handled by limit-checked booking through `Settlement.settle`. Generic codecs preserve the field;
+is handled by exact booking through `Settlement.settle`. Generic codecs preserve the field;
 `settle` passes all five fields as a `Position memory` struct to its hook for
 counterparty validation and authorization. Settlement hooks take
 `(account, position)`, plus `Execution memory funds` for funded settlement.
-Each POSITION is paired with one LIMITS input containing `uint limits`: the high
-128 bits hold the minimum asset amount and the low 128 bits the maximum debt.
-Both are literal bounds; the payload is 32 bytes. The command enforces the minimum net
-asset amount and maximum total debt. Producers handle fees before supplying the
-position: `amount` is the final net receipt and `debt` is the final total payment.
-`Settlement` receives the checked position, books zero-counterparty positions on the active
+Settlement accepts empty input and consumes any number of POSITION blocks.
+Producers enforce minimum asset amounts and maximum debts before emitting their
+final positions, using packed LIMITS where appropriate. Producers handle fees
+before supplying the position: `amount` is the final net receipt and `debt` is the final total payment.
+`Settlement` receives the final position, books zero-counterparty positions on the active
 account, and passes nonzero counterparties to the account hooks when exchanging the
 exact debt and asset quantities. It adds no fees and makes no separate host
 fee credits. Account validation and authorization belong to the host's debit/credit
 hooks, or its custom `BookHook` if it bypasses them. Empty exchanges skip the
 account hooks, so they do not validate the counterparty.
+
+`Repay` settles only the debt: `POSITION → POSITION` with empty input. Its
+`RepayHook.repay(account, position)` must satisfy the entire debt or revert,
+without mutating the position. The command then sets `debt = 0` and preserves
+all other fields. `Settlement.repay` uses `BookHook` to debit the account and,
+for a nonzero counterparty, credit that counterparty with the exact payment.
+Zero debt skips booking. A following `Settle` consumes the remaining asset leg.
 
 Every nonzero position counterparty is an account, including host accounts.
 `settle` can exchange balances with any account counterparty on the executing
@@ -446,6 +452,25 @@ next pipeline step. Account debits are exact internal bookkeeping operations:
 they must make the complete requested amount available or revert. Any account
 fee is charged in addition and does not reduce the resulting balance.
 
+Commands can describe grouped lanes with `GroupsAnnot`, available through
+`Core.sol` and `Commands.sol`:
+
+```solidity
+annotateGroups(id, "#state as (debit, credit), #output as (receipt, change)");
+```
+
+Only grouped lanes are listed. Their schemas come from the descriptor; empty
+lanes remain empty. Counts and roles are off-chain hints, with no descriptor
+fields or runtime enforcement. An empty description clears previous hints.
+
+Commands can adjust their output allocation hint before the first output reservation
+with `exec.scaleOutput(numerator, denominator)`: use `(3, 1)` for three times the
+capacity or `(1, 2)` for half. This changes only the capacity hint and allocates
+no backing buffer. Division rounds down; zero numerator clears the hint and later
+writes still grow normally. Zero denominators, overflowing products or capacities,
+and calls after output reservation revert. It does not change descriptor metadata,
+input grouping, or the number of blocks the command may emit.
+
 The final argument is a packed flags byte. Pass `0` for an ordinary endpoint,
 or compose values such as `Flags.Funded`, `Flags.Admin`, and
 `Flags.AdminFunded` from the command or endpoint package entry point.
@@ -454,6 +479,16 @@ published descriptor metadata aligned. `Flags.Handoff` marks a command that
 takes ownership of the remaining pipeline, while `Flags.HandoffFunded` combines
 handoff behavior with native-value funding;
 bit 6 remains endpoint-defined, and bits 2 through 5 remain reserved.
+
+`CashoutHook` defaults to transferring the exact native amount to
+`Accounts.addr(account)`, accepting EVM-backed account subtypes with a nonzero
+address. It remains overridable. Failed transfers revert with
+`CashoutFailed()` without copying recipient return data.
+The hook does not debit account balances: the host must authorize and fund the
+withdrawal, finalize accounting before calling it, and protect its entrypoints
+against reentrancy. Successful nonzero payouts emit
+`Spent(account, chainAsset, amount, Actions.Cashout, 0)`. Zero amounts skip
+validation, transfer, and event emission.
 
 The standard commands cover the common ledger movements: `bootstrap` (source
 an initial balance and native-value budget), `cashout` (withdraw native
@@ -604,7 +639,7 @@ position:
 position(C, 100, C, 100)
 → position(C, 100, B, 50)
 → position(C, 100, A, 25)
-→ settle(limits)
+→ settle()
 ```
 
 This is backward composition, not backward execution: `#step` blocks still
@@ -678,12 +713,12 @@ The central ports are batches all the way down:
 - `portRequestAllowance` consumes the same amount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
-- `portBook` consumes unnamed custom parent blocks with local key `1`, each containing two
-  `accountAmount` children: debit account/liability/debt first, then credit
-  account/asset/amount. It publishes `#accountAmount as (debit, credit)`
-  with the same exact 208-byte payload spec used by its descriptor.
+- `portBook` consumes a flat stream of paired `accountAmount` blocks: debit
+  account/liability/debt first, then credit account/asset/amount. Its descriptor
+  declares ACCOUNT_AMOUNT input and it publishes `#input as (debit, credit)`
+  through `GroupsAnnot` on the port ID, without a custom parent block.
   Both accounts may be the same for booking. It returns empty bytes and zero credit, and any
-  invalid parent, child, or account-hook failure reverts the entire batch.
+  incomplete pair, malformed block, or account-hook failure reverts the entire batch.
   Both legs are decoded before calling `BookHook`; zero amounts skip their legs.
   For transfers, use the same asset and amount on both sides. For a single-sided
   entry, explicitly set the omitted leg to zero debt or amount; a zero account

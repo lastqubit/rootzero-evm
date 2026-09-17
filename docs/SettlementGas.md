@@ -1,6 +1,6 @@
 # Settlement gas baseline
 
-Measured on 2026-09-14 with Solidity 0.8.35, optimizer enabled with 200 runs,
+Measured on 2026-09-17 with Solidity 0.8.35, optimizer enabled with 200 runs,
 Cancun EVM target, and Hardhat's local simulated network. The benchmark caller checks
 packed limits before settlement applies final position quantities without host fees.
 Account validation is delegated to the account hooks. This benchmark's ledger
@@ -19,12 +19,12 @@ the median of three deployments and transactions.
 
 | Recipient balances | Counterparty | Transaction gas | Execution gas |
 | --- | --- | ---: | ---: |
-| Empty | Rootzero | 50,858 | 28,706 |
-| Empty | Host | 79,138 | 56,686 |
-| Empty | External | 78,886 | 56,686 |
-| Existing | Rootzero | 33,758 | 11,606 |
-| Existing | Host | 44,938 | 22,486 |
-| Existing | External | 44,686 | 22,486 |
+| Empty | Rootzero | 50,853 | 28,701 |
+| Empty | Host | 79,148 | 56,696 |
+| Empty | External | 78,896 | 56,696 |
+| Existing | Rootzero | 33,753 | 11,601 |
+| Existing | Host | 44,948 | 22,496 |
+| Existing | External | 44,696 | 22,496 |
 
 Execution gas subtracts the 21,000 transaction base cost and calldata byte costs
 from receipt gas. It includes entrypoint dispatch and ABI decoding. Host and
@@ -53,11 +53,11 @@ storage access patterns may change the totals.
 
 The previous packed-limits baseline with a debt-side host fee used 58,843
 execution gas for an empty host counterparty and 81,235 for an empty external
-counterparty. Exact settlement uses 56,686 for either: reductions of 2,157 and
-24,549 gas respectively. With existing recipients, the reductions are 2,157
-and 7,449 gas. The external reduction includes eliminating a separate host fee
+counterparty. Exact settlement uses 56,696 for either: reductions of 2,147 and
+24,539 gas respectively. With existing recipients, the reductions are 2,147
+and 7,439 gas. The external reduction includes eliminating a separate host fee
 credit. These flows have different fee effects; this comparison does not include
 the cost of any fees handled upstream by position producers.
-Delegating account validation removes another 90 execution gas per account
-exchange from the preceding exact-settlement baseline. Hosts that validate
-accounts in their hooks will incur the cost of their chosen checks.
+Compared with the 1.39.0 baseline, Rootzero booking uses 5 fewer execution gas
+and account exchanges use 10 more. Hosts that validate accounts in their hooks
+will incur the cost of their chosen checks.
