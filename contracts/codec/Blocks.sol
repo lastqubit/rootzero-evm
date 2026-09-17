@@ -2362,6 +2362,23 @@ library Blocks {
         if (head != Headers.Limits) revert InvalidBlock();
     }
 
+    /// @notice Check quantities against a LIMITS block directly in calldata.
+    /// @dev The caller must bound the complete block. Validates the header before quantity errors.
+    /// @param abs Absolute LIMITS block position; not advanced.
+    /// @param amount Full-width final asset amount, checked against the inclusive minimum.
+    /// @param debt Full-width final debt, checked against the literal inclusive maximum.
+    function requireLimits(uint abs, uint amount, uint debt) internal pure {
+        uint64 head;
+        bool outside;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            let limits := calldataload(add(abs, 0x08))
+            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
+        }
+        if (head != Headers.Limits) revert InvalidBlock();
+        if (outside) revert OutOfRange();
+    }
+
     // Quote and position payloads
 
     /// @notice Decode a QUOTE at an in-bounds absolute calldata position.
@@ -2863,6 +2880,12 @@ library Blocks {
         uint len = max32(Sizes.B32 + bytes(name).length);
         value = allocate(Sizes.Header + len);
         writeLabelAllocated(value, namespace, name);
+    }
+
+    /// @notice Encode a command loop-group annotation containing its description string.
+    /// @dev The grouping syntax is interpreted offchain, not validated here.
+    function createGroups(string memory description) internal pure returns (bytes memory value) {
+        return create(Keys.Groups, createString(description));
     }
 
     /// @notice Encode an ACTION annotation block.

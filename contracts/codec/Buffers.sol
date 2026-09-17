@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {ValueOverflow} from "../utils/Errors.sol";
+import {ValueOverflow, ZeroAmount, UnexpectedPosition} from "../utils/Errors.sol";
 
 /// @title Buffers
 /// @notice Allocation and finalization helpers for mutable memory byte buffers.
@@ -18,6 +18,24 @@ library Buffers {
     function cursor(uint len) internal pure returns (uint cur) {
         if (len > type(uint32).max) revert ValueOverflow();
         cur = len << 32;
+    }
+
+    /// @notice Scale a capacity hint while its write position is still zero.
+    /// @dev Rounds down, preserves other cursor bits, and allocates no memory.
+    /// The caller must ensure no backing buffer has been allocated for this cursor.
+    /// Reverts on a zero denominator, uint256 product overflow, or uint32 capacity overflow.
+    /// @param cur Packed buffer cursor at write position zero.
+    /// @param numerator Multiplier; zero clears the capacity hint.
+    /// @param denominator Divisor applied after multiplication; must be nonzero.
+    /// @return updated Cursor with the scaled capacity.
+    function scale(uint cur, uint numerator, uint denominator) internal pure returns (uint updated) {
+        if (uint32(cur) != 0) revert UnexpectedPosition();
+        if (denominator == 0) revert ZeroAmount();
+        uint capacity = uint32(cur >> 32);
+        if (capacity != 0 && numerator > type(uint).max / capacity) revert ValueOverflow();
+        unchecked { capacity = capacity * numerator / denominator; }
+        if (capacity > type(uint32).max) revert ValueOverflow();
+        updated = (cur & ~(uint(type(uint32).max) << 32)) | (capacity << 32);
     }
 
     /// @notice Reserve relative write space and return the updated packed buffer cursor.

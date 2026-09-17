@@ -527,6 +527,15 @@ library Executions {
         limits = Blocks.unpackLimits(abs);
     }
 
+    /// @notice Consume one LIMITS input and check final quantities directly against calldata.
+    /// @param exec Execution whose input cursor is bounded and advanced by one block.
+    /// @param amount Final asset amount, checked against the inclusive minimum.
+    /// @param debt Final debt, checked against the literal inclusive maximum.
+    function requireLimits(Execution memory exec, uint amount, uint debt) internal pure {
+        uint abs = take(exec, Sizes.Limits);
+        Blocks.requireLimits(abs, amount, debt);
+    }
+
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
     function unpackQuote(
         Execution memory exec
@@ -925,6 +934,18 @@ library Executions {
     // -------------------------------------------------------------------------
     // Output writing
     // -------------------------------------------------------------------------
+
+    /// @notice Scale the initial output capacity hint before allocating the backing buffer.
+    /// @dev Rounds down. Does not allocate or change decoding; later writes can still grow.
+    /// Reverts if output was reserved, the denominator is zero, the product exceeds uint256,
+    /// or the resulting capacity exceeds uint32. A zero numerator clears the hint.
+    /// @param exec Execution whose output capacity is adjusted.
+    /// @param numerator Multiplier applied to the current capacity.
+    /// @param denominator Divisor applied after multiplication; must be nonzero.
+    function scaleOutput(Execution memory exec, uint numerator, uint denominator) internal pure {
+        if (exec.output.length != 0) revert UnexpectedPosition();
+        exec.writer = Buffers.scale(exec.writer, numerator, denominator);
+    }
 
     /// @dev Reserve output capacity and advance its writer cursor.
     /// @param exec Execution whose output writer is advanced.
