@@ -6,6 +6,32 @@ breaking API changes. Breaking changes are called out explicitly.
 Add all changes made after a release to `Unreleased`. Published version
 sections are immutable and must continue to describe the tagged release.
 
+## Unreleased
+
+## 1.40.0
+
+### Breaking Changes
+
+- Change `portBook` input to flat ACCOUNT_AMOUNT debit/credit pairs, replacing its custom parent schema with `#input as (debit, credit)` in a Groups annotation on the port ID. Callers must remove the former parent header; incomplete pairs and malformed blocks still revert atomically.
+
+- Remove LIMITS input from `settle` and `settlePayable`; both consume POSITION streams with empty input. `ExecuteSettle` now iterates memory positions directly and rejects nonempty input.
+
+- Position producers are responsible for quantity limits on their final outputs. Callers must remove settlement LIMITS inputs and enforce those constraints upstream; `Realize` retains its output limit checks. Settlement still applies exact quantities and delegates account authorization to its hooks.
+
+### Added and Changed
+
+- Add `RepayHook`, default debt-only `Settlement.repay`, and the `Repay` command. Repayment takes POSITION state and empty input, settles the exact debt through `BookHook`, and emits each position with only debt set to zero. Successful hooks must fulfill the complete debt without mutating the position.
+
+- Add `GroupsAnnot.annotateGroups(commandId, description)` and the `#groups` annotation to describe only grouped state/input/output lanes using alias lists. Grouping remains off-chain metadata; descriptors, decoding, and allocation do not use group counts.
+
+- Add `Buffers.scale` and its `Executions.scaleOutput(numerator, denominator)` adapter to scale the output capacity hint up or down before its first reservation, without changing descriptors or decoding.
+
+- Implement an overridable default `CashoutHook` that transfers native value to `Accounts.addr(account)` and reverts with `CashoutFailed` without copying recipient return data. The hook inherits `ChainAsset` and `SpentEvent` and emits `Spent(account, chainAsset, amount, Actions.Cashout, 0)` after successful transfers. Zero amounts skip validation, transfer, and emission. Hosts remain responsible for funding, authorization, accounting, and reentrancy protection.
+
+- Add `Blocks.requireLimits` and `Executions.requireLimits` to check final amount and debt directly against a calldata LIMITS block. `Realize` uses the execution helper after its hook returns.
+
+- Correct the endpoint descriptor layout in the indexing guide and refresh the settlement gas baseline.
+
 ## 1.39.0
 
 ### Breaking Changes
