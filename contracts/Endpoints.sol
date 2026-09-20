@@ -34,7 +34,7 @@ import {AllowAssets, AllowAssetsHook} from "./commands/admin/AllowAssets.sol";
 import {Allowance, AllowanceHook} from "./commands/admin/Allowance.sol";
 import {Annotate} from "./commands/admin/Annotate.sol";
 import {Appoint} from "./commands/admin/Appoint.sol";
-import {Authorize} from "./commands/admin/Authorize.sol";
+import {Authorize, ExecuteAuthorize} from "./commands/admin/Authorize.sol";
 import {DenyAssets, DenyAssetsHook} from "./commands/admin/DenyAssets.sol";
 import {Dismiss} from "./commands/admin/Dismiss.sol";
 import {ExecutePayable} from "./commands/admin/Execute.sol";

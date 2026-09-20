@@ -18,9 +18,6 @@ using Executions for Execution;
 abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @dev Thrown when `onlyActive` finds that `deadline` has already passed.
     error Expired();
-    /// @dev Thrown when a non-funded internal command receives native value.
-    error ValueNotAllowed();
-
     /// @dev Restrict execution to trusted callers.
     modifier onlyCommand() {
         enforceCaller(msg.sender);

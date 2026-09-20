@@ -646,6 +646,14 @@ externally callable command and may consume value for chain-asset balance;
 the other four return assigned value unused as pipeline credit. Their external
 command entrypoints remain nonpayable.
 
+`ExecuteAuthorize` extends `Authorize` with an `executeAuthorize` adapter for
+NODE input and empty state, returning assigned value unused as pipeline credit. It checks
+`enforceAdmin(account, address(this))` internally; the default `Host` policy
+therefore requires a self-managed host. Pipeline entrypoints must authenticate
+the account and prevent peer-supplied admin accounts. Dispatching `authorizeId()`
+directly to this adapter keeps local authorization available independently of
+the node allowlist. The external `authorize` endpoint retains its caller checks.
+
 Positions also support backward-composed pipelines. In an exact-output route,
 the asset side can represent the desired result while the liability side
 represents the value currently required upstream. Each hop consumes one
