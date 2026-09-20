@@ -8,6 +8,23 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.42.0
+
+### Breaking Changes
+
+- Reorganize `Actions` into groups of 16 with reserved gaps. Add lifecycle, membership, and permission actions, including `Add` (4) and `Remove` (5); `Enable`/`Disable` are 6/7. All previous nonzero action IDs change. Indexers must use deployment-specific catalogs; the indexing guide preserves the v1.41.0 mapping.
+- Change `Node` and `Guardian` events to carry `uint32 action, uint status` instead of `bool active`, and add `uint32 action` before `Route`'s status. Zero means inactive; nonzero means active with host-defined meaning. Default hosts emit `Authorize`/`Revoke` and `Appoint`/`Dismiss` with status 1/0, including repeated operations. Update event signatures and decoders.
+- Rename the asset preimage event and mixin to `AssetPreimage(bytes32 indexed asset, bytes preimage)` and `AssetPreimageEvent`, removing the host argument. Replace `AssetStatusEvent` with `AssetEvent`, emitting `Asset(uint indexed host, bytes32 asset, uint32 action, uint status)`. The `AssetStatus` query is unchanged.
+- Replace `NodeAccess.setNode` with independently overridable `authorizeNode`/`revokeNode`, and `GuardianAccess.setGuardian` with `appointGuardian`/`dismissGuardian`. Default implementations preserve identifier validation and update access state and events together.
+- Rename `AllowAssets`/`DenyAssets`, their hooks and ports, and callable endpoints to singular `AllowAsset`/`DenyAsset`, `allowAsset`/`denyAsset`, and `portAllowAsset`/`portDenyAsset`. Consolidate their admin definitions in `commands/admin/Asset.sol`; rename the port and query files to `ports/Asset.sol` and `queries/Asset.sol`. Update imports, selectors, endpoint IDs, and allowlists. Block-stream batching is unchanged; the `Assets` utility keeps its name.
+- Consolidate `Appoint`/`Dismiss` in `commands/admin/Guardian.sol`. Update deep imports; contract names and callable endpoints are unchanged.
+
+### Added and Changed
+
+- Define shared action semantics: action identifies the operation, while status describes its result. Route membership changes use `Add`/`Remove`; configured routes can use `Enable`/`Disable`. Asset events distinguish creation, deletion, and support changes.
+- Export all shared protocol errors through `Core.sol`, `Commands.sol`, `Endpoints.sol`, and `Utils.sol`, including `QueryFailed`, `UnexpectedInput`, and `UnexpectedState`. Add missing annotation helpers and `Quote` to `Commands.sol`, and `Cur`/`Cursors` to `Utils.sol`, with compile-time import coverage.
+- Place hook declarations before command, port, and query implementations. Update API documentation and add event ABI, full-width status, repeated-operation, and singular asset endpoint coverage.
+
 ## 1.41.0
 
 ### Breaking Changes
