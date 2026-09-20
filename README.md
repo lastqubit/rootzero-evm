@@ -463,6 +463,23 @@ Only grouped lanes are listed. Their schemas come from the descriptor; empty
 lanes remain empty. Counts and roles are off-chain hints, with no descriptor
 fields or runtime enforcement. An empty description clears previous hints.
 
+Commands can publish execution estimates with `ExecutionCost`, available
+through `Core.sol` and `Commands.sol`:
+
+```solidity
+executionCost(id, 10_000, 5_000); // base cost per invocation, additional cost per batch
+```
+
+This emits `#executionCost { uint base, uint batch }`. Estimated command cost is
+`base + batch * batchCount`, in destination-local execution units. A batch is one
+logical group processed by the command; grouped inputs count as one batch, not
+one per constituent block. The concrete host supplies estimates for its hooks.
+Pipeline and transport overhead, plus any safety margin, are added separately
+by the planner or destination adapter. These are advisory estimates, not enforced
+limits or guaranteed bounds. Unknown batch counts or missing annotations mean
+unknown cost. The latest trusted annotation replaces the previous estimate;
+zero values are valid estimates and do not clear metadata.
+
 Commands can adjust their output allocation hint before the first output reservation
 with `exec.scaleOutput(numerator, denominator)`: use `(3, 1)` for three times the
 capacity or `(1, 2)` for half. This changes only the capacity hint and allocates

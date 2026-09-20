@@ -5,6 +5,7 @@ pragma solidity ^0.8.33;
 // Import this file for both standard Execution-based commands and custom decoders.
 
 import {GroupsAnnot} from "./annotations/Groups.sol";
+import {ExecutionCost} from "./annotations/Execution.sol";
 import {CommandBase} from "./commands/Base.sol";
 import {Flags} from "./utils/Flags.sol";
 import {Execution, Executions} from "./execution/Execution.sol";

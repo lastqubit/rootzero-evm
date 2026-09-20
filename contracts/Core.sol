@@ -5,6 +5,7 @@ pragma solidity ^0.8.33;
 // Import this file to bring the full rootzero host base layer into scope.
 
 import {GroupsAnnot} from "./annotations/Groups.sol";
+import {ExecutionCost} from "./annotations/Execution.sol";
 import { ActionAnnot } from "./annotations/Action.sol";
 import { CounterpartyAnnot } from "./annotations/Counterparty.sol";
 import { LabelAnnot } from "./annotations/Label.sol";

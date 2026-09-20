@@ -73,9 +73,20 @@ not change the descriptor, block encoding, allocation, or execution. The latest
 trusted description replaces the whole earlier description; empty clears it.
 See `Schema.md` for the grammar and invalid-hint handling.
 
-Annotation helpers use the `Annot` contract suffix: `ActionAnnot`,
-`CounterpartyAnnot`, `GroupsAnnot`, `LabelAnnot`, and `SchemaAnnot`. Their functions are
-`annotateAction`, `annotateCounterparty`, `annotateGroups`, `label`, and `schema`, respectively.
+Commands may publish `#executionCost { uint base, uint batch }` on their command
+ID. The key is `bytes4(keccak256("#executionCost"))` and its payload is exactly
+64 bytes, with base followed by batch. Estimate command execution as
+`base + batch * batchCount` in destination-local execution units. Each batch is
+one logical group processed by the command, including its constituent blocks.
+Pipeline and transport overhead and safety margins are separate. Estimates are
+advisory, not guaranteed bounds. Missing annotations or unknown batch counts
+mean unknown cost. The latest trusted annotation replaces both fields; zero
+values are valid estimates, not a clearing sentinel.
+
+Annotation helpers are `ActionAnnot`, `CounterpartyAnnot`, `ExecutionCost`,
+`GroupsAnnot`, `LabelAnnot`, and `SchemaAnnot`.
+Their functions are `annotateAction`, `annotateCounterparty`, `executionCost`,
+`annotateGroups`, `label`, and `schema`, respectively.
 
 `ActionEvent` (exported by `Events.sol`) provides
 `Action(bytes32 indexed account, uint32 action)` for hosts to identify an account

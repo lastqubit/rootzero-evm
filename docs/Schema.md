@@ -61,6 +61,15 @@ representation as in POSITION. The annotation identifies the counterparty, not
 whether to settle or realize it. Like other annotation helpers, it encodes the
 claim without validating either ID; consumers apply type and trust policy.
 
+The standard `#executionCost { uint base, uint batch }` annotation describes a
+command's estimated execution cost in destination-local execution units. Its
+payload is exactly 64 bytes. Estimate cost as `base + batch * batchCount`, where
+a batch is one logical group processed by the command, including all constituent
+blocks. Pipeline and transport overhead are separate. Estimates are advisory;
+missing annotations or unknown batch counts mean unknown cost. The latest
+trusted annotation replaces both fields; zero values are valid estimates.
+`ExecutionCost.executionCost(entity, base, batch)` publishes the annotation.
+
 For example, a host-specific payment block can use a small literal, the command
 selector, or any other chosen `bytes4` value as long as that key is not
 overloaded in the relevant host/schema context.

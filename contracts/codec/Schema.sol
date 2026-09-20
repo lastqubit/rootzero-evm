@@ -166,6 +166,7 @@ library Schemas {
 
     string constant Action = "uint action";
     string constant Counterparty = "bytes32 account";
+    string constant ExecutionCost = "uint base, uint batch";
     string constant Groups = "#string as description";
     string constant Label = "bytes32 namespace, #string as name";
     string constant Schema = "uint spec, #string as body, bytes32 name";

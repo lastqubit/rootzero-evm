@@ -2904,6 +2904,15 @@ library Blocks {
         write32(value, 0, Keys.Counterparty, account);
     }
 
+    /// @notice Encode an EXECUTION_COST annotation block.
+    /// @param base Fixed execution cost per invocation in destination-local units.
+    /// @param batch Additional execution cost per logical batch in the same units.
+    /// @return value Encoded EXECUTION_COST block bytes.
+    function createExecutionCost(uint base, uint batch) internal pure returns (bytes memory value) {
+        value = allocate(Sizes.B64);
+        write64(value, 0, Keys.ExecutionCost, bytes32(base), bytes32(batch));
+    }
+
     /// @notice Encode a SCHEMA block.
     /// @param spec Block specification.
     /// @param body Schema body.

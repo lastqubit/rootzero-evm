@@ -73,6 +73,8 @@ library Keys {
     bytes4 constant Action = bytes4(keccak256("#action"));
     /// @dev Entity counterparty annotation - (bytes32 account)
     bytes4 constant Counterparty = bytes4(keccak256("#counterparty"));
+    /// @dev Command execution cost estimate - (uint base, uint batch)
+    bytes4 constant ExecutionCost = bytes4(keccak256("#executionCost"));
     /// @dev Command loop-group annotation - (#string as description)
     bytes4 constant Groups = bytes4(keccak256("#groups"));
     /// @dev Block schema publication - (bytes4 key, #string as body, bytes32 name)
