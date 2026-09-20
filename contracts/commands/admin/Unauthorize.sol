@@ -32,7 +32,7 @@ abstract contract Unauthorize is AdminBase {
 
         while (exec.more()) {
             uint node = exec.unpackNode();
-            setNode(node, false);
+            revokeNode(node);
         }
 
         return exec.close();

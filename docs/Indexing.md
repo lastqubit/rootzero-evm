@@ -155,16 +155,27 @@ Host topology and access state are fully evented by the library:
 
 ```txt
 event Introduction(uint indexed host, uint peer, bytes32 origin, uint blocknum)
-event Node(uint indexed host, uint node, bool active)
-event Guardian(uint indexed host, bytes32 account, bool active)
+event Node(uint indexed host, uint node, uint32 action, uint status)
+event Guardian(uint indexed host, bytes32 account, uint32 action, uint status)
 ```
 
 `Introduction` fires on the receiving host when a peer host introduces itself
 during construction. `origin` records `tx.origin` as a chain-agnostic user
 account for provenance and must not be treated as authorization. Every
-node-trust change routes through `setNode` and every
-guardian change through `setGuardian`, so `Node` and `Guardian` are exhaustive:
+node-trust change routes through `authorizeNode` or `revokeNode` and every
+guardian change through `appointGuardian` or `dismissGuardian`, so `Node` and `Guardian` are exhaustive:
 replaying them yields the exact current access sets.
+
+For both events, `action` describes the operation and `status` is the authoritative
+state after that operation. Zero means inactive; one means active. Other nonzero
+values mean active with host-defined meaning. `Host` emits `Actions.Authorize`
+with `1` and `Actions.Revoke` with `0` for nodes, including guardian-triggered
+revocations. For guardians it emits `Actions.Appoint` with `1` and
+`Actions.Dismiss` with `0`. Repeating an operation still emits its action and
+resulting status. Emitters must keep these fields consistent. Indexers derive
+membership from `status != 0`, even when they do not recognize an action code,
+and retain the complete status value. These changes replace both event signatures;
+use the published ABI for each deployment.
 
 All account, asset, and node IDs are 32-byte values with one top-byte rule:
 `0x00` is null/unset, `0x01` is Rootzero-native, `0x02` is opaque
@@ -229,12 +240,45 @@ event Received(bytes32 indexed account, bytes32 asset, uint amount, uint32 actio
 event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
 event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
 event Unlocked(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
-event Asset(uint indexed host, bytes32 asset, bytes preimage)
-event AssetStatus(uint indexed host, bytes32 asset, uint status)
+event Asset(uint indexed host, bytes32 asset, uint32 action, uint status)
+event AssetPreimage(bytes32 indexed asset, bytes preimage)
+event Route(uint indexed host, uint portal, uint32 action, uint status)
 event Rooted(bytes32 indexed account, uint deadline, uint value)
 ```
 
 ### Host Conventions
+
+`AssetPreimage` publishes an opaque asset's preimage, with the asset ID as the
+indexed field and no host argument. The emitting contract remains available in
+the log address; consumers validate that the preimage derives the declared ID.
+This event declares a preimage and does not imply support on a host.
+
+`Asset` records an asset lifecycle or administrative action and its resulting
+`status` on a host. `Actions.Create` means the asset was created;
+`Actions.Delete` means it was deleted. `Actions.Allow` and `Actions.Deny` describe
+support decisions. Hosts supply the emissions and must keep actions and resulting
+states consistent. Indexers use `status != 0` to reconstruct the host's active asset
+set, including repeated operations or unrecognized action codes. The action must
+also be retained to distinguish creation, deletion, and support changes.
+Status zero means inactive, one means active, and other nonzero values mean active
+with host-defined meaning. The `AssetStatus` query continues to return its
+existing numeric status.
+
+These signatures replace the former `Asset(host, asset, preimage)` and
+`AssetStatus(host, asset, status)` events. Preimage emitters must inherit
+`AssetPreimageEvent`; asset action emitters use `AssetEvent`. Both are exported by
+`Events.sol`. Indexers must use the ABI published by each deployment.
+
+`Route` records the action performed on a host's route to `portal` and its
+resulting `status`. `addRoute` uses `Actions.Add` with `1`; `removeRoute` uses
+`Actions.Remove` with `0`. These operations change route membership rather than
+create or delete the destination portal. `Enable` with `1` and `Disable` with `0`
+toggle a route that remains configured. Hosts define
+the route policy and supply consistent emissions, including repeated operations.
+The event carries `uint32 action, uint status`; status zero means inactive,
+one means active, and other nonzero values mean active with host-defined meaning.
+Indexers must update the event signature and reconstruct route activity from
+`status != 0` while retaining the full status and the action's canonical meaning.
 
 A host that wants to be indexable from logs alone must follow these rules. A
 host that omits them still works on-chain, but its ledger is invisible to
@@ -301,10 +345,11 @@ the final budget. Synchronous EVM execution
 remains atomic: if settlement or a later pipeline step reverts, its event is
 reverted as well.
 
-**Asset gating.** Hosts that gate assets emit `AssetStatus` from their
-`allowAsset`/`denyAsset` hooks (zero status means unsupported).
+**Asset gating.** Hosts that gate assets emit `Asset` from their
+`allowAsset`/`denyAsset` hooks, with `Actions.Allow`/`Actions.Deny` and the
+resulting `status` (`0` means unsupported, nonzero means supported).
 
-**Opaque assets.** Hosts that create or register opaque asset IDs emit `Asset`
+**Opaque assets.** Hosts that create or register opaque asset IDs emit `AssetPreimage`
 with the canonical preimage used to resolve the asset. Indexers should treat
 `asset` as the ledger key and can verify host-specific opaque IDs by checking
 `asset == 0x02 || preimage[1:3] || bytes29(hash(preimage))`. The preimage starts
@@ -323,10 +368,41 @@ causing endpoint — the innermost command, port, or guard whose semantic
 performed the change — or zero when no endpoint context exists. `action` is a
 code from `utils/Actions.sol`:
 
+**Shared action semantics.** In every event carrying `action`, the action states
+which operation occurred. Its canonical meaning is the same across event types:
+`Actions.Create` means creation, `Actions.Delete` means deletion,
+`Actions.Add`/`Actions.Remove` mean membership changes, and
+`Actions.Refund` means a refund. The event identifies the affected entity or
+effect and supplies context. Any accompanying state fields describe the result;
+they do not redefine the action. For example, `Asset(..., Actions.Create, 0)`
+records an asset that was created but is inactive on that host, not a denial.
+Consumers should retain the action even when different operations produce the
+same state. Hosts choose applicable actions and must emit them truthfully.
+
+| Range | Group | Assigned codes | Reserved |
+| --- | --- | --- | --- |
+| 0-15 | Lifecycle and membership | None 0, Create 1, Update 2, Delete 3, Add 4, Remove 5, Enable 6, Disable 7 | 8-15 |
+| 16-31 | Permissions and roles | Authorize 16, Revoke 17, Appoint 18, Dismiss 19, Allow 20, Deny 21 | 22-31 |
+| 32-47 | Transfers | Transfer 32, Payout 33, Deposit 34, Withdraw 35, Cashin 36, Cashout 37 | 38-47 |
+| 48-63 | Supply | Mint 48, Burn 49 | 50-63 |
+| 64-79 | Accounting and settlement | Post 64, Book 65, Realize 66, Settle 67, Fee 68, Refund 69 | 70-79 |
+| 80-95 | Trading and credit | Swap 80, Borrow 81, Repay 82, Liquidate 83 | 84-95 |
+
+Values 96 and above are reserved for future groups. Unassigned values must not
+be used as custom actions. Ranges organize the catalog and imply no permissions
+or runtime dispatch. An event's contract defines which actions apply and what
+its context and state fields describe, while preserving canonical action meanings.
+
+**Numeric compatibility:** the grouped catalog replaces the assignments used
+through v1.41.0. Event signatures and `#action` block keys do not identify the
+catalog version. Indexers must select the mapping for the emitting deployment
+(and implementation epoch for upgraded hosts), never reinterpret older logs or
+annotations with the new mapping. The previous catalog was:
+
 ```txt
 None 0, Transfer 1, Payout 2, Settle 3, Deposit 4, Withdraw 5, Fee 6,
 Mint 7, Burn 8, Swap 9, Borrow 10, Repay 11, Liquidate 12, Refund 13, Post 14,
-Cashout 15, Cashin 16, Realize 17
+Cashout 15, Cashin 16, Realize 17, Book 18
 ```
 
 Joins available to an indexer: `context` -> the endpoint repository

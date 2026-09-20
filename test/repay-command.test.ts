@@ -21,7 +21,7 @@ describe("Repay command", () => {
     const positionSpec = BigInt(Keys.Position) << 224n | 160n << 136n;
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
       endpointDescriptor({ state: Keys.Position, stateHint: 160, output: positionSpec }));
-    await expect(host.deploymentTransaction()).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(11n));
+    await expect(host.deploymentTransaction()).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(82n));
   });
 
   describe("calldata command", () => {

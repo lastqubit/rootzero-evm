@@ -42,7 +42,7 @@ describe("Burn", () => {
     expect(deployment).to.not.equal(null);
 
     await expect(deployment!).to.emit(host, "Annotation")
-      .withArgs(await commandId(burnMethod, host), encodeActionBlock(8n));
+      .withArgs(await commandId(burnMethod, host), encodeActionBlock(49n));
   });
 
   // â”€â”€ Happy path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -95,5 +95,4 @@ describe("Burn", () => {
     expect(await (host as any)[burnMethod].staticCall(...ctx())).to.deep.equal(["0x", 0n]);
   });
 });
-
 

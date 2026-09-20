@@ -122,7 +122,7 @@ describe("Commands", () => {
   function commandFlags(method: string): bigint {
     if (method === "relayPayable" || method === "relayBalancePayable") return HandoffFunded;
     if (method === "executePayable") return 0x03n;
-    if (["authorize", "unauthorize", "appoint", "dismiss", "allowAssets", "denyAssets", "allowance", "annotate"].includes(method)) {
+    if (["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "annotate"].includes(method)) {
       return 0x02n;
     }
     if (["depositPayable", "settlePayable", "provisionPayable", "recoverPayable"].includes(method)) {
@@ -140,14 +140,14 @@ describe("Commands", () => {
     expect(deployment).to.not.equal(null);
 
     for (const [method, action] of [
-      ["deposit", 4n],
-      ["depositPayable", 4n],
-      ["withdraw", 5n],
-      ["payout", 2n],
-      ["settle", 3n],
-      ["settlePayable", 3n],
-      ["cashout", 15n],
-      ["realize", 17n],
+      ["deposit", 34n],
+      ["depositPayable", 34n],
+      ["withdraw", 35n],
+      ["payout", 33n],
+      ["settle", 67n],
+      ["settlePayable", 67n],
+      ["cashout", 37n],
+      ["realize", 66n],
     ] as const) {
       await expect(deployment!).to.emit(host, "Annotation")
         .withArgs(await cmd(method), encodeActionBlock(action));

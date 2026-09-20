@@ -20,7 +20,7 @@ describe("Settle command", () => {
     const tx = host.deploymentTransaction();
     await expect(tx).to.emit(host, "Endpoint").withArgs(await host.host(), id,
       endpointDescriptor({ state: Keys.Position, stateHint: 160 }));
-    await expect(tx).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(3n));
+    await expect(tx).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(67n));
   });
 
   it("does not expose or authorize the removed book command", async () => {

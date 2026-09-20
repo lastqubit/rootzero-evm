@@ -20,8 +20,7 @@ import { ExecuteSettle, SettlePayable } from "../commands/Settle.sol";
 import { Pipeline } from "../core/Pipeline.sol";
 import { Settlement, SettleHook } from "../core/Settlement.sol";
 import { BookPort } from "../ports/Book.sol";
-import { AllowAssets } from "../commands/admin/AllowAssets.sol";
-import { DenyAssets } from "../commands/admin/DenyAssets.sol";
+import {AllowAsset, DenyAsset} from "../commands/admin/Asset.sol";
 import { Allowance } from "../commands/admin/Allowance.sol";
 import { RevokeAllowance, RevokeAsset } from "../guards/Revoke.sol";
 import { HostAmount, Position } from "../core/Types.sol";
@@ -54,8 +53,8 @@ contract TestHost is
     Settlement,
     Pipeline,
     BookPort,
-    AllowAssets,
-    DenyAssets,
+    AllowAsset,
+    DenyAsset,
     Allowance,
     RevokeAllowance,
     RevokeAsset
@@ -306,8 +305,8 @@ contract TestHost is
         return unauthorizeId();
     }
 
-    function setGuardianAccount(bytes32 account, bool active) external {
-        setGuardian(account, active);
+    function appointGuardianAccount(bytes32 account) external {
+        appointGuardian(account);
     }
 
     function isGuardianAddress(address addr) external view returns (bool) {
@@ -316,6 +315,5 @@ contract TestHost is
 
 
 }
-
 
 

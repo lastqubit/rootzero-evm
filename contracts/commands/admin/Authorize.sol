@@ -36,7 +36,7 @@ abstract contract Authorize is AdminBase {
 
         while (exec.more()) {
             uint node = exec.unpackNode();
-            setNode(node, true);
+            authorizeNode(node);
         }
 
         return exec.close();
@@ -68,7 +68,7 @@ abstract contract ExecuteAuthorize is Authorize {
 
         (uint abs, uint end) = Cursors.bounds(input, Sizes.B32);
         while (abs < end) {
-            setNode(Blocks.unpackNode(abs), true);
+            authorizeNode(Blocks.unpackNode(abs));
             unchecked {
                 abs += Sizes.B32;
             }

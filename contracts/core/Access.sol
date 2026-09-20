@@ -57,16 +57,22 @@ abstract contract AdminAccess {
 /// @notice Aggregate hook surface required by node administration and guards.
 /// Contains declarations only; hosts provide the policy and storage.
 abstract contract NodeAccess is PeerAccess, AdminAccess, CommandAccess, PortAccess {
-    /// @notice Set authorization status for a node.
-    function setNode(uint node, bool active) internal virtual;
+    /// @notice Grant authorization to a node.
+    function authorizeNode(uint node) internal virtual;
+
+    /// @notice Revoke authorization from a node.
+    function revokeNode(uint node) internal virtual;
 }
 
 /// @title GuardianAccess
 /// @notice Guardian authorization and mutation capabilities required by guardian features.
 /// Contains declarations only; hosts provide the policy and storage.
 abstract contract GuardianAccess {
-    /// @notice Set guardian status for an account.
-    function setGuardian(bytes32 account, bool active) internal virtual;
+    /// @notice Appoint an account as a guardian.
+    function appointGuardian(bytes32 account) internal virtual;
+
+    /// @notice Dismiss an account from its guardian role.
+    function dismissGuardian(bytes32 account) internal virtual;
 
     /// @notice Assert that `caller` is an active guardian and return it.
     function enforceGuardian(address caller) internal view virtual returns (address);

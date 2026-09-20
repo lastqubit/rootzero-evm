@@ -83,7 +83,7 @@ describe("Access Control", () => {
 
     await expect(host.connect(signers[0]).authorize(...ctx))
       .to.emit(host, "Node")
-      .withArgs(await host.host(), dummyNode, true);
+      .withArgs(await host.host(), dummyNode, 16n, 1n);
   });
 
   it("node is authorized after authorize call", async () => {
@@ -105,7 +105,7 @@ describe("Access Control", () => {
     // Then unauthorize
     await expect(
       host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)))
-    ).to.emit(host, "Node").withArgs(await host.host(), dummyNode, false);
+    ).to.emit(host, "Node").withArgs(await host.host(), dummyNode, 17n, 0n);
   });
 
   it("node is not authorized after unauthorize call", async () => {
@@ -163,7 +163,7 @@ describe("Access Control", () => {
 
     expect(await host.isGuardianAddress(guardianAddress)).to.be.false;
 
-    await host.setGuardianAccount(guardianAccount, true);
+    await host.appointGuardianAccount(guardianAccount);
     expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
   });
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { AssetStatus } from "../queries/Assets.sol";
+import { AssetStatus } from "../queries/Asset.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 contract TestAssetStatusQuery is AssetStatus {

@@ -5,8 +5,8 @@ pragma solidity ^0.8.33;
 // Import this file to inherit from the full rootzero callable host surface without managing individual paths.
 
 // Shared endpoint hooks
-import {CashinHook, CashoutHook, sendChainAsset} from "./core/Cash.sol";
 import {SendFailed} from "./utils/Errors.sol";
+import {CashinHook, CashoutHook, sendChainAsset} from "./core/Cash.sol";
 import {Flags} from "./utils/Flags.sol";
 import {ExecuteHook, PipeHook} from "./core/Pipeline.sol";
 import {BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook} from "./core/Settlement.sol";
@@ -31,19 +31,17 @@ import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";
 
 // Admin commands
 import {AdminBase} from "./commands/admin/Base.sol";
-import {AllowAssets, AllowAssetsHook} from "./commands/admin/AllowAssets.sol";
+import {AllowAsset, AllowAssetHook, DenyAsset, DenyAssetHook} from "./commands/admin/Asset.sol";
 import {Allowance, AllowanceHook} from "./commands/admin/Allowance.sol";
 import {Annotate} from "./commands/admin/Annotate.sol";
-import {Appoint} from "./commands/admin/Appoint.sol";
+import {Appoint, Dismiss} from "./commands/admin/Guardian.sol";
 import {Authorize, ExecuteAuthorize} from "./commands/admin/Authorize.sol";
-import {DenyAssets, DenyAssetsHook} from "./commands/admin/DenyAssets.sol";
-import {Dismiss} from "./commands/admin/Dismiss.sol";
 import {ExecutePayable} from "./commands/admin/Execute.sol";
 import {Unauthorize} from "./commands/admin/Unauthorize.sol";
 
 // Port endpoints
 import {PortBase} from "./ports/Base.sol";
-import {AllowAssetsPort, DenyAssetsPort, RequestAssetPort, RequestAssetHook} from "./ports/Assets.sol";
+import {AllowAssetPort, DenyAssetPort, RequestAssetPort, RequestAssetHook} from "./ports/Asset.sol";
 import {RequestAllowancePort} from "./ports/Allowance.sol";
 import {CreditAccountPort} from "./ports/Credit.sol";
 import {BookPort} from "./ports/Book.sol";
@@ -57,5 +55,5 @@ import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
 
 // Query endpoints
 import {QueryBase} from "./queries/Base.sol";
-import {AssetStatus, AssetStatusHook} from "./queries/Assets.sol";
+import {AssetStatus, AssetStatusHook} from "./queries/Asset.sol";
 import {GetBalances, GetBalancesHook} from "./queries/Balances.sol";

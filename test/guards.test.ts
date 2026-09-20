@@ -157,7 +157,7 @@ describe("Guard Actions", () => {
 
     await expect(host.connect(guardianSigner).revoke(encodeNodeBlock(node)))
       .to.emit(host, "Node")
-      .withArgs(await host.host(), node, false);
+      .withArgs(await host.host(), node, 17n, 0n);
 
     expect(await host.isAuthorized(node)).to.be.false;
   });
@@ -219,7 +219,7 @@ describe("Guard Actions", () => {
 
     await expect(host.appoint(...adminCtx(encodeAccountBlock(guardianAccount))))
       .to.emit(host, "Guardian")
-      .withArgs(await host.host(), guardianAccount, true);
+      .withArgs(await host.host(), guardianAccount, 18n, 1n);
 
     expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
   });

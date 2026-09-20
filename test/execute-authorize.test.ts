@@ -22,7 +22,7 @@ describe("ExecuteAuthorize", () => {
     expect(await host.isAuthorized(command)).to.equal(false);
     await expect(host.testPipe(admin, "0x", encodeStepBlock(command, 0n,
       concat(encodeNodeBlock(node), encodeNodeBlock(second)))))
-      .to.emit(host, "Node").withArgs(await host.host(), node, true);
+      .to.emit(host, "Node").withArgs(await host.host(), node, 16n, 1n);
     expect(await host.isAuthorized(node)).to.equal(true);
     expect(await host.isAuthorized(second)).to.equal(true);
   });

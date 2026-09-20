@@ -40,7 +40,7 @@ describe("Admin Commands", () => {
 
   async function cmd(method: string) {
     const flags = method === "executePayable" ? 3n
-      : ["authorize", "unauthorize", "appoint", "dismiss", "allowAssets", "denyAssets", "allowance", "annotate"].includes(method)
+      : ["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "annotate"].includes(method)
         ? 2n
         : 0n;
     return commandId(host.interface.getFunction(method)!.selector, host, flags);
@@ -58,7 +58,7 @@ describe("Admin Commands", () => {
       const input = encodeNodeBlock(nodeId);
       await expect(callAs(0, "authorize", adminCtx(input)))
         .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, true);
+        .withArgs(await host.host(), nodeId, 16n, 1n);
       expect(await host.isAuthorized(nodeId)).to.be.true;
     });
 
@@ -120,7 +120,7 @@ describe("Admin Commands", () => {
       // then unauthorize
       await expect(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))))
         .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, false);
+        .withArgs(await host.host(), nodeId, 17n, 0n);
       expect(await host.isAuthorized(nodeId)).to.be.false;
     });
 
@@ -144,7 +144,7 @@ describe("Admin Commands", () => {
 
       await expect(callAs(0, "appoint", adminCtx(input)))
         .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, true);
+        .withArgs(await host.host(), guardianAccount, 18n, 1n);
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
     });
@@ -186,7 +186,7 @@ describe("Admin Commands", () => {
 
       await expect(callAs(0, "dismiss", adminCtx(input)))
         .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, false);
+        .withArgs(await host.host(), guardianAccount, 19n, 0n);
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.false;
     });
@@ -204,13 +204,13 @@ describe("Admin Commands", () => {
     });
   });
 
-  // â”€â”€ AllowAssets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ AllowAsset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  describe("allowAssets", () => {
+  describe("allowAsset", () => {
     it("emits AllowAssetCalled for each ASSET block", async () => {
       const asset = ethers.zeroPadValue("0x01", 32);
       const input = encodeAssetBlock(asset);
-      await expect(callAs(0, "allowAssets", adminCtx(input)))
+      await expect(callAs(0, "allowAsset", adminCtx(input)))
         .to.emit(host, "AllowAssetCalled")
         .withArgs(asset);
     });
@@ -219,40 +219,40 @@ describe("Admin Commands", () => {
       const a1 = ethers.zeroPadValue("0xA1", 32);
       const a2 = ethers.zeroPadValue("0xA2", 32);
       const input = concat(encodeAssetBlock(a1), encodeAssetBlock(a2));
-      const tx = await callAs(0, "allowAssets", adminCtx(input));
+      const tx = await callAs(0, "allowAsset", adminCtx(input));
       await expect(tx).to.emit(host, "AllowAssetCalled").withArgs(a1);
       await expect(tx).to.emit(host, "AllowAssetCalled").withArgs(a2);
     });
 
     it("reverts AccessDenied for non-admin account", async () => {
       const fakeAdmin = ethers.zeroPadValue("0x03", 32);
-      await expect(callAs(0, "allowAssets", userCtx(fakeAdmin, encodeAssetBlock(ethers.zeroPadValue("0x01", 32)))))
+      await expect(callAs(0, "allowAsset", userCtx(fakeAdmin, encodeAssetBlock(ethers.zeroPadValue("0x01", 32)))))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
     it("accepts an empty input batch", async () => {
-      await callAs(0, "allowAssets", adminCtx("0x"));
+      await callAs(0, "allowAsset", adminCtx("0x"));
     });
   });
 
-  // â”€â”€ DenyAssets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ DenyAsset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  describe("denyAssets", () => {
+  describe("denyAsset", () => {
     it("emits DenyAssetCalled for each ASSET block", async () => {
       const asset = ethers.zeroPadValue("0x03", 32);
-      await expect(callAs(0, "denyAssets", adminCtx(encodeAssetBlock(asset))))
+      await expect(callAs(0, "denyAsset", adminCtx(encodeAssetBlock(asset))))
         .to.emit(host, "DenyAssetCalled")
         .withArgs(asset);
     });
 
     it("reverts AccessDenied for non-admin", async () => {
       const fakeAdmin = ethers.zeroPadValue("0x04", 32);
-      await expect(callAs(0, "denyAssets", userCtx(fakeAdmin, encodeAssetBlock(ethers.zeroPadValue("0x01", 32)))))
+      await expect(callAs(0, "denyAsset", userCtx(fakeAdmin, encodeAssetBlock(ethers.zeroPadValue("0x01", 32)))))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
     it("accepts an empty input batch", async () => {
-      await callAs(0, "denyAssets", adminCtx("0x"));
+      await callAs(0, "denyAsset", adminCtx("0x"));
     });
   });
 
@@ -378,7 +378,7 @@ describe("Admin Commands", () => {
 
       const asset = ethers.zeroPadValue("0x123456", 32);
       const targetArgs = [encodeContextBlock(await target.getAdminAccount(), "0x", encodeAssetBlock(asset))];
-      const calldata = target.interface.encodeFunctionData("allowAssets", targetArgs);
+      const calldata = target.interface.encodeFunctionData("allowAsset", targetArgs);
       const input = encodeCallBlock(await hostId(await target.getAddress()), 0n, calldata);
 
       await expect(source.executePayable(encodeContextBlock(sourceAdminAccount, "0x", input)))
@@ -395,11 +395,11 @@ describe("Admin Commands", () => {
       const assetB = ethers.zeroPadValue("0xbb", 32);
 
       const calldataA = targetA.interface.encodeFunctionData(
-        "allowAssets",
+        "allowAsset",
         [encodeContextBlock(await targetA.getAdminAccount(), "0x", encodeAssetBlock(assetA))]
       );
       const calldataB = targetB.interface.encodeFunctionData(
-        "denyAssets",
+        "denyAsset",
         [encodeContextBlock(await targetB.getAdminAccount(), "0x", encodeAssetBlock(assetB))]
       );
 

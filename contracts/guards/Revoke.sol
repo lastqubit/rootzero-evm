@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AllowanceHook} from "../commands/admin/Allowance.sol";
-import {DenyAssetsHook} from "../commands/admin/DenyAssets.sol";
+import {DenyAssetHook} from "../commands/admin/Asset.sol";
 import {NodeAccess} from "../core/Access.sol";
 import {GuardBase} from "./Base.sol";
 import {Specs} from "../Codec.sol";
@@ -26,7 +26,7 @@ abstract contract Revoke is NodeAccess, GuardBase {
 
         while (exec.more()) {
             uint node = exec.unpackNode();
-            setNode(node, false);
+            revokeNode(node);
         }
     }
 }
@@ -54,8 +54,8 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 
 /// @title RevokeAsset
 /// @notice Guardian action that denies assets through the host's existing asset hook.
-/// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetsHook.
-abstract contract RevokeAsset is GuardBase, DenyAssetsHook {
+/// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
+abstract contract RevokeAsset is GuardBase, DenyAssetHook {
     uint private immutable descriptor;
 
     constructor() {

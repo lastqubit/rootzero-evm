@@ -4,9 +4,8 @@ pragma solidity ^0.8.33;
 import {AccessDenied, CallerAccess} from "./Access.sol";
 import {Runtime} from "./Runtime.sol";
 import {Annotate} from "../commands/admin/Annotate.sol";
-import {Appoint} from "../commands/admin/Appoint.sol";
+import {Appoint, Dismiss} from "../commands/admin/Guardian.sol";
 import {Authorize} from "../commands/admin/Authorize.sol";
-import {Dismiss} from "../commands/admin/Dismiss.sol";
 import {Unauthorize} from "../commands/admin/Unauthorize.sol";
 import {ExecutePayable} from "../commands/admin/Execute.sol";
 import {Revoke} from "../guards/Revoke.sol";
@@ -14,6 +13,7 @@ import {IntroductionEvent} from "../events/Introduction.sol";
 import {GuardianEvent} from "../events/Guardian.sol";
 import {NodeEvent} from "../events/Node.sol";
 import {Accounts} from "../utils/Accounts.sol";
+import {Actions} from "../utils/Actions.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
 /// @title IHostIntroduction
@@ -114,16 +114,28 @@ abstract contract Host is
         admin = Accounts.toAdmin(commanderAddr);
     }
 
-    function setNode(uint node, bool active) internal virtual override {
+    function authorizeNode(uint node) internal virtual override {
         node = Nodes.local(node);
-        nodes[node] = active;
-        emit Node(host, node, active);
+        nodes[node] = true;
+        emit Node(host, node, Actions.Authorize, 1);
     }
 
-    function setGuardian(bytes32 account, bool active) internal virtual override {
+    function revokeNode(uint node) internal virtual override {
+        node = Nodes.local(node);
+        nodes[node] = false;
+        emit Node(host, node, Actions.Revoke, 0);
+    }
+
+    function appointGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
-        guardians[account] = active;
-        emit Guardian(host, account, active);
+        guardians[account] = true;
+        emit Guardian(host, account, Actions.Appoint, 1);
+    }
+
+    function dismissGuardian(bytes32 account) internal virtual override {
+        account = Accounts.user(account);
+        guardians[account] = false;
+        emit Guardian(host, account, Actions.Dismiss, 0);
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.

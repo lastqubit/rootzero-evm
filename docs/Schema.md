@@ -652,7 +652,7 @@ Settlement rejects all nonempty input.
 
 `repay` accepts POSITION state and empty input and returns one POSITION per
 source position, preserving every field except `debt`, which becomes zero.
-It publishes `Actions.Repay` (11). The unfunded `RepayHook` must satisfy the
+It publishes `Actions.Repay` (82). The unfunded `RepayHook` must satisfy the
 complete exact debt or revert and must not mutate its position argument; the
 command clears debt only after the hook succeeds. `Settlement.repay` routes
 payment through `BookHook`: zero counterparty debits the active account only,

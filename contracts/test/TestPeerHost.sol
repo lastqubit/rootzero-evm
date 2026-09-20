@@ -10,7 +10,7 @@ import { DebitAccountPort } from "../ports/Debit.sol";
 import { PipePayablePort } from "../ports/Pipe.sol";
 import { DispatchPayablePort } from "../ports/Dispatch.sol";
 import { BookPort } from "../ports/Book.sol";
-import { RequestAssetPort } from "../ports/Assets.sol";
+import { RequestAssetPort } from "../ports/Asset.sol";
 import { Settlement } from "../core/Settlement.sol";
 import { Pipeline } from "../core/Pipeline.sol";
 import { Position } from "../core/Types.sol";
