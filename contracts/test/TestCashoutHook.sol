@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {CashoutHook} from "../core/Cash.sol";
+import {CashoutHook, sendChainAsset} from "../core/Cash.sol";
 
 contract TestCashoutHook is CashoutHook {
     uint public paid;
@@ -10,6 +10,10 @@ contract TestCashoutHook is CashoutHook {
     function pay(bytes32 account, uint amount) external {
         paid += amount;
         cashout(account, amount);
+    }
+
+    function cashout(bytes32 account, uint amount) internal override {
+        sendChainAsset(account, amount);
     }
 }
 

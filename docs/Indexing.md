@@ -273,7 +273,7 @@ with the matching `Actions` code:
 | -------------------------- | ---------- | ------------------ |
 | deposit / depositPayable   | `Received` | `Actions.Deposit`  |
 | withdraw                   | `Spent`    | `Actions.Withdraw` |
-| cashout (default hook)     | `Spent`    | `Actions.Cashout`  |
+| cashout (host implementation) | `Spent` | `Actions.Cashout` |
 | burn                       | `Spent`    | `Actions.Burn`     |
 | creditAccount              | `Received` | `Actions.Transfer` |
 | debitAccount               | `Spent`    | `Actions.Transfer` |
@@ -283,10 +283,11 @@ with the matching `Actions` code:
 | provision (lock custody)   | `Locked`   | per operation      |
 | custody release            | `Unlocked` | per operation      |
 
-The default `CashoutHook` inherits `ChainAsset` and `SpentEvent`, advertising the
-event ABI at deployment. It emits `Spent` after each successful nonzero native
-transfer with the chain asset, `Actions.Cashout`, and context zero. Zero payouts
-emit nothing. Overrides are responsible for their own event emission.
+`CashoutHook` is abstract and has no event-emitter inheritance. Hosts implementing
+cashout are responsible for their own flow events and event ABI publication.
+The free `sendChainAsset` transfer helper emits no events; hosts may emit
+`Spent(account, chainAsset, amount, Actions.Cashout, context)` after a successful
+payout according to their event policy.
 
 `Balance` and flow events are complementary, not redundant: flow events record
 that value moved and why; balance events record the resulting total, which gives

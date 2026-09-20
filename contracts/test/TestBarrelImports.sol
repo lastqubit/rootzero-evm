@@ -23,6 +23,8 @@ import {
     Cashout,
     CashinHook,
     CashoutHook,
+    SendFailed,
+    sendChainAsset,
     ExecuteCashout,
     ExecuteHook as EndpointExecuteHook,
     PipeHook as EndpointPipeHook,
@@ -61,6 +63,8 @@ import {
     AccessDenied,
     CashinHook as CoreCashinHook,
     CashoutHook as CoreCashoutHook,
+    SendFailed as CoreSendFailed,
+    sendChainAsset as coreSendChainAsset,
     ActionAnnot,
     CounterpartyAnnot,
     LabelAnnot,
@@ -81,6 +85,7 @@ import {
 } from "../Core.sol";
 import {
     UnexpectedAmount as UtilsUnexpectedAmount,
+    SendFailed as UtilsSendFailed,
     ZeroAddress,
     clear8,
     clear16,

@@ -497,15 +497,19 @@ takes ownership of the remaining pipeline, while `Flags.HandoffFunded` combines
 handoff behavior with native-value funding;
 bit 6 remains endpoint-defined, and bits 2 through 5 remain reserved.
 
-`CashoutHook` defaults to transferring the exact native amount to
+`CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
+their payout policy and choose the accounting and events to emit. The hook has
+no `ChainAsset` or `SpentEvent` inheritance.
+
+The free `sendChainAsset(account, amount)` helper in `core/Cash.sol`, also exported
+by `Core.sol` and `Endpoints.sol`, transfers the exact amount to
 `Accounts.addr(account)`, accepting EVM-backed account subtypes with a nonzero
-address. It remains overridable. Failed transfers revert with
-`CashoutFailed()` without copying recipient return data.
-The hook does not debit account balances: the host must authorize and fund the
-withdrawal, finalize accounting before calling it, and protect its entrypoints
-against reentrancy. Successful nonzero payouts emit
-`Spent(account, chainAsset, amount, Actions.Cashout, 0)`. Zero amounts skip
-validation, transfer, and event emission.
+address. Failed transfers revert with the global `SendFailed()` error without
+copying recipient return data. Zero amounts still validate the account and call
+the recipient; hook implementations may skip zero amounts before calling.
+The helper performs no bookkeeping and emits no events. The host must authorize
+and fund the withdrawal, finalize accounting before calling it, and protect its
+entrypoints against reentrancy.
 
 The standard commands cover the common ledger movements: `bootstrap` (source
 an initial balance and native-value budget), `cashout` (withdraw native

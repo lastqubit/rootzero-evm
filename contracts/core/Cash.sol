@@ -2,9 +2,24 @@
 pragma solidity ^0.8.33;
 
 import {Accounts} from "../utils/Accounts.sol";
-import {Actions} from "../utils/Actions.sol";
-import {ChainAsset} from "./Runtime.sol";
-import {SpentEvent} from "../events/Spent.sol";
+import {SendFailed} from "../utils/Errors.sol";
+
+/// @notice Send an exact chain-asset amount to the address embedded in `account`.
+/// @dev Validates the EVM account family and nonzero address, without restricting subtype.
+/// Zero amounts still validate the account and call the recipient. Failed transfers revert
+/// without copying recipient return data. This helper performs no bookkeeping
+/// and emits no events. Callers must authorize and fund the transfer, finalize
+/// accounting before calling, and protect their entrypoints against reentrancy.
+/// @param account EVM-backed account receiving the chain asset.
+/// @param amount Chain-asset amount to send.
+function sendChainAsset(bytes32 account, uint amount) {
+    address recipient = Accounts.addr(account);
+    bool success;
+    assembly ("memory-safe") {
+        success := call(gas(), recipient, amount, 0, 0, 0, 0)
+    }
+    if (!success) revert SendFailed();
+}
 
 /// @notice Hook implemented by hosts that credit native value to accounts.
 abstract contract CashinHook {
@@ -18,28 +33,14 @@ abstract contract CashinHook {
     function cashin(bytes32 account, uint amount) internal virtual;
 }
 
-/// @notice Overridable native payout for EVM-backed accounts.
-abstract contract CashoutHook is ChainAsset, SpentEvent {
-    error CashoutFailed();
-
-    /// @notice Pay an exact chain-asset amount to the address embedded in `account`.
+/// @notice Hook implemented by hosts that pay chain assets to accounts.
+abstract contract CashoutHook {
+    /// @notice Pay an exact chain-asset amount to `account`.
     /// Called once per chain-asset BALANCE block in state by the cashout command.
-    /// @dev Validates the EVM account family and nonzero address, without restricting subtype.
-    /// Callers must authorize and fund the withdrawal and finalize accounting before this call.
-    /// Zero amounts return without validation, transfer, or event emission.
-    /// This hook does not debit a ledger. The recipient may execute code;
-    /// the host is responsible for protecting its entrypoints against reentrancy.
-    /// Failed transfers revert without copying recipient return data. Successful transfers emit Spent.
-    /// @param account EVM-backed account receiving the native asset.
-    /// @param amount Native-asset amount to pay.
-    function cashout(bytes32 account, uint amount) internal virtual {
-        if (amount == 0) return;
-        address recipient = Accounts.addr(account);
-        bool success;
-        assembly ("memory-safe") {
-            success := call(gas(), recipient, amount, 0, 0, 0, 0)
-        }
-        if (!success) revert CashoutFailed();
-        emit Spent(account, chainAsset, amount, Actions.Cashout, 0);
-    }
+    /// @dev Implementations must revert if the complete amount cannot be paid.
+    /// Hosts define account validation, accounting, event emission, and reentrancy protection.
+    /// EVM-backed payouts may use sendChainAsset.
+    /// @param account Account receiving the chain asset.
+    /// @param amount Chain-asset amount to pay.
+    function cashout(bytes32 account, uint amount) internal virtual;
 }
