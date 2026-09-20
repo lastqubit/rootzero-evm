@@ -8,6 +8,22 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.41.0
+
+### Breaking Changes
+
+- Remove the unused `CommandBase.ValueNotAllowed()` error. Internal pipeline adapters return unused assigned value as credit.
+
+- Make `CashoutHook.cashout` abstract and remove its `ChainAsset` and `SpentEvent` inheritance. Hosts must implement payouts and event emission explicitly. Extract `sendChainAsset(account, amount)` into `core/Cash.sol`, exported through `Core.sol` and `Endpoints.sol`, and replace `CashoutFailed()` with the global `SendFailed()` error in `utils/Errors.sol`, also exported through `Utils.sol`. The helper validates EVM accounts and calls recipients even for zero amounts, preserves transfer failure handling, and emits no events. Hooks choose whether to skip zero amounts.
+
+### Added and Changed
+
+- Add `ExecuteAuthorize`, an internal pipeline adapter that reuses the Authorize command ID and enforces admin access with the host as caller. Default host policy requires a self-managed host; pipeline entrypoints must authenticate admin accounts.
+
+- Add `ExecutionCost.executionCost(entity, base, batch)` and the `#executionCost` annotation for advisory command estimates in destination-local execution units, with standard key, spec, schema, and block encoding support.
+
+- Add the argument-free global `QueryFailed()` error and re-export it from `Utils.sol`.
+
 ## 1.40.0
 
 ### Breaking Changes
