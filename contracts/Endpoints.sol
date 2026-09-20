@@ -5,7 +5,6 @@ pragma solidity ^0.8.33;
 // Import this file to inherit from the full rootzero callable host surface without managing individual paths.
 
 // Shared endpoint hooks
-import {SendFailed} from "./utils/Errors.sol";
 import {CashinHook, CashoutHook, sendChainAsset} from "./core/Cash.sol";
 import {Flags} from "./utils/Flags.sol";
 import {ExecuteHook, PipeHook} from "./core/Pipeline.sol";
@@ -57,3 +56,28 @@ import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
 import {QueryBase} from "./queries/Base.sol";
 import {AssetStatus, AssetStatusHook} from "./queries/Asset.sol";
 import {GetBalances, GetBalancesHook} from "./queries/Balances.sol";
+
+// Shared protocol errors.
+import {
+    InsufficientValue,
+    InvalidAccount,
+    InvalidAsset,
+    InvalidContract,
+    InvalidId,
+    InvalidPreimage,
+    NotDivisible,
+    OutOfBounds,
+    OutOfRange,
+    QueryFailed,
+    SendFailed,
+    UnauthorizedAsset,
+    UnconsumedData,
+    UnexpectedAmount,
+    UnexpectedInput,
+    UnexpectedPosition,
+    UnexpectedState,
+    UnexpectedValue,
+    ValueOverflow,
+    ZeroAddress,
+    ZeroAmount
+} from "./utils/Errors.sol";

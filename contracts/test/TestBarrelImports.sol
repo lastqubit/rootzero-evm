@@ -17,6 +17,12 @@ import {BookHook as CoreBookHook} from "../Core.sol";
 // their package barrels.
 import {
     CommandBase,
+    AllowAsset,
+    AllowAssetHook,
+    AllowAssetPort,
+    DenyAsset,
+    DenyAssetHook,
+    DenyAssetPort,
     ExecuteCreditAccount,
     ExecuteDebitAccount,
     ExecuteBootstrap,
@@ -97,3 +103,100 @@ import {
     replace32,
     replace64
 } from "../Utils.sol";
+
+// All shared errors are available through every authoring entry point.
+import {
+    InsufficientValue as CoreSharedInsufficientValue,
+    InvalidAccount as CoreSharedInvalidAccount,
+    InvalidAsset as CoreSharedInvalidAsset,
+    InvalidContract as CoreSharedInvalidContract,
+    InvalidId as CoreSharedInvalidId,
+    InvalidPreimage as CoreSharedInvalidPreimage,
+    NotDivisible as CoreSharedNotDivisible,
+    OutOfBounds as CoreSharedOutOfBounds,
+    OutOfRange as CoreSharedOutOfRange,
+    QueryFailed as CoreSharedQueryFailed,
+    SendFailed as CoreSharedSendFailed,
+    UnauthorizedAsset as CoreSharedUnauthorizedAsset,
+    UnconsumedData as CoreSharedUnconsumedData,
+    UnexpectedAmount as CoreSharedUnexpectedAmount,
+    UnexpectedInput as CoreSharedUnexpectedInput,
+    UnexpectedPosition as CoreSharedUnexpectedPosition,
+    UnexpectedState as CoreSharedUnexpectedState,
+    UnexpectedValue as CoreSharedUnexpectedValue,
+    ValueOverflow as CoreSharedValueOverflow,
+    ZeroAddress as CoreSharedZeroAddress,
+    ZeroAmount as CoreSharedZeroAmount
+} from "../Core.sol";
+import {
+    InsufficientValue as CommandsSharedInsufficientValue,
+    InvalidAccount as CommandsSharedInvalidAccount,
+    InvalidAsset as CommandsSharedInvalidAsset,
+    InvalidContract as CommandsSharedInvalidContract,
+    InvalidId as CommandsSharedInvalidId,
+    InvalidPreimage as CommandsSharedInvalidPreimage,
+    NotDivisible as CommandsSharedNotDivisible,
+    OutOfBounds as CommandsSharedOutOfBounds,
+    OutOfRange as CommandsSharedOutOfRange,
+    QueryFailed as CommandsSharedQueryFailed,
+    SendFailed as CommandsSharedSendFailed,
+    UnauthorizedAsset as CommandsSharedUnauthorizedAsset,
+    UnconsumedData as CommandsSharedUnconsumedData,
+    UnexpectedAmount as CommandsSharedUnexpectedAmount,
+    UnexpectedInput as CommandsSharedUnexpectedInput,
+    UnexpectedPosition as CommandsSharedUnexpectedPosition,
+    UnexpectedState as CommandsSharedUnexpectedState,
+    UnexpectedValue as CommandsSharedUnexpectedValue,
+    ValueOverflow as CommandsSharedValueOverflow,
+    ZeroAddress as CommandsSharedZeroAddress,
+    ZeroAmount as CommandsSharedZeroAmount
+} from "../Commands.sol";
+import {
+    InsufficientValue as EndpointsSharedInsufficientValue,
+    InvalidAccount as EndpointsSharedInvalidAccount,
+    InvalidAsset as EndpointsSharedInvalidAsset,
+    InvalidContract as EndpointsSharedInvalidContract,
+    InvalidId as EndpointsSharedInvalidId,
+    InvalidPreimage as EndpointsSharedInvalidPreimage,
+    NotDivisible as EndpointsSharedNotDivisible,
+    OutOfBounds as EndpointsSharedOutOfBounds,
+    OutOfRange as EndpointsSharedOutOfRange,
+    QueryFailed as EndpointsSharedQueryFailed,
+    SendFailed as EndpointsSharedSendFailed,
+    UnauthorizedAsset as EndpointsSharedUnauthorizedAsset,
+    UnconsumedData as EndpointsSharedUnconsumedData,
+    UnexpectedAmount as EndpointsSharedUnexpectedAmount,
+    UnexpectedInput as EndpointsSharedUnexpectedInput,
+    UnexpectedPosition as EndpointsSharedUnexpectedPosition,
+    UnexpectedState as EndpointsSharedUnexpectedState,
+    UnexpectedValue as EndpointsSharedUnexpectedValue,
+    ValueOverflow as EndpointsSharedValueOverflow,
+    ZeroAddress as EndpointsSharedZeroAddress,
+    ZeroAmount as EndpointsSharedZeroAmount
+} from "../Endpoints.sol";
+import {
+    InsufficientValue as UtilsSharedInsufficientValue,
+    InvalidAccount as UtilsSharedInvalidAccount,
+    InvalidAsset as UtilsSharedInvalidAsset,
+    InvalidContract as UtilsSharedInvalidContract,
+    InvalidId as UtilsSharedInvalidId,
+    InvalidPreimage as UtilsSharedInvalidPreimage,
+    NotDivisible as UtilsSharedNotDivisible,
+    OutOfBounds as UtilsSharedOutOfBounds,
+    OutOfRange as UtilsSharedOutOfRange,
+    QueryFailed as UtilsSharedQueryFailed,
+    SendFailed as UtilsSharedSendFailed,
+    UnauthorizedAsset as UtilsSharedUnauthorizedAsset,
+    UnconsumedData as UtilsSharedUnconsumedData,
+    UnexpectedAmount as UtilsSharedUnexpectedAmount,
+    UnexpectedInput as UtilsSharedUnexpectedInput,
+    UnexpectedPosition as UtilsSharedUnexpectedPosition,
+    UnexpectedState as UtilsSharedUnexpectedState,
+    UnexpectedValue as UtilsSharedUnexpectedValue,
+    ValueOverflow as UtilsSharedValueOverflow,
+    ZeroAddress as UtilsSharedZeroAddress,
+    ZeroAmount as UtilsSharedZeroAmount
+} from "../Utils.sol";
+
+import {Quote as CommandQuote, ActionAnnot as CommandActionAnnot, CounterpartyAnnot as CommandCounterpartyAnnot, LabelAnnot as CommandLabelAnnot, SchemaAnnot as CommandSchemaAnnot} from "../Commands.sol";
+import {Cur as UtilsCur, Cursors as UtilsCursors} from "../Utils.sol";

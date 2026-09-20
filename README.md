@@ -239,7 +239,8 @@ The Rootzero asset is the singleton global ID
 on every chain. Access it as `Assets.Rootzero`; EVM chain-coin
 and ERC-20 asset IDs remain chain-local.
 
-Opaque asset declarations use `Asset(host, asset, preimage)`. The preimage uses
+Opaque asset declarations use `AssetPreimage(bytes32 indexed asset, bytes preimage)`.
+The asset ID is indexed and there is no host argument. The preimage uses
 `[0x01][Asset][subtype][payload...]`, letting offchain indexers or witnesses
 verify and resolve
 `[0x02][Asset][subtype][bytes29(keccak256(preimage))]` assets.
@@ -783,7 +784,7 @@ bytes and produce the same output bytes for every endpoint.
 Admin commands use the regular command shape but are gated to the host's admin
 account: trust management (`authorize`, `unauthorize`), guardian management
 (`appoint`, `dismiss`), metadata (`annotate`), optional asset gating
-(`allowAssets`, `denyAssets`, `allowance`), and raw calls (`executePayable`).
+(`allowAsset`, `denyAsset`, `allowance`), and raw calls (`executePayable`).
 Guards go the other way: direct actions guardians can take
 without any command context — the default is `revoke`, which lets a guardian
 drop a trusted node immediately.
@@ -817,18 +818,23 @@ Use `npm test -- --list` or `npm run bench -- --list` to inspect suite selection
 Import from the package entry points rather than deep paths:
 
 - `@rootzero/contracts/Core.sol` — `Host`, annotation helpers including
-  `Counterparty`, access control, `Balances`, `Settlement`, `ExecuteHook`,
+  `CounterpartyAnnot`, access control, `Balances`, `Settlement`, `ExecuteHook`,
   `PipeHook`, `ForwardHook`, `Pipeline`, `Portal`, validator
 - `@rootzero/contracts/Commands.sol` — `CommandBase`, `Execution`, `Flags`,
-  codec helpers, and shared value types for authoring custom commands
+  annotation and codec helpers, and shared value types for authoring custom commands
 - `@rootzero/contracts/Endpoints.sol` — command, admin, port, guard, and query
   mixins, their hooks (including `ExecuteHook` and `PipeHook`), and `Flags`
 - `@rootzero/contracts/Codec.sol` — `Blocks`, calldata `Cur`/`Cursors`, memory
   `Memory`, `Writers`, `Schemas`, `Execution`/`Executions`, `Flags`, `Keys`, and
   `Specs`
 - `@rootzero/contracts/Utils.sol` — `Ids`, `Nodes`, `Assets`, `Accounts`,
-  layout and value helpers
+  cursor, layout, and value helpers
 - `@rootzero/contracts/Events.sol` — protocol event contracts
+
+`Core.sol`, `Commands.sol`, `Endpoints.sol`, and `Utils.sol` each export all
+shared protocol errors from `utils/Errors.sol`, including `QueryFailed` and
+`SendFailed`. Core-specific errors such as `AccessDenied` and `FailedCall`
+are exported by `Core.sol`.
 
 Repo layout:
 

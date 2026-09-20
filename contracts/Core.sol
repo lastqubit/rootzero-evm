@@ -13,7 +13,6 @@ import { SchemaAnnot } from "./annotations/Schema.sol";
 import { AccessDenied, AdminAccess, CallerAccess, CommandAccess, enforceSender, GuardianAccess, NodeAccess, PeerAccess, PortAccess } from "./core/Access.sol";
 import { Balances, InsufficientFunds } from "./core/Balances.sol";
 import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
-import { SendFailed } from "./utils/Errors.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, HostAccount, Runtime } from "./core/Runtime.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
@@ -22,10 +21,31 @@ import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";
 import { ExecuteHook, PipeHook, Pipeline } from "./core/Pipeline.sol";
 import { Budget, Budgets } from "./core/Budget.sol";
 import { BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook, Settlement } from "./core/Settlement.sol";
-import { UnexpectedAmount } from "./utils/Errors.sol";
 import { ForwardHook, Portal } from "./core/Portal.sol";
 import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Quote, Position, Tx } from "./core/Types.sol";
 import { Validator } from "./core/Validator.sol";
 
-
-
+// Shared protocol errors.
+import {
+    InsufficientValue,
+    InvalidAccount,
+    InvalidAsset,
+    InvalidContract,
+    InvalidId,
+    InvalidPreimage,
+    NotDivisible,
+    OutOfBounds,
+    OutOfRange,
+    QueryFailed,
+    SendFailed,
+    UnauthorizedAsset,
+    UnconsumedData,
+    UnexpectedAmount,
+    UnexpectedInput,
+    UnexpectedPosition,
+    UnexpectedState,
+    UnexpectedValue,
+    ValueOverflow,
+    ZeroAddress,
+    ZeroAmount
+} from "./utils/Errors.sol";
