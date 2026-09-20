@@ -15,7 +15,7 @@ import { Nodes } from "./utils/Nodes.sol";
 import { Positions } from "./utils/Positions.sol";
 import { Layout } from "./utils/Layout.sol";
 import { Flags } from "./utils/Flags.sol";
-import { OutOfRange, InsufficientValue, InvalidAccount, InvalidAsset, InvalidContract, InvalidId, InvalidPreimage, NotDivisible, OutOfBounds, UnauthorizedAsset, UnconsumedData, UnexpectedAmount, UnexpectedPosition, UnexpectedValue, ValueOverflow, ZeroAddress, ZeroAmount} from "./utils/Errors.sol";
+import { OutOfRange, InsufficientValue, InvalidAccount, InvalidAsset, InvalidContract, InvalidId, InvalidPreimage, NotDivisible, OutOfBounds, QueryFailed, SendFailed, UnauthorizedAsset, UnconsumedData, UnexpectedAmount, UnexpectedPosition, UnexpectedValue, ValueOverflow, ZeroAddress, ZeroAmount} from "./utils/Errors.sol";
 import { addrOr, applyBps, beforeBps, bytes32ToInt, bytes32ToString, clear8, clear16, clear32, clear64, divisible, ensureAddr, ensureContract, hash32, intToBytes32, isFamily, matchesBase, MAX_BPS, max8, max16, max24, max32, max40, max64, max96, max128, max160, replace8, replace16, replace32, replace64, retryTicket, toLocalBase, toUnspecifiedBase } from "./utils/Utils.sol";
 
 

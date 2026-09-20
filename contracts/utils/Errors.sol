@@ -13,6 +13,12 @@ error ZeroAddress();
 /// @dev Thrown when an address does not contain deployed bytecode.
 error InvalidContract();
 
+/// @dev Thrown when a query fails.
+error QueryFailed();
+
+/// @dev Thrown when sending the chain asset fails.
+error SendFailed();
+
 /// @dev Thrown when an account ID does not match the expected family or type.
 error InvalidAccount();
 
