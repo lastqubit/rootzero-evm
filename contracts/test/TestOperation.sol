@@ -9,8 +9,7 @@ using Executions for Execution;
 contract TestOperation {
 
     function testOpenSources(
-        bytes calldata state,
-        bytes calldata input
+        bytes calldata context
     ) external pure returns (bool) {
         uint descriptor = Executions.describe(
             Specs.Balance,
@@ -19,7 +18,7 @@ contract TestOperation {
             0
         );
         Execution memory exec;
-        exec.open(descriptor, 0, 0, state, input);
+        exec.openContext(descriptor, 0, context);
         return true;
     }
 }

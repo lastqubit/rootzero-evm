@@ -42,18 +42,16 @@ abstract contract MyCommand is CommandBase {
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, myCommandOne);
+    }
 
-        while (exec.more()) {
-            (uint targetHost, bytes32 asset, uint amount) = unpackInput(exec);
+    function myCommandOne(Execution memory exec) private {
+        (uint targetHost, bytes32 asset, uint amount) = unpackInput(exec);
 
-            // Delegate to the implementer to move the asset to the selected host.
-            sendToHost(targetHost, asset, amount);
+        // Delegate to the implementer to move the asset to the selected host.
+        sendToHost(targetHost, asset, amount);
 
-            // Append a CUSTODY block recording that this asset is now held by `targetHost`.
-            exec.outputCustody(HostAmount({host: targetHost, asset: asset, amount: amount}));
-        }
-
-        return exec.close();
+        // Append a CUSTODY block recording that this asset is now held by `targetHost`.
+        exec.outputCustody(HostAmount({host: targetHost, asset: asset, amount: amount}));
     }
 }

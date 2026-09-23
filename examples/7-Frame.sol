@@ -55,16 +55,13 @@ abstract contract MyCommand is CommandBase {
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        // Each callback decodes one payment with the command-local unpack helper.
+        return runCommand(context, descriptor, myCommandOne);
+    }
 
-        // The input can batch multiple payment blocks. Each one is decoded
-        // with the command-local unpack helper above.
-        while (exec.more()) {
-            (bytes32 asset, uint amount, uint status) = unpackPayment(exec);
-            emit PaymentSeen(asset, amount, status);
-        }
-
-        return exec.close();
+    function myCommandOne(Execution memory exec) private {
+        (bytes32 asset, uint amount, uint status) = unpackPayment(exec);
+        emit PaymentSeen(asset, amount, status);
     }
 }
 

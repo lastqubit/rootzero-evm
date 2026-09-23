@@ -39,13 +39,11 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
     /// @return Empty response bytes.
     /// @return Remaining native budget credit.
     function portDispatchPayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portDispatchPayableOne);
+    }
 
-        while (exec.more()) {
-            (uint portal, uint resources, bytes calldata payload) = exec.unpackDispatch();
-            dispatchTo(portal, resources, payload, exec);
-        }
-        
-        return exec.close();
+    function portDispatchPayableOne(Execution memory exec) private {
+        (uint portal, uint resources, bytes calldata payload) = exec.unpackDispatch();
+        dispatchTo(portal, resources, payload, exec);
     }
 }

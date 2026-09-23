@@ -21,15 +21,13 @@ abstract contract MyCommand is CommandBase {
 
     function myCommand(
         bytes calldata context
-    ) external onlyCommand returns (bytes memory output, uint credit) {
-        Execution memory exec = openCommand(context, descriptor);
+    ) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, myCommandOne);
+    }
 
-        while (exec.more()) {
-            uint amount = exec.unpackNode();
-            credit += amount;
-        }
-
-        return exec.close(credit);
+    function myCommandOne(Execution memory exec) private pure {
+        uint amount = exec.unpackNode();
+        exec.addToBudget(amount);
     }
 }
 

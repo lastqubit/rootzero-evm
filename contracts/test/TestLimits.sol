@@ -45,7 +45,7 @@ contract TestLimits {
         position.debt = debt;
         if (execution) {
             Execution memory exec;
-            exec.open(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, 0, input[:0], input);
+            exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, input);
             Positions.requireLimits(position, exec.unpackLimits());
             return exec.unpackLimits();
         }
@@ -73,7 +73,7 @@ contract TestLimits {
 
     function execute(bytes calldata input) external pure returns (bytes memory) {
         Execution memory exec;
-        exec.open(Executions.describe(Specs.Empty, Specs.Limits, Specs.Limits, 0), 0, 0, input[:0], input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Limits, 0), 0, input);
         while (exec.more()) {
             exec.outputLimits(exec.unpackLimits());
         }

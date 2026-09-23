@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { HostAmount, Position, Tx } from "../core/Types.sol";
+import { Position, Tx } from "../core/Types.sol";
 import { Specs } from "../codec/Specs.sol";
 import { Blocks, Cur, Decoders, Memory, Sizes, Writer } from "../Codec.sol";
 import {Cursors} from "../utils/Cursors.sol";
@@ -311,16 +311,6 @@ contract TestCursorHelper {
         (uint abs, uint end) = Memory.bounds(data, Sizes.Transaction);
         if (end - abs != Sizes.Transaction) revert Blocks.InvalidBlock();
         return Memory.unpackTransaction(abs);
-    }
-
-    function testUnpackBalanceForHost(
-        bytes calldata source,
-        uint host_
-    ) external pure returns (uint host, bytes32 asset, uint amount, uint i) {
-        Cur memory cur = Decoders.open(source);
-        HostAmount memory value = cur.unpackBalanceForHost(host_);
-        i = relativePosition(cur, source);
-        return (value.host, value.asset, value.amount, i);
     }
 
     function testUnpackHostAccountAsset(

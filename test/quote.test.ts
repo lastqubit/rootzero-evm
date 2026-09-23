@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { MaxUint128, packLimits, concat, encodeBlock, exactSpec, Keys, encodePositionBlock, encodeQuoteBlock, encodeUserAccount } from "./helpers/blocks.js";
+import { encodeContextBlock, MaxUint128, packLimits, concat, encodeBlock, exactSpec, Keys, encodePositionBlock, encodeQuoteBlock, encodeUserAccount } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Quote codec", () => {
@@ -46,7 +46,7 @@ describe("Quote codec", () => {
       for (const scalar of [true, false]) {
         expect(await helper.write(value, scalar)).to.equal(block);
         expect(Array.from(await helper.decode(block, scalar))).to.deep.equal(value);
-        expect(await helper.execute(state, block, scalar)).to.equal(block);
+        expect(await helper.execute(encodeContextBlock(ethers.ZeroHash, state, block), scalar)).to.equal(block);
       }
     }
   });
@@ -90,7 +90,7 @@ describe("Quote codec", () => {
 
     it(`consumes quotes from input independently of position state (${scalar})`, async () => {
       const second = encodeQuoteBlock(liability, asset, packLimits(0n, 0n));
-      expect(await helper.execute(concat(state, state), concat(encoded, second), scalar))
+      expect(await helper.execute(encodeContextBlock(ethers.ZeroHash, concat(state, state), concat(encoded, second)), scalar))
         .to.equal(concat(encoded, second));
     });
 
@@ -113,7 +113,7 @@ describe("Quote codec", () => {
         asset, liability, counterparty, ethers.toBeHex(packLimits(123n, 456n), 32),
       ]));
       await expect(helper.decode(previous, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
-      await expect(helper.execute(state, previous, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+      await expect(helper.execute(encodeContextBlock(ethers.ZeroHash, state, previous), scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
     it(`rejects the legacy five-word quote (${scalar})`, async () => {
@@ -121,7 +121,7 @@ describe("Quote codec", () => {
         asset, ethers.toBeHex(123n, 32), liability, ethers.toBeHex(456n, 32), counterparty,
       ]));
       await expect(helper.decode(legacy, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
-      await expect(helper.execute(state, legacy, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+      await expect(helper.execute(encodeContextBlock(ethers.ZeroHash, state, legacy), scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
   }
 });

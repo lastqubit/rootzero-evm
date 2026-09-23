@@ -39,18 +39,14 @@ abstract contract Provision is CommandBase, ProvisionHook {
     /// @param context Command context carrying the ALLOCATION input stream.
     /// @return CUSTODY block stream matching the provisioned allocations.
     /// @return Zero native budget credit.
-    function provision(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function provision(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, provisionOne);
+    }
 
-        while (exec.more()) {
-            HostAmount memory allocation = exec.unpackAllocationValue();
-            provision(exec.account, allocation);
-            exec.outputCustody(allocation);
-        }
-
-        return exec.close();
+    function provisionOne(Execution memory exec) private {
+        HostAmount memory allocation = exec.unpackAllocationValue();
+        provision(exec.account, allocation);
+        exec.outputCustody(allocation);
     }
 }
 
@@ -69,18 +65,13 @@ abstract contract ProvisionPayable is CommandBase, ProvisionPayableHook {
     /// @param context Command context carrying the ALLOCATION input stream.
     /// @return CUSTODY block stream matching the provisioned allocations.
     /// @return Native value to add to the caller's budget.
-    function provisionPayable(
-        bytes calldata context
-    ) external payable onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function provisionPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, provisionPayableOne);
+    }
 
-        while (exec.more()) {
-            HostAmount memory allocation = exec.unpackAllocationValue();
-            provision(exec.account, allocation, exec);
-            exec.outputCustody(allocation);
-        }
-
-        return exec.close();
+    function provisionPayableOne(Execution memory exec) private {
+        HostAmount memory allocation = exec.unpackAllocationValue();
+        provision(exec.account, allocation, exec);
+        exec.outputCustody(allocation);
     }
 }
-

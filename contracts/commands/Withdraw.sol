@@ -33,16 +33,12 @@ abstract contract Withdraw is CommandBase, WithdrawHook, ActionAnnot {
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
-    function withdraw(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function withdraw(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, withdrawOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackBalance();
-            withdraw(exec.account, asset, amount);
-        }
-
-        return exec.close();
+    function withdrawOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackBalance();
+        withdraw(exec.account, asset, amount);
     }
 }

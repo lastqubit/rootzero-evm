@@ -345,13 +345,14 @@ contract TestUtils is CommandBase {
         remainingAfter = exec.budget;
     }
 
-    function testCloseWithCredit(
+    function testAddToBudgetAndClose(
         uint remaining,
         uint extraCredit
-    ) external returns (uint credit, uint remainingAfter) {
+    ) external pure returns (uint credit, uint remainingAfter) {
         Execution memory exec;
         exec.budget = remaining;
-        (, credit) = exec.close(extraCredit);
+        exec.addToBudget(extraCredit);
+        (, credit) = exec.close();
         remainingAfter = exec.budget;
     }
 

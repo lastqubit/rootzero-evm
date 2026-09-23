@@ -29,20 +29,16 @@ abstract contract Cashout is CommandBase, CashoutHook, ActionAnnot {
 
     /// @notice Withdraw chain-asset BALANCE state from the command account.
     /// @param context Command context carrying a BALANCE state stream.
-    /// @return output Empty output state.
-    /// @return credit Zero native budget credit.
-    function cashout(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory output, uint credit) {
-        Execution memory exec = openCommand(context, descriptor);
+    /// @return Empty output state.
+    /// @return Zero native budget credit.
+    function cashout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, cashoutOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackBalance();
-            if (asset != chainAsset) revert InvalidAsset();
-            cashout(exec.account, amount);
-        }
-
-        return exec.close();
+    function cashoutOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackBalance();
+        if (asset != chainAsset) revert InvalidAsset();
+        cashout(exec.account, amount);
     }
 }
 

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import { InputEndpointBase } from "../core/Endpoint.sol";
-import { Executions } from "../execution/Execution.sol";
+import { Execution, Executions } from "../execution/Execution.sol";
 import { Specs } from "../codec/Specs.sol";
 import { Nodes } from "../utils/Nodes.sol";
 
@@ -40,5 +40,27 @@ abstract contract QueryBase is InputEndpointBase {
     ) internal returns (uint id, uint published) {
         id = Nodes.toQuery(name, address(this), uint8(descriptor));
         published = endpoint(id, name, descriptor);
+    }
+
+    /// @notice Query an input stream through a view callback per item.
+    /// @dev Opens raw input with no account, state, or native-value budget.
+    /// The callback may read contract state and update execution memory, and must
+    /// advance input on each iteration. Empty input invokes no callback. No
+    /// progress guard is enforced.
+    /// @param input Input block stream.
+    /// @param descriptor Packed input-only endpoint descriptor.
+    /// @param process Internal view callback that consumes and answers one item.
+    /// @return output Final encoded response block stream.
+    function runQuery(
+        bytes calldata input,
+        uint descriptor,
+        function(Execution memory) internal view process
+    ) internal view returns (bytes memory output) {
+        Execution memory exec;
+        Executions.openInput(exec, descriptor, 0, input);
+        while (Executions.more(exec)) {
+            process(exec);
+        }
+        return Executions.finish(exec);
     }
 }

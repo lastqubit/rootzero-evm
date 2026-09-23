@@ -3,6 +3,7 @@ pragma solidity ^0.8.33;
 
 import {CallerAccess} from "../core/Access.sol";
 import {EndpointBase} from "../core/Endpoint.sol";
+import {Buffers} from "../codec/Buffers.sol";
 import {Blocks} from "../codec/Blocks.sol";
 import {Specs} from "../codec/Specs.sol";
 import {HostAmount, Position} from "../core/Types.sol";
@@ -70,14 +71,55 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @param descriptor Packed command endpoint descriptor.
     /// @return exec Execution with a resizable output writer initialized from its descriptor hint.
     function openCommand(bytes calldata context, uint descriptor) internal view returns (Execution memory exec) {
-        uint abs;
-        assembly ("memory-safe") {
-            abs := context.offset
+        exec.openContext(descriptor, msg.value, context);
+    }
+
+    /// @notice Run a context through a callback for each batch item.
+    /// @dev Opens exactly one CONTEXT using `msg.value` as its initial budget.
+    /// The callback shares the execution and must advance state or input on each
+    /// iteration until both sources are consumed. No progress guard is enforced.
+    /// Source pairing, parent boundaries, and access control remain the caller's
+    /// responsibility.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// @param descriptor Packed endpoint descriptor.
+    /// @param process Internal callback that consumes and processes one batch item.
+    /// @return output Final encoded output block stream.
+    /// @return credit Remaining native-value budget.
+    function runCommand(
+        bytes calldata context,
+        uint descriptor,
+        function(Execution memory) internal process
+    ) internal returns (bytes memory output, uint credit) {
+        Execution memory exec = openCommand(context, descriptor);
+
+        while (Executions.more(exec)) {
+            process(exec);
         }
 
-        (bytes32 account, bytes calldata state, bytes calldata input, uint end) = Blocks.unpackContext(abs);
-        if (end != abs + context.length) revert Blocks.InvalidBlock();
+        // Normal loop exit already proves that neither source has unread bytes.
+        output = exec.output.length == 0 ? new bytes(0) : Buffers.finish(exec.writer, exec.output);
+        credit = exec.budget;
+        exec.budget = 0;
+    }
 
-        exec.open(descriptor, account, msg.value, state, input);
+    /// @notice Run a context through a callback exactly once.
+    /// @dev Opens exactly one CONTEXT using `msg.value` as its initial budget.
+    /// Invokes the callback even when both sources are empty, then requires both
+    /// sources to be fully consumed. The callback defines required input and
+    /// state shapes; parent boundaries and access control remain the caller's
+    /// responsibility.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// @param descriptor Packed endpoint descriptor.
+    /// @param process Internal callback that processes the complete execution.
+    /// @return output Final encoded output block stream.
+    /// @return credit Remaining native-value budget.
+    function runCommandOnce(
+        bytes calldata context,
+        uint descriptor,
+        function(Execution memory) internal process
+    ) internal returns (bytes memory output, uint credit) {
+        Execution memory exec = openCommand(context, descriptor);
+        process(exec);
+        return Executions.close(exec);
     }
 }

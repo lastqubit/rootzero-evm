@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 // Example 4: Batch Processing
 //
 // Inputs can contain multiple blocks of the same type.
-// This example shows how to iterate over all AMOUNT blocks in a input
+// This example uses the runner to process all AMOUNT blocks in input
 // and produce a matching BALANCE block for each one.
 //
 // Execution owns the response buffer and grows it through output helpers.
@@ -23,19 +23,14 @@ abstract contract MyCommand is CommandBase {
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        // Open and validate both descriptor lanes and initialize the output buffer.
-        Execution memory exec = openCommand(context, descriptor);
+        // runCommand owns opening, batch iteration, and finalization. Empty input is valid.
+        return runCommand(context, descriptor, myCommandOne);
+    }
 
-        // Walk every AMOUNT block in the current input run.
-        while (exec.more()) {
-            // Unpack asset and amount from the next AMOUNT block.
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-
-            // Apply your app logic here (e.g. debit the account), then append a BALANCE block.
-            exec.outputBalance(asset, amount);
-        }
-
-        return exec.close();
+    function myCommandOne(Execution memory exec) private pure {
+        // Unpack one AMOUNT and append its matching BALANCE.
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        exec.outputBalance(asset, amount);
     }
 }
 

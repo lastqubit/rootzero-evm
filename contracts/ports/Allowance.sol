@@ -24,14 +24,12 @@ abstract contract RequestAllowancePort is PortBase, AllowanceHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portRequestAllowance(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portRequestAllowanceOne);
+    }
+
+    function portRequestAllowanceOne(Execution memory exec) private {
         uint peer = caller();
-
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            allowance(peer, asset, amount);
-        }
-
-        return exec.close();
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        allowance(peer, asset, amount);
     }
 }

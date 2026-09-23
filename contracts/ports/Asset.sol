@@ -34,14 +34,12 @@ abstract contract AllowAssetPort is PortBase, AllowAssetHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portAllowAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portAllowAssetOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            allowAsset(asset);
-        }
-
-        return exec.close();
+    function portAllowAssetOne(Execution memory exec) private {
+        bytes32 asset = exec.unpackAsset();
+        allowAsset(asset);
     }
 }
 
@@ -60,14 +58,12 @@ abstract contract DenyAssetPort is PortBase, DenyAssetHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portDenyAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portDenyAssetOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            denyAsset(asset);
-        }
-
-        return exec.close();
+    function portDenyAssetOne(Execution memory exec) private {
+        bytes32 asset = exec.unpackAsset();
+        denyAsset(asset);
     }
 }
 
@@ -88,14 +84,12 @@ abstract contract RequestAssetPort is PortBase, RequestAssetHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portRequestAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portRequestAssetOne);
+    }
+
+    function portRequestAssetOne(Execution memory exec) private {
         uint peer = caller();
-
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            requestAsset(peer, asset, amount);
-        }
-
-        return exec.close();
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        requestAsset(peer, asset, amount);
     }
 }

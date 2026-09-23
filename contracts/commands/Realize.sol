@@ -39,15 +39,13 @@ abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.
     function realize(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, realizeOne);
+    }
 
-        while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            position = realize(exec.account, position);
-            exec.requireLimits(position.amount, position.debt);
-            exec.outputPosition(position);
-        }
-
-        return exec.close();
+    function realizeOne(Execution memory exec) private {
+        Position memory position = exec.unpackPositionValue();
+        position = realize(exec.account, position);
+        exec.requireLimits(position.amount, position.debt);
+        exec.outputPosition(position);
     }
 }

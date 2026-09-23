@@ -34,17 +34,16 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
     /// @return Zero native budget credit.
     function portPipePayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
-        uint budget = exec.drainBudget();
 
         bytes32 account;
         while (exec.more()) {
             bytes calldata state;
             bytes calldata input;
             (account, state, input) = exec.unpackContext();
-            budget = pipe(account, state, input, budget);
+            exec.budget = pipe(account, state, input, exec.budget);
         }
 
-        if (budget != 0) cashin(account, budget);
+        if (exec.budget != 0) cashin(account, exec.drainBudget());
 
         return exec.close();
     }

@@ -31,18 +31,14 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
     /// @param context Command context carrying the AMOUNT input stream.
     /// @return BALANCE block stream matching the debited amounts.
     /// @return Zero native budget credit.
-    function debitAccount(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function debitAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, debitAccountOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            debitAccount(exec.account, asset, amount);
-            exec.outputBalance(asset, amount);
-        }
-
-        return exec.close();
+    function debitAccountOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        debitAccount(exec.account, asset, amount);
+        exec.outputBalance(asset, amount);
     }
 }
 

@@ -29,14 +29,12 @@ abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portBook(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portBookOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 from, bytes32 liability, uint debt) = exec.unpackAccountAmount();
-            (bytes32 to, bytes32 asset, uint amount) = exec.unpackAccountAmount();
-            book(from, to, asset, amount, liability, debt);
-        }
-
-        return exec.close();
+    function portBookOne(Execution memory exec) private {
+        (bytes32 from, bytes32 liability, uint debt) = exec.unpackAccountAmount();
+        (bytes32 to, bytes32 asset, uint amount) = exec.unpackAccountAmount();
+        book(from, to, asset, amount, liability, debt);
     }
 }

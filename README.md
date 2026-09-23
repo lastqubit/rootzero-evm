@@ -446,6 +446,24 @@ abstract contract MyCommand is CommandBase {
 }
 ```
 
+Callback runners in `CommandBase`, `PortBase`, and `QueryBase` can replace the standard lifecycle:
+`runCommand(context, descriptor, callback)` processes command batches,
+`runCommandOnce(context, descriptor, callback)` invokes its callback exactly once,
+`runPort(input, descriptor, callback)` processes port batches and returns output plus
+remaining value credit, and `runQuery(input, descriptor, callback)` processes queries
+through an `internal view` callback and returns only response bytes. Each callback
+receives the shared `Execution memory`. Batch callbacks must consume an item on
+every invocation; `runCommandOnce` also invokes its callback for empty sources and rejects
+leftover data afterward. Entry-point access modifiers remain in place.
+
+Use `<endpoint>One` for per-item private callbacks, such as `depositOne` and
+`portCreditAccountOne`, and `<endpoint>Once` for whole-input callbacks passed to
+`runCommandOnce`, such as `relayPayableOnce`. Endpoint-specific names allow composing
+endpoint mixins: Solidity rejects
+conflicting private callback signatures in multiple base contracts. Keep explicit
+opening and closing for custom lifecycle work, such as admin authorization before
+processing or pipe settlement after the entire batch.
+
 Deposit hooks return the actual amount that becomes live `#balance` state.
 Implementations can therefore deduct external ingress fees or report an
 otherwise adjusted received amount without overstating the value passed to the

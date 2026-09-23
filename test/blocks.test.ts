@@ -220,7 +220,7 @@ describe("Cursors", () => {
         ethers.concat([new Uint8Array(5), expected]),
       );
       expect(await blocksHelper.executionOutputPosition(asset, positionAmount, liability, debt)).to.equal(expected);
-      expect(await blocksHelper.executionUnpackPosition(expected)).to.deep.equal([
+      expect(await blocksHelper.executionUnpackPosition(encodeContextBlock(ethers.ZeroHash, expected, "0x"))).to.deep.equal([
         asset, positionAmount, liability, debt, ethers.ZeroHash,
       ]);
       expect(await helper.testUnpackPosition(expected)).to.deep.equal([asset, positionAmount, liability, debt, ethers.ZeroHash]);
@@ -259,7 +259,7 @@ describe("Cursors", () => {
         await expect(helper.testMemoryUnpackPositionValue(data)).to.be.revertedWithCustomError(helper, "InvalidBlock");
         await expect(helper.testUnpackPosition(data)).to.be.revertedWithCustomError(helper,
           ethers.dataLength(data) < 168 ? "OutOfBounds" : "InvalidBlock");
-        await expect(blocksHelper.executionUnpackPosition(data)).to.be.revertedWithCustomError(blocksHelper,
+        await expect(blocksHelper.executionUnpackPosition(encodeContextBlock(ethers.ZeroHash, data, "0x"))).to.be.revertedWithCustomError(blocksHelper,
           ethers.dataLength(data) < 168 ? "OutOfBounds" : "InvalidBlock");
       }
       expect(await helper.testWritePositionCounterparty(ethers.ZeroHash))
@@ -276,7 +276,7 @@ describe("Cursors", () => {
       expect(await helper.testUnpackPositionValue(data)).to.deep.equal(expected);
       expect(await helper.testMemoryUnpackPosition(data)).to.deep.equal(expected);
       expect(await helper.testMemoryUnpackPositionValue(data)).to.deep.equal(expected);
-      expect(await blocksHelper.executionUnpackPosition(data)).to.deep.equal(expected);
+      expect(await blocksHelper.executionUnpackPosition(encodeContextBlock(ethers.ZeroHash, data, "0x"))).to.deep.equal(expected);
     });
 
     it("position decoder rejects another four-word block", async () => {
@@ -686,7 +686,7 @@ describe("Cursors", () => {
         encodeAmountBlock(asset, 4n),
       );
 
-      expect(await blocksHelper.executionWriterHint("0x", input, 0, amountSpec, balanceSpec))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, amountSpec, balanceSpec))
         .to.equal(4n * 72n);
     });
 
@@ -701,9 +701,7 @@ describe("Cursors", () => {
       );
 
       expect(
-        await blocksHelper.executionWriterHint(
-          state,
-          input,
+        await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, state, input),
           balanceSpec,
           amountSpec,
           positionSpec,
@@ -720,7 +718,7 @@ describe("Cursors", () => {
         encodeBalanceBlock(asset, 3n),
       );
 
-      expect(await blocksHelper.executionWriterHint(state, "0x", balanceSpec, 0, amountSpec))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, state, "0x"), balanceSpec, 0, amountSpec))
         .to.equal(3n * 72n);
     });
 
@@ -735,7 +733,7 @@ describe("Cursors", () => {
       const noSource = await blocksHelper.describeSpecs(0, 0, exactSpec(Keys.Balance, 64));
       expect((noSource >> 96n) & 0xffffffffffffffffn).to.equal(0n);
       expect((noSource >> 64n) & 0xffffffffn).to.equal(72n);
-      expect(await blocksHelper.executionWriterHint("0x", "0x", 0, 0, exactSpec(Keys.Balance, 64)))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", "0x"), 0, 0, exactSpec(Keys.Balance, 64)))
         .to.equal(72n);
     });
 
@@ -744,16 +742,16 @@ describe("Cursors", () => {
       const output = exactSpec(Keys.Balance, 64);
       // Seventeen empty blocks occupy one hinted block: deliberately underestimate.
       const small = concat(...Array.from({ length: 17 }, () => encodeBytesBlock("0x")));
-      expect(await blocksHelper.executionWriterHint("0x", small, 0, spec, output))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", small), 0, spec, output))
         .to.equal(72n);
       // Three encoded 264-byte blocks do not divide by the hinted 136-byte block.
       const large = concat(...Array.from({ length: 3 }, () => encodeBytesBlock("0x" + "a5".repeat(256))));
-      expect(await blocksHelper.executionWriterHint("0x", large, 0, spec, output))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", large), 0, spec, output))
         .to.equal(3n * 72n);
-      expect(await blocksHelper.executionWriterHint(small, "0x", spec, 0, output))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, small, "0x"), spec, 0, output))
         .to.equal(72n);
       // Declared state remains the selected source even when empty.
-      expect(await blocksHelper.executionWriterHint("0x", small, spec, spec, output))
+      expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", small), spec, spec, output))
         .to.equal(0n);
     });
 
@@ -782,7 +780,7 @@ describe("Cursors", () => {
 
     it("opens descriptor state and input cursors with initialized writers", async () => {
       const [stateCursor, stateWriter, inputCursor, inputWriter] =
-        await blocksHelper.descriptorOpens("0x1234", "0xaabbcc");
+        await blocksHelper.descriptorOpens(encodeContextBlock(ethers.ZeroHash, "0x1234", "0x"), "0xaabbcc");
 
       expect(((stateCursor >> 96n) & 0xffffffffn) - ((stateCursor >> 64n) & 0xffffffffn)).to.equal(2n);
       expect(stateCursor >> 128n).to.equal(3n);
@@ -800,7 +798,7 @@ describe("Cursors", () => {
       const state = encodeBalanceBlock(stateAsset, 41n);
       const input = encodeListBlock(encodeAmountBlock(inputAsset, 42n));
 
-      expect(await blocksHelper.executionEnterAmount(state, input))
+      expect(await blocksHelper.executionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
         .to.deep.equal([stateAsset, 41n, inputAsset, 42n]);
     });
 
@@ -808,10 +806,10 @@ describe("Cursors", () => {
       const state = encodeBalanceBlock(ethers.zeroPadValue("0x31", 32), 41n);
       const input = encodeListBlock(encodeAmountBlock(ethers.zeroPadValue("0x32", 32), 42n));
 
-      expect(await blocksHelper.executionEnterAmount(state, input))
-        .to.deep.equal(await blocksHelper.legacyExecutionEnterAmount(state, input));
-      const specialized = await blocksHelper.executionEnterAmount.estimateGas(state, input);
-      const legacy = await blocksHelper.legacyExecutionEnterAmount.estimateGas(state, input);
+      expect(await blocksHelper.executionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
+        .to.deep.equal(await blocksHelper.legacyExecutionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)));
+      const specialized = await blocksHelper.executionEnterAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
+      const legacy = await blocksHelper.legacyExecutionEnterAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
       // Whole-call estimates include selector dispatch and cursor initialization.
       // Allow small compiler/layout changes while detecting a material regression.
       expect(specialized * 100n).to.be.lessThan(legacy * 101n);
@@ -931,7 +929,7 @@ describe("Cursors", () => {
       expect(await blocksHelper.budgetUseValue.staticCall(3n, { value: 5n }))
         .to.deep.equal([3n, 2n]);
       expect(await blocksHelper.budgetAddValue(2n, 3n)).to.equal(5n);
-      expect(await blocksHelper.executionAddValue(2n, 3n)).to.equal(5n);
+      expect(await blocksHelper.executionAddToBudget(2n, 3n)).to.equal(5n);
       expect(await blocksHelper.budgetDrain.staticCall({ value: 5n }))
         .to.deep.equal([5n, 0n]);
       expect(await blocksHelper.takeBudget.staticCall({ value: 5n }))
@@ -944,7 +942,7 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(blocksHelper, "InsufficientValue");
       for (const addValue of [
         () => blocksHelper.budgetAddValue(ethers.MaxUint256, 1n),
-        () => blocksHelper.executionAddValue(ethers.MaxUint256, 1n),
+        () => blocksHelper.executionAddToBudget(ethers.MaxUint256, 1n),
       ]) {
         let overflowed = false;
         try {
@@ -1102,16 +1100,6 @@ describe("Cursors", () => {
       expect(await helper.testCursorResize(10n, 6n, 20n)).to.deep.equal([6n, 20n]);
       await expect(helper.testCursorResize(10n, 6n, 5n))
         .to.be.revertedWithCustomError(helper, "OutOfBounds");
-    });
-
-    it("unpackBalanceForHost scopes a consumed BALANCE to the supplied host", async () => {
-      const host = 1234n;
-      const source = encodeBalanceBlock(asset, amount);
-      const [outHost, outAsset, outAmount, i] = await helper.testUnpackBalanceForHost(source, host);
-      expect(outHost).to.equal(host);
-      expect(outAsset).to.equal(asset);
-      expect(outAmount).to.equal(amount);
-      expect(i).to.equal(BigInt(ethers.getBytes(source).length));
     });
 
     it("open(source) creates an cursor over the complete source", async () => {
@@ -1498,7 +1486,7 @@ describe("Cursors", () => {
       const input = encodeBlock(custom, encodeAccountBlock(encodeUserAccount("0x12")));
       const state = encodeBalanceBlock(asset, amount);
 
-      expect(await blocksHelper.executionTakeBlock(state, input, custom, custom))
+      expect(await blocksHelper.executionTakeBlock(encodeContextBlock(ethers.ZeroHash, state, input), custom, custom))
         .to.deep.equal([input, asset, amount, true]);
     });
 
@@ -1508,7 +1496,7 @@ describe("Cursors", () => {
       const input = encodeBlock(custom, "0x1234");
       const state = encodeBalanceBlock(asset, amount);
 
-      await expect(blocksHelper.executionTakeBlock(state, input, custom, other))
+      await expect(blocksHelper.executionTakeBlock(encodeContextBlock(ethers.ZeroHash, state, input), custom, other))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
     });
 
@@ -1518,7 +1506,7 @@ describe("Cursors", () => {
       const first = ethers.zeroPadValue("0x41", 32);
       const second = ethers.zeroPadValue("0x42", 32);
 
-      expect(await blocksHelper.executionRaw(state, input))
+      expect(await blocksHelper.executionRaw(encodeContextBlock(ethers.ZeroHash, state, input)))
         .to.deep.equal([state, "0x", input]);
       expect(await blocksHelper.executionRawEmptyState(input)).to.equal("0x");
       expect(await helper.testDecoderRaw(concat(first, second), 32n)).to.equal(second);
@@ -1526,7 +1514,7 @@ describe("Cursors", () => {
 
     it("takeRawState returns the unread state source and consumes it", async () => {
       const state = encodeBalanceBlock(asset, amount);
-      expect(await blocksHelper.executionTakeRawState(state)).to.deep.equal([state, true]);
+      expect(await blocksHelper.executionTakeRawState(encodeContextBlock(ethers.ZeroHash, state, "0x"))).to.deep.equal([state, true]);
     });
 
     it("takeRawInput returns the unread input source and consumes it", async () => {
@@ -1539,12 +1527,12 @@ describe("Cursors", () => {
       const input = encodeAmountBlock(asset, amount);
       const stateSpec = exactSpec(Keys.Balance, 64);
       const inputSpec = exactSpec(Keys.Amount, 64);
-      expect(await blocksHelper.executionForwardRaw(state, input, stateSpec, inputSpec)).to.equal("0x");
-      expect(await blocksHelper.executionForwardRaw("0x", input, 0, inputSpec)).to.equal("0x");
-      expect(await blocksHelper.executionForwardRaw(state, "0x", stateSpec, 0)).to.equal("0x");
-      await expect(blocksHelper.executionForwardRaw(state, input, 0, inputSpec))
+      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, "0x"), stateSpec, 0)).to.equal("0x");
+      await expect(blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), 0, inputSpec))
         .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
-      await expect(blocksHelper.executionForwardRaw(state, input, stateSpec, 0))
+      await expect(blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, 0))
         .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
     });
 
@@ -1554,7 +1542,7 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
 
       const state = encodeBalanceBlock(asset, amount);
-      await expect(blocksHelper.executionFinishUnreadState(state))
+      await expect(blocksHelper.executionFinishUnreadState(encodeContextBlock(ethers.ZeroHash, state, "0x")))
         .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
     });
 
@@ -1745,7 +1733,7 @@ describe("Cursors", () => {
       );
       const input = encodeAmountBlock(asset, 3n);
 
-      expect(await operation.testOpenSources(state, input)).to.equal(true);
+      expect(await operation.testOpenSources(encodeContextBlock(ethers.ZeroHash, state, input))).to.equal(true);
     });
 
     it("does not pre-scan or reconcile state and input counts", async () => {
@@ -1756,7 +1744,7 @@ describe("Cursors", () => {
       );
       const input = encodeAmountBlock(asset, 4n);
 
-      expect(await operation.testOpenSources(state, input)).to.equal(true);
+      expect(await operation.testOpenSources(encodeContextBlock(ethers.ZeroHash, state, input))).to.equal(true);
     });
   });
 

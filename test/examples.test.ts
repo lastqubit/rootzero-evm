@@ -48,6 +48,11 @@ describe("Examples", () => {
 
       expect(output).to.equal(encodeBalanceBlock(asset, 12n));
       expect(transactions).to.equal(0n);
+      await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", "0x")))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
+      const amount = encodeAmountBlock(asset, 12n);
+      await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", concat(amount, amount))))
+        .to.be.revertedWithCustomError(host, "UnconsumedData");
     });
 
     it("builds and runs the batch command example", async () => {

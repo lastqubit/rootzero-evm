@@ -31,14 +31,12 @@ abstract contract AssetStatus is QueryBase, AssetStatusHook {
     /// @param input Block-stream input consisting of `asset { bytes32 asset }` blocks.
     /// @return Block-stream response containing one `status { uint code }` form block per asset block.
     function assetStatus(bytes calldata input) external view returns (bytes memory) {
-        Execution memory exec = openInput(input, descriptor);
+        return runQuery(input, descriptor, assetStatusOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            uint status = assetStatus(asset);
-            exec.outputStatus(status);
-        }
-
-        return close(exec);
+    function assetStatusOne(Execution memory exec) private view {
+        bytes32 asset = exec.unpackAsset();
+        uint status = assetStatus(asset);
+        exec.outputStatus(status);
     }
 }

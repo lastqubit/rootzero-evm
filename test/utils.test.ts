@@ -775,8 +775,8 @@ describe("Utils", () => {
       expect(remaining).to.equal(0n);
     });
 
-    it("combines additional command credit with the remaining execution budget", async () => {
-      const [credit, remaining] = await utils.testCloseWithCredit.staticCall(40n, 2n);
+    it("returns added budget on close and clears the execution budget", async () => {
+      const [credit, remaining] = await utils.testAddToBudgetAndClose.staticCall(40n, 2n);
 
       expect(credit).to.equal(42n);
       expect(remaining).to.equal(0n);

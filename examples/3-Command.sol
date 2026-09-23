@@ -21,21 +21,23 @@ abstract contract MyCommand is CommandBase {
 
     constructor() {
         // Announce this command to the rootzero protocol.
-        // Args: label, state, input, output, selector override, funded.
+        // Args: name, state, input, output, flags.
         (, descriptor) = command("myCommand", Specs.Empty, Specs.Amount, Specs.Balance, 0);
     }
 
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        // onlyCommand checks that msg.sender is the trusted runtime / commander host.
-        Execution memory exec = openCommand(context, descriptor);
+        // onlyCommand enforces caller access. The runner opens and
+        // closes the execution; runCommandOnce requires this callback to consume all input.
+        return runCommandOnce(context, descriptor, myCommandOnce);
+    }
+
+    function myCommandOnce(Execution memory exec) private pure {
         (bytes32 asset, uint amount) = exec.unpackAmount();
 
         // Apply your app logic here (e.g. debit the account), then append a BALANCE block.
         exec.outputBalance(asset, amount);
-
-        return exec.close();
     }
 }
 

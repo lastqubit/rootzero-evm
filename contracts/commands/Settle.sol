@@ -48,14 +48,12 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function settle(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, settleOne);
+    }
 
-        while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            settle(exec.account, position);
-        }
-
-        return exec.close();
+    function settleOne(Execution memory exec) private {
+        Position memory position = exec.unpackPositionValue();
+        settle(exec.account, position);
     }
 }
 
@@ -76,14 +74,12 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function settlePayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, settlePayableOne);
+    }
 
-        while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            settle(exec.account, position, exec);
-        }
-
-        return exec.close();
+    function settlePayableOne(Execution memory exec) private {
+        Position memory position = exec.unpackPositionValue();
+        settle(exec.account, position, exec);
     }
 }
 

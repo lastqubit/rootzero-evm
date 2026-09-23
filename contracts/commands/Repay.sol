@@ -24,16 +24,14 @@ abstract contract Repay is CommandBase, RepayHook, ActionAnnot {
     /// @return Positions with zero debt and all other fields preserved.
     /// @return Zero native budget credit.
     function repay(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, repayOne);
+    }
 
-        while (exec.more()) {
-            Position memory position = exec.unpackPositionValue();
-            repay(exec.account, position);
-            position.debt = 0;
-            exec.outputPosition(position);
-        }
-        
-        return exec.close();
+    function repayOne(Execution memory exec) private {
+        Position memory position = exec.unpackPositionValue();
+        repay(exec.account, position);
+        position.debt = 0;
+        exec.outputPosition(position);
     }
 }
 

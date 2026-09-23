@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { deploy } from "./helpers/setup.js";
+import "./helpers/matchers.js";
 import {
   concat,
   encodeAssetBlock,
@@ -8,6 +9,14 @@ import {
 } from "./helpers/blocks.js";
 
 describe("AssetStatus", () => {
+  it("returns empty output for empty input and rejects a truncated trailing item", async () => {
+    const query = await deploy("TestAssetStatusQuery");
+    expect(await query["assetStatus(bytes)"].staticCall("0x")).to.equal("0x");
+    const input = concat(encodeAssetBlock(await query.allowedAssetId()), "0x01");
+    await expect(query["assetStatus(bytes)"].staticCall(input))
+      .to.be.revertedWithCustomError(query, "OutOfBounds");
+  });
+
   it("returns one status block for one asset query", async () => {
     const query = await deploy("TestAssetStatusQuery");
     const asset = await query.allowedAssetId();

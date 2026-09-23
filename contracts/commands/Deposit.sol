@@ -55,15 +55,13 @@ abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
     function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, depositOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            amount = deposit(exec.account, asset, amount);
-            exec.outputBalance(asset, amount);
-        }
-
-        return exec.close();
+    function depositOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        amount = deposit(exec.account, asset, amount);
+        exec.outputBalance(asset, amount);
     }
 }
 
@@ -84,14 +82,12 @@ abstract contract DepositPayable is CommandBase, DepositPayableHook, ActionAnnot
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.
     function depositPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommand(context, descriptor, depositPayableOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            amount = deposit(exec.account, asset, amount, exec);
-            exec.outputBalance(asset, amount);
-        }
-
-        return exec.close();
+    function depositPayableOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackAmount();
+        amount = deposit(exec.account, asset, amount, exec);
+        exec.outputBalance(asset, amount);
     }
 }

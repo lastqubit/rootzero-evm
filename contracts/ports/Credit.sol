@@ -23,13 +23,11 @@ abstract contract CreditAccountPort is PortBase, CreditAccountHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portCreditAccount(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        Execution memory exec = openInput(data, descriptor);
+        return runPort(data, descriptor, portCreditAccountOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 account, bytes32 asset, uint amount) = exec.unpackAccountAmount();
-            creditAccount(account, asset, amount);
-        }
-        
-        return exec.close();
+    function portCreditAccountOne(Execution memory exec) private {
+        (bytes32 account, bytes32 asset, uint amount) = exec.unpackAccountAmount();
+        creditAccount(account, asset, amount);
     }
 }

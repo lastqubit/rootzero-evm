@@ -488,17 +488,6 @@ library Decoders {
         (asset, amount) = Blocks.unpackBalance(abs);
     }
 
-    /// @notice Decode one BALANCE block and associate it with `host`.
-    /// @param cur Cursor advanced past the block.
-    /// @param host Host identifier associated with the balance.
-    /// @return value Structured host balance.
-    function unpackBalanceForHost(Cur memory cur, uint host) internal pure returns (HostAmount memory value) {
-        uint abs;
-        (cur.state, abs) = cur.state.consume(Sizes.Balance);
-        value.host = host;
-        (value.asset, value.amount) = Blocks.unpackBalance(abs);
-    }
-
     /// @notice Decode and consume one ACCOUNT_AMOUNT block.
     /// @param cur Cursor advanced past the block.
     /// @return account Decoded account identifier.

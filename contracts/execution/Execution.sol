@@ -107,23 +107,24 @@ library Executions {
         exec.writer = writerCursor(decoders, descriptor);
     }
 
-    /// @notice Initialize a complete command execution from its context and descriptor-backed sources.
+    /// @notice Decode exactly one context and initialize a complete command execution.
     /// @dev `exec` must be newly allocated or otherwise empty. Input always
-    /// occupies bits 0-63 and state bits 64-127.
+    /// occupies bits 0-63 and state bits 64-127. Rejects trailing context bytes.
     /// @param exec Execution to initialize.
     /// @param descriptor Packed command descriptor.
-    /// @param account Command account.
     /// @param budget Initial native-value budget.
-    /// @param state Descriptor-backed state source.
-    /// @param input Descriptor-backed input source.
-    function open(
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    function openContext(
         Execution memory exec,
         uint descriptor,
-        bytes32 account,
         uint budget,
-        bytes calldata state,
-        bytes calldata input
+        bytes calldata context
     ) internal pure {
+        uint abs;
+        assembly ("memory-safe") { abs := context.offset }
+        (bytes32 account, bytes calldata state, bytes calldata input, uint end) = Blocks.unpackContext(abs);
+        if (end != abs + context.length) revert Blocks.InvalidBlock();
+
         uint decoders;
         assembly ("memory-safe") {
             decoders := or(
@@ -295,6 +296,8 @@ library Executions {
         data = msg.data[abs - Sizes.Header:end];
     }
 
+    // Parent block entry
+
     /// @notice Validate and enter the payload of the next execution input block.
     /// @dev The input cursor remains in its existing frame so callers can decode
     /// child blocks in place. Callers should prove complete payload consumption
@@ -357,6 +360,29 @@ library Executions {
         (body, next, end) = Blocks.enter(uint32(decoders), key, amount);
         if (next > uint32(decoders >> 32)) revert OutOfBounds();
         exec.decoders = (decoders & ~uint(type(uint32).max)) | next;
+    }
+
+    /// @notice Enter a parent input block and return the same execution for chaining.
+    /// @dev Retains the outer input bounds; does not enforce complete parent
+    /// payload consumption. Use `enter` and `expect(end)` for that check.
+    /// @param exec Execution whose input cursor advances over the block header.
+    /// @param spec Expected parent block specification.
+    /// @return The same execution with its input cursor advanced.
+    function into(Execution memory exec, uint spec) internal pure returns (Execution memory) {
+        enter(exec, spec);
+        return exec;
+    }
+
+    /// @notice Enter a keyed parent input block and return the same execution for chaining.
+    /// @dev Validates no payload-size constraint. Retains the outer input bounds;
+    /// does not enforce complete parent payload consumption. Use `enter` and
+    /// `expect(end)` for that check.
+    /// @param exec Execution whose input cursor advances over the block header.
+    /// @param key Expected parent block key.
+    /// @return The same execution with its input cursor advanced.
+    function into(Execution memory exec, bytes4 key) internal pure returns (Execution memory) {
+        enter(exec, key);
+        return exec;
     }
 
     // Raw input navigation
@@ -677,16 +703,6 @@ library Executions {
         uint pos = takeState(exec, Sizes.Position);
         uint lim = take(exec, Sizes.Limits);
         position = Blocks.unpackLimitedPosition(pos, lim);
-    }
-
-    /// @notice Decode and consume one BALANCE block from state and associate it with `host`.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @param host Host associated with the decoded balance.
-    /// @return value Host-scoped asset amount.
-    function unpackBalanceForHost(Execution memory exec, uint host) internal pure returns (HostAmount memory value) {
-        uint abs = takeState(exec, Sizes.Balance);
-        value.host = host;
-        (value.asset, value.amount) = Blocks.unpackBalance(abs);
     }
 
     // Remaining fixed-width input decoding
@@ -1484,7 +1500,7 @@ library Executions {
     /// is backed by native value held by the host or otherwise made available.
     /// @param exec Mutable execution whose budget is credited.
     /// @param value Native value to add in wei.
-    function addValue(Execution memory exec, uint value) internal pure {
+    function addToBudget(Execution memory exec, uint value) internal pure {
         exec.budget += value;
     }
 
@@ -1576,17 +1592,8 @@ library Executions {
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native value to credit to the caller's budget.
     function close(Execution memory exec) internal pure returns (bytes memory output, uint credit) {
-        return close(exec, 0);
-    }
-
-    /// @notice Close an execution and combine its remaining budget with additional command credit.
-    /// @param exec Execution whose sources, writer, and budget are finalized.
-    /// @param extraCredit Additional trusted credit produced by the command.
-    /// @return output Final encoded output block stream.
-    /// @return credit Remaining execution budget plus `extraCredit`.
-    function close(Execution memory exec, uint extraCredit) internal pure returns (bytes memory output, uint credit) {
         output = finish(exec);
-        credit = exec.budget + extraCredit;
+        credit = exec.budget;
         exec.budget = 0;
     }
 }

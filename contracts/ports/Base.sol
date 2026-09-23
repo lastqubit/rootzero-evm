@@ -5,7 +5,7 @@ import { PeerAccess } from "../core/Access.sol";
 import { Specs } from "../codec/Specs.sol";
 import { InputEndpointBase } from "../core/Endpoint.sol";
 import { Nodes } from "../utils/Nodes.sol";
-import { Executions } from "../execution/Execution.sol";
+import { Execution, Executions } from "../execution/Execution.sol";
 
 /// @title PortBase
 /// @notice Abstract base for peer-facing rootzero ports.
@@ -62,5 +62,28 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     ) internal returns (uint id, uint published) {
         id = Nodes.toPort(name, address(this), uint8(descriptor));
         published = endpoint(id, name, descriptor);
+    }
+
+    /// @notice Process a port input stream through a callback per item.
+    /// @dev Opens raw input with `msg.value` as its initial budget and no account
+    /// or state source. The callback must advance input on each iteration; empty
+    /// input invokes no callback. No progress guard is enforced. Access control
+    /// remains the caller's responsibility.
+    /// @param input Input block stream.
+    /// @param descriptor Packed input-only endpoint descriptor.
+    /// @param process Internal callback that consumes and processes one item.
+    /// @return output Final encoded response block stream.
+    /// @return credit Remaining native-value budget.
+    function runPort(
+        bytes calldata input,
+        uint descriptor,
+        function(Execution memory) internal process
+    ) internal returns (bytes memory output, uint credit) {
+        Execution memory exec;
+        Executions.openInput(exec, descriptor, msg.value, input);
+        while (Executions.more(exec)) {
+            process(exec);
+        }
+        return Executions.close(exec);
     }
 }

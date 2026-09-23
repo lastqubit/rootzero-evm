@@ -34,16 +34,13 @@ abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
     /// @param context Command context carrying BALANCE state and matching ACCOUNT input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
-    function payout(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function payout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, payoutOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackBalance();
-            payout(exec.account, exec.unpackAccount(), asset, amount);
-        }
-
-        return exec.close();
+    function payoutOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackBalance();
+        bytes32 to = exec.unpackAccount();
+        payout(exec.account, to, asset, amount);
     }
 }

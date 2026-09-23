@@ -14,7 +14,7 @@ abstract contract EnterHarness {
 
     function measureDiscard(bytes calldata input, uint spec, uint amount, uint mode) external view returns (uint gasUsed, uint position) {
         Execution memory exec;
-        exec.open(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, 0, input[:0], input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, input);
         uint remaining = 208 - (mode < 2 ? 0 : amount);
         uint initial = gasleft();
         while (exec.more()) {
@@ -27,7 +27,7 @@ abstract contract EnterHarness {
 
     function enterOnce(bytes calldata input, uint spec, uint amount, uint mode) external pure returns (uint, uint, uint, bool) {
         Execution memory exec;
-        exec.open(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, 0, input[:0], input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, input);
         uint original = exec.decoders;
         (uint body, uint end) = step(exec, spec, amount, mode);
         uint start;
@@ -37,7 +37,7 @@ abstract contract EnterHarness {
 
     function measure(bytes calldata input, uint spec, uint amount, uint mode) external view returns (uint gasUsed, uint checksum) {
         Execution memory exec;
-        exec.open(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, 0, input[:0], input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Bytes, Specs.Empty, 0), 0, input);
         uint beforeGas = gasleft();
         while (exec.more()) {
             (uint body, uint end) = step(exec, spec, amount, mode);

@@ -29,17 +29,13 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
-    function creditAccount(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function creditAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, creditAccountOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackBalance();
-            creditAccount(exec.account, asset, amount);
-        }
-
-        return exec.close();
+    function creditAccountOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackBalance();
+        creditAccount(exec.account, asset, amount);
     }
 }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { Execution, Executions, CommandBase, Specs } from "./Base.sol";
+import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
 using Executions for Execution;
@@ -33,22 +33,12 @@ abstract contract Burn is CommandBase, BurnHook, ActionAnnot {
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
-    function burn(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+    function burn(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(context, descriptor, burnOne);
+    }
 
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackBalance();
-            burn(exec.account, asset, amount);
-        }
-
-        return exec.close();
+    function burnOne(Execution memory exec) private {
+        (bytes32 asset, uint amount) = exec.unpackBalance();
+        burn(exec.account, asset, amount);
     }
 }
-
-
-
-
-
-

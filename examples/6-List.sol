@@ -6,6 +6,7 @@ pragma solidity ^0.8.33;
 // A top-level `many #asset` list is published as a custom schema. Its custom
 // key identifies the outer list block, whose payload is a stream of ASSET
 // blocks. Multiple outer blocks still form an ordinary command batch.
+// Keep explicit iteration here to carry a local batch index across outer lists.
 
 import {Host} from "../contracts/Core.sol";
 import {CommandBase, Cur, Decoders, Execution, Executions, Specs} from "../contracts/Commands.sol";

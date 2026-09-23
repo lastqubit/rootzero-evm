@@ -1,7 +1,7 @@
 ﻿import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeActionBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeActionBlock, encodeAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Burn", () => {
@@ -73,12 +73,10 @@ describe("Burn", () => {
     expect(transactions).to.equal(0n);
   });
 
-  it("stops at the first non-BALANCE block and succeeds if at least one was processed", async () => {
-    // Single balance followed by an amount block â€” only the balance is burned
+  it("rejects a non-BALANCE block after a valid balance", async () => {
     const asset = ethers.zeroPadValue("0xd1", 32);
-    const state = encodeBalanceBlock(asset, 5n);
-    const tx = await callAs(0, ctx({ state }));
-    await expect(tx).to.emit(host, "BurnCalled").withArgs(userAccount, asset, 5n);
+    const state = concat(encodeBalanceBlock(asset, 5n), encodeAmountBlock(asset, 5n));
+    await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidBlock");
   });
 
   // â”€â”€ Target / access guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -95,4 +93,3 @@ describe("Burn", () => {
     expect(await (host as any)[burnMethod].staticCall(...ctx())).to.deep.equal(["0x", 0n]);
   });
 });
-

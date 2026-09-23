@@ -40,12 +40,12 @@ abstract contract RelayPayable is CommandBase, RelayPayableHook {
 
     /// @notice Relay one RELAY input block with the command account and empty state.
     function relayPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommandOnce(context, descriptor, relayPayableOnce);
+    }
 
+    function relayPayableOnce(Execution memory exec) private {
         (bytes calldata input, bytes calldata steps) = exec.unpackRelay();
-        relay(exec.account, input, Blocks.createContextCopy(exec.account, context[0:0], steps), exec);
-
-        return exec.close();
+        relay(exec.account, input, Blocks.createContextCopy(exec.account, steps[0:0], steps), exec);
     }
 }
 
@@ -66,12 +66,12 @@ abstract contract RelayBalancePayable is CommandBase, RelayPayableHook {
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function relayBalancePayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
+        return runCommandOnce(context, descriptor, relayBalancePayableOnce);
+    }
 
+    function relayBalancePayableOnce(Execution memory exec) private {
         (bytes calldata input, bytes calldata steps) = exec.unpackRelay();
         bytes calldata state = exec.takeRawBalances();
         relay(exec.account, input, Blocks.createContextCopy(exec.account, state, steps), exec);
-
-        return exec.close();
     }
 }
