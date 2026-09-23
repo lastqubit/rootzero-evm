@@ -344,14 +344,14 @@ library Writers {
     }
 
     /// @notice Append a QUOTE with minimum amount and maximum debt.
-    function appendQuote(Writer memory writer, bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) internal pure {
+    function appendQuote(Writer memory writer, bytes32 asset, bytes32 liability, uint limits) internal pure {
         uint i = reserve(writer, Sizes.Quote);
-        Blocks.writeQuote(writer.dst, i, asset, liability, counterparty, limits);
+        Blocks.writeQuote(writer.dst, i, asset, liability, limits);
     }
 
     /// @notice Append a structured QUOTE.
     function appendQuote(Writer memory writer, Quote memory quote) internal pure {
-        appendQuote(writer, quote.asset, quote.liability, quote.counterparty, quote.limits);
+        appendQuote(writer, quote.asset, quote.liability, quote.limits);
     }
 
     /// @notice Append a POSITION block.

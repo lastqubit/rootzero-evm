@@ -540,14 +540,14 @@ library Executions {
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
     function unpackQuote(
         Execution memory exec
-    ) internal pure returns (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) {
+    ) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
         uint abs = take(exec, Sizes.Quote);
-        (asset, liability, counterparty, limits) = Blocks.unpackQuote(abs);
+        (asset, liability, limits) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
     function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
-        (quote.asset, quote.liability, quote.counterparty, quote.limits) = unpackQuote(exec);
+        (quote.asset, quote.liability, quote.limits) = unpackQuote(exec);
     }
 
     /// @notice Decode and consume one ASSET_LIABILITY block from input.
@@ -1049,16 +1049,15 @@ library Executions {
         Execution memory exec,
         bytes32 asset,
         bytes32 liability,
-        bytes32 counterparty,
         uint limits
     ) internal pure {
         uint i = reserve(exec, Sizes.Quote);
-        Blocks.writeQuote(exec.output, i, asset, liability, counterparty, limits);
+        Blocks.writeQuote(exec.output, i, asset, liability, limits);
     }
 
     /// @notice Append a structured QUOTE.
     function outputQuote(Execution memory exec, Quote memory quote) internal pure {
-        outputQuote(exec, quote.asset, quote.liability, quote.counterparty, quote.limits);
+        outputQuote(exec, quote.asset, quote.liability, quote.limits);
     }
 
     /// @notice Append a POSITION block to execution output.

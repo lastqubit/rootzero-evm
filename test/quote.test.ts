@@ -8,16 +8,16 @@ describe("Quote codec", () => {
   const asset = ethers.zeroPadValue("0x11", 32);
   const liability = ethers.zeroPadValue("0x22", 32);
   const counterparty = encodeUserAccount("0x0000000000000000000000000000000000000033");
-  const quote = [asset, liability, counterparty, packLimits(123n, MaxUint128)];
-  const encoded = encodeQuoteBlock(asset, liability, counterparty, packLimits(123n, MaxUint128));
+  const quote = [asset, liability, packLimits(123n, MaxUint128)];
+  const encoded = encodeQuoteBlock(asset, liability, packLimits(123n, MaxUint128));
   const state = encodePositionBlock(liability, 99n, asset, 77n);
   let helper: Awaited<ReturnType<typeof deploy>>;
 
   before(async () => { helper = await deploy("TestQuote"); });
 
-  it("advertises a four-word quote with packed limits", async () => {
+  it("advertises a three-word quote with packed limits", async () => {
     expect(Array.from(await helper.metadata())).to.deep.equal([
-      exactSpec(Keys.Quote, 128), 136n, "bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits",
+      exactSpec(Keys.Quote, 96), 104n, "bytes32 asset, bytes32 liability, uint limits",
     ]);
   });
 
@@ -27,7 +27,7 @@ describe("Quote codec", () => {
   });
 
   it("accepts full-width asset output but treats the maximum debt lane as a literal cap", async () => {
-    const input = concat(encodeQuoteBlock(asset, liability, counterparty, ethers.MaxUint256), encoded);
+    const input = concat(encodeQuoteBlock(asset, liability, ethers.MaxUint256), encoded);
     for (const amount of [MaxUint128, MaxUint128 + 1n, ethers.MaxUint256]) {
       expect(Array.from(await helper.check(input, [asset, amount, liability, MaxUint128, counterparty])))
         .to.deep.equal(quote);
@@ -40,8 +40,8 @@ describe("Quote codec", () => {
 
   it("preserves both packed lanes across scalar and structured paths", async () => {
     for (const limits of [0n, MaxUint128, MaxUint128 << 128n, ethers.MaxUint256]) {
-      const value = [asset, liability, counterparty, limits];
-      const block = encodeQuoteBlock(asset, liability, counterparty, limits);
+      const value = [asset, liability, limits];
+      const block = encodeQuoteBlock(asset, liability, limits);
       expect(await helper.create(value)).to.equal(block);
       for (const scalar of [true, false]) {
         expect(await helper.write(value, scalar)).to.equal(block);
@@ -51,8 +51,8 @@ describe("Quote codec", () => {
     }
   });
 
-  it("checks inclusive limits and exact counterparty, and advances exactly one quote", async () => {
-    const first = encodeQuoteBlock(asset, liability, counterparty, packLimits(123n, 456n));
+  it("checks inclusive limits, and advances exactly one quote", async () => {
+    const first = encodeQuoteBlock(asset, liability, packLimits(123n, 456n));
     expect(Array.from(await helper.check(concat(first, encoded), [asset, 123n, liability, 456n, counterparty])))
       .to.deep.equal(quote);
   });
@@ -64,28 +64,21 @@ describe("Quote codec", () => {
     [[asset, 123n, asset, 456n, ethers.ZeroHash], "UnexpectedValue"],
   ] as const) {
     it(`rejects a result outside its quote: ${position.join(",")}`, async () => {
-      await expect(helper.check(concat(encodeQuoteBlock(asset, liability, ethers.ZeroHash, packLimits(123n, 456n)), encoded), position))
+      await expect(helper.check(concat(encodeQuoteBlock(asset, liability, packLimits(123n, 456n)), encoded), position))
         .to.be.revertedWithCustomError(helper, error);
     });
   }
 
-  for (const [requested, actual] of [[ethers.ZeroHash, counterparty], [counterparty, ethers.ZeroHash],
-    [counterparty, encodeUserAccount("0x0000000000000000000000000000000000000044")]]) {
-    it(`rejects counterparty mismatch ${requested} -> ${actual}`, async () => {
-      const input = concat(encodeQuoteBlock(asset, liability, requested, packLimits(123n, 456n)), encoded);
-      await expect(helper.check(input, [asset, 123n, liability, 456n, actual]))
-        .to.be.revertedWithCustomError(helper, "UnexpectedValue");
+  for (const actual of [ethers.ZeroHash, counterparty, encodeUserAccount("0x0000000000000000000000000000000000000044")]) {
+    it(`accepts a matching economic result independently of counterparty ${actual}`, async () => {
+      const input = concat(encodeQuoteBlock(asset, liability, packLimits(123n, 456n)), encoded);
+      expect(Array.from(await helper.check(input, [asset, 123n, liability, 456n, actual])))
+        .to.deep.equal(quote);
     });
   }
 
-  it("accepts Rootzero as an exact counterparty", async () => {
-    const input = concat(encodeQuoteBlock(asset, liability, ethers.ZeroHash, packLimits(123n, 456n)), encoded);
-    expect(Array.from(await helper.check(input, [asset, 123n, liability, 456n, ethers.ZeroHash])))
-      .to.deep.equal(quote);
-  });
-
-  it("encodes four words including the requested counterparty and packed limits", async () => {
-    expect(ethers.dataLength(encoded)).to.equal(136);
+  it("encodes three words with identifiers and packed limits", async () => {
+    expect(ethers.dataLength(encoded)).to.equal(104);
     expect(await helper.create(quote)).to.equal(encoded);
   });
 
@@ -96,13 +89,13 @@ describe("Quote codec", () => {
     });
 
     it(`consumes quotes from input independently of position state (${scalar})`, async () => {
-      const second = encodeQuoteBlock(liability, asset, ethers.ZeroHash, packLimits(0n, 0n));
+      const second = encodeQuoteBlock(liability, asset, packLimits(0n, 0n));
       expect(await helper.execute(concat(state, state), concat(encoded, second), scalar))
         .to.equal(concat(encoded, second));
     });
 
     it(`rejects truncated quotes (${scalar})`, async () => {
-      await expect(helper.decode(ethers.dataSlice(encoded, 0, 135), scalar))
+      await expect(helper.decode(ethers.dataSlice(encoded, 0, 103), scalar))
         .to.be.revertedWithCustomError(helper, "OutOfBounds");
     });
 
@@ -113,6 +106,14 @@ describe("Quote codec", () => {
     it(`rejects the quote key with an incorrect payload length (${scalar})`, async () => {
       const malformed = concat(ethers.dataSlice(encoded, 0, 4), ethers.toBeHex(160, 4), ethers.dataSlice(encoded, 8));
       await expect(helper.decode(malformed, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+    });
+
+    it(`rejects the previous four-word quote (${scalar})`, async () => {
+      const previous = encodeBlock(Keys.Quote, ethers.concat([
+        asset, liability, counterparty, ethers.toBeHex(packLimits(123n, 456n), 32),
+      ]));
+      await expect(helper.decode(previous, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+      await expect(helper.execute(state, previous, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
     it(`rejects the legacy five-word quote (${scalar})`, async () => {

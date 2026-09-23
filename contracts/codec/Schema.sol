@@ -150,7 +150,7 @@ library Schemas {
     // Four-word input payloads
 
     /// @dev Exact identifiers and packed inclusive quantity bounds.
-    string constant Quote = "bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits";
+    string constant Quote = "bytes32 asset, bytes32 liability, uint limits";
 
     // Composite payloads
 

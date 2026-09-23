@@ -75,13 +75,16 @@ struct HostAccountAmount {
     uint amount;
 }
 
-/// @notice Exact position identifiers and inclusive packed quantity bounds.
+/// @notice Constraints on a resulting position's asset, liability, and quantities.
+/// @dev Asset and liability identifiers must match exactly. Quantity bounds are
+/// inclusive and do not constrain the position's counterparty.
 struct Quote {
+    /// @dev Required asset identifier.
     bytes32 asset;
+    /// @dev Required liability identifier.
     bytes32 liability;
-    /// @dev Exact counterparty requirement; zero requires Rootzero backing.
-    bytes32 counterparty;
-    /// @dev High 128 bits: minimum asset amount; low 128 bits: literal maximum debt.
+    /// @dev High 128 bits: minimum net asset receipt; low 128 bits: maximum total
+    /// debt including fees. Both bounds are literal, with no sentinel values.
     uint limits;
 }
 

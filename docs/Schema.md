@@ -543,8 +543,8 @@ account hooks, and any failure reverts the whole operation.
 The former `book` command is removed. `settle` accepts account counterparties and
 applies final quantities without checking limits; producers must enforce their
 quantity constraints. Callers that require an already-realized
-position must explicitly check counterparty zero, for example with
-`Positions.requireQuoted` and a quote whose counterparty is zero. A trusted
+position must explicitly check `position.counterparty == bytes32(0)` separately
+from `Positions.requireQuoted`. A trusted
 realization hook must return counterparty zero before handing the result onward.
 
 The same `BookHook` is used directly by `portBook` and settlement for its
@@ -682,27 +682,27 @@ return counterparty zero after fulfillment; the command does not check those fie
 The QUOTE schema remains available independently:
 
 ```txt
-#quote { bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits }
+#quote { bytes32 asset, bytes32 liability, uint limits }
 ```
 
-A QUOTE constrains the resulting position: `asset`, `liability`, and `counterparty` must match exactly,
+A QUOTE constrains the resulting position: `asset` and `liability` must match exactly,
 `limits` packs the inclusive minimum asset output into its high 128 bits and
 the inclusive maximum debt into its low 128 bits. Both lanes are literal bounds,
 including `type(uint128).max`; there is no unlimited-debt sentinel. Actual asset
 output may exceed 128 bits, but quoted debt cannot exceed the cap.
-The quote has four words (128 payload bytes, 136 bytes including the header).
+The quote has three words (96 payload bytes, 104 bytes including the header).
 It decodes into a distinct `Quote` struct exported through `Core.sol` and
 `Codec.sol`; positions retain their full-width actual quantities.
-Counterparty zero requires Rootzero backing;
-it is not a wildcard. It is an input schema, not live position state.
+Counterparty is not part of the quote. It is an input schema, not live position state.
 
 Cursor and execution helpers decode quotes with `unpackQuoteValue()`. Callers
 can use `Positions.requireQuoted(position, quote)`, exported through `Utils.sol`,
-to enforce exact identifiers and counterparty, then check the inclusive quantity
+to enforce exact asset and liability identifiers, then check the inclusive quantity
 bounds through `Positions.requireLimits(position, quote.limits)`.
 Realize does not consume QUOTE input. Code that independently validates a
-Rootzero-backed result against a quote must require counterparty zero in that
-quote. Failed comparisons revert the enclosing call and its earlier changes.
+Rootzero-backed result against a quote must separately require zero on the resulting
+position's counterparty. Hosts remain responsible for counterparty authorization
+and backing. Failed comparisons revert the enclosing call and its earlier changes.
 
 This representation supports ordinary forward transformations as well as
 backward composition. For example, an exact-output route can carry its desired
@@ -993,8 +993,8 @@ accountAmount      bytes32 account, bytes32 asset, uint amount
 hostAmount         uint host, bytes32 asset, uint amount
 hostAccountAsset   uint host, bytes32 account, bytes32 asset
 limits             uint limits
-quote              bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits
-position           bytes32 asset, uint amount, bytes32 liability, uint debt
+quote              bytes32 asset, bytes32 liability, uint limits
+position           bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
 transaction        bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount  uint host, bytes32 account, bytes32 asset, uint amount
 step               uint cmd, uint value, #bytes as input

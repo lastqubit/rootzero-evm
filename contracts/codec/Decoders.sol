@@ -754,15 +754,15 @@ library Decoders {
     }
 
     /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
-    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) {
+    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.Quote);
-        (asset, liability, counterparty, limits) = Blocks.unpackQuote(abs);
+        (asset, liability, limits) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
     function unpackQuoteValue(Cur memory cur) internal pure returns (Quote memory quote) {
-        (quote.asset, quote.liability, quote.counterparty, quote.limits) = unpackQuote(cur);
+        (quote.asset, quote.liability, quote.limits) = unpackQuote(cur);
     }
 
     /// @notice Decode and consume one POSITION block.

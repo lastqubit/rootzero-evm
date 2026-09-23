@@ -178,8 +178,8 @@ export function encodeLimitsBlock(amount: bigint, debt: bigint): string {
   return encodeBlock(Keys.Limits, pad32(packLimits(amount, debt)));
 }
 
-export function encodeQuoteBlock(asset: string, liability: string, counterparty: string, limits: bigint): string {
-  return encodeBlock(Keys.Quote, ethers.concat([pad32(asset), pad32(liability), pad32(counterparty), pad32(limits)]));
+export function encodeQuoteBlock(asset: string, liability: string, limits: bigint): string {
+  return encodeBlock(Keys.Quote, ethers.concat([pad32(asset), pad32(liability), pad32(limits)]));
 }
 
 export function encodePositionBlock(

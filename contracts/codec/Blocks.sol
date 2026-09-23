@@ -735,7 +735,6 @@ library Blocks {
         uint i,
         bytes32 asset,
         bytes32 liability,
-        bytes32 counterparty,
         uint limits
     ) internal pure {
         uint spec = Specs.Quote;
@@ -744,8 +743,7 @@ library Blocks {
             mstore(p, spec)
             mstore(add(p, 0x08), asset)
             mstore(add(p, 0x28), liability)
-            mstore(add(p, 0x48), counterparty)
-            mstore(add(p, 0x68), limits)
+            mstore(add(p, 0x48), limits)
         }
     }
 
@@ -2385,14 +2383,13 @@ library Blocks {
     /// Exact identifiers precede packed minimum amount and maximum debt limits.
     function unpackQuote(
         uint abs
-    ) internal pure returns (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) {
+    ) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
         uint64 head;
         assembly ("memory-safe") {
             head := shr(192, calldataload(abs))
             asset := calldataload(add(abs, 0x08))
             liability := calldataload(add(abs, 0x28))
-            counterparty := calldataload(add(abs, 0x48))
-            limits := calldataload(add(abs, 0x68))
+            limits := calldataload(add(abs, 0x48))
         }
         if (head != Headers.Quote) revert InvalidBlock();
     }
@@ -2993,11 +2990,10 @@ library Blocks {
     function createQuote(
         bytes32 asset,
         bytes32 liability,
-        bytes32 counterparty,
         uint limits
     ) internal pure returns (bytes memory value) {
         value = allocate(Sizes.Quote);
-        writeQuote(value, 0, asset, liability, counterparty, limits);
+        writeQuote(value, 0, asset, liability, limits);
     }
 
     /// @notice Encode a POSITION block.

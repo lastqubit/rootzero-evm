@@ -40,8 +40,8 @@ library Sizes {
     /// @dev LIMITS block: 8 header + 32 packed limits = 40 bytes.
     uint constant Limits = B32;
 
-    /// @dev QUOTE block: 8 header + four-word outcome = 136 bytes.
-    uint constant Quote = B128;
+    /// @dev QUOTE block: 8 header + three-word outcome = 104 bytes.
+    uint constant Quote = B96;
 
     /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
     uint constant Bootstrap = B96;
@@ -96,7 +96,7 @@ library Specs {
     // Input and value blocks
 
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
-    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
+    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact96;
 
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;

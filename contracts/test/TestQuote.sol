@@ -23,19 +23,19 @@ contract TestQuote {
     }
 
     function create(Quote memory quote) external pure returns (bytes memory) {
-        return Blocks.createQuote(quote.asset, quote.liability, quote.counterparty, quote.limits);
+        return Blocks.createQuote(quote.asset, quote.liability, quote.limits);
     }
 
     function write(Quote memory quote, bool scalar) external pure returns (bytes memory) {
         Writer memory writer = Writers.init(Specs.Quote, 1);
-        if (scalar) writer.appendQuote(quote.asset, quote.liability, quote.counterparty, quote.limits);
+        if (scalar) writer.appendQuote(quote.asset, quote.liability, quote.limits);
         else writer.appendQuote(quote);
         return writer.finish();
     }
 
     function decode(bytes calldata input, bool scalar) external pure returns (Quote memory quote) {
         Cur memory cur = Decoders.open(input);
-        if (scalar) (quote.asset, quote.liability, quote.counterparty, quote.limits) = cur.unpackQuote();
+        if (scalar) (quote.asset, quote.liability, quote.limits) = cur.unpackQuote();
         else quote = cur.unpackQuoteValue();
     }
 
@@ -45,8 +45,8 @@ contract TestQuote {
         while (exec.more()) {
             exec.unpackPosition();
             if (scalar) {
-                (bytes32 asset, bytes32 liability, bytes32 counterparty, uint limits) = exec.unpackQuote();
-                exec.outputQuote(asset, liability, counterparty, limits);
+                (bytes32 asset, bytes32 liability, uint limits) = exec.unpackQuote();
+                exec.outputQuote(asset, liability, limits);
             } else {
                 exec.outputQuote(exec.unpackQuoteValue());
             }

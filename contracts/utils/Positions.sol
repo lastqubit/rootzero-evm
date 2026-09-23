@@ -15,12 +15,13 @@ library Positions {
     }
 
     /// @notice Assert that a position satisfies a decoded quote.
-    /// @dev Reverts with `UnexpectedValue` for an identifier or counterparty mismatch,
+    /// @dev Reverts with `UnexpectedValue` for an identifier mismatch,
     /// or `OutOfRange` for an amount below the minimum or debt above the maximum.
+    /// Counterparty authorization and backing must be checked separately.
     /// @param position Resulting position to validate.
-    /// @param quote Exact identifiers and counterparty, minimum amount, and maximum debt.
+    /// @param quote Exact asset and liability identifiers, minimum amount, and maximum debt.
     function requireQuoted(Position memory position, Quote memory quote) internal pure {
-        if (position.asset != quote.asset || position.liability != quote.liability || position.counterparty != quote.counterparty) revert UnexpectedValue();
+        if (position.asset != quote.asset || position.liability != quote.liability) revert UnexpectedValue();
         requireLimits(position, quote.limits);
     }
 }

@@ -62,7 +62,7 @@ describe("Realization failure atomicity", () => {
 
     it("rejects QUOTE input and rolls back the hook", async () => {
       await rejectsWithoutChanges(method, state,
-        encodeQuoteBlock(asset, liability, ethers.ZeroHash, MaxUint128), "InvalidBlock");
+        encodeQuoteBlock(asset, liability, MaxUint128), "InvalidBlock");
     });
 
     it("rejects the old ASSET_LIABILITY input shape", async () => {
