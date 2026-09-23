@@ -8,6 +8,79 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.43.0
+
+### Breaking Changes
+
+- Replace descriptor-backed `Executions.open` with
+  `openContext(exec, descriptor, budget, context)`, centralizing context decoding
+  and exact-boundary validation for `openCommand`, `runCommand`, and `runCommandOnce`.
+
+- Rename `Executions.addValue` to `addToBudget` and remove `close(extraCredit)`.
+  Add trusted credit to the execution budget before calling `close()`; credit
+  added during a batch is available to subsequent iterations. Update the budget
+  credit example to use this flow.
+
+- Remove `Executions.unpackBalanceForHost` and `Decoders.unpackBalanceForHost`.
+  Build `HostAmount` explicitly by assigning its host and decoding its asset and
+  amount with `unpackBalance`, as `Allocate` now does.
+
+- Rename the balance query to `GetBalance` / `GetBalanceHook` in
+  `queries/Balance.sol`, with endpoint `getBalance(bytes)` and callback
+  `getBalanceOne`. Update imports and callers: the endpoint selector and query ID
+  change. Batch behavior and the `getBalance(account, asset)` hook are unchanged.
+
+- Remove `counterparty` from `Quote` and its codec helpers. QUOTE now encodes
+  `(bytes32 asset, bytes32 liability, uint limits)` in 96 payload bytes (104 with
+  the header); previous four-word encodings are rejected. `Positions.requireQuoted`
+  validates asset, liability, and inclusive quantity bounds only. Counterparty
+  authorization and backing remain separate host responsibilities; `Position`
+  retains its counterparty field.
+
+- Move the free raw-call helpers into the internal `Calls` library, exported
+  through `Core.sol`: `rawCall` becomes `Calls.raw`, `rawCallCopy` becomes
+  `Calls.rawCopy`, `tryRawCall` becomes `Calls.tryRaw`, `tryRawCallCopy` becomes
+  `Calls.tryRawCopy`, and `rawQuery` becomes `Calls.rawQuery`. Update imports and
+  call sites. `FailedCall` remains a global error, and the `Executions.rawCall`
+  and `Executions.rawCallCopy` names are unchanged.
+
+### Added and Changed
+
+- Update the custom-command examples to use execution runners where
+  their lifecycle fits; retain explicit iteration for the list example's batch index.
+
+- Keep the payable pipe port's shared budget in `Execution`, draining it only
+  when settling the remainder through `cashin`.
+
+- Add `PortBase.runPort(input, descriptor, callback)` with shared
+  native-value budgeting. Migrate ordinary command and port batches to the
+  runners, and both relay commands to `runCommandOnce`. Admin authorization flows,
+  specialized pipeline adapters, and post-batch pipe settlement remain explicit.
+  Use `<endpoint>One` for batch callbacks and `<endpoint>Once` for whole-input
+  callbacks so command, port, and query mixins can be inherited together without
+  callback signature conflicts.
+
+- Add `QueryBase.runQuery(input, descriptor, callback)` for input-only
+  view callbacks and migrate `AssetStatus` and `GetBalance` to it.
+
+- Add `CommandBase.runCommandOnce(context, descriptor, callback)` to invoke
+  a callback exactly once, including for empty sources, and reject leftover data
+  before returning output and remaining native-value credit.
+
+- Migrate `Burn` to `CommandBase.runCommand` with a per-balance callback.
+  Add a benchmark against its previous loop, including gas, runtime size, and
+  behavior comparisons; see `docs/BurnRunBenchmark.md`.
+
+- Add `CommandBase.runCommand(context, descriptor, callback)` to open a
+  context, process batch items through an internal callback, and finalize output
+  and remaining native-value credit.
+
+- Add `Executions.into` overloads for a parent specification or key, returning
+  the same execution for chaining alongside the existing `enter` helpers.
+
+- Add `Executions.rawCall` and `rawCallCopy` accepting full-width native value with inline budget
+  debiting and returned-credit accounting, returning only decoded output bytes.
+
 ## 1.42.0
 
 ### Breaking Changes
