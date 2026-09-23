@@ -16,7 +16,7 @@ import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, HostAccount, Runtime } from "./core/Runtime.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
-import { FailedCall, rawCall, rawCallCopy, rawQuery, tryRawCall, tryRawCallCopy } from "./core/Calls.sol";
+import { Calls, FailedCall } from "./core/Calls.sol";
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";
 import { ExecuteHook, PipeHook, Pipeline } from "./core/Pipeline.sol";
 import { Budget, Budgets } from "./core/Budget.sol";

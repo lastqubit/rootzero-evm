@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {RecoverPayable} from "../commands/Recover.sol";
 import {Host} from "../core/Host.sol";
 import {ForwardHook, Portal} from "../core/Portal.sol";
-import {rawCall, rawCallCopy} from "../core/Calls.sol";
+import {Calls} from "../core/Calls.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
@@ -29,7 +29,7 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
     function testCallPortMemory(uint port, bytes calldata input, uint value) external payable returns (bytes memory, uint) {
         bytes memory data = input;
         (bytes4 selector, address target) = enforcePort(port);
-        return rawCall(selector, target, value, data, true);
+        return Calls.raw(selector, target, value, data, true);
     }
 
     function getAdminAccount() external view returns (bytes32) {
@@ -45,8 +45,7 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
     ) internal override {
         bytes calldata resolved = resolve(key, witness);
         (bytes4 selector, address target) = enforcePort(handler);
-        (, uint credit) = rawCallCopy(selector, target, funds.useResourceValue(resources), resolved, true);
-        funds.addValue(credit);
+        funds.rawCallCopy(selector, target, uint128(resources), resolved, true);
         emit Resolved(host, key);
     }
 }

@@ -702,7 +702,7 @@ amounts. Matching accounts or assets are not netted. Hosts may implement the
 hook directly while preserving those exact-leg and funding requirements.
 Settlement also calls it for both exact exchange transfers, liability first.
 
-`rawCall` and `rawCallCopy` (from `Core.sol`) call ports returning
+`Calls.raw` and `Calls.rawCopy` (from `Core.sol`) call ports returning
 `(bytes output, uint credit)`, using memory and calldata input respectively.
 They take `(selector, target, value, input, expectEmpty)`, strictly decode the
 tuple, and preserve target failures in `FailedCall`. `expectEmpty` constrains
@@ -711,7 +711,16 @@ credit is backed before adding it to their budget; the helpers do not transfer
 ETH back. All ports return this tuple. Nonpayable ports return zero credit;
 `portDispatchPayable` returns its unspent budget. `portPipePayable` settles its
 remainder through `cashin` and returns zero credit.
-`rawQuery` continues to decode bytes-only query results.
+`Calls.rawQuery` decodes bytes-only query results. `Calls.tryRaw` and
+`Calls.tryRawCopy` report call success without decoding returndata, with optional
+explicit gas limits. All `Calls` functions are internal library helpers.
+
+`exec.rawCall(selector, target, value, input, expectEmpty)` and
+`exec.rawCallCopy(...)` provide the same calls with execution budget accounting.
+They debit the full-width native `uint value` before calling, add the returned
+trusted credit to `exec.budget`, and return only the output bytes. Callers with
+packed resources pass `uint128(resources)` to extract the EVM value lane.
+Target authorization and credit backing remain the caller's responsibility.
 
 Ports are the host-to-host surfaces, callable only by trusted peer hosts.
 **A trusted peer is a fully trusted extension of the receiving host.** Admitting

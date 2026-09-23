@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {tryRawCallCopy} from "./Calls.sol";
+import {Calls} from "./Calls.sol";
 import {Runtime} from "./Runtime.sol";
 import {ResolvedEvent} from "../events/Resolved.sol";
 import {UnresolvedEvent} from "../events/Unresolved.sol";
@@ -37,7 +37,7 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
             free := mload(0x40)
         }
         uint words = (length + 31) / 32;
-        // ABI header, padded message, and trailing zero write in tryRawCallCopy.
+        // ABI header, padded message, and trailing zero write in Calls.tryRawCopy.
         uint endWords = (free + 68 + words * 32 + 32 + 31) / 32;
         // Two calldata copies and KECCAK cost 12 gas per message word.
         uint reserve = gasReserve + 12 * words + 3 * endWords + (endWords * endWords) / 512;
@@ -58,7 +58,7 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
     /// @return miss Message digest recorded for recovery when forwarding fails; zero on success.
     function forward(bytes32 key, bytes calldata message, uint value) internal override returns (bytes32 miss) {
         uint gas = forwardGas(message.length, value);
-        if (gas > 0 && tryRawCallCopy(PortPipePayableSelector, commanderAddr, value, gas, message)) return bytes32(0);
+        if (gas > 0 && Calls.tryRawCopy(PortPipePayableSelector, commanderAddr, value, gas, message)) return bytes32(0);
 
         miss = keccak256(message);
         unresolved[key] = miss;

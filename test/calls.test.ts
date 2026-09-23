@@ -5,6 +5,79 @@ import { concat, encodeContextBlock, encodeRelayBlock, encodeStepBlock } from ".
 import "./helpers/matchers.js";
 
 describe("Command calls", () => {
+  for (const method of ["testExecutionRawCall", "testExecutionRawCallCopy"]) {
+    describe(method, () => {
+      let helper: Awaited<ReturnType<typeof deploy>>;
+      let target: string;
+      async function revertData(call: Promise<unknown>): Promise<string | undefined> {
+        try {
+          await call;
+        } catch (error: any) {
+          return error.data ?? error.info?.error?.data;
+        }
+        throw new Error("Expected call to revert");
+      }
+      before(async () => {
+        helper = await deploy("TestCommandCalls");
+        target = await helper.getAddress();
+      });
+
+      it("forwards native value and restores returned credit", async () => {
+        const selector = helper.interface.getFunction("echoPort")!.selector;
+        const value = 7n;
+        const input = "0x" + "ab".repeat(33);
+        expect(await helper[method].staticCall(selector, target, value, input, false, { value: 10n }))
+          .to.deep.equal([input, 10n]);
+        await expect(helper[method](selector, target, value, input, false, { value: 10n }))
+          .to.emit(helper, "BytesCalled").withArgs(input, 7n);
+      });
+
+      it("accounts for zero, partial, and excess credit independently of value sent", async () => {
+        const selector = helper.interface.getFunction("returnRaw")!.selector;
+        for (const credit of [0n, 3n, 15n]) {
+          const input = ethers.AbiCoder.defaultAbiCoder().encode(["bytes", "uint256"], ["0x", credit]);
+          expect(await helper[method].staticCall(selector, target, 7n, input, true, { value: 10n }))
+            .to.deep.equal(["0x", 3n + credit]);
+        }
+      });
+
+      it("rejects spending beyond the execution budget before invoking the target", async () => {
+        await expect(helper[method].staticCall("0xffffffff", target, 11n, "0x", false, { value: 10n }))
+          .to.be.revertedWithCustomError(helper, "InsufficientValue");
+      });
+
+      it("checks the full-width value without truncating to uint128", async () => {
+        const selector = helper.interface.getFunction("echoPort")!.selector;
+        await expect(helper[method].staticCall(selector, target, (1n << 128n) | 7n, "0x", true, { value: 10n }))
+          .to.be.revertedWithCustomError(helper, "InsufficientValue");
+      });
+
+      it("checks credit addition for overflow", async () => {
+        const input = ethers.AbiCoder.defaultAbiCoder().encode(["bytes", "uint256"], ["0x", ethers.MaxUint256]);
+        expect(await revertData(helper[method].staticCall(
+          helper.interface.getFunction("returnRaw")!.selector, target, 0n, input, true, { value: 1n },
+        ))).to.equal("0x4e487b71" + ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [0x11]).slice(2));
+      });
+
+      it("preserves target failures", async () => {
+        const selector = helper.interface.getFunction("failBytes")!.selector;
+        const reason = helper.interface.encodeErrorResult("TargetFailure", [3n]);
+        const errors = new ethers.Interface(["error FailedCall(address addr, bytes4 selector, bytes err)"]);
+        expect(await revertData(helper[method].staticCall(selector, target, 0n, "0x010203", false)))
+          .to.equal(errors.encodeErrorResult("FailedCall", [target, selector, reason]));
+      });
+
+      it("rejects malformed returndata and unexpected output", async () => {
+        expect(await revertData(helper[method].staticCall(
+          helper.interface.getFunction("returnRaw")!.selector, target, 0n, "0x", false,
+        ))).to.equal("0x");
+        expect(await revertData(helper[method].staticCall(
+          helper.interface.getFunction("echoPort")!.selector, target, 0n, "0xab", true,
+        ))).to.equal("0x");
+      });
+    });
+  }
+
   describe("invokeCommand", () => {
     const account = ethers.zeroPadValue("0xab", 32);
     const bytes = (length: number, byte = "a5") => "0x" + byte.repeat(length);

@@ -7,6 +7,7 @@ import {Sizes, Specs, Headers} from "../codec/Specs.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
 import {InsufficientValue, OutOfBounds, UnexpectedPosition, UnconsumedData} from "../utils/Errors.sol";
 import {Budget} from "../core/Budget.sol";
+import {Calls} from "../core/Calls.sol";
 import {
     AssetAmount,
     AssetLiability,
@@ -1497,6 +1498,64 @@ library Executions {
     function useResourceValue(Execution memory exec, uint resources) internal pure returns (uint value) {
         value = uint128(resources);
         useValue(exec, value);
+    }
+
+    // -------------------------------------------------------------------------
+    // Calls
+    // -------------------------------------------------------------------------
+
+    /// @notice Call a port with memory input and update the execution budget.
+    /// @dev Debits value before calling and adds the returned trusted credit.
+    /// The caller must authorize the selector/target and ensure credit is backed;
+    /// this helper does not transfer ETH back.
+    /// @param exec Mutable execution whose budget funds the call and receives credit.
+    /// @param selector Selector of a `bytes -> (bytes, uint)` port.
+    /// @param target Target contract address.
+    /// @param value Native value to forward in wei.
+    /// @param input Raw contents of the port's `bytes` argument.
+    /// @param expectEmpty Whether the decoded output must be empty.
+    /// @return out Decoded output bytes returned by the target.
+    function rawCall(
+        Execution memory exec,
+        bytes4 selector,
+        address target,
+        uint value,
+        bytes memory input,
+        bool expectEmpty
+    ) internal returns (bytes memory out) {
+        if (value > exec.budget) revert InsufficientValue();
+        unchecked { exec.budget -= value; }
+
+        uint credit;
+        (out, credit) = Calls.raw(selector, target, value, input, expectEmpty);
+        exec.budget += credit;
+    }
+
+    /// @notice Call a port with calldata input and update the execution budget.
+    /// @dev Copies input directly from calldata. Debits value before calling and
+    /// adds the returned trusted credit. The caller must authorize the selector/target
+    /// and ensure credit is backed; this helper does not transfer ETH back.
+    /// @param exec Mutable execution whose budget funds the call and receives credit.
+    /// @param selector Selector of a `bytes -> (bytes, uint)` port.
+    /// @param target Target contract address.
+    /// @param value Native value to forward in wei.
+    /// @param input Raw contents of the port's `bytes` argument.
+    /// @param expectEmpty Whether the decoded output must be empty.
+    /// @return out Decoded output bytes returned by the target.
+    function rawCallCopy(
+        Execution memory exec,
+        bytes4 selector,
+        address target,
+        uint value,
+        bytes calldata input,
+        bool expectEmpty
+    ) internal returns (bytes memory out) {
+        if (value > exec.budget) revert InsufficientValue();
+        unchecked { exec.budget -= value; }
+
+        uint credit;
+        (out, credit) = Calls.rawCopy(selector, target, value, input, expectEmpty);
+        exec.budget += credit;
     }
 
     // -------------------------------------------------------------------------

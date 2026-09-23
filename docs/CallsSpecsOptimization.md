@@ -10,18 +10,18 @@ remain bytes-only. This comparison includes the ABI change, not just decoder cos
 
 | Operation | Gas saved, single operation | Allocation saved |
 | --- | ---: | ---: |
-| Successful `rawCall` | -9 to -11 | 0 bytes |
-| Successful `rawCallCopy` | -9 to -11 | 0 bytes |
-| Successful `rawQuery` | 28 | 32 bytes |
+| Successful `Calls.raw` | -9 to -11 | 0 bytes |
+| Successful `Calls.rawCopy` | -9 to -11 | 0 bytes |
+| Successful `Calls.rawQuery` | 28 | 32 bytes |
 | `Specs.blockSize`, nonzero key | 56 | none |
 | `Specs.allocation`, nonzero key | 67 | none |
 
-Negative savings mean additional gas. Eight successful rawCall/rawCallCopy calls
+Negative savings mean additional gas. Eight successful Calls.raw/Calls.rawCopy calls
 cost 51-61 extra gas and save no allocation against the bytes-only baseline.
-Eight rawQuery calls save 246-277 gas and 256 allocated bytes, depending on payload
+Eight Calls.rawQuery calls save 246-277 gas and 256 allocated bytes, depending on payload
 size. These measurements include the expectEmpty correctness fix described below.
 
-Target failures cost 9 additional gas for rawCall/rawCallCopy and 7 for rawQuery
+Target failures cost 9 additional gas for Calls.raw/Calls.rawCopy and 7 for Calls.rawQuery
 in the outer catch fixture. A zero-key blockSize costs 10 additional gas in its fixture;
 zero-key allocation saves 1 gas. These figures include old/new branch and
 compiler-layout differences, rather than isolating individual EVM instructions.
@@ -69,7 +69,7 @@ Results are written to `.npm-cache/calls-layout-results.json`,
 
 The previous `and(expectEmpty, outputLen)` condition was a bitwise AND, so a true
 expectEmpty rejected odd output lengths but accepted even nonzero lengths.
-rawCall and rawCallCopy now normalize outputLen to a boolean before combining
+Calls.raw and Calls.rawCopy now normalize outputLen to a boolean before combining
 it with expectEmpty. Both reject every nonempty output with the existing empty
 revert data; zero-length outputs and calls without expectEmpty retain their
 behavior. The frozen baseline remains unchanged. Differential tests account for

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {rawCall, rawCallCopy, rawQuery} from "../core/Calls.sol";
+import {Calls} from "../core/Calls.sol";
 import {previousRawCall, previousRawCallCopy, previousRawQuery} from "./PreviousCalls.sol";
 import {Specs} from "../codec/Specs.sol";
 import {PreviousSpecs} from "./PreviousSpecs.sol";
@@ -29,13 +29,13 @@ contract TestCallsSpecsOptimization {
         uint initial = gasleft();
         for (uint j; j < cfg.count; j++) {
             if (cfg.mode == 0) {
-                if (optimized) (r.output, ) = rawCall(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
+                if (optimized) (r.output, ) = Calls.raw(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
                 else r.output = previousRawCall(cfg.selector, cfg.target, msg.value, data, cfg.expectEmpty);
             } else if (cfg.mode == 1) {
-                if (optimized) (r.output, ) = rawCallCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
+                if (optimized) (r.output, ) = Calls.rawCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
                 else r.output = previousRawCallCopy(cfg.selector, cfg.target, msg.value, input, cfg.expectEmpty);
             } else {
-                if (optimized) r.output = rawQuery(cfg.selector, cfg.target, data);
+                if (optimized) r.output = Calls.rawQuery(cfg.selector, cfg.target, data);
                 else r.output = previousRawQuery(cfg.selector, cfg.target, data);
             }
             if (j == 0) r.first = r.output;

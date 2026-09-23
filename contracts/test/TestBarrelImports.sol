@@ -82,11 +82,7 @@ import {
     InputEndpointBase,
     PortAccess,
     UnexpectedAmount as CoreUnexpectedAmount,
-    rawCall,
-    rawCallCopy,
-    rawQuery,
-    tryRawCall,
-    tryRawCallCopy,
+    Calls,
     ForwardHook
 } from "../Core.sol";
 import {
