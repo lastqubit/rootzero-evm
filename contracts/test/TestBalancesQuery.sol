@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import { Accounts } from "../utils/Accounts.sol";
 import { Assets } from "../utils/Assets.sol";
 import {InvalidAsset} from "../utils/Errors.sol";
-import { GetBalances } from "../queries/Balances.sol";
+import { GetBalance } from "../queries/Balance.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 contract TestErc20BalanceToken {
@@ -19,7 +19,7 @@ contract TestErc20BalanceToken {
     }
 }
 
-contract TestBalancesQuery is GetBalances {
+contract TestBalancesQuery is GetBalance {
     TestErc20BalanceToken public immutable token = new TestErc20BalanceToken();
     bytes32 public immutable tokenAsset = Assets.toErc20(address(token));
 

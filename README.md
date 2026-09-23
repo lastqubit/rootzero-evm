@@ -698,7 +698,7 @@ other commands may transform the asset side, the liability side, or both.
 
 Queries are the read endpoints: view functions that take a block-stream input
 and return a block-stream response, with the same batch shape as commands. The
-standard `getBalances` query takes a run of account-asset positions
+standard `getBalance` query takes a run of account-asset positions
 and answers each one in order. Query the host's own holdings by supplying its
 deterministic host account:
 

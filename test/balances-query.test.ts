@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { deploy, getProvider, getSigner } from "./helpers/setup.js";
+import "./helpers/matchers.js";
 import {
   concat,
   encodeAccountAssetBlock,
@@ -8,6 +9,14 @@ import {
 } from "./helpers/blocks.js";
 
 describe("BalancesQuery", () => {
+  it("returns empty output for empty input and rejects a truncated trailing item", async () => {
+    const query = await deploy("TestBalancesQuery");
+    expect(await query.getBalance.staticCall("0x")).to.equal("0x");
+    const account = encodeUserAccount(await (await getSigner()).getAddress());
+    const input = concat(encodeAccountAssetBlock(account, await query.tokenAsset()), "0x01");
+    await expect(query.getBalance.staticCall(input)).to.be.revertedWithCustomError(query, "OutOfBounds");
+  });
+
   it("queries the host account through the same account balance endpoint", async () => {
     const query = await deploy("TestBalancesQuery");
     const tokenAsset = await query.tokenAsset();
@@ -20,7 +29,7 @@ describe("BalancesQuery", () => {
     const utils = await deploy("TestUtils");
     const account = await utils.testToHostAccount(queryAddress);
     const input = concat(encodeAccountAssetBlock(account, tokenAsset), encodeAccountAssetBlock(account, chainAsset));
-    const result: string = await query.getBalances.staticCall(input);
+    const result: string = await query.getBalance.staticCall(input);
 
     expect(result).to.equal(concat(
       encodeAccountAmountBlock(account, tokenAsset, 789n),
@@ -37,7 +46,7 @@ describe("BalancesQuery", () => {
     await query.mint(await account.getAddress(), 123n);
 
     const input = encodeAccountAssetBlock(accountId, tokenAsset);
-    const result: string = await query.getBalances.staticCall(input);
+    const result: string = await query.getBalance.staticCall(input);
 
     expect(result).to.equal(encodeAccountAmountBlock(accountId, tokenAsset, 123n));
   });
@@ -59,7 +68,7 @@ describe("BalancesQuery", () => {
       encodeAccountAssetBlock(accountId, chainAsset),
     );
 
-    const result: string = await query.getBalances.staticCall(input);
+    const result: string = await query.getBalance.staticCall(input);
 
     expect(result).to.equal(concat(
       encodeAccountAmountBlock(accountId, tokenAsset, 456n),

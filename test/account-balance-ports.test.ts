@@ -17,7 +17,7 @@ describe("Unified account balance ports", () => {
   });
 
   async function balances() {
-    return host.getBalances(concat(encodeAccountAssetBlock(hostAccount, asset), encodeAccountAssetBlock(user, asset)));
+    return host.getBalance(concat(encodeAccountAssetBlock(hostAccount, asset), encodeAccountAssetBlock(user, asset)));
   }
 
   it("credits, debits, and queries host and user accounts through the same endpoints", async () => {

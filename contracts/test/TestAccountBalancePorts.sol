@@ -4,11 +4,11 @@ pragma solidity ^0.8.33;
 import {Balances} from "../core/Balances.sol";
 import {CreditAccountPort} from "../ports/Credit.sol";
 import {DebitAccountPort} from "../ports/Debit.sol";
-import {GetBalances} from "../queries/Balances.sol";
+import {GetBalance} from "../queries/Balance.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {AccessDenied} from "../core/Access.sol";
 
-contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPort, GetBalances {
+contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPort, GetBalance {
     address private immutable peer = msg.sender;
     constructor() Runtime(0) {}
 
