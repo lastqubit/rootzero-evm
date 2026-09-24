@@ -8,6 +8,47 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.44.0
+
+### Added
+
+- Add ASSET_LIMITS (asset, min, max) and POSITION_LIMITS (asset, minAmount,
+  liability, maxDebt) schemas with full-width inclusive bounds. Constraints are
+  encoded offchain; scalar readers and Blocks/Executions expectation helpers
+  provide onchain decoding and validation.
+- Add CheckBalance and CheckPosition commands and their Execute adapters,
+  exported through Endpoints.sol. Checks preserve state; Execute adapters
+  validate memory state directly against calldata without unpacking or copying.
+- Add Blocks.descend and Executions.descend to enter a parent and its first
+  child, returning child payload and child/parent end positions. Callers remain
+  responsible for containment and complete consumption.
+
+### Breaking Changes
+
+- Replace packed QUOTE limits with full-width amount and debt. The layout is now
+  (asset, amount, liability, debt), with a 128-byte payload. Quote remains an
+  independent schema; use POSITION_LIMITS to constrain a resulting position.
+- Remove LIMITS input and quantity checks from realize; input must be empty.
+  Compose checkPosition after realization to enforce outcome constraints in
+  the same atomic pipeline.
+- Rename Blocks.require1/2/4/8/16/32 to expect1/2/4/8/16/32 and requireLimits
+  to expectLimits in Blocks and Executions.
+- Remove the unused Positions library and its Utils.sol export, and remove
+  unpackLimitedPosition from Blocks, Memory, and Executions. Use expectation
+  helpers or validation commands instead.
+- Move optional schema names into a leading name: prefix in the schema body.
+  Remove the separate name argument and decoder return value. SCHEMA payloads
+  now contain only uint spec and #string as body (40-byte minimum).
+- Put the body string first in SchemaAnnot.schema overloads: schema(body, spec),
+  schema(body, key, size), and schema(body, key, min, max, hint). Update schema
+  producers and consumers together.
+
+### Documentation
+
+- Define packed LIMITS as an inclusive minimum in the high 128 bits and maximum
+  in the low 128 bits, with context determining their meaning. Encoding is unchanged.
+- Document Quote fields, optional validation pipelines, and repayment behavior.
+
 ## 1.43.0
 
 ### Breaking Changes
