@@ -2,11 +2,12 @@
 pragma solidity ^0.8.33;
 
 import {ExecuteCheckBalance} from "../commands/Balance.sol";
+import {ExecuteCheckPosition} from "../commands/Position.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {AccessDenied} from "../core/Access.sol";
 import {Headers} from "../codec/Specs.sol";
 
-contract TestCheckBalance is ExecuteCheckBalance {
+contract TestCheckBalance is ExecuteCheckBalance, ExecuteCheckPosition {
     address private immutable tester = msg.sender;
     constructor() Runtime(0) {}
 

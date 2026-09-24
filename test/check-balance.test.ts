@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeAssetLimitsBlock, encodeLimitsBlock, encodeContextBlock, endpointDescriptor, Keys, MaxUint128 } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeAssetLimitsBlock, encodePositionBlock, encodePositionLimitsBlock, encodeLimitsBlock, encodeContextBlock, endpointDescriptor, Keys, MaxUint128 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("CheckBalance command", () => {
@@ -11,6 +11,16 @@ describe("CheckBalance command", () => {
   const limits = (minimum = 90n, maximum = 110n) => encodeAssetLimitsBlock(asset, minimum, maximum);
   let host: any;
   before(async () => { host = await deploy("TestCheckBalance"); });
+
+  it("composes both check commands in one host", async () => {
+    const liability = ethers.toBeHex(2n, 32);
+    const position = encodePositionBlock(asset, 100n, liability, 40n);
+    expect(await host.checkBalance.staticCall(encodeContextBlock(account, balance(), limits())))
+      .to.deep.equal([balance(), 0n]);
+    expect(await host.checkPosition.staticCall(encodeContextBlock(account, position,
+      encodePositionLimitsBlock(asset, 100n, liability, 40n))))
+      .to.deep.equal([position, 0n]);
+  });
 
   it("accepts the canonical Solidity schema headers in memory execution", async () => {
     const [balanceHeader, limitsHeader] = await host.schemaHeaders();
