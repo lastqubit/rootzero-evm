@@ -49,6 +49,26 @@ abstract contract EnterHarness {
 }
 
 contract TestEnterCurrent is EnterHarness {
+    function descendOnce(
+        bytes calldata input,
+        uint parent,
+        uint child,
+        uint limit,
+        uint metadata
+    ) external pure returns (uint body, uint end, uint outer, uint position, bool preserved) {
+        uint start;
+        assembly ("memory-safe") { start := input.offset }
+        Execution memory exec;
+        uint original = start | ((start + limit) << 32) | (metadata & ~uint(type(uint64).max));
+        exec.decoders = original;
+        (body, end, outer) = Executions.descend(exec, parent, child);
+        body -= start;
+        end -= start;
+        outer -= start;
+        position = Executions.absolute(exec) - start;
+        preserved = original >> 32 == exec.decoders >> 32;
+    }
+
     function step(Execution memory exec, uint spec, uint amount, uint mode) internal pure override returns (uint, uint) {
         if (mode == 0) return Executions.enter(exec, spec);
         if (mode == 1) return Executions.enter(exec, bytes4(uint32(spec >> 224)));

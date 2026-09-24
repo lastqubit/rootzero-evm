@@ -535,6 +535,44 @@ describe("Cursors", () => {
         .to.deep.equal([8n, BigInt(ethers.getBytes(block).length), BigInt(ethers.getBytes(block).length)]);
     });
 
+    it("descends into the first child while retaining the parent end", async () => {
+      for (const raw of ["0x", "0x0102030405"]) {
+        const child = encodeBytesBlock(raw);
+        const siblings = encodeStringBlock("sibling");
+        const parent = encodeListBlock(child, siblings);
+        expect(await blocksHelper.descendAbsolute(
+          parent,
+          rangedSpec(Keys.List, 8, 0, 128),
+          exactSpec(Keys.Bytes, ethers.dataLength(raw)),
+        )).to.deep.equal([16n, BigInt(8 + ethers.dataLength(child)), BigInt(ethers.dataLength(parent))]);
+      }
+    });
+
+    it("descend validates both parent and child specifications", async () => {
+      const source = encodeListBlock(encodeBytesBlock("0x010203"));
+      const parent = exactSpec(Keys.List, 11);
+      const child = exactSpec(Keys.Bytes, 3);
+      for (const [p, c] of [
+        [exactSpec(Keys.String, 11), child],
+        [exactSpec(Keys.List, 12), child],
+        [parent, exactSpec(Keys.String, 3)],
+        [parent, exactSpec(Keys.Bytes, 2)],
+        [parent, rangedSpec(Keys.Bytes, 4, 0, 32)],
+      ]) {
+        await expect(blocksHelper.descendAbsolute(source, p, c))
+          .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
+      }
+    });
+
+    it("descend leaves source bounds and child containment to the caller", async () => {
+      const child = encodeBytesBlock("0x010203");
+      // Parent declares only the child header; child declares three payload bytes.
+      const source = encodeListBlock(ethers.dataSlice(child, 0, 8));
+      expect(await blocksHelper.descendAbsolute(
+        source, exactSpec(Keys.List, 8), exactSpec(Keys.Bytes, 3),
+      )).to.deep.equal([16n, 19n, 16n]);
+    });
+
     it("rejects absolute blocks outside the expected spec shape", async () => {
       const raw = "0x0102030405";
       const block = encodeBytesBlock(raw);

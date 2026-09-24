@@ -316,6 +316,28 @@ library Executions {
         exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
     }
 
+    /// @notice Validate and enter an input parent and its first child.
+    /// @dev The parent must begin with a child block. Retains the outer input
+    /// bounds and checks only the resulting cursor position, after validating
+    /// both headers. Callers must verify child and parent consumption with
+    /// `expect(end)` and `expect(outer)`; containment is not checked here.
+    /// @param exec Execution whose input cursor advances to the child payload.
+    /// @param parent Expected packed parent block specification.
+    /// @param child Expected packed child block specification.
+    /// @return body Absolute position of the first child payload byte.
+    /// @return end Absolute position immediately after the child payload.
+    /// @return outer Absolute position immediately after the parent payload.
+    function descend(
+        Execution memory exec,
+        uint parent,
+        uint child
+    ) internal pure returns (uint body, uint end, uint outer) {
+        uint decoders = exec.decoders;
+        (body, end, outer) = Blocks.descend(uint32(decoders), parent, child);
+        if (body > uint32(decoders >> 32)) revert OutOfBounds();
+        exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
+    }
+
     /// @notice Validate and enter the payload of the next keyed execution input block.
     /// @dev Validates no payload-size constraint. Callers should prove complete
     /// payload consumption with `exec.expect(end)` after decoding.

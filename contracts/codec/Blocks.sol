@@ -149,6 +149,21 @@ library Blocks {
         }
     }
 
+    /// @notice Validate and enter a parent block and its first child.
+    /// @dev DANGER: Unchecked calldata reads. Validates both specifications but
+    /// not source bounds or child containment. The parent must begin with a
+    /// child block. Callers must validate bounds and complete consumption.
+    /// @param abs Absolute calldata position of the parent header.
+    /// @param parent Expected packed parent block specification.
+    /// @param child Expected packed child block specification.
+    /// @return body Absolute position of the first child payload byte.
+    /// @return end Absolute position immediately after the child payload.
+    /// @return outer Absolute position immediately after the parent payload.
+    function descend(uint abs, uint parent, uint child) internal pure returns (uint body, uint end, uint outer) {
+        (body, outer) = enter(abs, parent);
+        (body, end) = enter(body, child);
+    }
+
     /// @notice Validate a block specification and enter after a fixed payload prefix.
     /// @dev DANGER: This performs an unchecked calldata read and does not ensure
     /// that the returned positions lie within the caller's logical calldata region.

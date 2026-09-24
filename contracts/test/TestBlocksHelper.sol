@@ -717,6 +717,18 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         end = limit - head;
     }
 
+    function descendAbsolute(
+        bytes calldata source,
+        uint parent,
+        uint child
+    ) external pure returns (uint body, uint end, uint outer) {
+        uint base = position(source);
+        (body, end, outer) = Blocks.descend(base, parent, child);
+        body -= base;
+        end -= base;
+        outer -= base;
+    }
+
     function enterAmountAbsolute(
         bytes calldata source,
         uint spec,

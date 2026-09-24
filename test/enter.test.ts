@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
+import "./helpers/matchers.js";
 import { concat, encodeBlock, exactSpec, Keys } from "./helpers/blocks.js";
 
 for (const kind of ["Execution", "Decoder"]) {
@@ -47,3 +48,47 @@ describe(`${kind} enter optimization`, () => {
 });
 
 }
+
+
+describe("Execution descend", () => {
+  let helper: Awaited<ReturnType<typeof deploy>>;
+  const child = encodeBlock(Keys.Bytes, "0x010203");
+  const parent = encodeBlock(Keys.List, concat(child, encodeBlock(Keys.String, "0xaa")));
+  const parentSpec = exactSpec(Keys.List, 20);
+  const childSpec = exactSpec(Keys.Bytes, 3);
+  before(async () => { helper = await deploy("TestEnterCurrent"); });
+
+  it("returns child and parent bounds and preserves every non-position bit", async () => {
+    expect(await helper.descendOnce(parent, parentSpec, childSpec, 28, ethers.MaxUint256))
+      .to.deep.equal([16n, 19n, 28n, 16n, true]);
+  });
+
+  it("allows empty children and leaves payload-end checks to the caller", async () => {
+    const empty = encodeBlock(Keys.List, encodeBlock(Keys.Bytes, "0x"));
+    expect(await helper.descendOnce(empty, exactSpec(Keys.List, 8), exactSpec(Keys.Bytes, 0), 16, 0))
+      .to.deep.equal([16n, 16n, 16n, 16n, true]);
+    // Both headers fit, but the child payload extends beyond the parent and input.
+    const headers = encodeBlock(Keys.List, ethers.dataSlice(child, 0, 8));
+    expect(await helper.descendOnce(headers, exactSpec(Keys.List, 8), childSpec, 16, 0))
+      .to.deep.equal([16n, 19n, 16n, 16n, true]);
+  });
+
+  it("rejects a child payload start beyond the input limit", async () => {
+    for (const limit of [0, 7, 8, 15]) {
+      await expect(helper.descendOnce(parent, parentSpec, childSpec, limit, 0))
+        .to.be.revertedWithCustomError(helper, "OutOfBounds");
+    }
+  });
+
+  it("validates both specifications before checking the cursor bound", async () => {
+    for (const [p, c] of [
+      [exactSpec(Keys.Bytes, 20), childSpec],
+      [exactSpec(Keys.List, 21), childSpec],
+      [parentSpec, exactSpec(Keys.String, 3)],
+      [parentSpec, exactSpec(Keys.Bytes, 2)],
+    ]) {
+      await expect(helper.descendOnce(parent, p, c, 0, 0))
+        .to.be.revertedWithCustomError(helper, "InvalidBlock");
+    }
+  });
+});
