@@ -8,6 +8,13 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.44.1
+
+### Fixed
+
+- Give CheckBalance and CheckPosition distinct callback names so both commands
+  can be inherited by the same host.
+
 ## 1.44.0
 
 ### Added
