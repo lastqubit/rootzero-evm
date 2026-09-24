@@ -51,16 +51,12 @@ library PreviousComposites {
     }
 
     function createSchema(uint spec, string memory body) internal pure returns (bytes memory value) {
-        return createSchema(spec, body, bytes32(0));
-    }
-
-    function createSchema(uint spec, string memory body, bytes32 name) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + bytes(body).length);
+        uint len = max32(Sizes.B32 + bytes(body).length);
         value = allocate(Sizes.Header + len);
-        Blocks.writeSchema(value, 0, spec, body, name);
+        Blocks.writeSchema(value, 0, spec, body);
     }
 
-    function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, bytes32 name, uint end) {
+    function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, uint end) {
         uint limit;
         (abs, limit) = Blocks.enter(abs, Keys.Schema);
         assembly ("memory-safe") {
@@ -68,10 +64,7 @@ library PreviousComposites {
         }
         bytes calldata value;
         (value, end) = unpackString(abs + 32);
-        if (end + 32 != limit) revert InvalidBlock();
-        assembly ("memory-safe") {
-            name := calldataload(end)
-        }
+        if (end != limit) revert InvalidBlock();
         end = limit;
         body = string(value);
     }
@@ -533,16 +526,6 @@ contract TestComposites {
         dirty(80 + a.length);
         if (forgedLength != 0) { assembly ("memory-safe") { mstore(ma, forgedLength) } }
         uint initial = gasleft();
-        output = optimized ? Blocks.createSchema(11, string(ma), bytes32(uint(33))) : PreviousComposites.createSchema(11, string(ma), bytes32(uint(33)));
-        usedGas = initial - gasleft();
-        cleanTail = clean(output);
-    }
-    function factorySchemaUnnamed(bool optimized, bytes calldata a, uint forgedLength)
-        external view returns(uint usedGas, bytes memory output, bool cleanTail) {
-        bytes memory ma = a;
-        dirty(80 + a.length);
-        if (forgedLength != 0) { assembly ("memory-safe") { mstore(ma, forgedLength) } }
-        uint initial = gasleft();
         output = optimized ? Blocks.createSchema(11, string(ma)) : PreviousComposites.createSchema(11, string(ma));
         usedGas = initial - gasleft();
         cleanTail = clean(output);
@@ -562,11 +545,11 @@ contract TestComposites {
         external view returns(uint usedGas, bytes memory output) {
         uint base; assembly ("memory-safe") { base := data.offset }
         uint abs = absolute ? start : base + start;
-        uint spec; string memory body; bytes32 name; uint end;
+        uint spec; string memory body; uint end;
         uint initial = gasleft();
-        if (optimized) (spec, body, name, end) = Blocks.unpackSchema(abs);
-        else (spec, body, name, end) = PreviousComposites.unpackSchema(abs);
+        if (optimized) (spec, body, end) = Blocks.unpackSchema(abs);
+        else (spec, body, end) = PreviousComposites.unpackSchema(abs);
         usedGas = initial - gasleft();
-        output = abi.encode(spec, body, name, end - base);
+        output = abi.encode(spec, body, end - base);
     }
 }

@@ -18,7 +18,7 @@ const supported = [
   { name: "unpackContext", input: encodeContextBlock(word, blob(3), blob(5)), parameter: 0n },
   { name: "unpackRelay", input: encodeRelayBlock(blob(3), blob(5)), parameter: 0n },
   { name: "unpackLabel", input: encodeLabelBlock(word, "abc"), parameter: 0n },
-  { name: "unpackSchema", input: encodeSchemaBlock(11n, "abc", word), parameter: 0n },
+  { name: "unpackSchema", input: encodeSchemaBlock(11n, "abc"), parameter: 0n },
   { name: "unpackRecover", input: encodeRecoverBlock(11n, 22n, word, blob(3)), parameter: 0n },
   { name: "unpackCall", input: encodeCallBlock(11n, 22n, blob(3)), parameter: 0n },
   { name: "unpackDispatch", input: encodeDispatchBlock(11n, 22n, blob(3)), parameter: 0n },

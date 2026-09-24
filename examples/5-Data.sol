@@ -21,7 +21,7 @@ abstract contract MyCommand is CommandBase {
 
     constructor() {
         uint32 size = uint32(32 + Sizes.Amount);
-        inputSpec = schema(1, size, INPUT, bytes32(0));
+        inputSpec = schema(INPUT, 1, size);
         (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Custody, 0);
     }
 

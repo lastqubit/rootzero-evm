@@ -25,7 +25,7 @@ contract TestQuery is QueryBase {
 
     constructor() Runtime(0) {
         uint32 size = uint32(Sizes.B32 - Sizes.Header);
-        uint valueSpec = schema(1, size, size, size, INPUT);
+        uint valueSpec = schema(INPUT, 1, size, size, size);
         ValueSpec = valueSpec;
         (, descriptor) = query("incrementQuery", valueSpec, valueSpec);
     }
@@ -51,7 +51,7 @@ contract TestKeyedLocalQuery is QueryBase {
 
     constructor() Runtime(0) {
         uint32 size = uint32(Sizes.B32 - Sizes.Header);
-        uint valueSpec = schema(2, size, size, size, INPUT);
+        uint valueSpec = schema(INPUT, 2, size, size, size);
         ValueSpec = valueSpec;
         (, descriptor) = query("keyedLocalQuery", valueSpec, valueSpec);
     }
@@ -73,12 +73,11 @@ contract TestQualifiedSchema is SchemaAnnot {
     constructor() Runtime(0) {
         uint32 size = 64;
         schema(
+            "relay.input: uint portal, uint resources",
             3,
             size,
             size,
-            size,
-            "uint portal, uint resources",
-            bytes32("relay.input")
+            size
         );
     }
 }

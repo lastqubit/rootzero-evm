@@ -154,8 +154,8 @@ contract TestExecutionOutputOptimization {
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputSchema(exec, 11, string(ma), bytes32(uint(33)));
-            else PreviousExecutions.outputSchema(exec, 11, string(ma), bytes32(uint(33)));
+            if (optimized) Executions.outputSchema(exec, 11, string(ma));
+            else PreviousExecutions.outputSchema(exec, 11, string(ma));
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }

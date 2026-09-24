@@ -153,6 +153,12 @@ verify identical `ValueOverflow` and arithmetic-overflow panic data before copyi
 
 ## LABEL and SCHEMA
 
+The measurements below describe the former SCHEMA format with a separate name
+word. Current SCHEMA blocks contain only the spec and STRING body; names are
+optional `name:` prefixes. Both LABEL and SCHEMA now validate their STRING
+against the parent end directly, and SCHEMA has one factory signature. The
+benchmark reference implementations have been adapted to the current format.
+
 LABEL and both SCHEMA factory overloads now use private allocated-buffer writers
 to reuse their validated outer payload length. Their existing limits are retained:
 these factories bound the outer payload to uint32, then allocate eight additional

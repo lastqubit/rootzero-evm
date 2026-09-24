@@ -3,9 +3,9 @@
 Rootzero input and response data is encoded as a stream of typed blocks. A
 schema string describes the payload body for discovery events and tooling; the
 runtime block key is the compact type tag that identifies that payload layout in
-the active schema context. The block alias comes from the protocol's standard
-catalog or an explicit schema annotation name; it is not part of the payload
-schema string.
+the active schema context. The block alias comes from an optional `name:` prefix
+in the schema string or the protocol's standard key catalog. The prefix names the schema, while
+`as` names an individual item within its payload body.
 
 ## Wire Format
 
@@ -30,10 +30,10 @@ and therefore know, for example, that the key derived from `#amount` is named
 `amount` and has the body `{ bytes32 asset, uint amount }`. This does not depend
 on a host emitting a named schema annotation.
 
-If an emitted `#schema` block has `name == bytes32(0)` and its key is standard,
-tooling uses that key's canonical standard alias. A zero name on a nonstandard
-key remains unnamed. An explicit nonzero name is still required for qualified
-bindings such as `relay.input`.
+If an emitted `#schema` body has no name prefix and its key is standard,
+tooling uses that key's canonical standard alias. A nonstandard key without
+a prefix remains unnamed. An explicit prefix is required for qualified
+bindings such as `relay.input:`.
 
 Custom block keys do not have to be keccak-derived. They
 are opaque `bytes4` tags and only need to be unique in the context where they are
@@ -41,7 +41,7 @@ used. A host can publish the meaning of a custom key as an annotation:
 
 ```solidity
 event Annotation(uint indexed entity, bytes data);
-#schema { uint spec, #string as body, bytes32 name }
+#schema { uint spec, #string as body }
 ```
 
 Annotation merge behavior is defined by the annotation block type rather than
@@ -76,8 +76,9 @@ overloaded in the relevant host/schema context.
 
 ## Block Syntax
 
-A block definition has an event alias and a schema body. A schema body is one
-of these forms:
+A schema string has the form `[name ":"] body`. The optional name prefix
+appears only at the beginning, outside any body braces. A body is one of
+these forms:
 
 ```txt
 ""                  empty or raw payload
@@ -91,15 +92,14 @@ One optional pair of outer braces may wrap any non-empty schema body. The
 braces are presentation-only and never change its wire layout:
 
 ```txt
-alias:  amount
-schema: bytes32 asset, uint amount
-also valid: { bytes32 asset, uint amount }
+amount: bytes32 asset, uint amount
+amount: { bytes32 asset, uint amount }
 ```
 
-Consumers must remove one matching pair of outer braces, when present, before
-parsing the item sequence. Only commas outside alias-list parentheses separate
-sibling items. Unmatched braces and additional
-outer brace layers are invalid.
+After extracting any name prefix, consumers must remove one matching pair of
+outer braces, when present, before parsing the item sequence. Only commas
+outside alias-list parentheses separate sibling items. Unmatched braces and
+additional outer brace layers are invalid.
 
 A block body can reference another block alias as a child item with `#`:
 
@@ -165,6 +165,43 @@ uint id, #bytes as (source.payload, destination.payload), #account as owner
 Commas inside the parentheses separate aliases, not schema items. After
 expansion, all ordinary sibling validation and presentation rules apply.
 
+### Optional schema name
+
+The prefix names the whole schema independently of field names and `as` aliases:
+
+```txt
+assets: many #asset as assets
+portfolio: many #asset as holdings
+relay.input: uint portal, uint resources
+opaque:
+```
+
+The first example declares a schema named `assets` and gives its list item the
+presentation name `assets`. The second declares `portfolio` with a list named
+`holdings`. References use `#assets` or `#portfolio`; neither prefix nor field
+alias adds a container or changes the key in `spec`. The existing top-level
+`many` rule still uses that key as the outer list block key.
+
+Consumers first extract the optional prefix, then parse the remaining body.
+Whitespace around the name, colon, and body is insignificant. Names follow the
+identifier/path grammar below, are case-sensitive, and have no 32-byte limit.
+Exactly one prefix is allowed, only at the start and outside braces. Empty
+names, invalid identifiers, additional colons, and nested declarations are
+invalid; consumers must reject them rather than treating them as unnamed.
+For example, `: uint value`, `bad-name: uint value`, `a: b: uint value`, and
+`{ assets: many #asset }` are invalid.
+
+An empty remaining body, as in `opaque:`, has the same empty/raw meaning as an
+unnamed empty string. Empty braces remain invalid. A malformed selected schema
+does not fall back to a standard schema. Name resolution and trusted-context
+precedence are unchanged. Solidity helpers encode the complete string without
+parsing or validating this offchain DSL.
+
+The `#schema` payload is `uint spec, #string as body`, with a minimum payload
+length of 40 bytes. There is no separate name word. This replaces the previous
+`uint spec, #string as body, bytes32 name` wire format; consumers must migrate
+alongside producers rather than accepting the trailing word as part of the body.
+
 ## Payload Layout
 
 A block payload encodes schema items in declaration order. Fixed fields are
@@ -175,7 +212,7 @@ length, fixed fields may appear before, after, or between child blocks.
 ```txt
 { uint target, uint resources, #bytes as payload }
 { bytes32 account, #bytes as state, #bytes as input }
-{ uint spec, #string as body, bytes32 name }
+{ uint spec, #string as body }
 { #bytes as left, uint op, #bytes as right }
 ```
 
@@ -208,9 +245,8 @@ existing schema annotation helper:
 
 ```solidity
 schema(
-    inputSpec,
-    "uint portal, uint resources",
-    bytes32("relay.input")
+    "relay.input: uint portal, uint resources",
+    inputSpec
 );
 ```
 
@@ -313,7 +349,7 @@ parent block. Each child has its existing schema key and may have a role alias:
 
 ```txt
 schema key:  0x00000001 (local key published by the host)
-schema name: zero (unnamed)
+schema name: omitted (unnamed)
 schema body: #accountAmount as (debit, credit)
 expanded:    #accountAmount as debit, #accountAmount as credit
 wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
@@ -954,21 +990,29 @@ it with a `#schema` annotation. Endpoint contracts can use `schema(...)` to
 construct and publish that spec:
 
 ```solidity
-uint input = schema(1, 64, 64, 64, "{ bytes32 asset, uint amount }", bytes32(0));
+uint input = schema("{ bytes32 asset, uint amount }", 1, 64, 64, 64);
+```
+
+The body string comes first in every overload:
+
+```solidity
+schema(body, spec);
+schema(body, key, size);
+schema(body, key, min, max, hint);
 ```
 
 Use different numeric keys when a host needs more than one local block key. The
 key can also be a selector or any other `bytes4` value that is unique in the
 context where it is used. The numeric arguments after the key are the minimum,
-maximum, and allocation hint payload sizes. The alias names the block; the
-schema string describes only the payload body.
+maximum, and allocation hint payload sizes. The optional `name:` prefix names
+the block; the remainder of the schema string describes its payload body.
 
 ## Standard Blocks
 
 The complete canonical name/body catalog lives in `contracts/codec/Schema.sol`;
 the corresponding keys and packed specifications live in `Keys.sol` and
 `Specs.sol`. These names are intrinsic standard metadata and need not be emitted
-in `#schema.name`:
+as a prefix in `#schema.body`:
 
 ```txt
 bytes              ""
@@ -1008,7 +1052,7 @@ action             uint action
 counterparty      bytes32 account
 groups             #string as description
 label              bytes32 namespace, #string as name
-schema             uint spec, #string as body, bytes32 name
+schema             uint spec, #string as body
 ```
 
 ### Host Accounts

@@ -35,9 +35,9 @@ contract TestStringCursorHelper {
 
     function testUnpackSchema(
         bytes calldata source
-    ) external pure returns (uint spec, string memory body, bytes32 name, uint i) {
+    ) external pure returns (uint spec, string memory body, uint i) {
         Cur memory cur = Decoders.open(source);
-        (spec, body, name) = cur.unpackSchema();
+        (spec, body) = cur.unpackSchema();
         i = Cursors.position(cur.state) - Cursors.base(source);
     }
 }

@@ -16,7 +16,7 @@ const layouts: Record<string, (a: string, b: string) => string> = {
   Context: (a, b) => encodeContextBlock(word, a, b),
   Recover: (a, b) => encodeRecoverBlock(11n, 22n, word, a),
   Label: (a, b) => encodeBlock(Keys.Label, ethers.concat([word, encodeBlock(Keys.String, a)])),
-  Schema: (a, b) => encodeBlock(Keys.Schema, ethers.concat([ethers.toBeHex(11, 32), encodeBlock(Keys.String, a), word])),
+  Schema: (a, b) => encodeBlock(Keys.Schema, ethers.concat([ethers.toBeHex(11, 32), encodeBlock(Keys.String, a)])),
   Block: (a, b) => encodeBlock(Keys.Bytes, a),
   List: (a, b) => encodeBlock(Keys.List, a),
   Bytes: (a, b) => encodeBlock(Keys.Bytes, a),

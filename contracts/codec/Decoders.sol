@@ -608,12 +608,11 @@ library Decoders {
     /// @notice Decode and consume one SCHEMA block.
     /// @param cur Cursor advanced past the block.
     /// @return spec Decoded block specification.
-    /// @return body Decoded schema body.
-    /// @return name Decoded schema name.
-    function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body, bytes32 name) {
+    /// @return body Decoded schema DSL string, including any `name:` prefix.
+    function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body) {
         uint abs = cur.state.position();
         uint end;
-        (spec, body, name, end) = Blocks.unpackSchema(abs);
+        (spec, body, end) = Blocks.unpackSchema(abs);
         cur.state = seekAfterBlock(cur.state, end);
     }
 

@@ -46,7 +46,7 @@ describe("Queries", () => {
       );
     await expect(tx!)
       .to.emit(query, "Annotation")
-      .withArgs(await query.host(), encodeSchemaBlock(ValueSpec, "uint value", ethers.ZeroHash));
+      .withArgs(await query.host(), encodeSchemaBlock(ValueSpec, "uint value"));
     await expect(tx!)
       .to.emit(query, "Annotation")
       .withArgs(await qry("incrementQuery"), encodeLabelBlock(ethers.ZeroHash, "incrementQuery"));
@@ -94,7 +94,7 @@ describe("Queries", () => {
         );
       await expect(tx!)
         .to.emit(keyedQuery, "Annotation")
-        .withArgs(await keyedQuery.host(), encodeSchemaBlock(KeyedValueSpec, "{ uint value }", ethers.ZeroHash));
+        .withArgs(await keyedQuery.host(), encodeSchemaBlock(KeyedValueSpec, "{ uint value }"));
     });
 
     it("accepts the keyed local value block", async () => {
@@ -119,8 +119,7 @@ describe("Qualified schemas", () => {
         await schema.host(),
         encodeSchemaBlock(
           RelayInputSpec,
-          "uint portal, uint resources",
-          ethers.encodeBytes32String("relay.input"),
+          "relay.input: uint portal, uint resources",
         ),
       );
   });

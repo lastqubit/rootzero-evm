@@ -319,11 +319,9 @@ describe("Admin Commands", () => {
 
     it("publishes a block schema through an Annotation block", async () => {
       const entity = await host.host();
-      const name = ethers.encodeBytes32String("amount");
       const data = encodeSchemaBlock(
         exactSpec(Keys.Amount, 64),
-        "{ bytes32 asset, uint amount }",
-        name,
+        "amount: { bytes32 asset, uint amount }",
       );
       const input = encodeAnnotationBlock(entity, data);
 

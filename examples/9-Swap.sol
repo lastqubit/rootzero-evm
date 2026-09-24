@@ -33,7 +33,7 @@ using Decoders for Cur;
 using Executions for Execution;
 
 abstract contract SwapHopInput is SchemaAnnot {
-    string private constant INPUT = "{ bytes32 asset, uint32 fee, int32 tickSpacing, uint hook, #bytes as hookData }";
+    string private constant INPUT = "swapHop: { bytes32 asset, uint32 fee, int32 tickSpacing, uint hook, #bytes as hookData }";
 
     uint private immutable inputSpec;
 
@@ -46,7 +46,7 @@ abstract contract SwapHopInput is SchemaAnnot {
     }
 
     constructor(uint32 key) {
-        inputSpec = schema(key, 80, 0, 128, INPUT, bytes32("swapHop"));
+        inputSpec = schema(INPUT, key, 80, 0, 128);
     }
 
     function unpackSwapHop(Cur memory hops) internal view returns (SwapHop memory value) {
@@ -76,7 +76,7 @@ abstract contract SwapInput is SchemaAnnot {
     }
 
     constructor(uint32 key) {
-        swapSpec = schema(key, 184, 0, 512, INPUT);
+        swapSpec = schema(INPUT, key, 184, 0, 512);
     }
 
     function unpackSwap(

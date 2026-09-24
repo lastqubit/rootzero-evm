@@ -1113,8 +1113,7 @@ describe("Commands", () => {
           await host.host(),
           encodeSchemaBlock(
             RelayInputSpec,
-            "uint portal, uint resources",
-            ethers.encodeBytes32String("relay.input"),
+            "relay.input: uint portal, uint resources",
           ),
         );
     });

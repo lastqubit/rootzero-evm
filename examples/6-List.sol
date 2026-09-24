@@ -16,7 +16,7 @@ using Decoders for Cur;
 
 abstract contract MyCommand is CommandBase {
     string private constant INPUT = "many #asset";
-    uint private immutable inputSpec = schema(1, 0, 0, 128, INPUT, bytes32(0));
+    uint private immutable inputSpec = schema(INPUT, 1, 0, 0, 128);
     uint private immutable descriptor;
 
     event AssetSeen(uint indexed batch, bytes32 asset);

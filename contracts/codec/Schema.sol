@@ -7,8 +7,8 @@ pragma solidity ^0.8.33;
 // - payload layout is block-specific
 //
 // Schema:
-// - block aliases come from the standard catalog or explicit schema annotation
-//   names; they are not part of the payload schema string
+// - schema strings accept an optional `name:` prefix before the payload body;
+//   aliases otherwise come from the standard key catalog
 // - payload schemas are `""` or a comma-separated item sequence; one optional
 //   pair of outer braces may wrap a non-empty sequence without changing meaning
 // - an empty schema string means the block has no structured payload
@@ -52,11 +52,9 @@ pragma solidity ^0.8.33;
 // - `at N` assigns an offchain presentation position to one sibling; explicit
 //   positions are reserved first and unannotated siblings retain relative order
 // - child blocks resolve by alias in the active schema context; unresolved aliases are invalid
-// - schema strings describe the payload body only; the standard catalog or an
-//   explicit annotation name supplies the alias
-// - standard keys have protocol-defined canonical aliases even when an emitted
-//   `#schema` block has a zero name; indexers resolve the alias from the standard
-//   key catalog, while a zero name on a nonstandard key remains unnamed
+// - the `name:` prefix names the whole schema; `as` independently names an item
+// - standard keys have canonical aliases even without an explicit name prefix;
+//   a nonstandard key without a prefix remains unnamed
 // - items are encoded in declaration order
 // - fixed fields are packed inline and any number of child blocks are embedded directly
 // - child blocks may appear between fixed fields because each block carries its own length
@@ -169,6 +167,6 @@ library Schemas {
     string constant ExecutionCost = "uint base, uint batch";
     string constant Groups = "#string as description";
     string constant Label = "bytes32 namespace, #string as name";
-    string constant Schema = "uint spec, #string as body, bytes32 name";
+    string constant Schema = "uint spec, #string as body";
 }
 

@@ -878,11 +878,10 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function writeSchema(
         uint offset,
         uint spec,
-        string memory body,
-        bytes32 name
+        string memory body
     ) external pure returns (bytes memory dst) {
-        dst = new bytes(offset + Sizes.B64 + Sizes.Header + bytes(body).length);
-        Blocks.writeSchema(dst, offset, spec, body, name);
+        dst = new bytes(offset + Sizes.B32 + Sizes.Header + bytes(body).length);
+        Blocks.writeSchema(dst, offset, spec, body);
     }
 
     function position(bytes calldata source) private pure returns (uint abs) {

@@ -89,10 +89,10 @@ contract TestExecutionOptimization {
             data = abi.encode(v0, v1);
         }
         else if (mode == 9) {
-            uint v0; string memory v1; bytes32 v2;
-            if (optimized) (v0, v1, v2) = Executions.unpackSchema(exec);
-            else (v0, v1, v2) = PreviousExecutions.unpackSchema(exec);
-            data = abi.encode(v0, v1, v2);
+            uint v0; string memory v1;
+            if (optimized) (v0, v1) = Executions.unpackSchema(exec);
+            else (v0, v1) = PreviousExecutions.unpackSchema(exec);
+            data = abi.encode(v0, v1);
         }
         else if (mode == 10) {
             uint v0; uint v1; bytes32 v2; bytes calldata v3;

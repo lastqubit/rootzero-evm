@@ -119,7 +119,7 @@ library PreviousSpecs {
     uint constant Annotation = uint(bytes32(Keys.Annotation)) | UnboundedMin40Hint256;
     uint constant Action = uint(bytes32(Keys.Action)) | Exact32;
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
-    uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin72Hint256;
+    uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;

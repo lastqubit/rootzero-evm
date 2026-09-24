@@ -924,12 +924,11 @@ library Executions {
     /// @notice Decode and consume one SCHEMA block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return spec Decoded block specification.
-    /// @return body Decoded schema body.
-    /// @return name Decoded schema name.
-    function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body, bytes32 name) {
+    /// @return body Decoded schema DSL string, including any `name:` prefix.
+    function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body) {
         uint abs = uint32(exec.decoders);
         uint end;
-        (spec, body, name, end) = Blocks.unpackSchema(abs);
+        (spec, body, end) = Blocks.unpackSchema(abs);
         seekInput(exec, end);
     }
 
@@ -1366,12 +1365,11 @@ library Executions {
     /// @notice Append a SCHEMA block to execution output.
     /// @param exec Execution receiving the block.
     /// @param spec Block specification to encode.
-    /// @param body Schema body to encode.
-    /// @param name Schema name to encode.
-    function outputSchema(Execution memory exec, uint spec, string memory body, bytes32 name) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + bytes(body).length;
+    /// @param body Schema DSL string, optionally prefixed with `name:`.
+    function outputSchema(Execution memory exec, uint spec, string memory body) internal pure {
+        uint size = Sizes.B32 + Sizes.Header + bytes(body).length;
         uint i = reserve(exec, size);
-        Blocks.writeSchemaSized(exec.output, i, spec, body, name, size);
+        Blocks.writeSchemaSized(exec.output, i, spec, body, size);
     }
 
     // -------------------------------------------------------------------------

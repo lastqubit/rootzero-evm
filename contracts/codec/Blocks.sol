@@ -1081,10 +1081,9 @@ library Blocks {
     /// @param dst Destination buffer.
     /// @param i Relative write position.
     /// @param spec Block specification.
-    /// @param body Schema body.
-    /// @param name Schema name.
-    function writeSchema(bytes memory dst, uint i, uint spec, string memory body, bytes32 name) internal pure {
-        uint len = 64 + Sizes.Header + bytes(body).length;
+    /// @param body Schema DSL string, optionally prefixed with `name:`.
+    function writeSchema(bytes memory dst, uint i, uint spec, string memory body) internal pure {
+        uint len = 32 + Sizes.Header + bytes(body).length;
         uint key = uint32(Keys.Schema);
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
@@ -1096,7 +1095,6 @@ library Blocks {
             let bodylen := mload(body)
             mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
             mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-            mstore(add(add(q, 0x08), bodylen), name)
         }
     }
 
@@ -1459,7 +1457,7 @@ library Blocks {
         }
     }
 
-    function writeSchemaAllocated(bytes memory dst, uint spec, string memory body, bytes32 name) private pure {
+    function writeSchemaAllocated(bytes memory dst, uint spec, string memory body) private pure {
         uint key = uint32(Keys.Schema);
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
@@ -1471,7 +1469,6 @@ library Blocks {
             let bodylen := mload(body)
             mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
             mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-            mstore(add(add(q, 0x08), bodylen), name)
         }
     }
 
@@ -1601,14 +1598,7 @@ library Blocks {
 
     /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
     /// prove size fits uint32, and pass the exact complete block size.
-    function writeSchemaSized(
-        bytes memory dst,
-        uint i,
-        uint spec,
-        string memory body,
-        bytes32 name,
-        uint size
-    ) internal pure {
+    function writeSchemaSized(bytes memory dst, uint i, uint spec, string memory body, uint size) internal pure {
         uint key = uint32(Keys.Schema);
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
@@ -1620,7 +1610,6 @@ library Blocks {
             let bodylen := mload(body)
             mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
             mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-            mstore(add(add(q, 0x08), bodylen), name)
         }
     }
 
@@ -2726,25 +2715,16 @@ library Blocks {
     /// @notice Decode one SCHEMA block and its nested body.
     /// @param abs Absolute block position.
     /// @return spec Decoded block specification.
-    /// @return body Decoded schema body.
-    /// @return name Decoded schema name.
+    /// @return body Decoded schema DSL string, including any `name:` prefix.
     /// @return end Absolute position after the block.
-    function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, bytes32 name, uint end) {
+    function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, uint end) {
         uint limit;
         (abs, limit) = enter(abs, Keys.Schema);
         assembly ("memory-safe") {
             spec := calldataload(abs)
         }
         bytes calldata value;
-        // The final word follows the STRING child. A too-short parent is
-        // rejected by unpackTailString, including subtraction underflow.
-        unchecked {
-            end = limit - 32;
-        }
-        value = unpackTailString(abs + 32, end);
-        assembly ("memory-safe") {
-            name := calldataload(end)
-        }
+        value = unpackTailString(abs + 32, limit);
         end = limit;
         body = string(value);
     }
@@ -2912,21 +2892,12 @@ library Blocks {
 
     /// @notice Encode a SCHEMA block.
     /// @param spec Block specification.
-    /// @param body Schema body.
+    /// @param body Schema DSL string, optionally prefixed with `name:`.
     /// @return value Encoded SCHEMA block bytes.
     function createSchema(uint spec, string memory body) internal pure returns (bytes memory value) {
-        return createSchema(spec, body, bytes32(0));
-    }
-
-    /// @notice Encode a named SCHEMA block.
-    /// @param spec Block specification.
-    /// @param body Schema body.
-    /// @param name Schema name.
-    /// @return value Encoded SCHEMA block bytes.
-    function createSchema(uint spec, string memory body, bytes32 name) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + bytes(body).length);
+        uint len = max32(Sizes.B32 + bytes(body).length);
         value = allocate(Sizes.Header + len);
-        writeSchemaAllocated(value, spec, body, name);
+        writeSchemaAllocated(value, spec, body);
     }
 
     // Fixed-width factories

@@ -10,7 +10,7 @@ function encode(name: string, input: string) {
   const child = encodeBlock(Keys.String, input);
   return name === "Label" ? encodeBlock(Keys.Label, ethers.concat([word, child]))
     : encodeBlock(Keys.Schema, ethers.concat([
-      ethers.toBeHex(11, 32), child, name === "SchemaUnnamed" ? ethers.ZeroHash : word,
+      ethers.toBeHex(11, 32), child,
     ]));
 }
 const replace = (data: string, offset: number, value: string) => ethers.concat([
@@ -27,11 +27,11 @@ async function outcome(call: () => Promise<any>) {
 
 describe("LABEL and SCHEMA optimization", function () {
   this.timeout(120_000);
-  it("benchmarks factories and decoders, including dirty memory and unnamed schemas", async () => {
+  it("benchmarks factories and decoders, including dirty memory", async () => {
     const helper = await deploy("TestComposites");
     const rows: any[] = [];
     const coder = ethers.AbiCoder.defaultAbiCoder();
-    for (const name of ["Label", "Schema", "SchemaUnnamed"]) {
+    for (const name of ["Label", "Schema"]) {
       for (const size of [0, 1, 7, 8, 23, 24, 31, 32, 33, 256, 4096]) {
         const input = blob(size), encoded = encode(name, input);
         const factory = helper["factory" + name];
@@ -50,8 +50,8 @@ describe("LABEL and SCHEMA optimization", function () {
         const end = ethers.dataLength(encoded) + 3;
         // ABI encodes bytes and string identically; retain arbitrary non-UTF8 input.
         const expected = name === "Label" ? coder.encode(["bytes32", "bytes", "uint256"], [word, input, end])
-          : coder.encode(["uint256", "bytes", "bytes32", "uint256"],
-            [11, input, name === "SchemaUnnamed" ? ethers.ZeroHash : word, end]);
+          : coder.encode(["uint256", "bytes", "uint256"],
+            [11, input, end]);
         expect(oldDecoded.output).to.equal(expected);
         expect(newDecoded.output).to.equal(expected);
         expect(newDecoded.usedGas).to.be.lessThan(oldDecoded.usedGas);
@@ -64,7 +64,7 @@ describe("LABEL and SCHEMA optimization", function () {
     console.table(rows.filter(row => row.size === 0));
   });
 
-  it("preserves malformed headers, truncation, trailing names, and absolute-position errors", async () => {
+  it("preserves malformed headers, truncation, trailing bytes, and absolute-position errors", async () => {
     const helper = await deploy("TestComposites");
     for (const name of ["Label", "Schema"]) {
       const method = helper["decode" + name];
@@ -90,12 +90,12 @@ describe("LABEL and SCHEMA optimization", function () {
     }
   });
 
-  it("retains payload-length limits and arithmetic-overflow errors in all factory overloads", async () => {
+  it("retains payload-length limits and arithmetic-overflow errors in both factories", async () => {
     const helper = await deploy("TestComposites");
-    for (const name of ["Label", "Schema", "SchemaUnnamed"]) {
+    for (const name of ["Label", "Schema"]) {
       const method = helper["factory" + name];
       // These factories bound the outer payload, rather than total encoded length.
-      const overhead = name === "Label" ? 40n : 72n;
+      const overhead = 40n;
       for (const length of [(1n << 32n) - overhead, 1n << 32n, ethers.MaxUint256]) {
         const before = await outcome(() => method(false, "0x", length));
         expect(before.error).to.equal(length === ethers.MaxUint256

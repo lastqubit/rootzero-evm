@@ -193,10 +193,6 @@ contract TestCursorHelper {
         return Blocks.createCounterparty(account);
     }
 
-    function testToSchemaBlock(uint spec, string memory body, bytes32 name) external pure returns (bytes memory) {
-        return Blocks.createSchema(spec, body, name);
-    }
-
     function testToSchemaBlock(uint spec, string memory body) external pure returns (bytes memory) {
         return Blocks.createSchema(spec, body);
     }

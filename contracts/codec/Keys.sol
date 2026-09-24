@@ -77,7 +77,7 @@ library Keys {
     bytes4 constant ExecutionCost = bytes4(keccak256("#executionCost"));
     /// @dev Command loop-group annotation - (#string as description)
     bytes4 constant Groups = bytes4(keccak256("#groups"));
-    /// @dev Block schema publication - (bytes4 key, #string as body, bytes32 name)
+    /// @dev Block schema publication - (uint spec, #string as body)
     bytes4 constant Schema = bytes4(keccak256("#schema"));
 
     /// @dev Structural status form - (uint code)

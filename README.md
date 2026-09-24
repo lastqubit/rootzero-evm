@@ -106,7 +106,7 @@ described by a schema body published under an alias. For example, the standard
 `amount` block that requests a deposit:
 
 ```txt
-amount { bytes32 asset, uint amount }
+amount: { bytes32 asset, uint amount }
 ```
 
 is 72 bytes on the wire: an 8-byte header followed by two big-endian 32-byte
@@ -127,6 +127,10 @@ position. Qualified schema names such as `relay.input` describe encoded block
 streams inside aliased `#bytes` fields, preserving ordinary block headers and
 decoder helpers; schemas emitted locally by the active host take precedence
 over trusted-context and standard schemas with the same name.
+Schema strings may start with an optional `name:` prefix. For example,
+`assets: many #asset as assets` names the schema `assets` and independently
+names its list item `assets`; helpers take the complete string without a
+separate name argument.
 Standard block aliases are intrinsic protocol metadata: indexers resolve names
 such as `balance`, `step`, and `context` from their standard keys even when no
 named schema annotation is emitted.

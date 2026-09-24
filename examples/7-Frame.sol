@@ -33,7 +33,7 @@ abstract contract MyCommand is CommandBase {
     event PaymentSeen(bytes32 asset, uint amount, uint status);
 
     constructor() {
-        inputSpec = schema(1, uint32(64 + Sizes.Header), uint32(64 + Sizes.Status), uint32(64 + Sizes.Status), INPUT);
+        inputSpec = schema(INPUT, 1, uint32(64 + Sizes.Header), uint32(64 + Sizes.Status), uint32(64 + Sizes.Status));
         (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
     }
 

@@ -74,10 +74,10 @@ library PreviousDecoders {
         cur.state = cur.state.seek(end);
     }
 
-    function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body, bytes32 name) {
+    function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body) {
         uint abs = cur.state.position();
         uint end;
-        (spec, body, name, end) = Blocks.unpackSchema(abs);
+        (spec, body, end) = Blocks.unpackSchema(abs);
         cur.state = cur.state.seek(end);
     }
 

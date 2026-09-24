@@ -534,12 +534,11 @@ library Writers {
     /// @notice Append a SCHEMA block.
     /// @param writer Destination writer.
     /// @param spec Block specification to encode.
-    /// @param body Schema body to encode.
-    /// @param name Schema name to encode.
-    function appendSchema(Writer memory writer, uint spec, string memory body, bytes32 name) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + bytes(body).length;
+    /// @param body Schema DSL string, optionally prefixed with `name:`.
+    function appendSchema(Writer memory writer, uint spec, string memory body) internal pure {
+        uint size = Sizes.B32 + Sizes.Header + bytes(body).length;
         uint i = reserve(writer, size);
-        Blocks.writeSchemaSized(writer.dst, i, spec, body, name, size);
+        Blocks.writeSchemaSized(writer.dst, i, spec, body, size);
     }
 
     // -------------------------------------------------------------------------

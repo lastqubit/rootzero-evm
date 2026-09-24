@@ -134,10 +134,13 @@ The standard types currently use these rules:
 
 Indexers must ship the protocol's standard schema catalog: every built-in key
 has a canonical alias, specification, and body. Standard aliases are known even
-when no schema annotation is emitted or an emitted `#schema.name` is zero. For
-example, `bytes4(keccak256("#balance"))` is canonically named `balance`. A zero
-name for a nonstandard key remains unnamed; qualified bindings such as
-`relay.input` require an explicit name.
+when no schema annotation is emitted or its body omits the optional `name:`
+prefix. For example, `bytes4(keccak256("#balance"))` is canonically named
+`balance`. A nonstandard key without a prefix remains unnamed; qualified
+bindings such as `relay.input` require an explicit `relay.input:` prefix.
+The `#schema` payload contains only `uint spec, #string as body`. Extract and
+validate the prefix before registering the schema; `as` aliases name items
+within the body and do not register schema names.
 
 For name-based schema resolution, schemas emitted by the active host about its
 own host ID take precedence over schemas from active trusted contexts, followed

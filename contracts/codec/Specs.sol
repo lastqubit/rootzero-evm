@@ -121,7 +121,7 @@ library Specs {
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
     uint constant ExecutionCost = uint(bytes32(Keys.ExecutionCost)) | Exact64;
     uint constant Groups = uint(bytes32(Keys.Groups)) | (uint(8) << 192) | UnboundedHint128;
-    uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin72Hint256;
+    uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;

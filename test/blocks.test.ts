@@ -472,7 +472,6 @@ describe("Cursors", () => {
       const namespace = pad32("0x99");
       const recoveryKey = pad32("0x77");
       const spec = exactSpec(Keys.Asset, 32);
-      const name = pad32("0x55");
       const expected = (block: string) =>
         ethers.concat([new Uint8Array(Number(offset)), block]);
 
@@ -496,8 +495,8 @@ describe("Cursors", () => {
         .to.equal(expected(encodeRecoverBlock(target, resources, recoveryKey, raw)));
       expect(await blocksHelper.writeLabel(offset, namespace, "rootzero"))
         .to.equal(expected(encodeLabelBlock(namespace, "rootzero")));
-      expect(await blocksHelper.writeSchema(offset, spec, "bytes32 asset", name))
-        .to.equal(expected(encodeSchemaBlock(spec, "bytes32 asset", name)));
+      expect(await blocksHelper.writeSchema(offset, spec, "assets: bytes32 asset"))
+        .to.equal(expected(encodeSchemaBlock(spec, "assets: bytes32 asset")));
     });
 
     it("unpacks dynamic leaf blocks using their absolute end positions", async () => {
@@ -658,11 +657,10 @@ describe("Cursors", () => {
 
     it("schema factory matches the canonical SCHEMA encoding", async () => {
       const spec = exactSpec(Keys.Asset, 32);
-      const name = pad32("0x55");
-      expect(await helper["testToSchemaBlock(uint256,string,bytes32)"](spec, "bytes32 asset", name))
-        .to.equal(encodeSchemaBlock(spec, "bytes32 asset", name));
+      expect(await helper["testToSchemaBlock(uint256,string)"](spec, "assets: bytes32 asset"))
+        .to.equal(encodeSchemaBlock(spec, "assets: bytes32 asset"));
       expect(await helper["testToSchemaBlock(uint256,string)"](spec, "bytes32 asset"))
-        .to.equal(encodeSchemaBlock(spec, "bytes32 asset", ethers.ZeroHash));
+        .to.equal(encodeSchemaBlock(spec, "bytes32 asset"));
     });
 
     it("creates exact specs from a numeric key and size", async () => {
@@ -1643,16 +1641,40 @@ describe("Cursors", () => {
       expect(i).to.equal(BigInt(ethers.getBytes(source).length));
     });
 
-    it("unpackSchema consumes a SCHEMA block and returns its fields", async () => {
+    for (const body of [
+      "", "opaque:", "bytes32 asset",
+      "amount: { bytes32 asset, uint amount }",
+      "assets: many #asset as assets",
+      "portfolio: many #asset as holdings",
+      "relay.input: uint portal, uint resources",
+      "longSchemaNameBeyondThirtyTwoCharacters: uint value",
+    ]) {
+      it(`round-trips the complete schema string ${JSON.stringify(body)}`, async () => {
+        const spec = exactSpec(Keys.Amount, 64);
+        const source = encodeSchemaBlock(spec, body);
+        expect(await helper.testToSchemaBlock(spec, body)).to.equal(source);
+        const [outSpec, outBody, i] = await stringHelper.testUnpackSchema(source);
+        expect(outSpec).to.equal(spec);
+        expect(outBody).to.equal(body);
+        expect(i).to.equal(BigInt(48 + ethers.toUtf8Bytes(body).length));
+      });
+    }
+
+    it("rejects schema truncation, invalid child headers, and the former trailing name word", async () => {
       const spec = exactSpec(Keys.Amount, 64);
-      const name = ethers.encodeBytes32String("amount");
-      const body = "{ bytes32 asset, uint amount }";
-      const source = encodeSchemaBlock(spec, body, name);
-      const [outSpec, outBody, outName, i] = await stringHelper.testUnpackSchema(source);
-      expect(outSpec).to.equal(spec);
-      expect(outBody).to.equal(body);
-      expect(outName).to.equal(name);
-      expect(i).to.equal(BigInt(ethers.getBytes(source).length));
+      const source = encodeSchemaBlock(spec, "assets: many #asset as assets");
+      for (let length = 0; length < ethers.dataLength(source); length++) {
+        await expect(stringHelper.testUnpackSchema(ethers.dataSlice(source, 0, length)))
+          .to.be.revertedWithCustomError(stringHelper, length < 48 ? "InvalidBlock" : "OutOfBounds");
+      }
+      for (const payload of [
+        pad32(spec),
+        ethers.concat([pad32(spec), encodeBytesBlock("0x")]),
+        ethers.concat([pad32(spec), encodeStringBlock("uint value"), ethers.ZeroHash]),
+      ]) {
+        await expect(stringHelper.testUnpackSchema(encodeBlock(Keys.Schema, payload)))
+          .to.be.revertedWithCustomError(stringHelper, "InvalidBlock");
+      }
     });
 
     it("unpackAccount returns the account word", async () => {

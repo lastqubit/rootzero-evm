@@ -188,10 +188,10 @@ library PreviousExecutions {
         seekInput(exec, end);
     }
 
-    function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body, bytes32 name) {
+    function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body) {
         uint abs = uint32(exec.decoders);
         uint end;
-        (spec, body, name, end) = Blocks.unpackSchema(abs);
+        (spec, body, end) = Blocks.unpackSchema(abs);
         seekInput(exec, end);
     }
 
@@ -283,10 +283,10 @@ library PreviousExecutions {
         Blocks.writeLabel(exec.output, i, namespace, name);
     }
 
-    function outputSchema(Execution memory exec, uint spec, string memory body, bytes32 name) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + bytes(body).length;
+    function outputSchema(Execution memory exec, uint spec, string memory body) internal pure {
+        uint size = Sizes.B32 + Sizes.Header + bytes(body).length;
         uint i = reserve(exec, size);
-        Blocks.writeSchema(exec.output, i, spec, body, name);
+        Blocks.writeSchema(exec.output, i, spec, body);
     }
 
     function outputCopyBlock(Execution memory exec, uint spec, bytes calldata data) internal pure {

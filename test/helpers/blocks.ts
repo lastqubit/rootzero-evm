@@ -270,8 +270,8 @@ export function encodeCounterpartyBlock(account: string): string {
   return encodeBlock(Keys.Counterparty, pad32(account));
 }
 
-export function encodeSchemaBlock(spec: bigint, body: string, name: string): string {
-  return encodeBlock(Keys.Schema, ethers.concat([pad32(spec), encodeStringBlock(body), pad32(name)]));
+export function encodeSchemaBlock(spec: bigint, body: string): string {
+  return encodeBlock(Keys.Schema, ethers.concat([pad32(spec), encodeStringBlock(body)]));
 }
 
 export function encodeStatusBlock(code: bigint): string {

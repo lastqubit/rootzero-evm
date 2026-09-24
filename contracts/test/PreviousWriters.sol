@@ -82,10 +82,10 @@ library PreviousWriters {
         Blocks.writeLabel(writer.dst, i, namespace, name);
     }
 
-    function appendSchema(Writer memory writer, uint spec, string memory body, bytes32 name) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + bytes(body).length;
+    function appendSchema(Writer memory writer, uint spec, string memory body) internal pure {
+        uint size = Sizes.B32 + Sizes.Header + bytes(body).length;
         uint i = reserve(writer, size);
-        Blocks.writeSchema(writer.dst, i, spec, body, name);
+        Blocks.writeSchema(writer.dst, i, spec, body);
     }
 
     function copyBlock(Writer memory writer, uint spec, bytes calldata data) internal pure {

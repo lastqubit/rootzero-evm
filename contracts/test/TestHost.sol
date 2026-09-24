@@ -107,7 +107,7 @@ contract TestHost is
     uint public realizeDebtFee;
 
     constructor(uint rootzero) Host(rootzero) Allocate() Deposit() Provision() {
-        schema(3, 64, "uint portal, uint resources", bytes32("relay.input"));
+        schema("relay.input: uint portal, uint resources", 3, 64);
     }
 
     function allocate(bytes32 account, HostAmount memory custody) internal override {

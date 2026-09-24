@@ -72,10 +72,10 @@ contract TestDecoderOptimization {
             data = abi.encode(v0, v1);
         }
         else if (mode == 9) {
-            uint v0; string memory v1; bytes32 v2;
-            if (optimized) (v0, v1, v2) = Decoders.unpackSchema(cur);
-            else (v0, v1, v2) = PreviousDecoders.unpackSchema(cur);
-            data = abi.encode(v0, v1, v2);
+            uint v0; string memory v1;
+            if (optimized) (v0, v1) = Decoders.unpackSchema(cur);
+            else (v0, v1) = PreviousDecoders.unpackSchema(cur);
+            data = abi.encode(v0, v1);
         }
         else if (mode == 10) {
             uint v0; uint v1; bytes32 v2; bytes calldata v3;
