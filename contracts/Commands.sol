@@ -14,7 +14,7 @@ import {CommandBase} from "./commands/Base.sol";
 import {Flags} from "./utils/Flags.sol";
 import {Execution, Executions} from "./execution/Execution.sol";
 import {Blocks} from "./codec/Blocks.sol";
-import { Sizes, Specs, Headers } from "./codec/Specs.sol";
+import {Sizes, Specs, Headers } from "./codec/Specs.sol";
 import {Decoders} from "./codec/Decoders.sol";
 import {Cursors, Cur} from "./utils/Cursors.sol";
 import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, Quote, Position, Tx} from "./core/Types.sol";

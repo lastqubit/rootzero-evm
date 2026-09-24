@@ -9,7 +9,6 @@ import {Quote as CodecQuote} from "../Codec.sol";
 import {HostAccount} from "../Core.sol";
 
 import {UnexpectedValue} from "../Utils.sol";
-import {Positions} from "../Utils.sol";
 import {BookHook} from "../Endpoints.sol";
 import {BookHook as CoreBookHook} from "../Core.sol";
 
@@ -17,6 +16,10 @@ import {BookHook as CoreBookHook} from "../Core.sol";
 // their package barrels.
 import {
     CommandBase,
+    CheckBalance,
+    ExecuteCheckBalance,
+    CheckPosition,
+    ExecuteCheckPosition,
     AllowAsset,
     AllowAssetHook,
     AllowAssetPort,

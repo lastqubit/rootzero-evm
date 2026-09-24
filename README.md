@@ -385,7 +385,8 @@ lending-specific debt record. Its liability side carries value owed or required;
 pairs that liability with value acquired or controlled. A command may preserve
 or replace either side and return the resulting state for the next step;
 `settle` terminally consumes the position, exchanging with an account
-counterparty or applying a zero-counterparty booking after checking limits. This supports swaps,
+counterparty or applying a zero-counterparty booking. An optional `checkPosition`
+step validates limits before settlement. This supports swaps,
 borrowing, refinancing, collateral changes, callback obligations, cross-host
 claims, fees, netting, and other multi-step operations. Positions are
 transient representations and do not themselves create or erase an obligation
@@ -542,12 +543,16 @@ an initial balance and native-value budget), `cashout` (withdraw native
 `debitAccount` and `creditAccount` (internal movements), `payout` (deliver
 state to other accounts), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
-returns counterparty zero, then the command checks the returned quantities
-against the paired LIMITS input using `Positions.requireLimits(position, limits)`),
+returns counterparty zero; input is empty, and an optional following
+`checkPosition` validates the result against POSITION_LIMITS),
 `allocate` (turn balance state
 into custody),
-`provision` (provision custody from an external allocation), `settle` (consume
-asset-liability position state with one LIMITS input per position, including
+`provision` (provision custody from an external allocation),
+`checkBalance` (validate each balance's asset and amount against paired ASSET_LIMITS
+and return it unchanged; `ExecuteCheckBalance` validates memory state directly),
+`checkPosition` (validate each position against paired POSITION_LIMITS and return it unchanged;
+`ExecuteCheckPosition` validates memory state directly), `settle` (consume
+asset-liability position state with empty input, including
 Rootzero-backed and liability-only positions),
 `relayPayable` (relay a pipeline without
 state), and `relayBalancePayable` (relay balance state and a pipeline to another

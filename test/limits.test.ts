@@ -32,15 +32,16 @@ describe("Limits codec", () => {
   });
 
   it("treats the maximum debt lane as a literal cap without truncating position quantities", async () => {
-    const position = (amount: bigint, debt: bigint) => [ethers.ZeroHash, amount, ethers.ZeroHash, debt, ethers.ZeroHash];
+    const check = (amount: bigint, debt: bigint) => helper.check(
+      concat(encodeLimitsBlock(MaxUint128, MaxUint128), encodeLimitsBlock(0n, 0n)), amount, debt, true);
     for (const amount of [MaxUint128, MaxUint128 + 1n, ethers.MaxUint256]) {
-      await helper.checkPosition(position(amount, MaxUint128), ethers.MaxUint256);
+      await check(amount, MaxUint128);
     }
     for (const debt of [MaxUint128 + 1n, 1n << 255n, ethers.MaxUint256]) {
-      await expect(helper.checkPosition(position(ethers.MaxUint256, debt), ethers.MaxUint256))
+      await expect(check(ethers.MaxUint256, debt))
         .to.be.revertedWithCustomError(helper, "OutOfRange");
     }
-    await expect(helper.checkPosition(position(MaxUint128 - 1n, 0n), ethers.MaxUint256))
+    await expect(check(MaxUint128 - 1n, 0n))
       .to.be.revertedWithCustomError(helper, "OutOfRange");
   });
 

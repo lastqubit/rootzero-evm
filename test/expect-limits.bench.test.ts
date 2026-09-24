@@ -4,7 +4,7 @@ import { concat, encodeLimitsBlock } from "./helpers/blocks.js";
 
 describe("Direct calldata limits benchmark", () => {
   it("compares direct checks with decoding limits for an existing position", async () => {
-    const helper = await deploy("TestRequireLimits");
+    const helper = await deploy("TestExpectLimits");
     const rows: { count: number; direct: number; decoded: number; saved: number }[] = [];
     for (const count of [1, 8, 32]) {
       const input = concat(...Array(count).fill(encodeLimitsBlock(100n, 40n)));

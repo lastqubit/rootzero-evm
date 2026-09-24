@@ -140,8 +140,7 @@ library Blocks {
             len := and(shr(192, word), 0xffffffff)
         }
         uint max = uint32(spec >> 160);
-        if (key != uint32(spec >> 224) || len < uint32(spec >> 192) || (max != 0 && len > max))
-            revert InvalidBlock();
+        if (key != uint32(spec >> 224) || len < uint32(spec >> 192) || (max != 0 && len > max)) revert InvalidBlock();
 
         unchecked {
             body = abs + Sizes.Header;
@@ -729,11 +728,11 @@ library Blocks {
         }
     }
 
-    /// @notice Write a LIMITS block with minimum amount and maximum debt.
+    /// @notice Write a LIMITS block with a packed inclusive minimum and maximum.
     /// @dev Unchecked memory write; reserve Sizes.Limits bytes first.
     /// @param dst Destination buffer.
     /// @param i Relative write position.
-    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function writeLimits(bytes memory dst, uint i, uint limits) internal pure {
         uint spec = Specs.Limits;
         assembly ("memory-safe") {
@@ -743,22 +742,24 @@ library Blocks {
         }
     }
 
-    /// @notice Write a QUOTE with minimum amount and maximum debt.
+    /// @notice Write a QUOTE with full-width asset and liability quantities.
     /// @dev Unchecked memory write; reserve Sizes.Quote bytes first.
     function writeQuote(
         bytes memory dst,
         uint i,
         bytes32 asset,
+        uint amount,
         bytes32 liability,
-        uint limits
+        uint debt
     ) internal pure {
         uint spec = Specs.Quote;
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, spec)
             mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), liability)
-            mstore(add(p, 0x48), limits)
+            mstore(add(p, 0x28), amount)
+            mstore(add(p, 0x48), liability)
+            mstore(add(p, 0x68), debt)
         }
     }
 
@@ -1899,13 +1900,13 @@ library Blocks {
         }
     }
 
-    // Value requirements
+    // Expectations
 
     /// @notice Require the byte at an absolute calldata position to match `expected`.
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected byte.
-    function require1(uint abs, bytes1 expected) internal pure {
+    function expect1(uint abs, bytes1 expected) internal pure {
         if (read1(abs) != expected) revert UnexpectedValue();
     }
 
@@ -1913,7 +1914,7 @@ library Blocks {
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected two-byte value.
-    function require2(uint abs, bytes2 expected) internal pure {
+    function expect2(uint abs, bytes2 expected) internal pure {
         if (read2(abs) != expected) revert UnexpectedValue();
     }
 
@@ -1921,7 +1922,7 @@ library Blocks {
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected four-byte value.
-    function require4(uint abs, bytes4 expected) internal pure {
+    function expect4(uint abs, bytes4 expected) internal pure {
         if (read4(abs) != expected) revert UnexpectedValue();
     }
 
@@ -1929,7 +1930,7 @@ library Blocks {
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected eight-byte value.
-    function require8(uint abs, bytes8 expected) internal pure {
+    function expect8(uint abs, bytes8 expected) internal pure {
         if (read8(abs) != expected) revert UnexpectedValue();
     }
 
@@ -1937,7 +1938,7 @@ library Blocks {
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected sixteen-byte value.
-    function require16(uint abs, bytes16 expected) internal pure {
+    function expect16(uint abs, bytes16 expected) internal pure {
         if (read16(abs) != expected) revert UnexpectedValue();
     }
 
@@ -1945,8 +1946,71 @@ library Blocks {
     /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
     /// @param abs Absolute calldata position.
     /// @param expected Expected word.
-    function require32(uint abs, bytes32 expected) internal pure {
+    function expect32(uint abs, bytes32 expected) internal pure {
         if (read32(abs) != expected) revert UnexpectedValue();
+    }
+
+    /// @notice Check quantities against a LIMITS block directly in calldata.
+    /// @dev The caller must bound the complete block. Validates the header before quantity errors.
+    /// @param abs Absolute LIMITS block position; not advanced.
+    /// @param amount Full-width final asset amount, checked against the inclusive minimum.
+    /// @param debt Full-width final debt, checked against the literal inclusive maximum.
+    function expectLimits(uint abs, uint amount, uint debt) internal pure {
+        uint64 head;
+        bool outside;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            let limits := calldataload(add(abs, 0x08))
+            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
+        }
+        if (head != Headers.Limits) revert InvalidBlock();
+        if (outside) revert OutOfRange();
+    }
+
+    /// @notice Check an asset and amount directly against calldata ASSET_LIMITS.
+    /// @dev The caller must bound the complete block. Validates the header, then
+    /// exact asset identity, then inclusive full-width quantity bounds.
+    /// @param abs Absolute ASSET_LIMITS block position; not advanced.
+    /// @param asset Expected balance asset identifier.
+    /// @param amount Full-width balance amount to check against both bounds.
+    function expectAssetLimits(uint abs, bytes32 asset, uint amount) internal pure {
+        uint64 head;
+        bool mismatch;
+        bool outside;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            mismatch := iszero(eq(asset, calldataload(add(abs, 0x08))))
+            outside := or(lt(amount, calldataload(add(abs, 0x28))), gt(amount, calldataload(add(abs, 0x48))))
+        }
+        if (head != Headers.AssetLimits) revert InvalidBlock();
+        if (mismatch) revert UnexpectedValue();
+        if (outside) revert OutOfRange();
+    }
+
+    /// @notice Check calldata POSITION_LIMITS against a position without unpacking its payload.
+    /// @dev DANGER: Unchecked calldata reads. Caller must bound the complete
+    /// 136-byte POSITION_LIMITS block. Validates the header, then identifiers, then inclusive
+    /// quantity limits. Does not advance a cursor or validate the counterparty.
+    /// @param abs Absolute calldata position of the POSITION_LIMITS header.
+    /// @param position Position whose identifiers and full-width quantities are checked.
+    function expectPositionLimits(uint abs, Position memory position) internal pure {
+        uint64 head;
+        bool mismatch;
+        bool outside;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            mismatch := or(
+                iszero(eq(calldataload(add(abs, 0x08)), mload(position))),
+                iszero(eq(calldataload(add(abs, 0x48)), mload(add(position, 0x40))))
+            )
+            outside := or(
+                lt(mload(add(position, 0x20)), calldataload(add(abs, 0x28))),
+                gt(mload(add(position, 0x60)), calldataload(add(abs, 0x68)))
+            )
+        }
+        if (head != Headers.PositionLimits) revert InvalidBlock();
+        if (mismatch) revert UnexpectedValue();
+        if (outside) revert OutOfRange();
     }
 
     // Generic block unpackers
@@ -2354,7 +2418,7 @@ library Blocks {
 
     /// @notice Decode a LIMITS block at an in-bounds absolute calldata position.
     /// @param abs Absolute block position.
-    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(uint abs) internal pure returns (uint limits) {
         uint64 head;
         assembly ("memory-safe") {
@@ -2364,36 +2428,44 @@ library Blocks {
         if (head != Headers.Limits) revert InvalidBlock();
     }
 
-    /// @notice Check quantities against a LIMITS block directly in calldata.
-    /// @dev The caller must bound the complete block. Validates the header before quantity errors.
-    /// @param abs Absolute LIMITS block position; not advanced.
-    /// @param amount Full-width final asset amount, checked against the inclusive minimum.
-    /// @param debt Full-width final debt, checked against the literal inclusive maximum.
-    function requireLimits(uint abs, uint amount, uint debt) internal pure {
-        uint64 head;
-        bool outside;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            let limits := calldataload(add(abs, 0x08))
-            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
-        }
-        if (head != Headers.Limits) revert InvalidBlock();
-        if (outside) revert OutOfRange();
-    }
-
-    // Quote and position payloads
-
-    /// @notice Decode a QUOTE at an in-bounds absolute calldata position.
-    /// Exact identifiers precede packed minimum amount and maximum debt limits.
-    function unpackQuote(
-        uint abs
-    ) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
+    /// @notice Decode ASSET_LIMITS at an in-bounds absolute calldata position.
+    function unpackAssetLimits(uint abs) internal pure returns (bytes32 asset, uint min, uint max) {
         uint64 head;
         assembly ("memory-safe") {
             head := shr(192, calldataload(abs))
             asset := calldataload(add(abs, 0x08))
-            liability := calldataload(add(abs, 0x28))
-            limits := calldataload(add(abs, 0x48))
+            min := calldataload(add(abs, 0x28))
+            max := calldataload(add(abs, 0x48))
+        }
+        if (head != Headers.AssetLimits) revert InvalidBlock();
+    }
+
+    // Quote and position payloads
+
+    /// @notice Decode POSITION_LIMITS with exact denominations and inclusive full-width bounds.
+    /// @dev Caller must bound the complete block at this absolute calldata position.
+    function unpackPositionLimits(uint abs) internal pure returns (bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt) {
+        uint64 head;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            asset := calldataload(add(abs, 0x08))
+            minAmount := calldataload(add(abs, 0x28))
+            liability := calldataload(add(abs, 0x48))
+            maxDebt := calldataload(add(abs, 0x68))
+        }
+        if (head != Headers.PositionLimits) revert InvalidBlock();
+    }
+
+    /// @notice Decode a QUOTE at an in-bounds absolute calldata position.
+    /// Layout matches the first four fields of POSITION.
+    function unpackQuote(uint abs) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
+        uint64 head;
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+            asset := calldataload(add(abs, 0x08))
+            amount := calldataload(add(abs, 0x28))
+            liability := calldataload(add(abs, 0x48))
+            debt := calldataload(add(abs, 0x68))
         }
         if (head != Headers.Quote) revert InvalidBlock();
     }
@@ -2418,33 +2490,6 @@ library Blocks {
             counterparty := calldataload(add(abs, 0x88))
         }
         if (head != Headers.Position) revert InvalidBlock();
-    }
-
-    /// @notice Decode a POSITION and enforce its paired LIMITS directly in calldata.
-    /// @dev DANGER: Unchecked calldata reads. The caller must ensure both complete
-    /// blocks are in bounds. Validates exact headers before quantity bounds.
-    /// Does not validate account or asset identifiers or advance either stream.
-    /// @param pos Absolute calldata position of the POSITION block.
-    /// @param lim Absolute calldata position of the LIMITS block.
-    /// @return position Decoded position satisfying the inclusive packed limits.
-    function unpackLimitedPosition(uint pos, uint lim) internal pure returns (Position memory position) {
-        uint64 poshead;
-        uint64 limitshead;
-        bool outside;
-        assembly ("memory-safe") {
-            poshead := shr(192, calldataload(pos))
-            limitshead := shr(192, calldataload(lim))
-            let limits := calldataload(add(lim, 0x08))
-            let amount := calldataload(add(pos, 0x28))
-            let debt := calldataload(add(pos, 0x68))
-            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
-        }
-        if (poshead != Headers.Position || limitshead != Headers.Limits) revert InvalidBlock();
-        if (outside) revert OutOfRange();
-        assembly ("memory-safe") {
-            // POSITION's five payload words match its memory struct layout.
-            calldatacopy(position, add(pos, 0x08), 0xa0)
-        }
     }
 
     /// @notice Decode a low-level fixed-width HOST_ASSET block at `abs`.
@@ -2964,8 +3009,8 @@ library Blocks {
         writeCustody(value, 0, host, asset, amount);
     }
 
-    /// @notice Encode a LIMITS block with minimum amount and maximum debt.
-    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @notice Encode a LIMITS block with a packed inclusive minimum and maximum.
+    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     /// @return value Encoded LIMITS block.
     function createLimits(uint limits) internal pure returns (bytes memory value) {
         value = allocate(Sizes.Limits);
@@ -2975,11 +3020,12 @@ library Blocks {
     /// @notice Encode a QUOTE block.
     function createQuote(
         bytes32 asset,
+        uint amount,
         bytes32 liability,
-        uint limits
+        uint debt
     ) internal pure returns (bytes memory value) {
         value = allocate(Sizes.Quote);
-        writeQuote(value, 0, asset, liability, limits);
+        writeQuote(value, 0, asset, amount, liability, debt);
     }
 
     /// @notice Encode a POSITION block.
@@ -3173,9 +3219,21 @@ library Memory {
         if (remainder != 0) revert Blocks.InvalidBlock();
     }
 
+    /// @notice Decode ASSET_LIMITS at an in-bounds absolute memory position.
+    function unpackAssetLimits(uint abs) internal pure returns (bytes32 asset, uint min, uint max) {
+        uint64 head;
+        assembly ("memory-safe") {
+            head := shr(192, mload(abs))
+            asset := mload(add(abs, 0x08))
+            min := mload(add(abs, 0x28))
+            max := mload(add(abs, 0x48))
+        }
+        if (head != Headers.AssetLimits) revert Blocks.InvalidBlock();
+    }
+
     /// @notice Decode a LIMITS block at an in-bounds absolute memory position.
     /// @param abs Absolute block position obtained from bounds.
-    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(uint abs) internal pure returns (uint limits) {
         uint64 actual;
         assembly ("memory-safe") {
@@ -3216,33 +3274,6 @@ library Memory {
     /// @dev Validates the exact header and preserves all fields, including counterparty.
     function unpackPositionValue(uint abs) internal pure returns (Position memory value) {
         (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(abs);
-    }
-
-    /// @notice Copy a memory POSITION after enforcing its paired calldata LIMITS.
-    /// @dev DANGER: Unchecked reads. The caller must ensure the complete POSITION
-    /// is in memory bounds and the complete LIMITS is in calldata bounds. Checks
-    /// exact headers before quantity bounds. Does not validate identifiers or
-    /// advance streams. The returned struct does not alias the source memory.
-    /// @param pos Absolute memory position of the POSITION block.
-    /// @param lim Absolute calldata position of the LIMITS block.
-    /// @return position Independent position copy satisfying inclusive packed limits.
-    function unpackLimitedPosition(uint pos, uint lim) internal pure returns (Position memory position) {
-        uint64 poshead;
-        uint64 limitshead;
-        bool outside;
-        assembly ("memory-safe") {
-            poshead := shr(192, mload(pos))
-            limitshead := shr(192, calldataload(lim))
-            let limits := calldataload(add(lim, 0x08))
-            let amount := mload(add(pos, 0x28))
-            let debt := mload(add(pos, 0x68))
-            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
-        }
-        if (poshead != Headers.Position || limitshead != Headers.Limits) revert Blocks.InvalidBlock();
-        if (outside) revert OutOfRange();
-        assembly ("memory-safe") {
-            mcopy(position, add(pos, 0x08), 0xa0)
-        }
     }
 
     /// @notice Decode a TRANSACTION block at an in-bounds absolute memory position.

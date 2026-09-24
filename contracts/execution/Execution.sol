@@ -432,13 +432,6 @@ library Executions {
         }
     }
 
-    /// @notice Require the active execution decoder to be at absolute position `abs`.
-    /// @param exec Execution whose input position is validated.
-    /// @param abs Expected absolute position.
-    function expect(Execution memory exec, uint abs) internal pure {
-        if (uint32(exec.decoders) != abs) revert UnexpectedPosition();
-    }
-
     // Scoped input traversal
 
     /// @notice Consume a LIST block and return a cursor scoped to its payload.
@@ -478,6 +471,43 @@ library Executions {
         uint end = uint32(decoders >> 32);
         if (next > end) revert OutOfBounds();
         exec.decoders = (decoders & ~uint(type(uint32).max)) | next;
+    }
+
+    // -------------------------------------------------------------------------
+    // Expectations
+    // -------------------------------------------------------------------------
+
+    /// @notice Require the active execution decoder to be at absolute position `abs`.
+    /// @param exec Execution whose input position is validated.
+    /// @param abs Expected absolute position.
+    function expect(Execution memory exec, uint abs) internal pure {
+        if (uint32(exec.decoders) != abs) revert UnexpectedPosition();
+    }
+
+    /// @notice Consume one LIMITS input and check final quantities directly against calldata.
+    /// @param exec Execution whose input cursor is bounded and advanced by one block.
+    /// @param amount Final asset amount, checked against the inclusive minimum.
+    /// @param debt Final debt, checked against the literal inclusive maximum.
+    function expectLimits(Execution memory exec, uint amount, uint debt) internal pure {
+        uint abs = take(exec, Sizes.Limits);
+        Blocks.expectLimits(abs, amount, debt);
+    }
+
+    /// @notice Consume one ASSET_LIMITS input and check an asset and amount directly against calldata.
+    /// @dev Bounds the complete block before checking its header, asset, and inclusive full-width bounds.
+    function expectAssetLimits(Execution memory exec, bytes32 asset, uint amount) internal pure {
+        uint abs = take(exec, Sizes.AssetLimits);
+        Blocks.expectAssetLimits(abs, asset, amount);
+    }
+
+    /// @notice Consume one POSITION_LIMITS input and check it directly against a position.
+    /// @dev Bounds the complete block before validating its header, identifiers,
+    /// and inclusive limits. Does not validate the position's counterparty.
+    /// @param exec Execution whose input cursor is advanced by one POSITION_LIMITS block.
+    /// @param position Position whose identifiers and full-width quantities are checked.
+    function expectPositionLimits(Execution memory exec, Position memory position) internal pure {
+        uint abs = take(exec, Sizes.PositionLimits);
+        Blocks.expectPositionLimits(abs, position);
     }
 
     // -------------------------------------------------------------------------
@@ -569,33 +599,38 @@ library Executions {
         asset = Blocks.unpackAsset(abs);
     }
 
+    /// @notice Decode and consume one ASSET_LIMITS input without enforcing its bounds.
+    function unpackAssetLimits(Execution memory exec) internal pure returns (bytes32 asset, uint min, uint max) {
+        uint abs = take(exec, Sizes.AssetLimits);
+        return Blocks.unpackAssetLimits(abs);
+    }
+
     /// @notice Decode and consume one LIMITS block.
-    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(Execution memory exec) internal pure returns (uint limits) {
         uint abs = take(exec, Sizes.Limits);
         limits = Blocks.unpackLimits(abs);
     }
 
-    /// @notice Consume one LIMITS input and check final quantities directly against calldata.
-    /// @param exec Execution whose input cursor is bounded and advanced by one block.
-    /// @param amount Final asset amount, checked against the inclusive minimum.
-    /// @param debt Final debt, checked against the literal inclusive maximum.
-    function requireLimits(Execution memory exec, uint amount, uint debt) internal pure {
-        uint abs = take(exec, Sizes.Limits);
-        Blocks.requireLimits(abs, amount, debt);
+    /// @notice Decode POSITION_LIMITS with exact denominations and inclusive full-width bounds.
+    function unpackPositionLimits(
+        Execution memory exec
+    ) internal pure returns (bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt) {
+        uint abs = take(exec, Sizes.PositionLimits);
+        (asset, minAmount, liability, maxDebt) = Blocks.unpackPositionLimits(abs);
     }
 
-    /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
+    /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
     function unpackQuote(
         Execution memory exec
-    ) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
+    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
         uint abs = take(exec, Sizes.Quote);
-        (asset, liability, limits) = Blocks.unpackQuote(abs);
+        (asset, amount, liability, debt) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
     function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
-        (quote.asset, quote.liability, quote.limits) = unpackQuote(exec);
+        (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
     }
 
     /// @notice Decode and consume one ASSET_LIABILITY block from input.
@@ -716,15 +751,6 @@ library Executions {
     /// @return value Decoded asset and liability position.
     function unpackPositionValue(Execution memory exec) internal pure returns (Position memory value) {
         (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(exec);
-    }
-
-    /// @notice Consume a POSITION from state and enforce LIMITS from input.
-    /// @param exec Execution whose state and input cursors are advanced.
-    /// @return position Decoded position satisfying the inclusive packed limits.
-    function unpackLimitedPosition(Execution memory exec) internal pure returns (Position memory position) {
-        uint pos = takeState(exec, Sizes.Position);
-        uint lim = take(exec, Sizes.Limits);
-        position = Blocks.unpackLimitedPosition(pos, lim);
     }
 
     // Remaining fixed-width input decoding
@@ -1074,27 +1100,28 @@ library Executions {
         outputBalance(exec, value.asset, value.amount);
     }
 
-    /// @notice Append a LIMITS block with minimum amount and maximum debt.
-    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @notice Append a LIMITS block with a packed inclusive minimum and maximum.
+    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function outputLimits(Execution memory exec, uint limits) internal pure {
         uint i = reserve(exec, Sizes.Limits);
         Blocks.writeLimits(exec.output, i, limits);
     }
 
-    /// @notice Append a QUOTE with minimum amount and maximum debt.
+    /// @notice Append a QUOTE with full-width asset and liability quantities.
     function outputQuote(
         Execution memory exec,
         bytes32 asset,
+        uint amount,
         bytes32 liability,
-        uint limits
+        uint debt
     ) internal pure {
         uint i = reserve(exec, Sizes.Quote);
-        Blocks.writeQuote(exec.output, i, asset, liability, limits);
+        Blocks.writeQuote(exec.output, i, asset, amount, liability, debt);
     }
 
     /// @notice Append a structured QUOTE.
     function outputQuote(Execution memory exec, Quote memory quote) internal pure {
-        outputQuote(exec, quote.asset, quote.liability, quote.limits);
+        outputQuote(exec, quote.asset, quote.amount, quote.liability, quote.debt);
     }
 
     /// @notice Append a POSITION block to execution output.

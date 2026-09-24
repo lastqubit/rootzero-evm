@@ -580,7 +580,7 @@ The former `book` command is removed. `settle` accepts account counterparties an
 applies final quantities without checking limits; producers must enforce their
 quantity constraints. Callers that require an already-realized
 position must explicitly check `position.counterparty == bytes32(0)` separately
-from `Positions.requireQuoted`. A trusted
+from `checkPosition` or `Blocks.expectPositionLimits`. A trusted
 realization hook must return counterparty zero before handing the result onward.
 
 The same `BookHook` is used directly by `portBook` and settlement for its
@@ -594,8 +594,9 @@ before calling the hook, so malformed credit data is rejected before debiting.
 
 `realize` passes the complete position to its hook, which validates its host account
 counterparty and fulfills the obligation before returning counterparty zero.
-The command takes one LIMITS input per position and checks the returned quantities
-with `Positions.requireLimits(position, limits)`. Identifier and counterparty correctness belong to the hook.
+The command takes empty input and returns the fulfilled positions. Callers may
+append `checkPosition` with POSITION_LIMITS to validate the final outcome.
+Identifier and counterparty correctness remain the hook's responsibility.
 
 ### Position Transformations
 
@@ -604,7 +605,7 @@ it is not a nested Solidity struct. The asset side represents
 value acquired or controlled, and the liability side represents value owed or
 required. Commands may preserve or replace either side and return a new
 position. The terminal `settle` command exchanges with an account counterparty
-or limit-checks a zero-counterparty booking. Positions, including
+or applies a zero-counterparty booking. Positions, including
 liability-only positions, are transient state; rewriting them does not by itself create,
 discharge, or replace an obligation persisted by a host or external protocol.
 The responsible command hook must perform or verify those effects. A command
@@ -614,7 +615,8 @@ accidentally.
 
 `settle` and `settlePayable` consume positions, including liability-only
 positions, and return empty state. To repay, use a POSITION with zero asset and
-amount. There are no separate repayment commands or repayment hooks. Hosts
+amount. The separate `repay` command uses `RepayHook` to discharge a liability
+while preserving any asset side in the returned position. Hosts
 implement settlement, which routes the liability transfer through
 `BookHook.book`. A position with an asset side also settles that side instead
 of returning a BALANCE block.
@@ -628,49 +630,78 @@ The hook fulfills both sides in their existing asset and liability denominations
 It validates the counterparty, chooses its internal operation order, and returns
 the complete realized position with counterparty zero. It must fulfill the entire
 obligation or revert: no source remainder is emitted, and fees or rounding must
-not silently discard debt. The command checks the returned quantities against
-the paired LIMITS input; identifier and counterparty correctness remain the
-hook's responsibility.
+not silently discard debt. The command accepts empty input and returns the
+hook's results without applying caller constraints. Identifier and counterparty
+correctness remain the hook's responsibility.
 
-The standalone `#limits { uint limits }` schema carries only quantity
-constraints in one packed word: the high 128 bits are the inclusive minimum net
-asset amount, and the low 128 bits are the inclusive maximum total liability debt,
-including fees. Its payload is 32 bytes (40 with the header). Both lanes are
-literal bounds: `type(uint128).max` is a cap, not an unlimited sentinel.
-It identifies no asset, liability, or counterparty. Position quantities remain
-full-width uints; output amounts may exceed 128 bits, but debt cannot exceed the cap.
+The standalone `#limits { uint limits }` schema carries a general packed
+minimum and maximum: the high 128 bits are the inclusive minimum, and the low
+128 bits are the inclusive maximum. The consuming context determines what
+each bound applies to. Its payload is 32 bytes (40 with the header). Both lanes
+are literal bounds: `type(uint128).max` is a cap, not an unlimited sentinel.
+It identifies no asset, liability, or counterparty.
 
-Pack with `(minAmount << 128) | maxDebt` after ensuring both inputs fit uint128.
+- With a POSITION, the minimum applies to the net asset amount and the maximum
+  applies to total liability debt, including fees: `position.amount >= minimum`
+  and `position.debt <= maximum`. These are separate quantities, so the minimum
+  need not be less than or equal to the maximum. Position quantities remain
+  full-width uints; output amounts may exceed 128 bits, but debt cannot exceed the cap.
+- With a BALANCE, both bounds apply to its amount:
+  `minimum <= balance.amount <= maximum`. A minimum greater than the maximum
+  describes an empty range that no balance can satisfy.
+
+Pack with `(minimum << 128) | maximum` after ensuring both inputs fit uint128.
 `unpackLimits` returns the packed uint from calldata, cursor, execution, or memory
 sources. Writers and execution outputs accept that same word. Codec helpers
 validate the block header and preserve the value without enforcing quantities.
-`Positions.requireLimits(position, limits)` checks the inclusive bounds and
-reverts with `OutOfRange`; it does not validate identifiers or counterparties.
 
-`Blocks.requireLimits(abs, amount, debt)` checks the LIMITS header and compares
+The separate `#assetLimits { bytes32 asset, uint min, uint max }` schema adds an
+exact asset identifier and uses full-width uint256 bounds. Its payload is 96
+bytes (104 including the header), ordered as asset, minimum, maximum. Both
+bounds are inclusive and literal; zero and `type(uint256).max` are not sentinels.
+An inverted range cannot be satisfied. Codecs preserve inverted ranges without
+enforcing them. `Specs.AssetLimits`, `Sizes.AssetLimits`, `Headers.AssetLimits`,
+and `Schemas.AssetLimits` describe this shape. Offchain callers encode these
+constraints. Scalar `unpackAssetLimits` readers support calldata, cursor, and
+execution paths; `Memory.unpackAssetLimits` decodes bounded memory blocks.
+There are no onchain ASSET_LIMITS writers, factories, or output helpers.
+
+`Blocks.expectAssetLimits(abs, asset, amount)` checks the header, exact asset,
+and inclusive amount bounds directly in calldata without unpacking. The caller
+must bound the complete block. `Executions.expectAssetLimits(exec, asset, amount)`
+bounds and consumes one ASSET_LIMITS input before delegating to it. A bad header
+reverts with `InvalidBlock`, an asset mismatch with `UnexpectedValue`, and a
+violated bound with `OutOfRange`, in that order. `CheckBalance` uses this helper.
+
+`checkBalance` (`CheckBalance` in `commands/Balance.sol`) accepts BALANCE state
+and one ASSET_LIMITS input per balance. It checks exact asset identity, then
+`min <= amount <= max`, and returns each balance unchanged. A mismatched asset
+reverts with `UnexpectedValue`; a violated bound reverts with `OutOfRange`.
+It does not check authorization or backing. Empty state with empty input is
+valid; missing, extra, malformed, or failing constraints revert the call.
+Packed LIMITS input is not accepted by this command. The generic packed LIMITS
+schema remains available for contexts that already establish asset identity.
+
+`ExecuteCheckBalance` adds internal execution for the same command ID. It checks
+memory BALANCE blocks directly against calldata ASSET_LIMITS in assembly without
+unpacking or copying, returning the original state buffer and unused native
+budget. Hosts route `checkBalanceId()` to
+`executeCheckBalance(account, state, input, value)` in their local dispatcher.
+The normal command uses the standard execution callback and output writer.
+
+`Blocks.expectLimits(abs, amount, debt)` checks the LIMITS header and compares
 full-width quantities directly against its calldata payload. The caller must bound
-the complete block. `Executions.requireLimits(exec, amount, debt)` bounds and
-consumes one LIMITS input before delegating to it. `Realize` uses this helper on
-the returned position, without unpacking limits into a Solidity value.
-
-`Blocks.unpackLimitedPosition(pos, lim)` checks both exact block
-headers, compares the position quantities against the packed limits directly in
-calldata, then returns a `Position` struct. Its caller must establish bounds for
-both complete blocks. It does not advance streams or validate identifiers.
-`Executions.unpackLimitedPosition(exec)` bounds and consumes one POSITION from
-state and one LIMITS from input, then delegates to this helper.
-`Memory.unpackLimitedPosition(pos, lim)` performs the same checks
-with the POSITION in memory and LIMITS in calldata, returning an independent
-copy via `mcopy`. Both complete blocks must be in bounds. These limited-position
-helpers remain available for commands that need paired quantity checks.
+the complete block. `Executions.expectLimits(exec, amount, debt)` bounds and
+consumes one LIMITS input before delegating to it. These helpers remain available
+for operations that consume generic packed bounds.
 
 `settle` and `settlePayable` consume any number of POSITION blocks with empty
 input. `ExecuteSettle` rejects nonempty input with `UnexpectedInput`, establishes
 fixed-size memory bounds, and iterates the position stream. Partial blocks revert
 with `InvalidBlock` when establishing bounds. The settlement hook validates and
-authorizes the counterparty. Producers enforce `net amount >= limits >> 128` and
-`total debt <= uint128(limits)` on their final outputs where those limits apply.
-`Realize` already checks its returned position against its paired LIMITS input.
+authorizes the counterparty. Callers may enforce final outcome constraints with
+`checkPosition` before settlement. `Realize` takes empty input; it does not apply
+quantity constraints.
 `Settlement` supplies a default `settle` implementation without host fees.
 Producers handle fees before creating the position: `amount` is the final net
 asset receipt and `debt` is the final total payment. Settlement applies those
@@ -709,36 +740,81 @@ rules as other accounts. Self-exchanges leave balances unchanged but still
 require funding for each debit before its matching credit. Matching assets are
 not netted, so incoming assets cannot fund the initial liability debit.
 
-For realization, each POSITION is paired with one LIMITS input. The command calls
-`realize(account, position)`, then `Positions.requireLimits(result, exec.unpackLimits())` before
-outputting the result. A failed quantity check or malformed LIMITS input reverts
-all hook changes. The hook must preserve asset and liability identifiers and
-return counterparty zero after fulfillment; the command does not check those fields.
+For realization, the command calls `realize(account, position)` for each POSITION
+and outputs the result. Input must be empty. To protect the returned quantities
+and denominations, compose `realize -> checkPosition -> settle` in one atomic
+pipeline. A failed check rolls back realization and any earlier effects. The
+check is optional. The realization hook must preserve asset and liability
+identifiers and return counterparty zero after fulfillment.
 
 The QUOTE schema remains available independently:
 
 ```txt
-#quote { bytes32 asset, bytes32 liability, uint limits }
+#quote { bytes32 asset, uint amount, bytes32 liability, uint debt }
 ```
 
-A QUOTE constrains the resulting position: `asset` and `liability` must match exactly,
-`limits` packs the inclusive minimum asset output into its high 128 bits and
-the inclusive maximum debt into its low 128 bits. Both lanes are literal bounds,
-including `type(uint128).max`; there is no unlimited-debt sentinel. Actual asset
-output may exceed 128 bits, but quoted debt cannot exceed the cap.
-The quote has three words (96 payload bytes, 104 bytes including the header).
-It decodes into a distinct `Quote` struct exported through `Core.sol` and
-`Codec.sol`; positions retain their full-width actual quantities.
-Counterparty is not part of the quote. It is an input schema, not live position state.
+A QUOTE describes asset and liability quantities using four full-width words,
+ordered as `asset, amount, liability, debt`, matching the first four fields of
+POSITION. Its payload is 128 bytes, or 136 bytes including the header. It decodes
+into a distinct `Quote` struct exported through `Core.sol`, `Codec.sol`, and
+`Commands.sol`. Counterparty is not part of the quote. It is not live position
+state; the consuming operation determines how its quantities are interpreted.
 
-Cursor and execution helpers decode quotes with `unpackQuoteValue()`. Callers
-can use `Positions.requireQuoted(position, quote)`, exported through `Utils.sol`,
-to enforce exact asset and liability identifiers, then check the inclusive quantity
-bounds through `Positions.requireLimits(position, quote.limits)`.
-Realize does not consume QUOTE input. Code that independently validates a
-Rootzero-backed result against a quote must separately require zero on the resulting
-position's counterparty. Hosts remain responsible for counterparty authorization
-and backing. Failed comparisons revert the enclosing call and its earlier changes.
+Cursor and execution helpers decode quotes with `unpackQuoteValue()` or return
+`(asset, amount, liability, debt)` from `unpackQuote()`. Scalar quote writers and
+factories use the same order; structured writers accept a `Quote`. QUOTE remains
+a separate schema whose interpretation is defined by its consumer; it is not
+accepted by `checkPosition` or the position-limits expectation helpers.
+
+The former three-word `asset, liability, limits` QUOTE format is invalid.
+
+Position acceptance constraints use a separate schema:
+
+```txt
+#positionLimits { bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt }
+```
+
+POSITION_LIMITS has a 128-byte payload (136 including the header), with the same
+word order as QUOTE but a distinct key. Offchain callers encode these constraints.
+Scalar `unpackPositionLimits` readers return `(asset, minAmount, liability, maxDebt)`
+from calldata, cursors, or execution input. There is no `PositionLimits` struct
+or onchain writer, factory, or execution-output helper.
+
+`checkPosition` and the `expectPositionLimits` helpers require exact asset and
+liability identifiers, then check `position.amount >= limits.minAmount` and
+`position.debt <= limits.maxDebt`. Both bounds are inclusive full-width uint256
+values with no sentinels. They constrain separate quantities, so minAmount may
+exceed maxDebt. Counterparty is not part of these constraints; authorization
+and backing remain separate responsibilities. Codecs preserve values without
+applying the comparisons.
+
+`Blocks.expectPositionLimits(abs, position)` performs the same checks directly
+against calldata without unpacking its payload. The caller
+must bound the complete block. It validates the POSITION_LIMITS header first
+(`InvalidBlock`), then identifiers (`UnexpectedValue`), then quantity bounds
+(`OutOfRange`). It does not advance a cursor or check the counterparty.
+`Executions.expectPositionLimits(exec, position)` bounds and consumes one
+POSITION_LIMITS input before delegating to it.
+
+Realize consumes empty input. Code checking a Rootzero-backed result
+must separately require zero on the resulting position's counterparty. Failed
+comparisons revert the enclosing call and its earlier changes.
+
+`checkPosition` (`CheckPosition` in `commands/Position.sol`) accepts POSITION state and
+one POSITION_LIMITS input per position, checks exact asset and liability identifiers and
+inclusive minimum amount / maximum debt, and returns each position unchanged.
+Empty state with empty input is valid; missing, extra, malformed, or failing
+constraints revert the call. It does not check counterparty authorization or backing.
+Place it after the transformations whose output should satisfy the limits, for
+example `transform → checkPosition → settle`, within the same atomic pipeline.
+
+`ExecuteCheckPosition` adds internal memory-state execution for the same command
+ID. It validates POSITION blocks in memory directly against POSITION_LIMITS blocks in
+calldata using assembly, without unpacking structs or copying output. It returns
+the original state buffer and any assigned native budget unchanged. Hosts route
+`checkPositionId()` to `executeCheckPosition(account, state, input, value)` in their
+local execution dispatcher. The normal external command uses the standard
+execution callback and emits unchanged positions through the output writer.
 
 This representation supports ordinary forward transformations as well as
 backward composition. For example, an exact-output route can carry its desired
@@ -1037,7 +1113,9 @@ accountAmount      bytes32 account, bytes32 asset, uint amount
 hostAmount         uint host, bytes32 asset, uint amount
 hostAccountAsset   uint host, bytes32 account, bytes32 asset
 limits             uint limits
-quote              bytes32 asset, bytes32 liability, uint limits
+assetLimits        bytes32 asset, uint min, uint max
+quote              bytes32 asset, uint amount, bytes32 liability, uint debt
+positionLimits     bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt
 position           bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
 transaction        bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount  uint host, bytes32 account, bytes32 asset, uint amount

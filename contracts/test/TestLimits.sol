@@ -6,8 +6,8 @@ import {Memory} from "../codec/Blocks.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {Schemas} from "../codec/Schema.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
-import {Position} from "../core/Types.sol";
-import {Positions} from "../utils/Positions.sol";
+
+import {OutOfRange} from "../utils/Errors.sol";
 
 contract TestLimits {
     using Decoders for Cur;
@@ -33,24 +33,18 @@ contract TestLimits {
         return cur.unpackLimits();
     }
 
-    function checkPosition(Position memory position, uint limits) external pure {
-        Positions.requireLimits(position, limits);
-    }
-
     function check(bytes calldata input, uint amount, uint debt, bool execution)
         external pure returns (uint nextLimits)
     {
-        Position memory position;
-        position.amount = amount;
-        position.debt = debt;
         if (execution) {
             Execution memory exec;
             exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, input);
-            Positions.requireLimits(position, exec.unpackLimits());
+            exec.expectLimits(amount, debt);
             return exec.unpackLimits();
         }
         Cur memory cur = Decoders.open(input);
-        Positions.requireLimits(position, cur.unpackLimits());
+        uint limits = cur.unpackLimits();
+        if (amount < limits >> 128 || debt > uint128(limits)) revert OutOfRange();
         return cur.unpackLimits();
     }
 

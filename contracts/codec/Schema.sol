@@ -121,7 +121,7 @@ library Schemas {
     string constant Asset = "bytes32 asset";
     string constant Status = "uint code";
 
-    /// @dev High 128 bits: inclusive minimum amount; low 128 bits: inclusive maximum debt.
+    /// @dev High 128 bits: inclusive minimum; low 128 bits: inclusive maximum; context defines meaning.
     string constant Limits = "uint limits";
 
     // Two-word payloads
@@ -133,6 +133,7 @@ library Schemas {
 
     // Three-word payloads
 
+    string constant AssetLimits = "bytes32 asset, uint min, uint max";
     string constant Bootstrap = "bytes32 asset, uint amount, uint budget";
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     string constant Allowance = "uint host, bytes32 asset, uint amount";
@@ -147,8 +148,9 @@ library Schemas {
 
     // Four-word input payloads
 
-    /// @dev Exact identifiers and packed inclusive quantity bounds.
-    string constant Quote = "bytes32 asset, bytes32 liability, uint limits";
+    /// @dev Exact identifiers and full-width inclusive quantity bounds.
+    string constant PositionLimits = "bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt";
+    string constant Quote = "bytes32 asset, uint amount, bytes32 liability, uint debt";
 
     // Composite payloads
 

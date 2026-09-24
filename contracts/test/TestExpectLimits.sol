@@ -4,9 +4,9 @@ pragma solidity ^0.8.33;
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Position} from "../core/Types.sol";
-import {Positions} from "../utils/Positions.sol";
+import {OutOfRange} from "../utils/Errors.sol";
 
-contract TestRequireLimits {
+contract TestExpectLimits {
     using Executions for Execution;
 
     function measureDirect(bytes calldata input, uint amount, uint debt)
@@ -18,7 +18,7 @@ contract TestRequireLimits {
         position.amount = amount;
         position.debt = debt;
         uint start = gasleft();
-        while (exec.more()) exec.requireLimits(position.amount, position.debt);
+        while (exec.more()) exec.expectLimits(position.amount, position.debt);
         used = start - gasleft();
         cursor = exec.absolute();
     }
@@ -32,7 +32,10 @@ contract TestRequireLimits {
         position.amount = amount;
         position.debt = debt;
         uint start = gasleft();
-        while (exec.more()) Positions.requireLimits(position, exec.unpackLimits());
+        while (exec.more()) {
+            uint limits = exec.unpackLimits();
+            if (position.amount < limits >> 128 || position.debt > uint128(limits)) revert OutOfRange();
+        }
         used = start - gasleft();
         cursor = exec.absolute();
     }

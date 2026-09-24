@@ -75,17 +75,17 @@ struct HostAccountAmount {
     uint amount;
 }
 
-/// @notice Constraints on a resulting position's asset, liability, and quantities.
-/// @dev Asset and liability identifiers must match exactly. Quantity bounds are
-/// inclusive and do not constrain the position's counterparty.
+/// @notice Quoted asset and liability quantities, independent of live position state.
+/// @dev Consumers define quotation semantics. Both quantities are full-width uints; counterparty is separate.
 struct Quote {
-    /// @dev Required asset identifier.
+    /// @dev Identifier for the quoted asset side.
     bytes32 asset;
-    /// @dev Required liability identifier.
+    /// @dev Quoted asset quantity in the asset's native units.
+    uint amount;
+    /// @dev Identifier for the quoted liability side.
     bytes32 liability;
-    /// @dev High 128 bits: minimum net asset receipt; low 128 bits: maximum total
-    /// debt including fees. Both bounds are literal, with no sentinel values.
-    uint limits;
+    /// @dev Quoted liability quantity in the liability's native units.
+    uint debt;
 }
 
 /// @notice Asset and liability pair threaded as live pipeline state.

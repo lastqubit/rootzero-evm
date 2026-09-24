@@ -674,30 +674,30 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         );
     }
 
-    function requireWidth(bytes calldata source, uint i, uint width, bytes32 expected) external pure {
+    function expectWidth(bytes calldata source, uint i, uint width, bytes32 expected) external pure {
         uint abs = position(source) + i;
         if (width == 1) {
-            Blocks.require1(abs, bytes1(expected));
+            Blocks.expect1(abs, bytes1(expected));
             return;
         }
         if (width == 2) {
-            Blocks.require2(abs, bytes2(expected));
+            Blocks.expect2(abs, bytes2(expected));
             return;
         }
         if (width == 4) {
-            Blocks.require4(abs, bytes4(expected));
+            Blocks.expect4(abs, bytes4(expected));
             return;
         }
         if (width == 8) {
-            Blocks.require8(abs, bytes8(expected));
+            Blocks.expect8(abs, bytes8(expected));
             return;
         }
         if (width == 16) {
-            Blocks.require16(abs, bytes16(expected));
+            Blocks.expect16(abs, bytes16(expected));
             return;
         }
         if (width == 32) {
-            Blocks.require32(abs, expected);
+            Blocks.expect32(abs, expected);
             return;
         }
         revert UnexpectedValue();

@@ -9,7 +9,7 @@ import {
   encodeBootstrapBlock,
   encodeAssetBlock,
   encodeAmountBlock,
-  MaxUint128, encodeLimitsBlock,  encodeHostAccount,
+  MaxUint128, encodeLimitsBlock, encodeQuoteBlock,  encodeHostAccount,
   encodeBalanceBlock, encodeLiabilityPosition, encodePositionBlock, encodeAllocationBlock, encodeCustodyBlock,
   encodeAccountBlock, encodeNodeBlock, encodeStepBlock, encodeUserAccount,
   encodeActionBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
@@ -417,7 +417,7 @@ describe("Commands", () => {
     const liability = ethers.zeroPadValue("0x21", 32);
     for (const counterparty of [userAccount, ethers.toBeHex(await host.host(), 32)]) {
       const state = encodePositionBlock(asset, 10n, liability, 7n, counterparty);
-      const input = encodeLimitsBlock(10n, 7n);
+      const input = "0x";
       await expect(callAs(0, "realize", ctx({ state, input })))
         .to.be.revertedWithCustomError(host, "UnexpectedValue");
     }
@@ -704,151 +704,62 @@ describe("Commands", () => {
   // â”€â”€ CreditTo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe("realize", () => {
-    function positionInput(minimum = 0n, maximum = MaxUint128) {
-      return encodeLimitsBlock(minimum, maximum);
-    }
     const asset = ethers.zeroPadValue("0x21", 32);
     const liability = ethers.zeroPadValue("0x22", 32);
-    const toAsset = asset;
-    const toLiability = liability;
 
-    it("discovers POSITION state, LIMITS input, and POSITION output", async () => {
-      const deployment = host.deploymentTransaction();
-      expect(deployment).to.not.equal(null);
-
-      await expect(deployment!).to.emit(host, "Endpoint")
-        .withArgs(
-          await host.host(),
-          await cmd("realize"),
-          endpointDescriptor({
-            state: Keys.Position, stateHint: 160,
-            input: Keys.Limits, inputHint: 32,
-            output: exactSpec(Keys.Position, 160),
-          }),
-        );
+    it("discovers POSITION state, empty input, and POSITION output", async () => {
+      await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(
+        await host.host(), await cmd("realize"), endpointDescriptor({
+          state: Keys.Position, stateHint: 160, output: exactSpec(Keys.Position, 160),
+        }));
     });
 
-    it("rejects the former BALANCE state shape", async () => {
-      await expect(callAs(0, "realize", ctx({
-        state: encodeBalanceBlock(asset, 100n),
-        input: positionInput(),
-      }))).to.be.revertedWithCustomError(host, "OutOfBounds");
-    });
-
-    it("passes the entire position to a single hook", async () => {
-      const state = encodePositionBlock(asset, 100n, liability, 80n, encodeHostAccount(await host.host()));
-      const input = positionInput(90n, 85n);
-      const tx = await callAs(0, "realize", ctx({ state, input }));
-
-      await expect(tx).to.emit(host, "RealizeCalled")
-        .withArgs(userAccount, asset, 100n, liability, 80n, encodeHostAccount(await host.host()));
-      expect(await host.realize.staticCall(...ctx({ state, input }))).to.deep.equal([
-        encodePositionBlock(toAsset, 100n, toLiability, 80n),
-        0n,
-      ]);
-    });
-
-    it("emits the position returned by the realization hook", async () => {
+    it("passes the full position to its hook and returns its result", async () => {
+      const counterparty = encodeHostAccount(await host.host());
+      const state = encodePositionBlock(asset, 100n, liability, 80n, counterparty);
+      await expect(callAs(0, "realize", ctx({ state }))).to.emit(host, "RealizeCalled")
+        .withArgs(userAccount, asset, 100n, liability, 80n, counterparty);
       await withRealizeFee(4n, async () => {
         await withRealizeDebtFee(3n, async () => {
-          const [result] = await host.realize.staticCall(...ctx({
-            state: encodePositionBlock(asset, 100n, liability, 80n, encodeHostAccount(await host.host())),
-            input: positionInput(96n, 77n),
-          }));
-          expect(result).to.equal(encodePositionBlock(toAsset, 96n, toLiability, 77n));
+          expect(await host.realize.staticCall(...ctx({ state })))
+            .to.deep.equal([encodePositionBlock(asset, 96n, liability, 77n), 0n]);
         });
       });
     });
 
-    it("pairs positions and quantity limits by position", async () => {
-      const asset2 = ethers.zeroPadValue("0x25", 32);
-      const liability2 = ethers.zeroPadValue("0x26", 32);
-      const toAsset2 = asset2;
-      const toLiability2 = liability2;
-      const state = concat(
-        encodePositionBlock(asset, 10n, liability, 8n, encodeHostAccount(await host.host())),
-        encodePositionBlock(asset2, 20n, liability2, 16n, encodeHostAccount(await host.host())),
-      );
-      const input = concat(
-        positionInput(10n, 8n),
-        positionInput(20n, 16n),
-      );
-
-      const [result, credit] = await host.realize.staticCall(...ctx({ state, input }));
-      expect(result).to.equal(concat(
-        encodePositionBlock(toAsset, 10n, toLiability, 8n),
-        encodePositionBlock(toAsset2, 20n, toLiability2, 16n),
-      ));
-      expect(credit).to.equal(0n);
-    });
-
-    it("validates LIMITS headers before quantities and bounds every input block", async () => {
-      const state = encodePositionBlock(asset, 0n, liability, 100n, encodeHostAccount(await host.host()));
-      const limits = encodeLimitsBlock(1n, 0n);
-      for (const input of ["0xffffffff" + limits.slice(10), limits.slice(0, 10) + "0000001f" + limits.slice(18)]) {
-        await expect(callAs(0, "realize", ctx({ state, input })))
-          .to.be.revertedWithCustomError(host, "InvalidBlock");
-      }
-      await expect(callAs(0, "realize", ctx({ state, input: ethers.dataSlice(limits, 0, 39) })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
-      await expect(callAs(0, "realize", ctx({ state, input: concat(positionInput(), positionInput()) })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
-    });
-
-    it("accepts empty streams and rejects malformed pairings", async () => {
+    it("handles a batch and empty state without limits", async () => {
+      const counterparty = encodeHostAccount(await host.host());
+      const state = concat(encodePositionBlock(asset, 10n, liability, 8n, counterparty),
+        encodePositionBlock(liability, 20n, asset, 16n, counterparty));
+      expect(await host.realize.staticCall(...ctx({ state }))).to.deep.equal([
+        concat(encodePositionBlock(asset, 10n, liability, 8n), encodePositionBlock(liability, 20n, asset, 16n)), 0n,
+      ]);
       expect(await host.realize.staticCall(...ctx())).to.deep.equal(["0x", 0n]);
-
-      await expect(callAs(0, "realize", ctx({
-        state: encodePositionBlock(asset, 1n, liability, 1n, encodeHostAccount(await host.host())),
-      }))).to.be.revertedWithCustomError(host, "OutOfBounds");
-      await expect(callAs(0, "realize", ctx({
-        state: encodePositionBlock(asset, 1n, liability, 1n, encodeHostAccount(await host.host())),
-        input: encodeAssetBlock(toAsset),
-      }))).to.be.revertedWithCustomError(host, "InvalidBlock");
-      await expect(callAs(0, "realize", ctx({
-        input: positionInput(),
-      }))).to.be.revertedWithCustomError(host, "OutOfBounds");
     });
-  });
 
-  describe("realization limits", () => {
-    const from = ethers.zeroPadValue("0x41", 32);
-    const to = from;
-    for (const side of ["asset", "debt"] as const) {
-      const encodeState = (asset: string, amount: bigint) => side === "asset"
-        ? encodePositionBlock(asset, amount, ethers.ZeroHash, 0n)
-        : encodeLiabilityPosition(asset, amount);
-      const encodeInput = (limit: bigint) => side === "asset"
-        ? encodeLimitsBlock(limit, MaxUint128)
-        : encodeLimitsBlock(0n, limit);
-      for (const [amount, limit] of [
-        [10n, 9n], [10n, 10n], [10n, 11n], [10n, 0n], [10n, MaxUint128],
-        [0n, 0n], [0n, 1n], [MaxUint128, MaxUint128],
-        [MaxUint128 + 1n, MaxUint128], [ethers.MaxUint256, MaxUint128],
-      ]) {
-        it(`${side} checks limit ${limit} against output ${amount}`, async () => {
-          const args = ctx({ state: encodePositionBlock(side === "asset" ? from : ethers.ZeroHash, side === "asset" ? amount : 0n, side === "debt" ? from : ethers.ZeroHash, side === "debt" ? amount : 0n, encodeHostAccount(await host.host())), input: encodeInput(limit) });
-          const fails = side === "asset" ? amount < limit : amount > limit;
-          if (fails) {
-            await expect(callAs(0, "realize", args)).to.be.revertedWithCustomError(host, "OutOfRange");
-          } else {
-            expect(await host.realize.staticCall(...args)).to.deep.equal([encodeState(to, amount), 0n]);
-          }
-        });
+    it("accepts full-width asset-only and liability-only results without a packed cap", async () => {
+      for (const amount of [0n, MaxUint128 + 1n, ethers.MaxUint256]) {
+        for (const debtOnly of [false, true]) {
+          const a = debtOnly ? ethers.ZeroHash : asset;
+          const l = debtOnly ? liability : ethers.ZeroHash;
+          const received = debtOnly ? 0n : amount;
+          const debt = debtOnly ? amount : 0n;
+          const state = encodePositionBlock(a, received, l, debt, encodeHostAccount(await host.host()));
+          expect(await host.realize.staticCall(...ctx({ state })))
+            .to.deep.equal([encodePositionBlock(a, received, l, debt), 0n]);
+        }
       }
+    });
 
-      it(`${side} checks the limit against the hook?s adjusted result`, async () => {
-        const withFee = side === "asset" ? withRealizeFee : withRealizeDebtFee;
-        await withFee(4n, async () => {
-          const state = encodePositionBlock(side === "asset" ? from : ethers.ZeroHash, side === "asset" ? 100n : 0n, side === "debt" ? from : ethers.ZeroHash, side === "debt" ? 100n : 0n, encodeHostAccount(await host.host()));
-          expect(await host.realize.staticCall(...ctx({ state, input: encodeInput(96n) })))
-            .to.deep.equal([encodeState(to, 96n), 0n]);
-          const limit = side === "asset" ? 97n : 95n;
-          await expect(callAs(0, "realize", ctx({ state, input: encodeInput(limit) })))
-            .to.be.revertedWithCustomError(host, "OutOfRange");
-        });
-      });
-    }
+    it("rejects nonempty input and malformed state", async () => {
+      const state = encodePositionBlock(asset, 100n, liability, 80n, encodeHostAccount(await host.host()));
+      for (const input of ["0x01", encodeLimitsBlock(0n, MaxUint128), encodeQuoteBlock(asset, 0n, liability, 80n)]) {
+        await expect(callAs(0, "realize", ctx({ state, input }))).to.be.revertedWithCustomError(host, "OutOfBounds");
+        await expect(callAs(0, "realize", ctx({ input }))).to.be.revertedWithCustomError(host, "OutOfBounds");
+      }
+      await expect(callAs(0, "realize", ctx({ state: encodeBalanceBlock(asset, 100n) })))
+        .to.be.revertedWithCustomError(host, "OutOfBounds");
+    });
   });
 
   describe("creditAccount", () => {

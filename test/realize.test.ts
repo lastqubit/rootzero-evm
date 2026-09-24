@@ -13,7 +13,7 @@ describe("Realization failure atomicity", () => {
   const to = ethers.zeroPadValue("0x33", 32);
   const balance = encodeBalanceBlock(asset, 10n);
   let position: string;
-  const positionInput = encodeLimitsBlock(0n, MaxUint128);
+  const positionInput = "0x";
   const context = (state: string, input: string) => encodeContextBlock(ethers.ZeroHash, state, input);
   let helper: Awaited<ReturnType<typeof deploy>>;
 
@@ -42,88 +42,40 @@ describe("Realization failure atomicity", () => {
     let state: string;
     beforeEach(() => { state = position; });
     const input = positionInput;
-    const wrongStates = [balance];
-    it("checks each result against its paired limits", async () => {
-      const first = encodeLimitsBlock(9n, 8n);
-      const second = encodeLimitsBlock(10n, 7n);
-      await helper.realize(context(concat(state, state), concat(first, second)));
+    it("realizes a batch with empty input", async () => {
+      await helper.realize(context(concat(state, state), "0x"));
       expect(await committedState()).to.deep.equal([3n, 3n, 30n, 21n]);
     });
 
-    it("invokes the hook before checking limits", async () => {
-      await (await helper.failAt(0n, 2n)).wait();
-      await rejectsWithoutChanges(method, state, "0x", "DebtFailure");
-    });
-
-    it("rolls back earlier positions when a later counterparty is not the host account", async () => {
-      const invalid = encodePositionBlock(asset, 10n, liability, 7n, to);
-      await rejectsWithoutChanges(method, concat(state, invalid), concat(input, input), "UnexpectedValue");
-    });
-
-    it("rejects QUOTE input and rolls back the hook", async () => {
-      await rejectsWithoutChanges(method, state,
-        encodeQuoteBlock(asset, liability, MaxUint128), "InvalidBlock");
-    });
-
-    it("rejects the old ASSET_LIABILITY input shape", async () => {
-      await rejectsWithoutChanges(method, state, encodeAssetLiabilityBlock(to, liability), "InvalidBlock");
-    });
-
-    it("passes the complete counterparty to the hook and emits its fulfilled result", async () => {
-      const [result] = await helper.realize.staticCall(context(
-        state, input));
+    it("passes the complete position to the hook and returns its result", async () => {
+      const [result, credit] = await helper.realize.staticCall(context(state, "0x"));
       expect(result).to.equal(encodePositionBlock(asset, 10n, liability, 7n));
+      expect(credit).to.equal(0n);
     });
 
-    for (const pair of [1, 2]) {
-      for (const side of ["asset", "debt"]) {
-        it(`rolls back all hooks when position ${pair} violates its ${side} limit`, async () => {
-          const invalid = side === "asset"
-            ? encodeLimitsBlock(11n, MaxUint128)
-            : encodeLimitsBlock(0n, 6n);
-          await rejectsWithoutChanges(method, concat(state, state),
-            pair === 1 ? concat(invalid, input) : concat(input, invalid),
-            "OutOfRange");
-        });
+    it("accepts empty state and rejects all nonempty input atomically", async () => {
+      expect(await helper.realize.staticCall(context("0x", "0x"))).to.deep.equal(["0x", 0n]);
+      for (const input of ["0x01", encodeLimitsBlock(0n, MaxUint128),
+        encodeQuoteBlock(asset, 0n, liability, MaxUint128), encodeAssetLiabilityBlock(to, liability),
+        concat(encodeAmountBlock(to, 1n), encodeAmountBlock(to, 0n))]) {
+        for (const state of ["0x", position, concat(position, position)]) {
+          await rejectsWithoutChanges(method, state, input, "OutOfBounds");
+        }
       }
-
-    }
-
-    it("rejects the old two-AMOUNT input shape and rolls back the hook", async () => {
-      const legacy = concat(encodeAmountBlock(to, ethers.MaxUint256), encodeAmountBlock(to, 0n));
-      await rejectsWithoutChanges(method, state, legacy, "InvalidBlock");
     });
 
-    it("rolls back a completed pair when nonempty state outnumbers input", async () => {
-      await rejectsWithoutChanges(method, concat(state, state), input, "OutOfBounds");
+    it("rolls back earlier positions if a later counterparty is invalid", async () => {
+      await rejectsWithoutChanges(method, concat(state, encodePositionBlock(asset, 10n, liability, 7n, to)),
+        "0x", "UnexpectedValue");
     });
 
-    it("rolls back a completed pair when nonempty input outnumbers state", async () => {
-      await rejectsWithoutChanges(method, state, concat(input, input), "OutOfBounds");
+    it("rolls back earlier hooks for malformed trailing state", async () => {
+      for (const [invalid, error] of [
+        [balance, "OutOfBounds"], [ethers.dataSlice(state, 0, 7), "OutOfBounds"],
+        [state.slice(0, -2), "OutOfBounds"], ["0xffffffff" + state.slice(10), "InvalidBlock"],
+        [state.slice(0, 10) + "00000000" + state.slice(18), "InvalidBlock"],
+      ]) await rejectsWithoutChanges(method, concat(state, invalid), "0x", error);
     });
-
-    for (const wrongState of wrongStates) {
-      it(`rejects trailing state type ${wrongState.slice(0, 10)} and rolls back earlier pairs`, async () => {
-        await rejectsWithoutChanges(method, concat(state, wrongState), concat(input, input),
-          wrongState.length < state.length ? "OutOfBounds" : "InvalidBlock");
-      });
-    }
-
-    for (const lane of ["state", "input"] as const) {
-      for (const defect of ["partial header", "truncated payload", "wrong key", "wrong payload length"] as const) {
-        it(`rolls back earlier pairs for a trailing ${lane} block with ${defect}`, async () => {
-          const block = lane === "state" ? state : input;
-          const malformed = defect === "partial header" ? ethers.dataSlice(block, 0, 7)
-            : defect === "truncated payload" ? ethers.dataSlice(block, 0, ethers.dataLength(block) - 1)
-            : defect === "wrong key" ? "0xffffffff" + block.slice(10)
-            : concat(ethers.dataSlice(block, 0, 4), "0x00000000", ethers.dataSlice(block, 8));
-          await rejectsWithoutChanges(method,
-            concat(state, lane === "state" ? malformed : state),
-            concat(input, lane === "input" ? malformed : input),
-            defect === "partial header" || defect === "truncated payload" ? "OutOfBounds" : "InvalidBlock");
-        });
-      }
-    }
 
     for (const hook of ["asset", "debt"]) {
       for (const pair of [1, 2]) {

@@ -733,24 +733,38 @@ library Decoders {
         (value.host, value.asset, value.amount) = unpackCustody(cur);
     }
 
+    /// @notice Decode and consume one ASSET_LIMITS block without enforcing its bounds.
+    function unpackAssetLimits(Cur memory cur) internal pure returns (bytes32 asset, uint min, uint max) {
+        uint abs;
+        (cur.state, abs) = cur.state.consume(Sizes.AssetLimits);
+        return Blocks.unpackAssetLimits(abs);
+    }
+
     /// @notice Decode and consume one LIMITS block.
-    /// @return limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(Cur memory cur) internal pure returns (uint limits) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.Limits);
         limits = Blocks.unpackLimits(abs);
     }
 
-    /// @notice Decode and consume one QUOTE input with minimum amount and maximum debt.
-    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, bytes32 liability, uint limits) {
+    /// @notice Decode POSITION_LIMITS with exact denominations and inclusive full-width bounds.
+    function unpackPositionLimits(Cur memory cur) internal pure returns (bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt) {
+        uint abs;
+        (cur.state, abs) = cur.state.consume(Sizes.PositionLimits);
+        (asset, minAmount, liability, maxDebt) = Blocks.unpackPositionLimits(abs);
+    }
+
+    /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
+    function unpackQuote(Cur memory cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
         uint abs;
         (cur.state, abs) = cur.state.consume(Sizes.Quote);
-        (asset, liability, limits) = Blocks.unpackQuote(abs);
+        (asset, amount, liability, debt) = Blocks.unpackQuote(abs);
     }
 
     /// @notice Decode one QUOTE into its structured value.
     function unpackQuoteValue(Cur memory cur) internal pure returns (Quote memory quote) {
-        (quote.asset, quote.liability, quote.limits) = unpackQuote(cur);
+        (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(cur);
     }
 
     /// @notice Decode and consume one POSITION block.

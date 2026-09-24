@@ -37,11 +37,16 @@ library Sizes {
 
     // Input and structural blocks
 
+    /// @dev ASSET_LIMITS block: 8 header + three words = 104 bytes.
+    uint constant AssetLimits = B96;
+
     /// @dev LIMITS block: 8 header + 32 packed limits = 40 bytes.
     uint constant Limits = B32;
 
-    /// @dev QUOTE block: 8 header + three-word outcome = 104 bytes.
-    uint constant Quote = B96;
+    /// @dev POSITION_LIMITS block: 8 header + four-word constraints = 136 bytes.
+    uint constant PositionLimits = B128;
+    /// @dev QUOTE block: 8 header + four-word quantities = 136 bytes.
+    uint constant Quote = B128;
 
     /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
     uint constant Bootstrap = B96;
@@ -95,8 +100,10 @@ library Specs {
 
     // Input and value blocks
 
+    uint constant AssetLimits = uint(bytes32(Keys.AssetLimits)) | Exact96;
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
-    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact96;
+    uint constant PositionLimits = uint(bytes32(Keys.PositionLimits)) | Exact128;
+    uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;
@@ -256,7 +263,9 @@ library Headers {
     uint64 constant AccountAmount = uint64(Specs.AccountAmount >> 192);
     uint64 constant HostAmount = uint64(Specs.HostAmount >> 192);
     uint64 constant HostAccountAsset = uint64(Specs.HostAccountAsset >> 192);
+    uint64 constant AssetLimits = uint64(Specs.AssetLimits >> 192);
     uint64 constant Limits = uint64(Specs.Limits >> 192);
+    uint64 constant PositionLimits = uint64(Specs.PositionLimits >> 192);
     uint64 constant Quote = uint64(Specs.Quote >> 192);
     uint64 constant Position = uint64(Specs.Position >> 192);
     uint64 constant HostAsset = uint64(Specs.HostAsset >> 192);

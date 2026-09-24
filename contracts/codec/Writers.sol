@@ -336,22 +336,22 @@ library Writers {
         Blocks.writeHostAccountAsset(writer.dst, i, host, account, asset);
     }
 
-    /// @notice Append a LIMITS block with minimum amount and maximum debt.
-    /// @param limits Packed minimum asset amount (high 128 bits) and maximum debt (low 128 bits).
+    /// @notice Append a LIMITS block with a packed inclusive minimum and maximum.
+    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function appendLimits(Writer memory writer, uint limits) internal pure {
         uint i = reserve(writer, Sizes.Limits);
         Blocks.writeLimits(writer.dst, i, limits);
     }
 
-    /// @notice Append a QUOTE with minimum amount and maximum debt.
-    function appendQuote(Writer memory writer, bytes32 asset, bytes32 liability, uint limits) internal pure {
+    /// @notice Append a QUOTE with full-width asset and liability quantities.
+    function appendQuote(Writer memory writer, bytes32 asset, uint amount, bytes32 liability, uint debt) internal pure {
         uint i = reserve(writer, Sizes.Quote);
-        Blocks.writeQuote(writer.dst, i, asset, liability, limits);
+        Blocks.writeQuote(writer.dst, i, asset, amount, liability, debt);
     }
 
     /// @notice Append a structured QUOTE.
     function appendQuote(Writer memory writer, Quote memory quote) internal pure {
-        appendQuote(writer, quote.asset, quote.liability, quote.limits);
+        appendQuote(writer, quote.asset, quote.amount, quote.liability, quote.debt);
     }
 
     /// @notice Append a POSITION block.

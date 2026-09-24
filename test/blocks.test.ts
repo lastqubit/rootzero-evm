@@ -172,8 +172,8 @@ describe("Cursors", () => {
       const mismatch = `0xff${word.slice(4)}`;
 
       for (const width of [1, 2, 4, 8, 16, 32]) {
-        await blocksHelper.requireWidth(source, 3, width, word);
-        await expect(blocksHelper.requireWidth(source, 3, width, mismatch)).to.be.revertedWithCustomError(
+        await blocksHelper.expectWidth(source, 3, width, word);
+        await expect(blocksHelper.expectWidth(source, 3, width, mismatch)).to.be.revertedWithCustomError(
           blocksHelper,
           "UnexpectedValue",
         );

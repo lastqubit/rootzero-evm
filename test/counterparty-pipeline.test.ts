@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, hostId } from "./helpers/setup.js";
 import {
-  encodeLimitsBlock, concat, encodeHostAccount, encodeContextBlock, encodePositionBlock,  encodeStepBlock, encodeUserAccount,
+  encodePositionLimitsBlock, concat, encodeHostAccount, encodeContextBlock, encodePositionBlock,  encodeStepBlock, encodeUserAccount,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -11,7 +11,7 @@ describe("Counterparty pipeline", () => {
   const counterparty = encodeUserAccount("0x22");
   const asset = ethers.toBeHex(1n, 32);
   const liability = ethers.toBeHex(2n, 32);
-  const limits = encodeLimitsBlock(100n, 40n);
+  const limits = encodePositionLimitsBlock(asset, 100n, liability, 40n);
 
   for (const memory of [false, true]) {
     describe(memory ? "memory settlement" : "calldata settlement", () => {
@@ -20,11 +20,13 @@ describe("Counterparty pipeline", () => {
       let state: string;
       let realizeId: bigint;
       let settleId: bigint;
+      let checkId: bigint;
 
       beforeEach(async () => {
         host = await deploy("TestCounterpartyPipeline", memory);
         hostCounterparty = encodeHostAccount(await host.host());
         state = encodePositionBlock(asset, 100n, liability, 40n, hostCounterparty);
+        checkId = await commandId("checkPosition(bytes)", host);
         realizeId = await commandId("realize(bytes)", host);
         settleId = await commandId("settle(bytes)", host);
         await host.seedHost(asset, 200n);
@@ -32,7 +34,7 @@ describe("Counterparty pipeline", () => {
       });
 
       function steps(input = limits) {
-        return concat(encodeStepBlock(realizeId, 0n, input), encodeStepBlock(settleId, 0n, "0x"));
+        return concat(encodeStepBlock(realizeId, 0n, "0x"), encodeStepBlock(checkId, 0n, input), encodeStepBlock(settleId, 0n, "0x"));
       }
 
       async function snapshot() {
@@ -58,7 +60,7 @@ describe("Counterparty pipeline", () => {
           const failure = wrapper.parseError(data!)!;
           expect(failure.args.addr).to.equal(await host.getAddress());
           expect(failure.args.selector).to.be.oneOf([
-            ethers.id("realize(bytes)").slice(0, 10), ethers.id("settle(bytes)").slice(0, 10),
+            ethers.id("checkPosition(bytes)").slice(0, 10), ethers.id("realize(bytes)").slice(0, 10), ethers.id("settle(bytes)").slice(0, 10),
           ]);
           data = failure.args.err;
         }
@@ -75,7 +77,7 @@ describe("Counterparty pipeline", () => {
       }
 
       it("fulfills the executing host's position and books the result", async () => {
-        const result = await host.realize.staticCall(encodeContextBlock(account, state, limits));
+        const result = await host.realize.staticCall(encodeContextBlock(account, state, "0x"));
         expect(result).to.deep.equal([encodePositionBlock(asset, 100n, liability, 40n), 0n]);
         expect(await host.run.staticCall(account, state, steps())).to.equal(0n);
         await host.run(account, state, steps());
@@ -110,16 +112,15 @@ describe("Counterparty pipeline", () => {
         expect(await snapshot()).to.deep.equal([200n, 0n, 100n, 40n, 0n, 0n, 0n, memory ? 1n : 0n]);
       });
 
-      it("realizes then settles the resulting booking within limits", async () => {
+      it("can skip checking and realize then settle directly", async () => {
         await host.run(account, state,
-          concat(encodeStepBlock(realizeId, 0n, limits), encodeStepBlock(settleId, 0n, "0x")));
+          concat(encodeStepBlock(realizeId, 0n, "0x"), encodeStepBlock(settleId, 0n, "0x")));
         expect(await snapshot()).to.deep.equal([100n, 40n, 100n, 40n, 0n, 0n, 1n, memory ? 1n : 0n]);
       });
 
-      it("rolls back earlier realizations when later producer limits fail", async () => {
+      it("rolls back earlier realizations when the later checkPosition command fails", async () => {
         await rejectsUnchanged(concat(state, state),
-          concat(encodeStepBlock(realizeId, 0n, concat(limits, encodeLimitsBlock(101n, 40n))),
-            encodeStepBlock(settleId, 0n, "0x")),
+          steps(concat(limits, encodePositionLimitsBlock(asset, 101n, liability, 40n))),
           "OutOfRange");
       });
 
@@ -151,7 +152,7 @@ describe("Counterparty pipeline", () => {
 
       it("rolls back realization and earlier booking when a later liability cannot be paid", async () => {
         const second = encodePositionBlock(asset, 100n, liability, 41n, hostCounterparty);
-        const secondLimits = encodeLimitsBlock(100n, 41n);
+        const secondLimits = encodePositionLimitsBlock(asset, 100n, liability, 41n);
         await rejectsUnchanged(concat(state, second), steps(concat(limits, secondLimits)), "InsufficientFunds");
       });
 
@@ -160,9 +161,9 @@ describe("Counterparty pipeline", () => {
       });
 
       for (const [label, invalidLimits, error] of [
-        ["asset minimum", encodeLimitsBlock(101n, 40n), "OutOfRange"],
-        ["debt maximum", encodeLimitsBlock(100n, 39n), "OutOfRange"],
-        ["truncated limits", ethers.dataSlice(limits, 0, 39), "OutOfBounds"],
+        ["asset minimum", encodePositionLimitsBlock(asset, 101n, liability, 40n), "OutOfRange"],
+        ["debt maximum", encodePositionLimitsBlock(asset, 100n, liability, 39n), "OutOfRange"],
+        ["truncated limits", ethers.dataSlice(limits, 0, 135), memory ? "InvalidBlock" : "OutOfBounds"],
       ]) {
         it(`rolls back backing changes for a later invalid ${label}`, async () => {
           await rejectsUnchanged(concat(state, state), steps(concat(limits, invalidLimits)), error);
@@ -170,7 +171,7 @@ describe("Counterparty pipeline", () => {
       }
 
       it("rolls back realization if the pipeline ends with an unsettled position", async () => {
-        await rejectsUnchanged(state, encodeStepBlock(realizeId, 0n, limits), "UnexpectedState");
+        await rejectsUnchanged(state, encodeStepBlock(realizeId, 0n, "0x"), "UnexpectedState");
       });
 
       for (const debtOnly of [false, true]) {
@@ -180,7 +181,7 @@ describe("Counterparty pipeline", () => {
           const amount = debtOnly ? 0n : 100n;
           const debt = debtOnly ? 40n : 0n;
           await host.run(account, encodePositionBlock(a, amount, l, debt, hostCounterparty),
-            steps(encodeLimitsBlock(amount, debt)));
+            steps(encodePositionLimitsBlock(a, amount, l, debt)));
           expect(await snapshot()).to.deep.equal([
             200n - amount, debt, amount, 80n - debt, 0n, 0n, 1n, memory ? 1n : 0n,
           ]);

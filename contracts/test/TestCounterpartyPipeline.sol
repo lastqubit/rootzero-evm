@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Realize} from "../commands/Realize.sol";
+import {ExecuteCheckPosition} from "../commands/Position.sol";
 import {ExecuteSettle} from "../commands/Settle.sol";
 import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
@@ -15,7 +16,7 @@ import {Nodes} from "../utils/Nodes.sol";
 
 /// @dev Test-only host backing positions with a reserve ledger. Realization
 /// commits reserves and records the receivable; booking collects it.
-contract TestCounterpartyPipeline is Realize, ExecuteSettle, Settlement, Balances, Pipeline {
+contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettle, Settlement, Balances, Pipeline {
     address private immutable tester = msg.sender;
     bool private immutable memorySettlement;
     uint public realizations;
@@ -43,13 +44,17 @@ contract TestCounterpartyPipeline is Realize, ExecuteSettle, Settlement, Balance
     }
 
     function enforceCommand(uint cmd) internal view override returns (bytes4, address) {
-        if (cmd != settleId() && cmd != Nodes.toCommand("realize", address(this))) revert AccessDenied();
+        if (cmd != checkPositionId() && cmd != settleId() && cmd != Nodes.toCommand("realize", address(this))) revert AccessDenied();
         return Nodes.decode(cmd);
     }
 
     function execute(uint cmd, bytes32 account, bytes memory state, bytes calldata input, uint value)
         internal override returns (bool, bytes memory, uint)
     {
+        if (memorySettlement && cmd == checkPositionId()) {
+            enforceCommand(cmd);
+            return executeCheckPosition(account, state, input, value);
+        }
         if (memorySettlement && cmd == settleId()) {
             enforceCommand(cmd);
             ++memorySettlements;
