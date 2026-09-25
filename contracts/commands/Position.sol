@@ -2,9 +2,9 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
+import {POSITION_HEADER, POSITION_LIMITS_HEADER} from "../codec/Specs.sol";
+import {INVALID_BLOCK, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
 import {Position} from "../core/Types.sol";
-import {Blocks, Memory} from "../codec/Blocks.sol";
-import {Sizes} from "../codec/Specs.sol";
 
 /// @notice Check each POSITION against a paired POSITION_LIMITS block and preserve the position.
 /// @dev Checks identifiers and inclusive quantity bounds, not counterparty authorization or backing.
@@ -40,15 +40,6 @@ abstract contract CheckPosition is CommandBase {
 
 /// @notice Extends checkPosition with direct validation of memory-backed pipeline state.
 abstract contract ExecuteCheckPosition is CheckPosition {
-    // Literal Headers.Position / Headers.PositionLimits values for direct assembly use.
-    uint private constant POSITION_HEADER = 0xe1f9db3d000000a0;
-    uint private constant POSITION_LIMITS_HEADER = 0xd076068e00000080;
-
-    // Right-aligned selectors for InvalidBlock(), UnexpectedValue(), and OutOfRange().
-    uint private constant INVALID_BLOCK = 0xbe5a36cf;
-    uint private constant UNEXPECTED_VALUE = 0x123146a6;
-    uint private constant OUT_OF_RANGE = 0x7db3aba7;
-
     /// @notice Validate positions in place without unpacking or copying their blocks.
     /// @param state POSITION block stream in memory.
     /// @param input Exactly one calldata POSITION_LIMITS block per position.
@@ -62,14 +53,21 @@ abstract contract ExecuteCheckPosition is CheckPosition {
         bytes calldata input,
         uint value
     ) internal pure returns (bool handled, bytes memory output, uint credit) {
-        (uint start, uint end) = Memory.bounds(state, Sizes.Position);
-        if (input.length != (state.length / Sizes.Position) * Sizes.PositionLimits) revert Blocks.InvalidBlock();
-
         assembly ("memory-safe") {
             function fail(selector) {
                 mstore(0, selector)
                 revert(28, 4)
             }
+            let size := mload(state)
+            if mod(size, 168) {
+                fail(INVALID_BLOCK)
+            }
+            // floor(size / 168) * 136 <= size, so multiplication cannot overflow.
+            if iszero(eq(input.length, mul(div(size, 168), 136))) {
+                fail(INVALID_BLOCK)
+            }
+            let start := add(state, 32)
+            let end := add(start, size)
             let q := input.offset
             // Strides include each block's eight-byte header.
             for {

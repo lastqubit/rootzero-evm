@@ -30,4 +30,15 @@ contract TestCheckPosition is ExecuteCheckPosition {
         assert(same);
         return (handled, output, credit);
     }
+
+    function measureMemory(bytes memory state, bytes calldata input, uint value)
+        external view returns (uint used, bool handled, bytes memory output, uint credit)
+    {
+        uint initial = gasleft();
+        (handled, output, credit) = executeCheckPosition(bytes32(0), state, input, value);
+        used = initial - gasleft();
+        bool same;
+        assembly ("memory-safe") { same := eq(state, output) }
+        assert(same);
+    }
 }

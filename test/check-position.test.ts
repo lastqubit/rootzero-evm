@@ -92,4 +92,28 @@ describe("CheckPosition command", () => {
     await expect(host.connect(await getSigner(1)).checkPosition(context)).to.be.revertedWithCustomError(host, "AccessDenied");
     await expect(host.checkPosition(concat(context, "0x00"))).to.be.revertedWithCustomError(host, "InvalidBlock");
   });
+
+  it("rejects partial memory streams and limits at header and payload boundaries", async () => {
+    for (const length of [1, 7, 8, 9, 39, 40, 135, 136, 167]) {
+      const partial = ethers.dataSlice(position(), 0, length);
+      for (const state of [partial, concat(position(), partial)]) {
+        await expect(host.checkMemory(state, limits(), 0n))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      }
+    }
+    for (const length of [1, 7, 8, 9, 39, 40, 103, 104, 135, 137]) {
+      const partial = ethers.dataSlice(concat(limits(), limits()), 0, length);
+      await expect(host.checkMemory(position(), partial, 0n))
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
+    }
+  });
+
+  it("returns the same state buffer and the entire unused budget for empty and nonempty streams", async () => {
+    for (const value of [0n, 1n, ethers.MaxUint256]) {
+      for (const [state, input] of [["0x", "0x"], [position(), limits()]]) {
+        // The harness also asserts memory pointer identity before returning.
+        expect(await host.checkMemory(state, input, value)).to.deep.equal([true, state, value]);
+      }
+    }
+  });
 });

@@ -63,7 +63,10 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
         (uint abs, uint end) = Cursors.bounds(input, Sizes.Bootstrap);
-        output = new bytes(input.length / Sizes.Bootstrap * Sizes.Balance);
+        // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
+        unchecked {
+            output = new bytes(input.length / Sizes.Bootstrap * Sizes.Balance);
+        }
         credit = value;
         uint i;
 

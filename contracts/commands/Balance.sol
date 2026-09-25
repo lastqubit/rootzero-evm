@@ -2,8 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {Blocks, Memory} from "../codec/Blocks.sol";
-import {Sizes} from "../codec/Specs.sol";
+import {BALANCE_HEADER, ASSET_LIMITS_HEADER} from "../codec/Specs.sol";
+import {INVALID_BLOCK, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
 
 /// @notice Check each BALANCE amount against paired inclusive ASSET_LIMITS and preserve the balance.
 /// @dev Checks asset identity and quantity, not authorization or backing.
@@ -39,15 +39,6 @@ abstract contract CheckBalance is CommandBase {
 
 /// @notice Extends checkBalance with direct validation of memory-backed pipeline state.
 abstract contract ExecuteCheckBalance is CheckBalance {
-    // Literal Headers.Balance / Headers.AssetLimits values for direct assembly use.
-    uint private constant BALANCE_HEADER = 0x0e170e1400000040;
-    uint private constant ASSET_LIMITS_HEADER = 0x673ca8e400000060;
-
-    // Right-aligned selectors for InvalidBlock(), UnexpectedValue(), and OutOfRange().
-    uint private constant INVALID_BLOCK = 0xbe5a36cf;
-    uint private constant UNEXPECTED_VALUE = 0x123146a6;
-    uint private constant OUT_OF_RANGE = 0x7db3aba7;
-
     /// @notice Validate balances in place without unpacking or copying their blocks.
     /// @param state BALANCE block stream in memory.
     /// @param input Exactly one calldata ASSET_LIMITS block per balance.
@@ -61,14 +52,18 @@ abstract contract ExecuteCheckBalance is CheckBalance {
         bytes calldata input,
         uint value
     ) internal pure returns (bool handled, bytes memory output, uint credit) {
-        (uint start, uint end) = Memory.bounds(state, Sizes.Balance);
-        if (input.length != (state.length / Sizes.Balance) * Sizes.AssetLimits) revert Blocks.InvalidBlock();
-
         assembly ("memory-safe") {
             function fail(selector) {
                 mstore(0, selector)
                 revert(28, 4)
             }
+            let size := mload(state)
+            // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
+            if or(mod(input.length, 104), iszero(eq(size, mul(div(input.length, 104), 72)))) {
+                fail(INVALID_BLOCK)
+            }
+            let start := add(state, 32)
+            let end := add(start, size)
             let q := input.offset
             // Strides include each block's eight-byte header.
             for {
