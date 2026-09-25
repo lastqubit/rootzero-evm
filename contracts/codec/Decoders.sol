@@ -340,8 +340,8 @@ library Decoders {
         bytes calldata value;
         uint end;
         (value, end) = Blocks.unpackString(cur.state.position());
-        data = string(value);
         cur.state = seekAfterBlock(cur.state, end);
+        data = string(value);
     }
 
     // -------------------------------------------------------------------------
@@ -600,9 +600,11 @@ library Decoders {
     /// @return name Decoded label text.
     function unpackLabel(Cur memory cur) internal pure returns (bytes32 namespace, string memory name) {
         uint abs = cur.state.position();
+        bytes calldata value;
         uint end;
-        (namespace, name, end) = Blocks.unpackLabel(abs);
+        (namespace, value, end) = Blocks.unpackLabel(abs);
         cur.state = seekAfterBlock(cur.state, end);
+        name = string(value);
     }
 
     /// @notice Decode and consume one SCHEMA block.
@@ -611,9 +613,11 @@ library Decoders {
     /// @return body Decoded schema DSL string, including any `name:` prefix.
     function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body) {
         uint abs = cur.state.position();
+        bytes calldata value;
         uint end;
-        (spec, body, end) = Blocks.unpackSchema(abs);
+        (spec, value, end) = Blocks.unpackSchema(abs);
         cur.state = seekAfterBlock(cur.state, end);
+        body = string(value);
     }
 
     /// @notice Decode and consume one RECOVER block.

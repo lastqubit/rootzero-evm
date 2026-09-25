@@ -5,7 +5,7 @@ import {Keys} from "./Keys.sol";
 import {Sizes, Specs, Headers} from "./Specs.sol";
 import {max32} from "../utils/Utils.sol";
 import {Position} from "../core/Types.sol";
-import {OutOfRange, UnexpectedValue} from "../utils/Errors.sol";
+import {OutOfRange, UnexpectedValue, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
 
 /// @title Blocks
 /// @notice Stateless helpers for inspecting and encoding protocol blocks.
@@ -14,6 +14,8 @@ import {OutOfRange, UnexpectedValue} from "../utils/Errors.sol";
 /// specialized absolute readers and unpackers intentionally omit logical-region
 /// checks. Their caller must validate consumed positions through a surrounding
 /// cursor, execution, or equivalent boundary.
+/// Dynamic unpackers return calldata views. Callers must validate containment
+/// before copying those views into memory, including STRING, LABEL, and SCHEMA.
 /// Full-header comparisons use right-aligned uint64 values. Readers that need
 /// individual fields extract the key and length directly from the calldata word.
 /// Encoded write words and specs remain uint256.
@@ -1804,7 +1806,7 @@ library Blocks {
         assembly ("memory-safe") {
             value := calldataload(abs)
             if iszero(eq(value, calldataload(otherAbs))) {
-                mstore(0, shl(224, 0x123146a6)) // UnexpectedValue()
+                mstore(0, shl(224, UNEXPECTED_VALUE)) // UnexpectedValue()
                 revert(0, 4)
             }
         }
@@ -1822,7 +1824,7 @@ library Blocks {
             value := calldataload(abs)
             other := calldataload(otherAbs)
             if eq(value, other) {
-                mstore(0, shl(224, 0x123146a6)) // UnexpectedValue()
+                mstore(0, shl(224, UNEXPECTED_VALUE)) // UnexpectedValue()
                 revert(0, 4)
             }
         }
@@ -1840,7 +1842,7 @@ library Blocks {
             value := calldataload(abs)
             other := calldataload(otherAbs)
             if iszero(lt(value, other)) {
-                mstore(0, shl(224, 0x7db3aba7)) // OutOfRange()
+                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
                 revert(0, 4)
             }
         }
@@ -1858,7 +1860,7 @@ library Blocks {
             value := calldataload(abs)
             other := calldataload(otherAbs)
             if gt(value, other) {
-                mstore(0, shl(224, 0x7db3aba7)) // OutOfRange()
+                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
                 revert(0, 4)
             }
         }
@@ -1876,7 +1878,7 @@ library Blocks {
             value := calldataload(abs)
             other := calldataload(otherAbs)
             if iszero(gt(value, other)) {
-                mstore(0, shl(224, 0x7db3aba7)) // OutOfRange()
+                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
                 revert(0, 4)
             }
         }
@@ -1894,7 +1896,7 @@ library Blocks {
             value := calldataload(abs)
             other := calldataload(otherAbs)
             if lt(value, other) {
-                mstore(0, shl(224, 0x7db3aba7)) // OutOfRange()
+                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
                 revert(0, 4)
             }
         }
@@ -2634,8 +2636,8 @@ library Blocks {
         if (!valid) revert InvalidBlock();
     }
 
-    /// @dev STRING variant of unpackTailBytes. For SCHEMA, end excludes the
-    /// trailing name word; an underflowed end fails the uint32 length check.
+    /// @dev STRING variant of unpackTailBytes; an underflowed end fails the
+    /// uint32 length check.
     function unpackTailString(uint abs, uint end) private pure returns (bytes calldata value) {
         uint stringkey = uint32(Keys.String);
         bool valid;
@@ -2758,35 +2760,31 @@ library Blocks {
     /// @notice Decode one LABEL block and its nested name.
     /// @param abs Absolute block position.
     /// @return namespace Decoded label namespace.
-    /// @return name Decoded label text.
+    /// @return name Calldata view of the label text, without copying.
     /// @return end Absolute position after the block.
-    function unpackLabel(uint abs) internal pure returns (bytes32 namespace, string memory name, uint end) {
+    function unpackLabel(uint abs) internal pure returns (bytes32 namespace, bytes calldata name, uint end) {
         uint limit;
         (abs, limit) = enter(abs, Keys.Label);
         assembly ("memory-safe") {
             namespace := calldataload(abs)
         }
-        bytes calldata value;
-        value = unpackTailString(abs + 32, limit);
+        name = unpackTailString(abs + 32, limit);
         end = limit;
-        name = string(value);
     }
 
     /// @notice Decode one SCHEMA block and its nested body.
     /// @param abs Absolute block position.
     /// @return spec Decoded block specification.
-    /// @return body Decoded schema DSL string, including any `name:` prefix.
+    /// @return body Calldata view of the schema DSL text, including any `name:` prefix.
     /// @return end Absolute position after the block.
-    function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, uint end) {
+    function unpackSchema(uint abs) internal pure returns (uint spec, bytes calldata body, uint end) {
         uint limit;
         (abs, limit) = enter(abs, Keys.Schema);
         assembly ("memory-safe") {
             spec := calldataload(abs)
         }
-        bytes calldata value;
-        value = unpackTailString(abs + 32, limit);
+        body = unpackTailString(abs + 32, limit);
         end = limit;
-        body = string(value);
     }
 
     // Three fixed words

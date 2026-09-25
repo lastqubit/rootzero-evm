@@ -214,8 +214,7 @@ library Executions {
         if ((exec.decoders & (1 << 128)) == 0) return data;
         // rawState already validated current <= end <= calldatasize.
         uint decoders = exec.decoders;
-        exec.decoders = (decoders & ~(uint(type(uint32).max) << 64))
-            | (uint(uint32(decoders >> 96)) << 64);
+        exec.decoders = (decoders & ~(uint(type(uint32).max) << 64)) | (uint(uint32(decoders >> 96)) << 64);
     }
 
     /// @notice Validate and consume the unread state as zero or more BALANCE blocks.
@@ -228,16 +227,25 @@ library Executions {
         if (data.length == 0) return data;
         uint abs;
         uint end;
-        assembly ("memory-safe") { abs := data.offset end := add(abs, data.length) }
+        assembly ("memory-safe") {
+            abs := data.offset
+            end := add(abs, data.length)
+        }
         uint64 expected = Headers.Balance;
         while (abs < end) {
             // Check each remaining block before its header, matching unpackBalance's
             // error order even when an earlier bad key precedes a truncated tail.
-            unchecked { if (end - abs < Sizes.Balance) revert OutOfBounds(); }
+            unchecked {
+                if (end - abs < Sizes.Balance) revert OutOfBounds();
+            }
             uint64 head;
-            assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
+            assembly ("memory-safe") {
+                head := shr(192, calldataload(abs))
+            }
             if (head != expected) revert Blocks.InvalidBlock();
-            unchecked { abs += Sizes.Balance; }
+            unchecked {
+                abs += Sizes.Balance;
+            }
         }
         uint decoders = exec.decoders;
         exec.decoders = (decoders & ~(uint(type(uint32).max) << 64)) | (end << 64);
@@ -590,7 +598,9 @@ library Executions {
     function unpack32(Execution memory exec, uint spec) internal pure returns (bytes32 value) {
         uint abs = take(exec, Sizes.B32);
         uint64 head;
-        assembly ("memory-safe") { head := shr(192, calldataload(abs)) }
+        assembly ("memory-safe") {
+            head := shr(192, calldataload(abs))
+        }
         if (head != ((uint64(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
         assembly ("memory-safe") {
             value := calldataload(add(abs, 0x08))
@@ -910,8 +920,8 @@ library Executions {
     function unpackString(Execution memory exec) internal pure returns (string memory data) {
         uint abs = uint32(exec.decoders);
         (bytes calldata value, uint end) = Blocks.unpackString(abs);
-        data = string(value);
         seekInput(exec, end);
+        data = string(value);
     }
 
     /// @notice Decode and consume one STEP block from input.
@@ -996,9 +1006,11 @@ library Executions {
     /// @return name Decoded label text.
     function unpackLabel(Execution memory exec) internal pure returns (bytes32 namespace, string memory name) {
         uint abs = uint32(exec.decoders);
+        bytes calldata value;
         uint end;
-        (namespace, name, end) = Blocks.unpackLabel(abs);
+        (namespace, value, end) = Blocks.unpackLabel(abs);
         seekInput(exec, end);
+        name = string(value);
     }
 
     /// @notice Decode and consume one SCHEMA block from input.
@@ -1007,9 +1019,11 @@ library Executions {
     /// @return body Decoded schema DSL string, including any `name:` prefix.
     function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body) {
         uint abs = uint32(exec.decoders);
+        bytes calldata value;
         uint end;
-        (spec, body, end) = Blocks.unpackSchema(abs);
+        (spec, value, end) = Blocks.unpackSchema(abs);
         seekInput(exec, end);
+        body = string(value);
     }
 
     /// @notice Decode and consume one RECOVER block from input.
@@ -1396,7 +1410,15 @@ library Executions {
     function outputDispatch(Execution memory exec, uint portal, uint resources, bytes memory payload) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(exec, size);
-        Blocks.writeCompositeSized(exec.output, i, bytes4(uint32(Specs.Dispatch >> 224)), portal, resources, payload, size);
+        Blocks.writeCompositeSized(
+            exec.output,
+            i,
+            bytes4(uint32(Specs.Dispatch >> 224)),
+            portal,
+            resources,
+            payload,
+            size
+        );
     }
 
     /// @notice Append a CONTEXT block to execution output.
@@ -1516,7 +1538,15 @@ library Executions {
     ) internal pure {
         uint size = Sizes.B64 + Sizes.Header + payload.length;
         uint i = reserve(exec, size);
-        Blocks.copyCompositeSized(exec.output, i, bytes4(uint32(Specs.Dispatch >> 224)), portal, resources, payload, size);
+        Blocks.copyCompositeSized(
+            exec.output,
+            i,
+            bytes4(uint32(Specs.Dispatch >> 224)),
+            portal,
+            resources,
+            payload,
+            size
+        );
     }
 
     /// @notice Append a CONTEXT block to execution output by copying its nested streams from calldata.
@@ -1570,7 +1600,9 @@ library Executions {
     /// @return The consumed native value.
     function useValue(Execution memory exec, uint value) internal pure returns (uint) {
         if (value > exec.budget) revert InsufficientValue();
-        unchecked { exec.budget -= value; }
+        unchecked {
+            exec.budget -= value;
+        }
         return value;
     }
 
@@ -1618,7 +1650,9 @@ library Executions {
         bool expectEmpty
     ) internal returns (bytes memory out) {
         if (value > exec.budget) revert InsufficientValue();
-        unchecked { exec.budget -= value; }
+        unchecked {
+            exec.budget -= value;
+        }
 
         uint credit;
         (out, credit) = Calls.raw(selector, target, value, input, expectEmpty);
@@ -1645,7 +1679,9 @@ library Executions {
         bool expectEmpty
     ) internal returns (bytes memory out) {
         if (value > exec.budget) revert InsufficientValue();
-        unchecked { exec.budget -= value; }
+        unchecked {
+            exec.budget -= value;
+        }
 
         uint credit;
         (out, credit) = Calls.rawCopy(selector, target, value, input, expectEmpty);

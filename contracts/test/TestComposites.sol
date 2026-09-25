@@ -536,7 +536,11 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         bytes32 namespace; string memory name; uint end;
         uint initial = gasleft();
-        if (optimized) (namespace, name, end) = Blocks.unpackLabel(abs);
+        if (optimized) {
+            bytes calldata value;
+            (namespace, value, end) = Blocks.unpackLabel(abs);
+            name = string(value);
+        }
         else (namespace, name, end) = PreviousComposites.unpackLabel(abs);
         usedGas = initial - gasleft();
         output = abi.encode(namespace, name, end - base);
@@ -547,7 +551,11 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint spec; string memory body; uint end;
         uint initial = gasleft();
-        if (optimized) (spec, body, end) = Blocks.unpackSchema(abs);
+        if (optimized) {
+            bytes calldata value;
+            (spec, value, end) = Blocks.unpackSchema(abs);
+            body = string(value);
+        }
         else (spec, body, end) = PreviousComposites.unpackSchema(abs);
         usedGas = initial - gasleft();
         output = abi.encode(spec, body, end - base);

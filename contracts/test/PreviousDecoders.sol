@@ -69,15 +69,19 @@ library PreviousDecoders {
 
     function unpackLabel(Cur memory cur) internal pure returns (bytes32 namespace, string memory name) {
         uint abs = cur.state.position();
+        bytes calldata value;
         uint end;
-        (namespace, name, end) = Blocks.unpackLabel(abs);
+        (namespace, value, end) = Blocks.unpackLabel(abs);
+        name = string(value);
         cur.state = cur.state.seek(end);
     }
 
     function unpackSchema(Cur memory cur) internal pure returns (uint spec, string memory body) {
         uint abs = cur.state.position();
+        bytes calldata value;
         uint end;
-        (spec, body, end) = Blocks.unpackSchema(abs);
+        (spec, value, end) = Blocks.unpackSchema(abs);
+        body = string(value);
         cur.state = cur.state.seek(end);
     }
 

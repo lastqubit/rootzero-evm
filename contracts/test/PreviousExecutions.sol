@@ -183,15 +183,19 @@ library PreviousExecutions {
 
     function unpackLabel(Execution memory exec) internal pure returns (bytes32 namespace, string memory name) {
         uint abs = uint32(exec.decoders);
+        bytes calldata value;
         uint end;
-        (namespace, name, end) = Blocks.unpackLabel(abs);
+        (namespace, value, end) = Blocks.unpackLabel(abs);
+        name = string(value);
         seekInput(exec, end);
     }
 
     function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body) {
         uint abs = uint32(exec.decoders);
+        bytes calldata value;
         uint end;
-        (spec, body, end) = Blocks.unpackSchema(abs);
+        (spec, value, end) = Blocks.unpackSchema(abs);
+        body = string(value);
         seekInput(exec, end);
     }
 
