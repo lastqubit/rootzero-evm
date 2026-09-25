@@ -19,6 +19,10 @@ import { addrOr, applyBps, beforeBps, bytes32ToInt, bytes32ToString, clear8, cle
 
 // Shared protocol errors.
 import {
+    INVALID_BLOCK,
+    OUT_OF_BOUNDS,
+    UNEXPECTED_VALUE,
+    OUT_OF_RANGE,
     InsufficientValue,
     InvalidAccount,
     InvalidAsset,

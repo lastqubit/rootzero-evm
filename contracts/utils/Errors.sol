@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+/// @dev Right-aligned Blocks.InvalidBlock() selector for direct assembly use.
+uint constant INVALID_BLOCK = 0xbe5a36cf;
+
+/// @dev Right-aligned OutOfBounds() selector for direct assembly use.
+uint constant OUT_OF_BOUNDS = 0xb4120f14;
+
+/// @dev Right-aligned UnexpectedValue() selector for direct assembly use.
+uint constant UNEXPECTED_VALUE = 0x123146a6;
+
+/// @dev Right-aligned OutOfRange() selector for direct assembly use.
+uint constant OUT_OF_RANGE = 0x7db3aba7;
+
 /// @dev Thrown when an ID does not match the expected convention or type.
 error InvalidId();
 

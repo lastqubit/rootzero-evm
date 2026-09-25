@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+/// @dev Right-aligned Keys.Bytes for direct assembly use: bytes4(keccak256("#bytes")).
+uint constant BYTES_KEY = 0x6911b332;
+
+/// @dev Right-aligned Keys.Step for direct assembly use: bytes4(keccak256("#step")).
+uint constant STEP_KEY = 0x53a8ad94;
+
+/// @dev Right-aligned Keys.Context for direct assembly use: bytes4(keccak256("#context")).
+uint constant CONTEXT_KEY = 0xc5769e23;
+
+/// @dev Right-aligned Keys.Relay for direct assembly use: bytes4(keccak256("#relay")).
+uint constant RELAY_KEY = 0xc34cc52a;
+
 /// @title Keys
 /// @notice Standard block type selectors for the rootzero block stream protocol.
 /// Standard keys use the first 4 bytes of `keccak256("#name")` by convention.

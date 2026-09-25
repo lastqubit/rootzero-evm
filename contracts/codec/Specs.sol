@@ -4,6 +4,18 @@ pragma solidity ^0.8.33;
 import {Keys} from "./Keys.sol";
 import {max24} from "../utils/Utils.sol";
 
+/// @dev Right-aligned Headers.Balance for direct assembly use: key plus 64-byte payload.
+uint constant BALANCE_HEADER = 0x0e170e1400000040;
+
+/// @dev Right-aligned Headers.AssetLimits for direct assembly use: key plus 96-byte payload.
+uint constant ASSET_LIMITS_HEADER = 0x673ca8e400000060;
+
+/// @dev Right-aligned Headers.Position for direct assembly use: key plus 160-byte payload.
+uint constant POSITION_HEADER = 0xe1f9db3d000000a0;
+
+/// @dev Right-aligned Headers.PositionLimits for direct assembly use: key plus 128-byte payload.
+uint constant POSITION_LIMITS_HEADER = 0xd076068e00000080;
+
 /// @title Sizes
 /// @notice Total byte sizes for fixed-width block types, including the 8-byte header (4-byte key + 4-byte payloadLen).
 library Sizes {
