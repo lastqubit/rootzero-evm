@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Blocks} from "../codec/Blocks.sol";
-import {Keys} from "../codec/Keys.sol";
 import {CommandAccess} from "./Access.sol";
-import {InsufficientValue, OutOfBounds, UnexpectedState} from "../utils/Errors.sol";
+import {STEP_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
+import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 import {Flags} from "../utils/Flags.sol";
 
 /// @notice Hook implemented by hosts that execute encoded step streams.
@@ -45,29 +44,37 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @dev Private pipeline cursor layout:
     /// bits 0-31 current STEP offset, 32-63 stream end,
     /// 64-95 command-input offset, 96-127 command-input length.
-    function unpackBytes(uint abs) private pure returns (uint input, uint end) {
-        uint body;
-        (body, end) = Blocks.enter(abs, Keys.Bytes);
-        // Key-only `enter` constructs `end` as `body + uint32(length)`.
-        unchecked {
-            input = uint32(body) | ((end - body) << 32);
-        }
-    }
-
+    /// Offsets and lengths start as uint32 values; adding two such values
+    /// plus at most 80 cannot overflow uint256. Exact child consumption and
+    /// end <= uint32(streamEnd) prove input and end fit their packed lanes.
     function takeStep(uint cursor) private pure returns (uint cmd, uint value, uint updated) {
-        uint abs = uint32(cursor);
-        uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Step);
         assembly ("memory-safe") {
-            cmd := calldataload(abs)
-            value := calldataload(add(abs, 0x20))
+            function fail(selector) {
+                mstore(0, selector)
+                revert(28, 4)
+            }
+            let abs := and(cursor, 0xffffffff)
+            let head := calldataload(abs)
+            if iszero(eq(shr(224, head), STEP_KEY)) {
+                fail(INVALID_BLOCK)
+            }
+            let end := add(add(abs, 8), and(shr(192, head), 0xffffffff))
+            cmd := calldataload(add(abs, 8))
+            value := calldataload(add(abs, 40))
+            head := calldataload(add(abs, 72))
+            if iszero(eq(shr(224, head), BYTES_KEY)) {
+                fail(INVALID_BLOCK)
+            }
+            let input := add(abs, 80)
+            let size := and(shr(192, head), 0xffffffff)
+            if iszero(eq(add(input, size), end)) {
+                fail(INVALID_BLOCK)
+            }
+            if gt(end, and(shr(32, cursor), 0xffffffff)) {
+                fail(OUT_OF_BOUNDS)
+            }
+            updated := or(or(end, and(cursor, 0xffffffff00000000)), or(shl(64, input), shl(96, size)))
         }
-
-        (uint input, uint end) = unpackBytes(abs + 64);
-        if (end != limit) revert Blocks.InvalidBlock();
-        if (end > uint32(cursor >> 32)) revert OutOfBounds();
-
-        updated = uint32(end) | (uint64(cursor) & (uint(type(uint32).max) << 32)) | (input << 64);
     }
 
     function rawInput(uint cursor) private pure returns (bytes calldata input) {
@@ -97,7 +104,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 let context := add(ptr, 0x44)
                 let stateBlock := add(context, 40)
                 let stateLength := mload(stateBytes)
-                mstore(stateBlock, or(shl(224, 0x6911b332), shl(192, stateLength)))
+                mstore(stateBlock, or(shl(224, BYTES_KEY), shl(192, stateLength)))
                 mcopy(add(stateBlock, 8), add(stateBytes, 32), stateLength)
                 let inputPtr := add(add(stateBlock, 8), stateLength)
                 let end
@@ -105,7 +112,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 switch iszero(shr(64, inputCursor))
                 case 1 {
                     let inputLength := and(shr(32, inputCursor), 0xffffffff)
-                    mstore(inputPtr, or(shl(224, 0x6911b332), shl(192, inputLength)))
+                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputPtr, 8), and(inputCursor, 0xffffffff), inputLength)
                     end := add(add(inputPtr, 8), inputLength)
                 }
@@ -114,18 +121,18 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                     let stepsOffset := and(inputCursor, 0xffffffff)
                     let stepsLength := sub(and(shr(32, inputCursor), 0xffffffff), stepsOffset)
                     let relayLength := add(16, add(inputLength, stepsLength))
-                    mstore(inputPtr, or(shl(224, 0x6911b332), shl(192, add(8, relayLength))))
-                    mstore(add(inputPtr, 8), or(shl(224, 0xc34cc52a), shl(192, relayLength)))
+                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, add(8, relayLength))))
+                    mstore(add(inputPtr, 8), or(shl(224, RELAY_KEY), shl(192, relayLength)))
                     let inputBlock := add(inputPtr, 16)
-                    mstore(inputBlock, or(shl(224, 0x6911b332), shl(192, inputLength)))
+                    mstore(inputBlock, or(shl(224, BYTES_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputBlock, 8), and(shr(64, inputCursor), 0xffffffff), inputLength)
                     let stepsBlock := add(add(inputBlock, 8), inputLength)
-                    mstore(stepsBlock, or(shl(224, 0x6911b332), shl(192, stepsLength)))
+                    mstore(stepsBlock, or(shl(224, BYTES_KEY), shl(192, stepsLength)))
                     calldatacopy(add(stepsBlock, 8), stepsOffset, stepsLength)
                     end := add(add(stepsBlock, 8), stepsLength)
                 }
                 let contextLength := sub(end, context)
-                mstore(context, or(shl(224, 0xc5769e23), shl(192, sub(contextLength, 8))))
+                mstore(context, or(shl(224, CONTEXT_KEY), shl(192, sub(contextLength, 8))))
                 mstore(add(context, 8), activeAccount)
                 mstore(ptr, callSelector)
                 mstore(add(ptr, 4), 32)
@@ -152,13 +159,21 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             // Only returndata survives; temporary call input is free to be reused.
             function decodeResult(ptr) -> result, returnedCredit {
                 let length := returndatasize()
-                if lt(length, 96) { revert(0, 0) }
+                if lt(length, 96) {
+                    revert(0, 0)
+                }
                 returndatacopy(ptr, 0, length)
-                if iszero(eq(mload(ptr), 64)) { revert(0, 0) }
+                if iszero(eq(mload(ptr), 64)) {
+                    revert(0, 0)
+                }
                 let stateLength := mload(add(ptr, 64))
-                if gt(stateLength, sub(length, 96)) { revert(0, 0) }
+                if gt(stateLength, sub(length, 96)) {
+                    revert(0, 0)
+                }
                 let paddedLength := and(add(stateLength, 31), not(31))
-                if iszero(eq(length, add(96, paddedLength))) { revert(0, 0) }
+                if iszero(eq(length, add(96, paddedLength))) {
+                    revert(0, 0)
+                }
                 result := add(ptr, 64)
                 returnedCredit := mload(add(ptr, 32))
                 mstore(0x40, and(add(add(ptr, length), 31), not(31)))
@@ -170,7 +185,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             if iszero(call(gas(), callTarget, value, scratch, size, 0, 0)) {
                 revertCall(scratch, callTarget, selector)
             }
-            output, credit := decodeResult(scratch)
+            output,credit := decodeResult(scratch)
         }
     }
 
@@ -220,7 +235,16 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 budget -= value;
             }
             (state, value, cursor) = run(cmd, account, state, value, cursor);
-            budget += value;
+            assembly ("memory-safe") {
+                let total := add(budget, value)
+                if lt(total, budget) {
+                    // Preserve Solidity Panic(0x11), including its ABI encoding.
+                    mstore(0, shl(224, 0x4e487b71))
+                    mstore(4, 0x11)
+                    revert(0, 36)
+                }
+                budget := total
+            }
         }
 
         if (state.length != 0) revert UnexpectedState();
