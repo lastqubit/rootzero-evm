@@ -2,10 +2,11 @@
 pragma solidity ^0.8.33;
 
 import {Blocks} from "../codec/Blocks.sol";
+import {BYTES_KEY, CONTEXT_KEY} from "../codec/Keys.sol";
 import {Buffers} from "../codec/Buffers.sol";
 import {Sizes, Specs, Headers} from "../codec/Specs.sol";
 import {Cursors, Cur} from "../utils/Cursors.sol";
-import {InsufficientValue, OutOfBounds, UnexpectedPosition, UnconsumedData} from "../utils/Errors.sol";
+import {InsufficientValue, OutOfBounds, UnexpectedPosition, UnconsumedData, INVALID_BLOCK} from "../utils/Errors.sol";
 import {Budget} from "../core/Budget.sol";
 import {Calls} from "../core/Calls.sol";
 import {
@@ -16,7 +17,8 @@ import {
     AccountAmount,
     HostAmount,
     HostAccountAsset,
-    Quote, Position,
+    Quote,
+    Position,
     Tx
 } from "../core/Types.sol";
 
@@ -78,7 +80,12 @@ library Executions {
                 count = Blocks.runCount(abs, end, key);
             }
         }
-        writer = Buffers.cursor(count * uint32(descriptor >> 64));
+        // Source positions and block sizes are uint32. Both counting paths
+        // produce at most uint32.max blocks, so the product fits uint64.
+        // Buffers.cursor still enforces the uint32 capacity limit.
+        unchecked {
+            writer = Buffers.cursor(count * uint32(descriptor >> 64));
+        }
     }
 
     /// @notice Open an execution containing only the current call-value budget.
@@ -114,22 +121,47 @@ library Executions {
     /// @param descriptor Packed command descriptor.
     /// @param budget Initial native-value budget.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
-    function openContext(
-        Execution memory exec,
-        uint descriptor,
-        uint budget,
-        bytes calldata context
-    ) internal pure {
-        uint abs;
-        assembly ("memory-safe") { abs := context.offset }
-        (bytes32 account, bytes calldata state, bytes calldata input, uint end) = Blocks.unpackContext(abs);
-        if (end != abs + context.length) revert Blocks.InvalidBlock();
-
+    function openContext(Execution memory exec, uint descriptor, uint budget, bytes calldata context) internal pure {
         uint decoders;
+        bytes32 account;
+        // A genuine bounded calldata slice plus uint32 nested lengths cannot
+        // overflow uint256 offsets. The tail check rejects subtraction underflow;
+        // the final boundary check confines both lanes to the supplied slice.
+        // Keep this local: unpackContext also accepts arbitrary absolute offsets.
         assembly ("memory-safe") {
+            function fail(selector) {
+                mstore(0, selector)
+                revert(28, 4)
+            }
+            let start := context.offset
+            let head := calldataload(start)
+            if iszero(eq(shr(224, head), CONTEXT_KEY)) {
+                fail(INVALID_BLOCK)
+            }
+            let limit := add(add(start, 8), and(shr(192, head), 0xffffffff))
+            account := calldataload(add(start, 8))
+            let stateHeader := add(start, 40)
+            head := calldataload(stateHeader)
+            if iszero(eq(shr(224, head), BYTES_KEY)) {
+                fail(INVALID_BLOCK)
+            }
+            let stateStart := add(stateHeader, 8)
+            let stateEnd := add(stateStart, and(shr(192, head), 0xffffffff))
+            let inputStart := add(stateEnd, 8)
+            let inputLength := sub(limit, inputStart)
+            // Match unpackTailBytes, including underflow and exact header length.
+            if or(
+                gt(inputLength, 0xffffffff),
+                iszero(eq(shr(192, calldataload(stateEnd)), or(shl(32, BYTES_KEY), inputLength)))
+            ) {
+                fail(INVALID_BLOCK)
+            }
+            if iszero(eq(limit, add(start, context.length))) {
+                fail(INVALID_BLOCK)
+            }
             decoders := or(
-                or(input.offset, shl(32, add(input.offset, input.length))),
-                or(shl(64, or(state.offset, shl(32, add(state.offset, state.length)))), shl(128, byte(25, descriptor)))
+                or(inputStart, shl(32, limit)),
+                or(shl(64, or(stateStart, shl(32, stateEnd))), shl(128, byte(25, descriptor)))
             )
         }
         exec.account = account;

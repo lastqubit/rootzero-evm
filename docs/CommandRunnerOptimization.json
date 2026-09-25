@@ -1,0 +1,677 @@
+{
+  "compiler": {
+    "version": "0.8.33",
+    "viaIR": true,
+    "optimizerRuns": 200
+  },
+  "upstream": {
+    "evmVersion": "cancun",
+    "before": {
+      "rows": [
+        {
+          "mode": 0,
+          "count": 0,
+          "gas": 23596
+        },
+        {
+          "mode": 0,
+          "count": 1,
+          "gas": 24387
+        },
+        {
+          "mode": 0,
+          "count": 4,
+          "gas": 27080
+        },
+        {
+          "mode": 0,
+          "count": 16,
+          "gas": 38240
+        },
+        {
+          "mode": 0,
+          "count": 64,
+          "gas": 82850
+        },
+        {
+          "mode": 1,
+          "count": 0,
+          "gas": 24100
+        },
+        {
+          "mode": 1,
+          "count": 1,
+          "gas": 25634
+        },
+        {
+          "mode": 1,
+          "count": 4,
+          "gas": 29136
+        },
+        {
+          "mode": 1,
+          "count": 16,
+          "gas": 42912
+        },
+        {
+          "mode": 1,
+          "count": 64,
+          "gas": 98121
+        },
+        {
+          "mode": 2,
+          "count": 0,
+          "gas": 24122
+        },
+        {
+          "mode": 2,
+          "count": 1,
+          "gas": 25635
+        },
+        {
+          "mode": 2,
+          "count": 4,
+          "gas": 29074
+        },
+        {
+          "mode": 2,
+          "count": 16,
+          "gas": 42598
+        },
+        {
+          "mode": 2,
+          "count": 64,
+          "gas": 96799
+        },
+        {
+          "mode": 3,
+          "count": 0,
+          "gas": 24138
+        },
+        {
+          "mode": 3,
+          "count": 1,
+          "gas": 26465
+        },
+        {
+          "mode": 3,
+          "count": 4,
+          "gas": 31938
+        },
+        {
+          "mode": 3,
+          "count": 16,
+          "gas": 53934
+        },
+        {
+          "mode": 3,
+          "count": 64,
+          "gas": 142430
+        }
+      ]
+    },
+    "after": {
+      "rows": [
+        {
+          "mode": 0,
+          "count": 0,
+          "gas": 23428
+        },
+        {
+          "mode": 0,
+          "count": 1,
+          "gas": 24219
+        },
+        {
+          "mode": 0,
+          "count": 4,
+          "gas": 27080
+        },
+        {
+          "mode": 0,
+          "count": 16,
+          "gas": 38240
+        },
+        {
+          "mode": 0,
+          "count": 64,
+          "gas": 82850
+        },
+        {
+          "mode": 1,
+          "count": 0,
+          "gas": 23881
+        },
+        {
+          "mode": 1,
+          "count": 1,
+          "gas": 25415
+        },
+        {
+          "mode": 1,
+          "count": 4,
+          "gas": 28917
+        },
+        {
+          "mode": 1,
+          "count": 16,
+          "gas": 42693
+        },
+        {
+          "mode": 1,
+          "count": 64,
+          "gas": 97902
+        },
+        {
+          "mode": 2,
+          "count": 0,
+          "gas": 23903
+        },
+        {
+          "mode": 2,
+          "count": 1,
+          "gas": 25416
+        },
+        {
+          "mode": 2,
+          "count": 4,
+          "gas": 28855
+        },
+        {
+          "mode": 2,
+          "count": 16,
+          "gas": 42379
+        },
+        {
+          "mode": 2,
+          "count": 64,
+          "gas": 96580
+        },
+        {
+          "mode": 3,
+          "count": 0,
+          "gas": 23919
+        },
+        {
+          "mode": 3,
+          "count": 1,
+          "gas": 26246
+        },
+        {
+          "mode": 3,
+          "count": 4,
+          "gas": 31719
+        },
+        {
+          "mode": 3,
+          "count": 16,
+          "gas": 53715
+        },
+        {
+          "mode": 3,
+          "count": 64,
+          "gas": 142430
+        }
+      ]
+    },
+    "bytecodeBefore": {
+      "CommandRunnerBenchmark.json": {
+        "runtime": 2607,
+        "init": 5456
+      }
+    },
+    "bytecodeAfter": {
+      "CommandRunnerBenchmark.json": {
+        "runtime": 2570,
+        "init": 5419
+      }
+    },
+    "corpusBefore": {
+      "cases": 331,
+      "digest": "0x07a54e4b915a07b3a309a9399c2b20f81f1ae3d21a69c64dbf1a3253ee73b7c3"
+    },
+    "corpusAfter": {
+      "cases": 331,
+      "digest": "0x07a54e4b915a07b3a309a9399c2b20f81f1ae3d21a69c64dbf1a3253ee73b7c3"
+    }
+  },
+  "host": {
+    "evmVersion": "osaka",
+    "before": {
+      "runner": {
+        "rows": [
+          {
+            "mode": 0,
+            "count": 0,
+            "gas": 23596
+          },
+          {
+            "mode": 0,
+            "count": 1,
+            "gas": 24387
+          },
+          {
+            "mode": 0,
+            "count": 4,
+            "gas": 27080
+          },
+          {
+            "mode": 0,
+            "count": 16,
+            "gas": 38240
+          },
+          {
+            "mode": 0,
+            "count": 64,
+            "gas": 82850
+          },
+          {
+            "mode": 1,
+            "count": 0,
+            "gas": 24100
+          },
+          {
+            "mode": 1,
+            "count": 1,
+            "gas": 25634
+          },
+          {
+            "mode": 1,
+            "count": 4,
+            "gas": 29136
+          },
+          {
+            "mode": 1,
+            "count": 16,
+            "gas": 42912
+          },
+          {
+            "mode": 1,
+            "count": 64,
+            "gas": 98121
+          },
+          {
+            "mode": 2,
+            "count": 0,
+            "gas": 24122
+          },
+          {
+            "mode": 2,
+            "count": 1,
+            "gas": 25635
+          },
+          {
+            "mode": 2,
+            "count": 4,
+            "gas": 29074
+          },
+          {
+            "mode": 2,
+            "count": 16,
+            "gas": 42598
+          },
+          {
+            "mode": 2,
+            "count": 64,
+            "gas": 96799
+          },
+          {
+            "mode": 3,
+            "count": 0,
+            "gas": 24138
+          },
+          {
+            "mode": 3,
+            "count": 1,
+            "gas": 26465
+          },
+          {
+            "mode": 3,
+            "count": 4,
+            "gas": 31938
+          },
+          {
+            "mode": 3,
+            "count": 16,
+            "gas": 53934
+          },
+          {
+            "mode": 3,
+            "count": 64,
+            "gas": 142430
+          }
+        ]
+      },
+      "pipeline": {
+        "version": "1.44.1",
+        "rows": [
+          {
+            "scenario": "withdraw (2 commands)",
+            "gas": "46089",
+            "bytes": 264
+          },
+          {
+            "scenario": "credit then withdraw (4 commands)",
+            "gas": "56084",
+            "bytes": 528
+          },
+          {
+            "scenario": "position, settle, withdraw (5 commands)",
+            "gas": "66796",
+            "bytes": 608
+          },
+          {
+            "scenario": "three batched withdrawals (6 commands)",
+            "gas": "79672",
+            "bytes": 792
+          },
+          {
+            "scenario": "three separate withdrawals (3 transactions)",
+            "gas": "138267",
+            "bytes": 792
+          }
+        ]
+      },
+      "position": {
+        "version": "1.44.1",
+        "rows": [
+          {
+            "positions": 1,
+            "localGas": 51536,
+            "separateGas": 53192,
+            "extraGas": 1656,
+            "extraPercent": 3.21,
+            "localBytes": 480,
+            "separateBytes": 560
+          },
+          {
+            "positions": 2,
+            "localGas": 63363,
+            "separateGas": 64862,
+            "extraGas": 1499,
+            "extraPercent": 2.37,
+            "localBytes": 720,
+            "separateBytes": 800
+          },
+          {
+            "positions": 4,
+            "localGas": 86835,
+            "separateGas": 88264,
+            "extraGas": 1429,
+            "extraPercent": 1.65,
+            "localBytes": 1200,
+            "separateBytes": 1280
+          },
+          {
+            "positions": 8,
+            "localGas": 133804,
+            "separateGas": 135126,
+            "extraGas": 1322,
+            "extraPercent": 0.99,
+            "localBytes": 2160,
+            "separateBytes": 2240
+          },
+          {
+            "positions": 15,
+            "localGas": 215993,
+            "separateGas": 217246,
+            "extraGas": 1253,
+            "extraPercent": 0.58,
+            "localBytes": 3840,
+            "separateBytes": 3920
+          }
+        ]
+      },
+      "bytecode": {
+        "Main.json": {
+          "runtime": 12038,
+          "init": 17968
+        },
+        "CommandRunnerBenchmark.json": {
+          "runtime": 2607,
+          "init": 5456
+        },
+        "PositionCommand.json": {
+          "runtime": 1931,
+          "init": 3415
+        }
+      },
+      "corpus": {
+        "cases": 331,
+        "digest": "0x07a54e4b915a07b3a309a9399c2b20f81f1ae3d21a69c64dbf1a3253ee73b7c3"
+      }
+    },
+    "after": {
+      "runner": {
+        "rows": [
+          {
+            "mode": 0,
+            "count": 0,
+            "gas": 23428
+          },
+          {
+            "mode": 0,
+            "count": 1,
+            "gas": 24219
+          },
+          {
+            "mode": 0,
+            "count": 4,
+            "gas": 27080
+          },
+          {
+            "mode": 0,
+            "count": 16,
+            "gas": 38240
+          },
+          {
+            "mode": 0,
+            "count": 64,
+            "gas": 82850
+          },
+          {
+            "mode": 1,
+            "count": 0,
+            "gas": 23881
+          },
+          {
+            "mode": 1,
+            "count": 1,
+            "gas": 25415
+          },
+          {
+            "mode": 1,
+            "count": 4,
+            "gas": 28917
+          },
+          {
+            "mode": 1,
+            "count": 16,
+            "gas": 42693
+          },
+          {
+            "mode": 1,
+            "count": 64,
+            "gas": 97902
+          },
+          {
+            "mode": 2,
+            "count": 0,
+            "gas": 23903
+          },
+          {
+            "mode": 2,
+            "count": 1,
+            "gas": 25416
+          },
+          {
+            "mode": 2,
+            "count": 4,
+            "gas": 28855
+          },
+          {
+            "mode": 2,
+            "count": 16,
+            "gas": 42379
+          },
+          {
+            "mode": 2,
+            "count": 64,
+            "gas": 96580
+          },
+          {
+            "mode": 3,
+            "count": 0,
+            "gas": 23919
+          },
+          {
+            "mode": 3,
+            "count": 1,
+            "gas": 26246
+          },
+          {
+            "mode": 3,
+            "count": 4,
+            "gas": 31719
+          },
+          {
+            "mode": 3,
+            "count": 16,
+            "gas": 53715
+          },
+          {
+            "mode": 3,
+            "count": 64,
+            "gas": 142430
+          }
+        ]
+      },
+      "pipeline": {
+        "version": "1.44.1",
+        "rows": [
+          {
+            "scenario": "withdraw (2 commands)",
+            "gas": "46089",
+            "bytes": 264
+          },
+          {
+            "scenario": "credit then withdraw (4 commands)",
+            "gas": "56084",
+            "bytes": 528
+          },
+          {
+            "scenario": "position, settle, withdraw (5 commands)",
+            "gas": "66565",
+            "bytes": 608
+          },
+          {
+            "scenario": "three batched withdrawals (6 commands)",
+            "gas": "79672",
+            "bytes": 792
+          },
+          {
+            "scenario": "three separate withdrawals (3 transactions)",
+            "gas": "138267",
+            "bytes": 792
+          }
+        ]
+      },
+      "position": {
+        "version": "1.44.1",
+        "rows": [
+          {
+            "positions": 1,
+            "localGas": 51311,
+            "separateGas": 52967,
+            "extraGas": 1656,
+            "extraPercent": 3.23,
+            "localBytes": 480,
+            "separateBytes": 560
+          },
+          {
+            "positions": 2,
+            "localGas": 63138,
+            "separateGas": 64637,
+            "extraGas": 1499,
+            "extraPercent": 2.37,
+            "localBytes": 720,
+            "separateBytes": 800
+          },
+          {
+            "positions": 4,
+            "localGas": 86610,
+            "separateGas": 88039,
+            "extraGas": 1429,
+            "extraPercent": 1.65,
+            "localBytes": 1200,
+            "separateBytes": 1280
+          },
+          {
+            "positions": 8,
+            "localGas": 133579,
+            "separateGas": 134901,
+            "extraGas": 1322,
+            "extraPercent": 0.99,
+            "localBytes": 2160,
+            "separateBytes": 2240
+          },
+          {
+            "positions": 15,
+            "localGas": 215768,
+            "separateGas": 217021,
+            "extraGas": 1253,
+            "extraPercent": 0.58,
+            "localBytes": 3840,
+            "separateBytes": 3920
+          }
+        ]
+      },
+      "bytecode": {
+        "Main.json": {
+          "runtime": 12095,
+          "init": 18025
+        },
+        "CommandRunnerBenchmark.json": {
+          "runtime": 2570,
+          "init": 5419
+        },
+        "PositionCommand.json": {
+          "runtime": 1879,
+          "init": 3363
+        }
+      },
+      "corpus": {
+        "cases": 331,
+        "digest": "0x07a54e4b915a07b3a309a9399c2b20f81f1ae3d21a69c64dbf1a3253ee73b7c3"
+      }
+    }
+  },
+  "validation": {
+    "upstreamDefault": {
+      "compiler": "0.8.35",
+      "viaIR": false,
+      "passed": 1261,
+      "failed": 0,
+      "typecheck": "passed"
+    },
+    "upstreamRequested": {
+      "compiler": "0.8.33",
+      "viaIR": true,
+      "passed": 1260,
+      "failed": 1,
+      "baselineFailure": "SCHEMA truncated to 48 bytes reverts with 0x instead of OutOfBounds; original and optimized runner builds have identical executable fixture bytecode and matching revert bytes at every truncation length."
+    },
+    "host": {
+      "compiler": "0.8.33",
+      "viaIR": true,
+      "passed": 181,
+      "failed": 0
+    },
+    "differential": {
+      "cases": 331,
+      "exactMatch": true
+    },
+    "releasePublished": false,
+    "dedicatedConfigReproduction": "passed; identical 20 gas rows, 331-case digest, and 2570-byte runtime"
+  }
+}
