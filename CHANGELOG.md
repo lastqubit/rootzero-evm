@@ -6,7 +6,44 @@ breaking API changes. Breaking changes are called out explicitly.
 Add all changes made after a release to `Unreleased`. Published version
 sections are immutable and must continue to describe the tagged release.
 
-## Unreleased
+## 1.45.0
+
+### Fixed
+
+- Check STRING, LABEL, and SCHEMA source bounds before copying text into memory
+  in cursor and execution adapters, preserving `OutOfBounds` revert data under viaIR.
+
+### Breaking
+
+- `Blocks.unpackLabel` and `Blocks.unpackSchema` now return their text as
+  `bytes calldata`, consistently with other low-level dynamic unpackers. Bounded
+  `Decoders` and `Executions` adapters retain their `string memory` return types.
+
+### Changed
+
+- Centralize shared assembly error selectors as file-level constants in
+  `utils/Errors.sol`, re-exported through `Utils.sol`.
+
+- Centralize assembly key and header literals in `codec/Keys.sol` and
+  `codec/Specs.sol`, re-exported through `Codec.sol`.
+
+- Fuse bounded command-context decoding and cursor packing in `Executions.openContext`,
+  and omit the redundant overflow check on the writer-capacity hint multiplication.
+  Preserve context validation order, capacity limits, callbacks, and budget accounting.
+  Add a dedicated Solidity 0.8.33/viaIR/optimizer-200 verification config,
+  preserving the default compiler and Cancun target.
+
+- Decode pipeline STEP and nested BYTES blocks together and accumulate returned
+  credit with an explicit overflow check, preserving parser error precedence
+  and the exact Solidity Panic(0x11) encoding. Use literal constants for
+  STEP/BYTES keys and shared parser error selectors in assembly.
+
+- Validate ExecuteCheckBalance stream lengths in assembly and use unchecked
+  shrinking output-size arithmetic in ExecuteBootstrap; preserve validation,
+  funding, checked financial arithmetic, and unused-value refunds.
+
+- Validate ExecuteCheckPosition stream lengths directly in assembly, avoiding
+  redundant checked arithmetic while preserving validation and refund behavior.
 
 ## 1.44.1
 
