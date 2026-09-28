@@ -595,21 +595,48 @@ describe("Port Entrypoints", () => {
       expect(receipt!.logs.filter((log: any) => log.topics[0] === topic)).to.have.length(0);
     });
 
-    it("settles empty pipelines to their account and empty input to the zero account", async () => {
+    it("returns only the unspent budget when the last context account is zero", async () => {
+      const input = concat(
+        encodeContextBlock(account, "0x", encodeStepBlock(await command("noop"), 2n, "0x")),
+        encodeContextBlock(ethers.ZeroHash, "0x", "0x"),
+      );
       const signer = await getSigner(1);
-      for (const input of [encodeContextBlock(account, "0x", "0x"), "0x"]) {
+      expect(await (host.connect(signer) as any)[method].staticCall(input, { value: 5n }))
+        .to.deep.equal(["0x", 3n]);
+      const tx = await callAs(1, method, input, { value: 5n });
+      await expect(tx).to.emit(remote, "CommandCalled")
+        .withArgs(remote.interface.getFunction("noop")!.selector, 2n);
+      const receipt = await tx.wait();
+      const topic = host.interface.getEvent("CashinCalled")!.topicHash;
+      expect(receipt!.logs.filter((log: any) => log.topics[0] === topic)).to.have.length(0);
+    });
+
+    it("settles empty pipelines only when the final account is nonzero", async () => {
+      const signer = await getSigner(1);
+      for (const [input, settles] of [
+        [encodeContextBlock(account, "0x", "0x"), true],
+        ["0x", false],
+        [encodeContextBlock(ethers.ZeroHash, "0x", "0x"), false],
+        [concat(
+          encodeContextBlock(account, "0x", "0x"),
+          encodeContextBlock(ethers.ZeroHash, "0x", "0x"),
+        ), false],
+      ] as const) {
         for (const value of [0n, 2n]) {
           expect(await (host.connect(signer) as any)[method].staticCall(input, { value }))
-            .to.deep.equal(["0x", 0n]);
+            .to.deep.equal(["0x", settles ? 0n : value]);
           const tx = await callAs(1, method, input, { value });
           const receipt = await tx.wait();
           const topic = host.interface.getEvent("CashinCalled")!.topicHash;
           expect(receipt!.logs.filter((log: any) => log.topics[0] === topic))
-            .to.have.length(value === 0n ? 0 : 1);
-          if (value !== 0n) {
-            await expect(tx).to.emit(host, "CashinCalled")
-              .withArgs(input === "0x" ? ethers.ZeroHash : account, value);
+            .to.have.length(settles && value !== 0n ? 1 : 0);
+          if (settles && value !== 0n) {
+            await expect(tx).to.emit(host, "CashinCalled").withArgs(account, value);
           }
+          const provider = await getProvider();
+          const address = await host.getAddress();
+          expect(await provider.getBalance(address, receipt!.blockNumber)
+            - await provider.getBalance(address, receipt!.blockNumber - 1)).to.equal(value);
         }
       }
     });
