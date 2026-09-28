@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
 import {AnnotationEvent} from "../events/Annotation.sol";
 import {Runtime} from "../core/Runtime.sol";
@@ -44,7 +44,7 @@ abstract contract SchemaAnnot is Runtime, AnnotationEvent {
     /// @param spec Packed block specification.
     /// @return The published block specification.
     function schema(string memory body, uint spec) internal returns (uint) {
-        emit Annotation(host, Blocks.createSchema(spec, body));
+        emit Annotation(host, Encoder.createSchema(spec, bytes(body)));
         return spec;
     }
 }

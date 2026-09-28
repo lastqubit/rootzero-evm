@@ -20,7 +20,7 @@ contract TestExpectLimits {
         uint start = gasleft();
         while (exec.more()) exec.expectLimits(position.amount, position.debt);
         used = start - gasleft();
-        cursor = exec.absolute();
+        cursor = uint32(exec.input);
     }
 
     function measureDecoded(bytes calldata input, uint amount, uint debt)
@@ -37,6 +37,6 @@ contract TestExpectLimits {
             if (position.amount < limits >> 128 || position.debt > uint128(limits)) revert OutOfRange();
         }
         used = start - gasleft();
-        cursor = exec.absolute();
+        cursor = uint32(exec.input);
     }
 }

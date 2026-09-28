@@ -21,7 +21,6 @@ contract TestSettlementGas is Settlement, Balances {
         settle(account, position);
     }
 
-
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         debitFrom(account, asset, amount);
     }

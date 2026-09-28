@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { Host } from "../core/Host.sol";
-import { Deposit } from "../commands/Deposit.sol";
-import { GetBalance } from "../queries/Balance.sol";
+import {Host} from "../core/Host.sol";
+import {Deposit} from "../commands/Deposit.sol";
+import {GetBalance} from "../queries/Balance.sol";
 
 contract TestCompositeHost is Host, Deposit, GetBalance {
     constructor(uint cmdr)

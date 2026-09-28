@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {Encoder} from "../codec/Encoder.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {PreviousExecutions} from "./PreviousExecutions.sol";
 import {Specs} from "../codec/Specs.sol";
-import {Blocks} from "../codec/Blocks.sol";
-import {Buffers} from "../codec/Buffers.sol";
+
 
 contract TestExecutionOutputOptimization {
     struct Options { uint count; uint capacity; uint forgedLength; }
@@ -13,9 +15,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -32,9 +34,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -51,9 +53,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -70,9 +72,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a; bytes memory mb = b;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -89,9 +91,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a; bytes memory mb = b;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -108,9 +110,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -127,9 +129,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -146,9 +148,9 @@ contract TestExecutionOutputOptimization {
         external view returns(Result memory result) {
         bytes memory ma = a;
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { mstore(ma, optsLength) } }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
@@ -161,190 +163,234 @@ contract TestExecutionOutputOptimization {
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyBlock(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputBlockWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyBlock(exec, Specs.Bytes, a);
+            if (optimized) Executions.outputBlockWrap(exec, Specs.Bytes, aCur);
             else PreviousExecutions.outputCopyBlock(exec, Specs.Bytes, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyList(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputListWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyList(exec, a);
+            if (optimized) Executions.outputListWrap(exec, aCur);
             else PreviousExecutions.outputCopyList(exec, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyBytes(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputBytesWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyBytes(exec, a);
+            if (optimized) Executions.outputBytesWrap(exec, aCur);
             else PreviousExecutions.outputCopyBytes(exec, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyString(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputStringWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyString(exec, string(a));
+            if (optimized) Executions.outputStringWrap(exec, aCur);
             else PreviousExecutions.outputCopyString(exec, string(a));
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyStep(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputStepWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyStep(exec, 11, 22, a);
+            if (optimized) Executions.outputStepWrap(exec, 11, 22, aCur);
             else PreviousExecutions.outputCopyStep(exec, 11, 22, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyCall(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputCallWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyCall(exec, 11, 22, a);
+            if (optimized) Executions.outputCallWrap(exec, 11, 22, aCur);
             else PreviousExecutions.outputCopyCall(exec, 11, 22, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyDispatch(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputDispatchWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyDispatch(exec, 11, 22, a);
+            if (optimized) Executions.outputDispatchWrap(exec, 11, 22, aCur);
             else PreviousExecutions.outputCopyDispatch(exec, 11, 22, a);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyRelay(bool optimized, bytes calldata a, bytes calldata b, Options calldata opts)
+    function outputRelayWrap(bool optimized, bytes calldata a, bytes calldata b, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        uint bCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+            bCur = Cursors.wrap(b);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyRelay(exec, a, b);
+            if (optimized) Executions.outputRelayWrap(exec, aCur, bCur);
             else PreviousExecutions.outputCopyRelay(exec, a, b);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyContext(bool optimized, bytes calldata a, bytes calldata b, Options calldata opts)
+    function outputContextWrap(bool optimized, bytes calldata a, bytes calldata b, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        uint bCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+            bCur = Cursors.wrap(b);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyContext(exec, bytes32(uint(33)), a, b);
+            if (optimized) Executions.outputContextWrap(exec, bytes32(uint(33)), aCur, bCur);
             else PreviousExecutions.outputCopyContext(exec, bytes32(uint(33)), a, b);
         }
         result.usedGas = initial - gasleft();
         assembly ("memory-safe") { mstore(add(result, 32), sub(mload(0x40), initialMemory)) }
         result.output = Executions.finish(exec);
     }
-    function outputCopyRecover(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
+    function outputRecoverWrap(bool optimized, bytes calldata a, bytes calldata /* b */, Options calldata opts)
         external view returns(Result memory result) {
 
         Execution memory exec;
-        exec.writer = Buffers.cursor(opts.capacity);
+        (exec.buffer, exec.output) = Encoder.init(opts.capacity);
         // A prefix ensures every tested write uses a nonzero buffer offset.
-        Executions.outputEmpty(exec, bytes4(0x12345678));
+        Executions.outputBytes(exec, new bytes(0));
         uint optsLength = opts.forgedLength;
         if (optsLength != 0) { assembly ("memory-safe") { a.length := optsLength } }
+        uint aCur;
+        if (optimized) {
+            aCur = Cursors.create(Cursors.base(a), Cursors.base(a) + a.length);
+        }
         uint initialMemory; assembly ("memory-safe") { initialMemory := mload(0x40) }
         uint initial = gasleft();
         for (uint j; j < opts.count; j++) {
-            if (optimized) Executions.outputCopyRecover(exec, 11, 22, bytes32(uint(33)), a);
+            if (optimized) Executions.outputRecoverWrap(exec, 11, 22, bytes32(uint(33)), aCur);
             else PreviousExecutions.outputCopyRecover(exec, 11, 22, bytes32(uint(33)), a);
         }
         result.usedGas = initial - gasleft();

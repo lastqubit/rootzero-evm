@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {Blocks} from "../codec/Blocks.sol";
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {InvalidBlock} from "../utils/Errors.sol";
+
 import {Keys} from "../codec/Keys.sol";
 import {Sizes, Specs} from "../codec/Specs.sol";
 
 /// @dev Frozen leaf and fixed-header implementations for gas/error comparisons.
 library PreviousLeafFixed {
-    error InvalidBlock();
+
     function unpackList(uint abs) internal pure returns (bytes calldata value, uint end) {
         uint head;
         uint len;
@@ -47,21 +49,16 @@ library PreviousLeafFixed {
     }
 
     function expectFixed(uint abs, bytes4 key, uint size) private pure returns (uint body, uint end) {
-        if (Blocks.header(abs, key) != size) revert InvalidBlock();
+        if (LegacyBlocks.header(abs, key) != size) revert InvalidBlock();
         unchecked {
             body = abs + Sizes.Header;
             end = body + size;
         }
     }
 
-    function expectEmpty(uint abs, bytes4 key) internal pure returns (uint end) {
-        if (Blocks.header(abs, key) != 0) revert InvalidBlock();
-        return abs + Sizes.Header;
-    }
-
     function unpack32(uint abs, uint spec) internal pure returns (bytes32 a, uint end) {
         (abs, end) = expectFixed(abs, Specs.key(spec), 32);
-        a = Blocks.read32(abs);
+        a = LegacyBlocks.read32(abs);
     }
 
     function unpack64(uint abs, uint spec) internal pure returns (bytes32 a, bytes32 b, uint end) {
@@ -119,13 +116,13 @@ contract TestLeafFixed {
         uint abs; assembly ("memory-safe") { abs := data.offset }
         bytes calldata value;
         if (kind == 0) {
-            if (optimized) (value, end) = Blocks.unpackList(abs);
+            if (optimized) (value, end) = LegacyBlocks.unpackList(abs);
             else (value, end) = PreviousLeafFixed.unpackList(abs);
         } else if (kind == 1) {
-            if (optimized) (value, end) = Blocks.unpackBytes(abs);
+            if (optimized) (value, end) = LegacyBlocks.unpackBytes(abs);
             else (value, end) = PreviousLeafFixed.unpackBytes(abs);
         } else {
-            if (optimized) (value, end) = Blocks.unpackString(abs);
+            if (optimized) (value, end) = LegacyBlocks.unpackString(abs);
             else (value, end) = PreviousLeafFixed.unpackString(abs);
         }
         assembly ("memory-safe") { offset := sub(value.offset, abs) length := value.length }
@@ -138,7 +135,7 @@ contract TestLeafFixed {
         uint abs = absolute ? start : base + start;
         bytes calldata value; uint end;
         uint initial = gasleft();
-        if (optimized) (value, end) = Blocks.unpackList(abs);
+        if (optimized) (value, end) = LegacyBlocks.unpackList(abs);
         else (value, end) = PreviousLeafFixed.unpackList(abs);
         usedGas = initial - gasleft();
         output = abi.encode(value, end);
@@ -149,7 +146,7 @@ contract TestLeafFixed {
         uint abs = absolute ? start : base + start;
         bytes calldata value; uint end;
         uint initial = gasleft();
-        if (optimized) (value, end) = Blocks.unpackBytes(abs);
+        if (optimized) (value, end) = LegacyBlocks.unpackBytes(abs);
         else (value, end) = PreviousLeafFixed.unpackBytes(abs);
         usedGas = initial - gasleft();
         output = abi.encode(value, end);
@@ -160,21 +157,10 @@ contract TestLeafFixed {
         uint abs = absolute ? start : base + start;
         bytes calldata value; uint end;
         uint initial = gasleft();
-        if (optimized) (value, end) = Blocks.unpackString(abs);
+        if (optimized) (value, end) = LegacyBlocks.unpackString(abs);
         else (value, end) = PreviousLeafFixed.unpackString(abs);
         usedGas = initial - gasleft();
         output = abi.encode(value, end);
-    }
-    function enterEmpty(bool optimized, bytes calldata data, uint start, bool absolute, bytes4 key)
-        external view returns(uint usedGas, bytes memory output) {
-        uint base; assembly ("memory-safe") { base := data.offset }
-        uint abs = absolute ? start : base + start;
-        uint end;
-        uint initial = gasleft();
-        if (optimized) end = Blocks.enterEmpty(abs, key);
-        else end = PreviousLeafFixed.expectEmpty(abs, key);
-        usedGas = initial - gasleft();
-        output = abi.encode(end);
     }
     function unpack32(bool optimized, bytes calldata data, uint start, bool absolute, uint spec)
         external view returns(uint usedGas, bytes memory output) {
@@ -186,7 +172,7 @@ contract TestLeafFixed {
         private view returns(uint usedGas, bytes memory output) {
         bytes32 a; uint end;
         uint initial = gasleft();
-        if (optimized) (a, end) = Blocks.unpack32(abs, spec);
+        if (optimized) (a, end) = LegacyBlocks.unpack32(abs, spec);
         else (a, end) = PreviousLeafFixed.unpack32(abs, spec);
         usedGas = initial - gasleft();
         output = abi.encode(a, end);
@@ -201,7 +187,7 @@ contract TestLeafFixed {
         private view returns(uint usedGas, bytes memory output) {
         bytes32 a; bytes32 b; uint end;
         uint initial = gasleft();
-        if (optimized) (a, b, end) = Blocks.unpack64(abs, spec);
+        if (optimized) (a, b, end) = LegacyBlocks.unpack64(abs, spec);
         else (a, b, end) = PreviousLeafFixed.unpack64(abs, spec);
         usedGas = initial - gasleft();
         output = abi.encode(a, b, end);
@@ -216,7 +202,7 @@ contract TestLeafFixed {
         private view returns(uint usedGas, bytes memory output) {
         bytes32 a; bytes32 b; bytes32 c; uint end;
         uint initial = gasleft();
-        if (optimized) (a, b, c, end) = Blocks.unpack96(abs, spec);
+        if (optimized) (a, b, c, end) = LegacyBlocks.unpack96(abs, spec);
         else (a, b, c, end) = PreviousLeafFixed.unpack96(abs, spec);
         usedGas = initial - gasleft();
         output = abi.encode(a, b, c, end);
@@ -231,7 +217,7 @@ contract TestLeafFixed {
         private view returns(uint usedGas, bytes memory output) {
         bytes32 a; bytes32 b; bytes32 c; bytes32 d; uint end;
         uint initial = gasleft();
-        if (optimized) (a, b, c, d, end) = Blocks.unpack128(abs, spec);
+        if (optimized) (a, b, c, d, end) = LegacyBlocks.unpack128(abs, spec);
         else (a, b, c, d, end) = PreviousLeafFixed.unpack128(abs, spec);
         usedGas = initial - gasleft();
         output = abi.encode(a, b, c, d, end);
@@ -246,7 +232,7 @@ contract TestLeafFixed {
         private view returns(uint usedGas, bytes memory output) {
         bytes32 a; bytes32 b; bytes32 c; bytes32 d; bytes32 e; uint end;
         uint initial = gasleft();
-        if (optimized) (a, b, c, d, e, end) = Blocks.unpack160(abs, spec);
+        if (optimized) (a, b, c, d, e, end) = LegacyBlocks.unpack160(abs, spec);
         else (a, b, c, d, e, end) = PreviousLeafFixed.unpack160(abs, spec);
         usedGas = initial - gasleft();
         output = abi.encode(a, b, c, d, e, end);

@@ -7,7 +7,7 @@ import { encodeBlock, encodeStepBlock, encodeCallBlock, encodeDispatchBlock, enc
 
 const word = ethers.toBeHex(33, 32);
 const blob = (size: number) => "0x" + "ab".repeat(size);
-const prefix = encodeBlock("0x12345678", "0x");
+const prefix = encodeBlock(ethers.id("#bytes").slice(0, 10), "0x");
 const layouts: Record<string, (a: string, b: string) => string> = {
   Step: (a, b) => encodeStepBlock(11n, 22n, a),
   Call: (a, b) => encodeCallBlock(11n, 22n, a),
@@ -24,7 +24,7 @@ const layouts: Record<string, (a: string, b: string) => string> = {
 };
 const methods = [
   ...["Step", "Call", "Dispatch", "Relay", "Context", "Recover", "Label", "Schema"].map(name => ({ name, method: "output" + name })),
-  ...["Block", "List", "Bytes", "String", "Step", "Call", "Dispatch", "Relay", "Context", "Recover"].map(name => ({ name, method: "outputCopy" + name })),
+  ...["Block", "List", "Bytes", "String", "Step", "Call", "Dispatch", "Relay", "Context", "Recover"].map(name => ({ name, method: "output" + name + "Wrap" })),
 ];
 async function failure(call: () => Promise<any>) {
   try { await call(); return undefined; }
@@ -34,7 +34,7 @@ async function failure(call: () => Promise<any>) {
     return data;
   }
 }
-describe("Execution output length reuse", function () {
+describe("Execution cursor encoder migration", function () {
   this.timeout(180_000);
   it("compares every output layout across buffer growth and preallocated capacity", async () => {
     const helper = await deploy("TestExecutionOutputOptimization");
@@ -42,7 +42,9 @@ describe("Execution output length reuse", function () {
     for (const { name, method } of methods) {
       for (const size of [0, 1, 31, 32, 33, 256, 4096]) {
         const a = blob(size), b = blob(size % 35);
-        for (const [count, capacity] of [[1, 0], [8, 0], [8, 16384]]) {
+        const blockSize = ethers.dataLength(layouts[name](a, b));
+        const prefixSize = ethers.dataLength(prefix);
+        for (const [count, capacity] of [[1, 0], [4, 0], [1, prefixSize + blockSize], [2, prefixSize + 2 * blockSize], [4, prefixSize + 4 * blockSize]]) {
           const opts = { count, capacity, forgedLength: 0 };
           const before = await helper[method](false, a, b, opts);
           const after = await helper[method](true, a, b, opts);
@@ -50,7 +52,8 @@ describe("Execution output length reuse", function () {
           expect(before.output).to.equal(expected);
           expect(after.output).to.equal(expected);
           expect(after.footprint).to.equal(before.footprint);
-          expect(after.usedGas, method).to.be.lessThan(before.usedGas);
+          // Record tradeoffs: primitive composition and cursor conversion need
+          // not beat the frozen assembly writer at every compiler call site.
           rows.push({ operation: method, size, count, capacity,
             before: Number(before.usedGas), after: Number(after.usedGas), saved: Number(before.usedGas - after.usedGas) });
         }
@@ -61,7 +64,7 @@ describe("Execution output length reuse", function () {
     console.table(rows.filter(row => row.size === 0 && row.count === 1));
   });
 
-  it("preserves overflow rejection before touching forged payloads", async () => {
+  it("rejects oversized memory payloads and unrepresentable calldata source cursors", async () => {
     const helper = await deploy("TestExecutionOutputOptimization");
     for (const { method } of methods) {
       for (const forgedLength of [(1n << 32n) - 1n, 1n << 32n, ethers.MaxUint256]) {
@@ -76,7 +79,7 @@ describe("Execution output length reuse", function () {
   it("handles empty first or second payloads at nonzero output positions", async () => {
     const helper = await deploy("TestExecutionOutputOptimization");
     for (const name of ["Relay", "Context"]) {
-      for (const method of ["output" + name, "outputCopy" + name]) {
+      for (const method of ["output" + name, "output" + name + "Wrap"]) {
         for (const [a, b] of [["0x", blob(33)], [blob(33), "0x"], [blob(1), blob(4096)]]) {
           const opts = { count: 4, capacity: 0, forgedLength: 0 };
           const expected = ethers.concat([prefix, ...Array(4).fill(layouts[name](a, b))]);

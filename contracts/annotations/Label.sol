@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AnnotationEvent} from "../events/Annotation.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 /// @title LabelAnnot
 /// @notice Emits standard label annotation blocks for entities.
@@ -14,6 +14,6 @@ abstract contract LabelAnnot is AnnotationEvent {
     /// @param namespace Label namespace.
     /// @param name Human-readable name within the namespace.
     function label(uint entity, bytes32 namespace, string memory name) internal virtual {
-        emit Annotation(entity, Blocks.createLabel(namespace, name));
+        emit Annotation(entity, Encoder.createLabel(namespace, bytes(name)));
     }
 }

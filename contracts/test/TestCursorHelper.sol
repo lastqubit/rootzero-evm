@@ -1,31 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {LegacyMemory} from "./LegacyMemory.sol";
 
-import { Position, Tx } from "../core/Types.sol";
-import { Specs } from "../codec/Specs.sol";
-import { Blocks, Cur, Decoders, Memory, Sizes, Writer } from "../Codec.sol";
+import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
+import {Position, Tx} from "../core/Types.sol";
+import {Specs} from "../codec/Specs.sol";
+import {Sizes} from "../Codec.sol";
 import {Cursors} from "../utils/Cursors.sol";
-import {OutOfBounds} from "../utils/Errors.sol";
-import { Writers } from "../codec/Writers.sol";
+import {OutOfBounds, InvalidBlock} from "../utils/Errors.sol";
 
-using Decoders for Cur;
-using Writers for Writer;
 using Cursors for uint;
 
 contract TestCursorHelper {
-    function relativePosition(Cur memory cur, bytes calldata source) private pure returns (uint) {
-        return cur.state.position() - Cursors.base(source);
+    function relativePosition(uint cur, bytes calldata source) private pure returns (uint) {
+        return cur.position() - Cursors.base(source);
     }
 
-    function testSpanMeta(
-        uint8 flags
-    ) external pure returns (uint cur, uint8 decodedFlags) {
-        cur = Cursors.create(0, 0, flags);
-        decodedFlags = uint8(cur >> 64);
+    function testCreate(uint abs, uint endAbs) external pure returns (uint cur) {
+        return Cursors.create(abs, endAbs);
     }
 
     function testCursorBounds() external pure returns (uint abs, uint end) {
-        return Cursors.create(10, 30, 0).seek(15).bounds();
+        return Cursors.create(10, 30).seek(15).bounds();
     }
 
     function testCalldataBounds(bytes calldata source, uint size) external pure returns (uint abs, uint end) {
@@ -39,27 +37,28 @@ contract TestCursorHelper {
         uint i,
         uint amount
     ) external pure returns (uint next, uint abs, bool more) {
-        uint cur = Cursors.create(offset, offset + len, 0).seek(offset + i);
-        (cur, abs) = cur.consume(amount);
+        uint cur = Cursors.create(offset, offset + len).seek(offset + i);
+        (abs, cur) = cur.enter(amount);
         next = cur.position() - offset;
         more = cur.more();
     }
 
     /// @notice Exercise cursor resizing at an existing position.
     function testCursorResize(uint len, uint i, uint resized) external pure returns (uint next, uint capacity) {
-        uint cur = Cursors.create(0, len, 0).seek(i).resize(resized);
+        uint cur = Cursors.create(0, len).seek(i).resize(resized);
         next = cur.position();
         capacity = cur.limit();
     }
 
     /// @notice Decode through the absolute generic cursor for gas regression coverage.
     function absoluteCursorBytes(bytes calldata source) external pure returns (bytes32 digest, uint next) {
-        Cur memory cur = Decoders.open(source);
-        bytes calldata a = cur.unpackBytes();
-        bytes calldata b = cur.unpackBytes();
-        bytes calldata c = cur.unpackBytes();
-        digest = keccak256(a) ^ keccak256(b) ^ keccak256(c);
-        next = cur.state.position();
+        uint cur = Cursors.wrap(source);
+        uint a; uint b; uint c;
+        (a, cur) = Blocks.unpackBytes(cur);
+        (b, cur) = Blocks.unpackBytes(cur);
+        (c, cur) = Blocks.unpackBytes(cur);
+        digest = Blocks.hash(a) ^ Blocks.hash(b) ^ Blocks.hash(c);
+        next = uint32(cur);
     }
 
     /// @notice Reproduce the removed relative generic cursor path as a gas baseline.
@@ -83,7 +82,7 @@ contract TestCursorHelper {
         uint len = uint32(cur >> 64);
         uint abs = uint32(cur >> 32) + position;
         uint end;
-        (value, end) = Blocks.unpackBytes(abs);
+        (value, end) = LegacyBlocks.unpackBytes(abs);
         uint offset = uint32(cur >> 32);
         if (end < offset) revert OutOfBounds();
         uint nextPosition = end - offset;
@@ -92,15 +91,9 @@ contract TestCursorHelper {
     }
 
     function testWriteBalanceBlock(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Balance, 1);
-        w.appendBalance(asset, amount);
-        return w.finish();
-    }
-
-    function testWriteEmptyBlock(bytes4 key) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Balance, 1);
-        w.appendEmpty(key);
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Balance, 1));
+        (wBuffer, w) = Encoder.writeBalance(w, wBuffer, asset, amount);
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWriteCustodyBlock(
@@ -108,9 +101,9 @@ contract TestCursorHelper {
         bytes32 asset,
         uint amount
     ) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Custody, 1);
-        w.appendCustody(host_, asset, amount);
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Custody, 1));
+        (wBuffer, w) = Encoder.writeCustody(w, wBuffer, host_, asset, amount);
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWritePositionBlock(
@@ -119,13 +112,13 @@ contract TestCursorHelper {
         bytes32 liability,
         uint debt
     ) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Position, 1);
-        w.appendPosition(asset, amount, liability, debt, bytes32(0));
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Position, 1));
+        (wBuffer, w) = Encoder.writePosition(w, wBuffer, asset, amount, liability, debt, bytes32(0));
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWritePositionCounterparty(bytes32 counterparty) external pure returns (bytes memory) {
-        return Blocks.createPosition(bytes32(0), 0, bytes32(0), 0, counterparty);
+        return LegacyBlocks.createPosition(bytes32(0), 0, bytes32(0), 0, counterparty);
     }
 
     function testWritePositionStructBlock(
@@ -134,9 +127,9 @@ contract TestCursorHelper {
         bytes32 liability,
         uint debt
     ) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Position, 1);
-        w.appendPosition(Position(asset, amount, liability, debt, bytes32(0)));
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Position, 1));
+        (wBuffer, w) = Encoder.writePosition(w, wBuffer, asset, amount, liability, debt, bytes32(0));
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWriteTxBlock(
@@ -145,9 +138,9 @@ contract TestCursorHelper {
         bytes32 asset,
         uint amount
     ) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Transaction, 1);
-        w.appendTransaction(from_, to_, asset, amount);
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Transaction, 1));
+        (wBuffer, w) = Encoder.writeTransaction(w, wBuffer, from_, to_, asset, amount);
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWriteTxStructBlock(
@@ -156,45 +149,41 @@ contract TestCursorHelper {
         bytes32 asset,
         uint amount
     ) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Transaction, 1);
-        w.appendTransaction(Tx({ from: from_, to: to_, asset: asset, amount: amount }));
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Transaction, 1));
+        (wBuffer, w) = Encoder.writeTransaction(w, wBuffer, from_, to_, asset, amount);
+        return Encoder.finish(w, wBuffer);
     }
 
     function testToDispatchBlock(uint portal, uint resources, bytes memory payload) external pure returns (bytes memory) {
-        return Blocks.createDispatch(portal, resources, payload);
+        return LegacyBlocks.createDispatch(portal, resources, payload);
     }
 
     function testToBalanceBlock(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        return Blocks.createBalance(asset, amount);
+        return LegacyBlocks.createBalance(asset, amount);
     }
 
     function testToAmountBlock(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        return Blocks.createAmount(asset, amount);
+        return LegacyBlocks.createAmount(asset, amount);
     }
 
     function testToBootstrapBlock(bytes32 asset, uint amount, uint budget) external pure returns (bytes memory) {
-        return Blocks.createBootstrap(asset, amount, budget);
-    }
-
-    function testToEmptyBlock(bytes4 key) external pure returns (bytes memory) {
-        return Blocks.createEmpty(key);
+        return LegacyBlocks.createBootstrap(asset, amount, budget);
     }
 
     function testToLabelBlock(bytes32 namespace, string memory name) external pure returns (bytes memory) {
-        return Blocks.createLabel(namespace, name);
+        return LegacyBlocks.createLabel(namespace, name);
     }
 
     function testToActionBlock(uint value) external pure returns (bytes memory) {
-        return Blocks.createAction(value);
+        return LegacyBlocks.createAction(value);
     }
 
     function testToCounterpartyBlock(bytes32 account) external pure returns (bytes memory) {
-        return Blocks.createCounterparty(account);
+        return LegacyBlocks.createCounterparty(account);
     }
 
     function testToSchemaBlock(uint spec, string memory body) external pure returns (bytes memory) {
-        return Blocks.createSchema(spec, body);
+        return LegacyBlocks.createSchema(spec, body);
     }
 
     function testToCustodyBlock(
@@ -202,7 +191,7 @@ contract TestCursorHelper {
         bytes32 asset,
         uint amount
     ) external pure returns (bytes memory) {
-        return Blocks.createCustody(host_, asset, amount);
+        return LegacyBlocks.createCustody(host_, asset, amount);
     }
 
     function testToPositionBlock(
@@ -211,7 +200,7 @@ contract TestCursorHelper {
         bytes32 liability,
         uint debt
     ) external pure returns (bytes memory) {
-        return Blocks.createPosition(asset, amount, liability, debt, bytes32(0));
+        return LegacyBlocks.createPosition(asset, amount, liability, debt, bytes32(0));
     }
 
     function testToTransactionBlock(
@@ -220,44 +209,45 @@ contract TestCursorHelper {
         bytes32 asset,
         uint amount
     ) external pure returns (bytes memory) {
-        return Blocks.createTransaction(from_, to_, asset, amount);
+        return LegacyBlocks.createTransaction(from_, to_, asset, amount);
     }
 
     function testWriterFinishEmpty() external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Balance, 1);
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Balance, 1));
+        return Encoder.finish(w, wBuffer);
     }
 
     function testWriterFinish(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        Writer memory w = Writers.init(Specs.Balance, 2);
-        w.appendBalance(asset, amount);
-        return w.finish();
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Balance, 2));
+        (wBuffer, w) = Encoder.writeBalance(w, wBuffer, asset, amount);
+        return Encoder.finish(w, wBuffer);
     }
 
     function testUnpackBalance(bytes calldata source) external pure returns (bytes32 asset, uint amount) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackBalance();
+        uint cur = Cursors.wrap(source);
+        (asset, amount,) = Blocks.unpackBalance(cur);
     }
 
     function testUnpackBootstrap(
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount, uint budget) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackBootstrap();
+        uint cur = Cursors.wrap(source);
+        (asset, amount, budget,) = Blocks.unpackBootstrap(cur);
     }
 
     function testUnpackPosition(
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackPosition();
+        uint cur = Cursors.wrap(source);
+        (asset, amount, liability, debt, counterparty,) = Blocks.unpackPosition(cur);
     }
 
     function testUnpackPositionValue(
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        Cur memory cur = Decoders.open(source);
-        Position memory value = cur.unpackPositionValue();
+        uint cur = Cursors.wrap(source);
+        Position memory value;
+        (value.asset, value.amount, value.liability, value.debt, value.counterparty,) = Blocks.unpackPosition(cur);
         return (value.asset, value.amount, value.liability, value.debt, value.counterparty);
     }
 
@@ -265,25 +255,25 @@ contract TestCursorHelper {
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
         bytes memory data = source;
-        (uint abs, uint end) = Memory.bounds(data, Sizes.Position);
-        if (end - abs != Sizes.Position) revert Blocks.InvalidBlock();
-        return Memory.unpackPosition(abs);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Position);
+        if (end - abs != Sizes.Position) revert InvalidBlock();
+        return LegacyMemory.unpackPosition(abs);
     }
 
     function testMemoryUnpackPositionValue(bytes calldata source) external pure returns (Position memory) {
         bytes memory data = source;
-        (uint abs, uint end) = Memory.bounds(data, Sizes.Position);
-        if (end - abs != Sizes.Position) revert Blocks.InvalidBlock();
-        return Memory.unpackPositionValue(abs);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Position);
+        if (end - abs != Sizes.Position) revert InvalidBlock();
+        return LegacyMemory.unpackPositionValue(abs);
     }
 
     function testMemoryUnpackBalance(
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount) {
         bytes memory data = source;
-        (uint abs, uint end) = Memory.bounds(data, Sizes.Balance);
-        if (end - abs != Sizes.Balance) revert Blocks.InvalidBlock();
-        return Memory.unpackBalance(abs);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Balance);
+        if (end - abs != Sizes.Balance) revert InvalidBlock();
+        return LegacyMemory.unpackBalance(abs);
     }
 
     function testMemoryUnpackTwoBalances(
@@ -294,50 +284,51 @@ contract TestCursorHelper {
         returns (bytes32 firstAsset, uint firstAmount, bytes32 secondAsset, uint secondAmount)
     {
         bytes memory data = source;
-        (uint abs, uint end) = Memory.bounds(data, Sizes.Balance);
-        if (end - abs != 2 * Sizes.Balance) revert Blocks.InvalidBlock();
-        (firstAsset, firstAmount) = Memory.unpackBalance(abs);
-        (secondAsset, secondAmount) = Memory.unpackBalance(abs + Sizes.Balance);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Balance);
+        if (end - abs != 2 * Sizes.Balance) revert InvalidBlock();
+        (firstAsset, firstAmount) = LegacyMemory.unpackBalance(abs);
+        (secondAsset, secondAmount) = LegacyMemory.unpackBalance(abs + Sizes.Balance);
     }
 
     function testMemoryUnpackTransaction(
         bytes calldata source
     ) external pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
         bytes memory data = source;
-        (uint abs, uint end) = Memory.bounds(data, Sizes.Transaction);
-        if (end - abs != Sizes.Transaction) revert Blocks.InvalidBlock();
-        return Memory.unpackTransaction(abs);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Transaction);
+        if (end - abs != Sizes.Transaction) revert InvalidBlock();
+        return LegacyMemory.unpackTransaction(abs);
     }
 
     function testUnpackHostAccountAsset(
         bytes calldata source
     ) external pure returns (uint host_, bytes32 account, bytes32 asset) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackHostAccountAsset();
+        uint cur = Cursors.wrap(source);
+        (host_, account, asset,) = Blocks.unpackHostAccountAsset(cur);
     }
 
     function testUnpackAccountAsset(
         bytes calldata source
     ) external pure returns (bytes32 account, bytes32 asset) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackAccountAsset();
+        uint cur = Cursors.wrap(source);
+        (account, asset,) = Blocks.unpackAccountAsset(cur);
     }
 
     function testUnpackHostAsset(
         bytes calldata source
     ) external pure returns (uint host_, bytes32 asset) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackHostAsset();
+        uint cur = Cursors.wrap(source);
+        (host_, asset,) = Blocks.unpackHostAsset(cur);
     }
 
     function testUnpackAccount(bytes calldata source) external pure returns (bytes32 account) {
-        Cur memory cur = Decoders.open(source);
-        return cur.unpackAccount();
+        uint cur = Cursors.wrap(source);
+        (account,) = Blocks.unpackAccount(cur);
     }
 
     function testToTxValue(bytes calldata source) external pure returns (bytes32 from_, bytes32 to_, bytes32 asset, uint amount) {
-        Cur memory cur = Decoders.open(source);
-        Tx memory value = cur.unpackTransactionValue();
+        uint cur = Cursors.wrap(source);
+        Tx memory value;
+        (value.from, value.to, value.asset, value.amount,) = Blocks.unpackTransaction(cur);
         return (value.from, value.to, value.asset, value.amount);
     }
 
@@ -349,23 +340,23 @@ contract TestCursorHelper {
         assembly ("memory-safe") {
             sourceStart := source.offset
         }
-        Cur memory cur;
-        cur = Decoders.open(source);
-        pos = cur.state.position();
-        end = cur.state.limit();
-        flags = uint8(cur.state >> 64);
+        uint cur;
+        cur = Cursors.wrap(source);
+        pos = cur.position();
+        end = cur.limit();
+        flags = uint8(cur >> 64);
     }
 
     function testClose(bytes calldata source, uint amount) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
-        cur.advance(amount);
-        cur.close();
+        uint cur = Cursors.wrap(source);
+        cur = Cursors.advance(cur, amount);
+        cur.expect(cur.limit());
         return true;
     }
 
     function testPeek(bytes calldata source, uint i) external pure returns (bytes4 key, uint len) {
-        Cur memory cur = Decoders.open(source);
-        return cur.peek(Cursors.base(source) + i);
+        uint cur = Cursors.wrap(source);
+        return LegacyBlocks.peek(Cursors.base(source) + i, cur.limit());
     }
 
     function testEnterAmount(bytes calldata source, uint spec)
@@ -373,16 +364,13 @@ contract TestCursorHelper {
         pure
         returns (bytes32 asset, uint amount, uint i, uint end)
     {
-        uint sourceOffset;
-        assembly ("memory-safe") {
-            sourceOffset := source.offset
-        }
-        Cur memory cur = Decoders.open(source);
-        (, end) = cur.enter(spec);
-        (asset, amount) = cur.unpackAmount();
+        uint cur;
+        (cur,) = Blocks.unpack(Cursors.wrap(source), spec);
+        end = cur.limit();
+        (asset, amount, cur) = Blocks.unpackAmount(cur);
         cur.expect(end);
         i = relativePosition(cur, source);
-        end -= sourceOffset;
+        end -= Cursors.base(source);
     }
 
     function testEnterWords(bytes calldata source, uint spec)
@@ -390,11 +378,10 @@ contract TestCursorHelper {
         pure
         returns (bytes32 first, bytes32 second)
     {
-        Cur memory cur = Decoders.open(source);
-        (, uint end) = cur.enter(spec);
-        first = cur.next32();
-        second = cur.next32();
-        cur.expect(end);
+        (uint abs, uint payloadCur,) = Blocks.enter(Cursors.wrap(source), spec, 64);
+        first = Blocks.read32(abs);
+        second = Blocks.read32(abs + 32);
+        payloadCur.expect(payloadCur.limit());
     }
 
     function testEnterAdvance(
@@ -402,15 +389,12 @@ contract TestCursorHelper {
         uint spec,
         uint advance
     ) external pure returns (uint abs, uint i, uint end) {
-        uint offset;
-        assembly ("memory-safe") {
-            offset := source.offset
-        }
-
-        Cur memory cur = Decoders.open(source);
-        (abs, end) = cur.enter(spec, advance);
-        i = relativePosition(cur, source);
-        return (abs - offset, i, end - offset);
+        uint payloadCur;
+        (abs, payloadCur,) = Blocks.enter(Cursors.wrap(source), spec, advance);
+        uint offset = Cursors.base(source);
+        i = uint32(payloadCur) - offset;
+        end = uint32(payloadCur >> 32) - offset;
+        abs -= offset;
     }
 
     function testEnterKeyAdvance(
@@ -418,15 +402,12 @@ contract TestCursorHelper {
         bytes4 key,
         uint advance
     ) external pure returns (uint body, uint i, uint end) {
-        uint offset;
-        assembly ("memory-safe") {
-            offset := source.offset
-        }
-
-        Cur memory cur = Decoders.open(source);
-        (body, end) = cur.enter(key, advance);
-        i = relativePosition(cur, source);
-        return (body - offset, i, end - offset);
+        uint payloadCur;
+        (body, payloadCur,) = Blocks.enter(Cursors.wrap(source), key, advance);
+        uint offset = Cursors.base(source);
+        i = uint32(payloadCur) - offset;
+        end = uint32(payloadCur >> 32) - offset;
+        body -= offset;
     }
 
     function testAdvance(
@@ -438,11 +419,11 @@ contract TestCursorHelper {
             offset := source.offset
         }
 
-        Cur memory cur = Decoders.open(source);
-        abs = cur.absolute();
-        cur.advance(amount);
+        uint cur = Cursors.wrap(source);
+        abs = uint32(cur);
+        cur = Cursors.advance(cur, amount);
         i = relativePosition(cur, source);
-        value = Blocks.read32(abs);
+        value = LegacyBlocks.read32(abs);
         return (abs - offset, i, value);
     }
 
@@ -455,10 +436,10 @@ contract TestCursorHelper {
             offset := source.offset
         }
 
-        Cur memory cur = Decoders.open(source);
-        abs = cur.take(amount);
+        uint cur = Cursors.wrap(source);
+        (abs, cur) = cur.enter(amount);
         i = relativePosition(cur, source);
-        value = Blocks.read32(abs);
+        value = LegacyBlocks.read32(abs);
         return (abs - offset, i, value);
     }
 
@@ -467,63 +448,48 @@ contract TestCursorHelper {
         pure
         returns (bytes1 a, bytes2 b, bytes4 c, bytes8 d, bytes16 e, bytes32 f)
     {
-        Cur memory cur = Decoders.open(source);
-        (, uint end) = cur.enter(spec);
-        a = cur.next1();
-        b = cur.next2();
-        c = cur.next4();
-        d = cur.next8();
-        e = cur.next16();
-        f = cur.next32();
-        cur.expect(end);
+        (uint abs, uint payloadCur,) = Blocks.enter(Cursors.wrap(source), spec, 63);
+        a = Blocks.read1(abs);
+        b = Blocks.read2(abs + 1);
+        c = Blocks.read4(abs + 3);
+        d = Blocks.read8(abs + 7);
+        e = Blocks.read16(abs + 15);
+        f = Blocks.read32(abs + 31);
+        payloadCur.expect(payloadCur.limit());
     }
 
     function testPastCurrent(bytes calldata source) external pure returns (uint) {
-        Cur memory cur = Decoders.open(source);
-        return cur.past() - Cursors.base(source);
+        uint cur = Cursors.wrap(source);
+        (, uint len) = LegacyBlocks.peek(uint32(cur), cur.limit());
+        return 8 + len;
     }
 
     function testIsAtCurrent(bytes calldata source, bytes4 key) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
-        return cur.isAt(key);
-    }
-
-    function testIsEmptyCurrent(bytes calldata source, bytes4 key) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
-        return cur.isEmpty(key);
-    }
-
-    function testTryConsumeEmpty(
-        bytes calldata source,
-        bytes4 key
-    ) external pure returns (bool empty, uint i, bool more) {
-        Cur memory cur = Decoders.open(source);
-        empty = cur.tryConsumeEmpty(key);
-        i = relativePosition(cur, source);
-        more = cur.more();
+        uint cur = Cursors.wrap(source);
+        return LegacyBlocks.hasAt(uint32(cur), cur.limit(), key);
     }
 
     function testHasAt(bytes calldata source, uint i, bytes4 key) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
-        return cur.hasAt(Cursors.base(source) + i, key);
+        uint cur = Cursors.wrap(source);
+        return LegacyBlocks.hasAt(Cursors.base(source) + i, cur.limit(), key);
     }
 
     function testRun(bytes calldata source, uint i, bytes4 key) external pure returns (uint count, uint position) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint offset = Cursors.base(source);
-        cur.state = cur.state.seek(offset + i);
-        count = cur.run(key);
-        position = cur.state.position() - offset;
+        cur = cur.seek(offset + i);
+        (count,) = LegacyBlocks.run(uint32(cur), cur.limit(), key);
+        position = cur.position() - offset;
     }
 
     function testRunCount(bytes calldata source, uint i, bytes4 key) external pure returns (uint count) {
         (uint abs, uint limit) = Cursors.bounds(source);
-        return Blocks.runCount(abs + i, limit, key);
+        return LegacyBlocks.runCount(abs + i, limit, key);
     }
 
     function testRunExact(bytes calldata source, bytes4 key) external pure returns (uint count, uint end) {
         (uint abs, uint limit) = Cursors.bounds(source);
-        (count, end) = Blocks.runExact(abs, limit, key);
+        (count, end) = LegacyBlocks.runExact(abs, limit, key);
         end -= abs;
     }
 
@@ -536,26 +502,26 @@ contract TestCursorHelper {
         assembly ("memory-safe") {
             sourceOffset := source.offset
         }
-        Cur memory cur = Decoders.open(source);
-        Cur memory out = cur.slice(sourceOffset + from, sourceOffset + to);
-        offset = out.state.position();
+        uint cur = Cursors.wrap(source);
+        uint out = cur.slice(sourceOffset + from, sourceOffset + to);
+        offset = out.position();
         i = 0;
-        len = out.state.limit() - offset;
+        len = out.limit() - offset;
         return (offset - sourceOffset, i, len);
     }
 
     function testRaw(bytes calldata source) external pure returns (bytes calldata data) {
-        Cur memory cur = Decoders.open(source);
-        return cur.raw();
+        uint cur = Cursors.wrap(source);
+        return cur.toBytes();
     }
 
     function testDecoderRaw(
         bytes calldata source,
         uint amount
     ) external pure returns (bytes calldata data) {
-        Cur memory cur = Decoders.open(source);
-        cur.advance(amount);
-        return cur.raw();
+        uint cur = Cursors.wrap(source);
+        cur = Cursors.advance(cur, amount);
+        return cur.toBytes();
     }
 
     function testCursorRaw(
@@ -563,47 +529,47 @@ contract TestCursorHelper {
         uint amount
     ) external pure returns (bytes calldata data) {
         uint cur = Cursors.wrap(source).advance(amount);
-        return cur.raw();
+        return cur.toBytes();
     }
 
     function testRawSlice(bytes calldata source, uint from, uint to) external pure returns (bytes calldata data) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint offset = Cursors.base(source);
-        return cur.raw(offset + from, offset + to);
+        return cur.slice(offset + from, offset + to).toBytes();
     }
 
     function testSeek(bytes calldata source, uint end) external pure returns (uint i) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint offset = Cursors.base(source);
-        cur.state = cur.state.seek(offset + end);
-        i = cur.state.position() - offset;
+        cur = cur.seek(offset + end);
+        i = cur.position() - offset;
     }
 
     function testSeekBackward(bytes calldata source, uint end) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint target = Cursors.base(source) + end;
-        cur.state = (cur.state & ~uint(type(uint32).max)) | (target + 1);
-        cur.state.seek(target);
+        cur = (cur & ~uint(type(uint32).max)) | (target + 1);
+        cur.seek(target);
         return true;
     }
 
     function testExpectPosition(bytes calldata source, uint pos) external pure returns (uint i) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint offset = Cursors.base(source);
         uint target = offset + pos;
-        cur.state = (cur.state & ~uint(type(uint32).max)) | target;
-        cur.state.expect(target);
-        i = cur.state.position() - offset;
+        cur = (cur & ~uint(type(uint32).max)) | target;
+        cur.expect(target);
+        i = cur.position() - offset;
     }
 
     function testExpectPositionMismatch(bytes calldata source, uint pos) external pure returns (bool) {
-        Cur memory cur = Decoders.open(source);
+        uint cur = Cursors.wrap(source);
         uint offset = Cursors.base(source);
-        uint len = cur.state.limit() - offset;
+        uint len = cur.limit() - offset;
         if (pos < len) {
-            cur.state = (cur.state & ~uint(type(uint32).max)) | (offset + pos + 1);
+            cur = (cur & ~uint(type(uint32).max)) | (offset + pos + 1);
         }
-        cur.state.expect(offset + pos);
+        cur.expect(offset + pos);
         return true;
     }
 
@@ -616,12 +582,13 @@ contract TestCursorHelper {
         assembly ("memory-safe") {
             sourceOffset := source.offset
         }
-        Cur memory cur = Decoders.open(source);
-        Cur memory items = cur.list();
-        uint offset = items.state.position();
+        uint cur = Cursors.wrap(source);
+        (uint items, uint nextCur) = Blocks.unpackList(cur);
+        cur = nextCur;
+        uint offset = items.position();
         itemsI = 0;
-        itemsLen = items.state.limit() - offset;
-        inputI = cur.state.position() - sourceOffset;
+        itemsLen = items.limit() - offset;
+        inputI = cur.position() - sourceOffset;
         return (offset - sourceOffset, itemsI, itemsLen, inputI);
     }
 
@@ -634,12 +601,13 @@ contract TestCursorHelper {
         assembly ("memory-safe") {
             sourceOffset := source.offset
         }
-        Cur memory cur = Decoders.open(source);
-        Cur memory items = cur.list(spec);
-        uint offset = items.state.position();
+        uint cur = Cursors.wrap(source);
+        (uint items, uint nextCur) = Blocks.unpack(cur, spec);
+        cur = nextCur;
+        uint offset = items.position();
         itemsI = 0;
-        itemsLen = items.state.limit() - offset;
-        inputI = cur.state.position() - sourceOffset;
+        itemsLen = items.limit() - offset;
+        inputI = cur.position() - sourceOffset;
         return (offset - sourceOffset, itemsI, itemsLen, inputI);
     }
 
@@ -652,20 +620,23 @@ contract TestCursorHelper {
         assembly ("memory-safe") {
             sourceOffset := source.offset
         }
-        Cur memory cur = Decoders.open(source);
-        Cur memory out = cur.takeBlock(key);
-        uint offset = out.state.position();
+        uint cur = Cursors.wrap(source);
+        (uint out, uint nextCur) = Blocks.take(cur, key);
+        cur = nextCur;
+        uint offset = out.position();
         outI = 0;
-        outLen = out.state.limit() - offset;
-        inputI = cur.state.position() - sourceOffset;
+        outLen = out.limit() - offset;
+        inputI = cur.position() - sourceOffset;
         return (offset - sourceOffset, outI, outLen, inputI);
     }
 
     function testUnpackStep(
         bytes calldata source
     ) external pure returns (uint cmd, uint value, bytes calldata input, uint i) {
-        Cur memory cur = Decoders.open(source);
-        (cmd, value, input) = cur.unpackStep();
+        uint cur = Cursors.wrap(source);
+        uint inputCur;
+        (cmd, value, inputCur, cur) = Blocks.unpackStep(cur);
+        input = Blocks.toBytes(inputCur);
         i = relativePosition(cur, source);
     }
 
@@ -674,8 +645,12 @@ contract TestCursorHelper {
         pure
         returns (bytes32 account, bytes calldata state, bytes calldata input, uint i)
     {
-        Cur memory cur = Decoders.open(source);
-        (account, state, input) = cur.unpackContext();
+        uint cur = Cursors.wrap(source);
+        uint stateCur;
+        uint inputCur;
+        (account, stateCur, inputCur, cur) = Blocks.unpackContext(cur);
+        state = Blocks.toBytes(stateCur);
+        input = Blocks.toBytes(inputCur);
         i = relativePosition(cur, source);
     }
 
@@ -684,8 +659,10 @@ contract TestCursorHelper {
         pure
         returns (uint handler, uint resources, bytes32 key, bytes calldata witness, uint i)
     {
-        Cur memory cur = Decoders.open(source);
-        (handler, resources, key, witness) = cur.unpackRecover();
+        uint cur = Cursors.wrap(source);
+        uint witnessCur;
+        (handler, resources, key, witnessCur, cur) = Blocks.unpackRecover(cur);
+        witness = Blocks.toBytes(witnessCur);
         i = relativePosition(cur, source);
     }
 
@@ -694,16 +671,13 @@ contract TestCursorHelper {
         pure
         returns (uint portal, uint resources, bytes calldata steps, uint i)
     {
-        Cur memory cur = Decoders.open(source);
-        (bytes calldata input, bytes calldata continuation) = cur.unpackRelay();
-        if (input.length >= 64) {
-            assembly ("memory-safe") {
-                portal := calldataload(input.offset)
-                resources := calldataload(add(input.offset, 0x20))
-            }
+        (uint inputCur, uint stepsCur, uint nextCur) = Blocks.unpackRelay(Cursors.wrap(source));
+        if (Blocks.length(inputCur) >= 64) {
+            portal = uint(Blocks.read32(uint32(inputCur)));
+            resources = uint(Blocks.read32(uint32(inputCur) + 32));
         }
-        steps = continuation;
-        i = relativePosition(cur, source);
+        steps = Blocks.toBytes(stepsCur);
+        i = relativePosition(nextCur, source);
     }
 
     function testUnpackRelayStreams(bytes calldata source)
@@ -711,8 +685,12 @@ contract TestCursorHelper {
         pure
         returns (bytes calldata input, bytes calldata steps, uint i)
     {
-        Cur memory cur = Decoders.open(source);
-        (input, steps) = cur.unpackRelay();
+        uint cur = Cursors.wrap(source);
+        uint inputCur;
+        uint stepsCur;
+        (inputCur, stepsCur, cur) = Blocks.unpackRelay(cur);
+        input = Blocks.toBytes(inputCur);
+        steps = Blocks.toBytes(stepsCur);
         i = relativePosition(cur, source);
     }
 
@@ -721,8 +699,10 @@ contract TestCursorHelper {
         pure
         returns (uint portal, uint resources, bytes calldata payload, uint i)
     {
-        Cur memory cur = Decoders.open(source);
-        (portal, resources, payload) = cur.unpackDispatch();
+        uint cur = Cursors.wrap(source);
+        uint payloadCur;
+        (portal, resources, payloadCur, cur) = Blocks.unpackDispatch(cur);
+        payload = Blocks.toBytes(payloadCur);
         i = relativePosition(cur, source);
     }
 

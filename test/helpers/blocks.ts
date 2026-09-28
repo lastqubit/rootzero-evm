@@ -56,9 +56,9 @@ export const Keys = {
 
   // Input and value blocks
   Amount: blockKey("#amount"),
-  AssetLimits: blockKey("#assetLimits"),
   Limits: blockKey("#limits"),
-  PositionLimits: blockKey("#positionLimits"),
+  BalanceConstraints: blockKey("#balanceConstraints"),
+  PositionConstraints: blockKey("#positionConstraints"),
   Quote: blockKey("#quote"),
   Bootstrap: blockKey("#bootstrap"),
   Allocation: blockKey("#allocation"),
@@ -180,12 +180,12 @@ export function encodeLimitsBlock(amount: bigint, debt: bigint): string {
   return encodeBlock(Keys.Limits, pad32(packLimits(amount, debt)));
 }
 
-export function encodeAssetLimitsBlock(asset: string, min: bigint, max: bigint): string {
-  return encodeBlock(Keys.AssetLimits, ethers.concat([pad32(asset), pad32(min), pad32(max)]));
+export function encodeBalanceConstraintsBlock(asset: string, min: bigint, max: bigint): string {
+  return encodeBlock(Keys.BalanceConstraints, ethers.concat([pad32(asset), pad32(min), pad32(max)]));
 }
 
-export function encodePositionLimitsBlock(asset: string, minAmount: bigint, liability: string, maxDebt: bigint): string {
-  return encodeBlock(Keys.PositionLimits, ethers.concat([pad32(asset), pad32(minAmount), pad32(liability), pad32(maxDebt)]));
+export function encodePositionConstraintsBlock(asset: string, amount: bigint, liability: string, debt: bigint): string {
+  return encodeBlock(Keys.PositionConstraints, ethers.concat([pad32(asset), pad32(amount), pad32(liability), pad32(debt)]));
 }
 
 export function encodeQuoteBlock(asset: string, amount: bigint, liability: string, debt: bigint): string {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
 
-import {Blocks} from "../codec/Blocks.sol";
 import {Keys} from "../codec/Keys.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {max32} from "../utils/Utils.sol";
@@ -87,16 +87,16 @@ contract TestFactoryValidation {
             assembly ("memory-safe") { mstore(output, add(input.length, 8)) }
         }
         uint initial = gasleft();
-        if (kind == 0) output = optimized ? Blocks.create(Keys.Bytes, memoryInput) : PreviousFactoryValidation.create(Keys.Bytes, memoryInput);
-        else if (kind == 1) output = optimized ? Blocks.createCopy(Keys.Bytes, input) : PreviousFactoryValidation.createCopy(Keys.Bytes, input);
-        else if (kind == 2) output = optimized ? Blocks.createListCopy(input) : PreviousFactoryValidation.createListCopy(input);
-        else if (kind == 3) output = optimized ? Blocks.createBytesCopy(input) : PreviousFactoryValidation.createBytesCopy(input);
-        else if (kind == 4) output = optimized ? Blocks.createStringCopy(string(input)) : PreviousFactoryValidation.createStringCopy(string(input));
+        if (kind == 0) output = optimized ? LegacyBlocks.create(Keys.Bytes, memoryInput) : PreviousFactoryValidation.create(Keys.Bytes, memoryInput);
+        else if (kind == 1) output = optimized ? LegacyBlocks.createCopy(Keys.Bytes, input) : PreviousFactoryValidation.createCopy(Keys.Bytes, input);
+        else if (kind == 2) output = optimized ? LegacyBlocks.createListCopy(input) : PreviousFactoryValidation.createListCopy(input);
+        else if (kind == 3) output = optimized ? LegacyBlocks.createBytesCopy(input) : PreviousFactoryValidation.createBytesCopy(input);
+        else if (kind == 4) output = optimized ? LegacyBlocks.createStringCopy(string(input)) : PreviousFactoryValidation.createStringCopy(string(input));
         else if (kind == 5) {
-            if (optimized) Blocks.write(output, 0, Keys.Bytes, memoryInput);
+            if (optimized) LegacyBlocks.write(output, 0, Keys.Bytes, memoryInput);
             else PreviousFactoryValidation.write(output, 0, Keys.Bytes, memoryInput);
         } else {
-            if (optimized) Blocks.copy(output, 0, Keys.Bytes, input);
+            if (optimized) LegacyBlocks.copy(output, 0, Keys.Bytes, input);
             else PreviousFactoryValidation.copy(output, 0, Keys.Bytes, input);
         }
         usedGas = initial - gasleft();
@@ -114,25 +114,25 @@ contract TestFactoryValidation {
             mstore(0x40, add(memoryInput, 32))
         }
         if (kind == 0) {
-            if (optimized) Blocks.create(Keys.Bytes, memoryInput);
+            if (optimized) LegacyBlocks.create(Keys.Bytes, memoryInput);
             else PreviousFactoryValidation.create(Keys.Bytes, memoryInput);
         } else if (kind == 1) {
-            if (optimized) Blocks.createCopy(Keys.Bytes, input);
+            if (optimized) LegacyBlocks.createCopy(Keys.Bytes, input);
             else PreviousFactoryValidation.createCopy(Keys.Bytes, input);
         } else if (kind == 2) {
-            if (optimized) Blocks.createListCopy(input);
+            if (optimized) LegacyBlocks.createListCopy(input);
             else PreviousFactoryValidation.createListCopy(input);
         } else if (kind == 3) {
-            if (optimized) Blocks.createBytesCopy(input);
+            if (optimized) LegacyBlocks.createBytesCopy(input);
             else PreviousFactoryValidation.createBytesCopy(input);
         } else if (kind == 4) {
-            if (optimized) Blocks.createStringCopy(string(input));
+            if (optimized) LegacyBlocks.createStringCopy(string(input));
             else PreviousFactoryValidation.createStringCopy(string(input));
         } else if (kind == 5) {
-            if (optimized) Blocks.write(dst, 0, Keys.Bytes, memoryInput);
+            if (optimized) LegacyBlocks.write(dst, 0, Keys.Bytes, memoryInput);
             else PreviousFactoryValidation.write(dst, 0, Keys.Bytes, memoryInput);
         } else {
-            if (optimized) Blocks.copy(dst, 0, Keys.Bytes, input);
+            if (optimized) LegacyBlocks.copy(dst, 0, Keys.Bytes, input);
             else PreviousFactoryValidation.copy(dst, 0, Keys.Bytes, input);
         }
     }

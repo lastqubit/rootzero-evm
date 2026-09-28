@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Blocks} from "../codec/Blocks.sol";
 
 import {DispatchPayablePort} from "../ports/Dispatch.sol";
 import {Runtime} from "../core/Runtime.sol";
@@ -22,9 +23,9 @@ contract TestDispatchBudget is DispatchPayablePort {
         return caller;
     }
 
-    function dispatchTo(uint portal, uint resources, bytes memory payload, Execution memory funds) internal override {
+    function dispatchTo(uint portal, uint resources, uint payloadCur, Execution memory funds) internal override {
         uint value = funds.useResourceValue(resources);
-        (bool success, ) = Nodes.hostAddr(portal).call{value: value}(payload);
+        (bool success, ) = Nodes.hostAddr(portal).call{value: value}(Blocks.toBytes(payloadCur));
         if (!success) revert TransferFailed();
         emit DispatchSpent(value, funds.budget);
     }

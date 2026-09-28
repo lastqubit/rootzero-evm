@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AnnotationEvent} from "../events/Annotation.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 /// @title GroupsAnnot
 /// @notice Describes grouped endpoint lanes using off-chain role hints.
@@ -15,6 +15,6 @@ abstract contract GroupsAnnot is AnnotationEvent {
     /// Only #state, #input, and #output are lane references in this annotation.
     /// Omitted lanes have no grouping hint; descriptor schemas take precedence over hints.
     function annotateGroups(uint endpoint, string memory description) internal virtual {
-        emit Annotation(endpoint, Blocks.createGroups(description));
+        emit Annotation(endpoint, Encoder.createGroups(bytes(description)));
     }
 }

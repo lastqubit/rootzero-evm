@@ -3,9 +3,8 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
-import {Cursors} from "../utils/Cursors.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
 using Executions for Execution;
@@ -50,7 +49,7 @@ abstract contract ExecuteDebitAccount is DebitAccount {
     /// @notice Execute the inherited debit-account command from an internal pipeline.
     /// @param account Account whose funds are debited.
     /// @param state Empty pipeline state required by the command schema.
-    /// @param input AMOUNT block stream.
+    /// @param inputCur AMOUNT block stream.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output BALANCE block stream matching the debited amounts.
@@ -58,21 +57,22 @@ abstract contract ExecuteDebitAccount is DebitAccount {
     function executeDebitAccount(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Cursors.bounds(input, Sizes.Amount);
-        output = new bytes(input.length);
+        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Amount);
         uint i;
+        unchecked {
+            (i, output) = Execute.allocateBalances((end - abs) / Sizes.Amount);
+        }
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = Blocks.unpackAmount(abs);
+            (bytes32 asset, uint amount) = Execute.unpackAmount(abs);
             debitAccount(account, asset, amount);
-            Blocks.writeBalance(output, i, asset, amount);
+            i = Execute.writeBalance(i, asset, amount);
             unchecked {
                 abs += Sizes.Amount;
-                i += Sizes.Balance;
             }
         }
 

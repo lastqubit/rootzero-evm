@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodePositionBlock, encodePositionLimitsBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodePositionBlock, encodePositionConstraintsBlock, encodeContextBlock } from "./helpers/blocks.js";
 
 describe("CheckPosition execution benchmark", function () {
   this.timeout(120_000);
@@ -12,7 +12,7 @@ describe("CheckPosition execution benchmark", function () {
     const rows: { count: number; normal: string; memory: string; execution: string }[] = [];
     for (const count of [0, 1, 2, 4, 8, 15, 32]) {
       const state = concat(...Array(count).fill(encodePositionBlock(asset, 100n, liability, 40n)));
-      const input = concat(...Array(count).fill(encodePositionLimitsBlock(asset, 100n, liability, 40n)));
+      const input = concat(...Array(count).fill(encodePositionConstraintsBlock(asset, 100n, liability, 40n)));
       const context = encodeContextBlock(ethers.ZeroHash, state, input);
       expect((await host.checkPosition.staticCall(context))[0]).to.equal(state);
       expect((await host.checkMemory(state, input, 0n))[1]).to.equal(state);

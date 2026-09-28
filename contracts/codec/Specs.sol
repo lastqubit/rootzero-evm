@@ -7,14 +7,14 @@ import {max24} from "../utils/Utils.sol";
 /// @dev Right-aligned Headers.Balance for direct assembly use: key plus 64-byte payload.
 uint constant BALANCE_HEADER = 0x0e170e1400000040;
 
-/// @dev Right-aligned Headers.AssetLimits for direct assembly use: key plus 96-byte payload.
-uint constant ASSET_LIMITS_HEADER = 0x673ca8e400000060;
+/// @dev Right-aligned Headers.BalanceConstraints for direct assembly use: key plus 96-byte payload.
+uint constant BALANCE_CONSTRAINTS_HEADER = 0x90e9207e00000060;
 
 /// @dev Right-aligned Headers.Position for direct assembly use: key plus 160-byte payload.
 uint constant POSITION_HEADER = 0xe1f9db3d000000a0;
 
-/// @dev Right-aligned Headers.PositionLimits for direct assembly use: key plus 128-byte payload.
-uint constant POSITION_LIMITS_HEADER = 0xd076068e00000080;
+/// @dev Right-aligned Headers.PositionConstraints for direct assembly use: key plus 128-byte payload.
+uint constant POSITION_CONSTRAINTS_HEADER = 0x2f90dce900000080;
 
 /// @title Sizes
 /// @notice Total byte sizes for fixed-width block types, including the 8-byte header (4-byte key + 4-byte payloadLen).
@@ -49,14 +49,14 @@ library Sizes {
 
     // Input and structural blocks
 
-    /// @dev ASSET_LIMITS block: 8 header + three words = 104 bytes.
-    uint constant AssetLimits = B96;
-
     /// @dev LIMITS block: 8 header + 32 packed limits = 40 bytes.
     uint constant Limits = B32;
 
-    /// @dev POSITION_LIMITS block: 8 header + four-word constraints = 136 bytes.
-    uint constant PositionLimits = B128;
+    /// @dev BALANCE_CONSTRAINTS block: 8 header + three words = 104 bytes.
+    uint constant BalanceConstraints = B96;
+
+    /// @dev POSITION_CONSTRAINTS block: 8 header + four-word constraints = 136 bytes.
+    uint constant PositionConstraints = B128;
     /// @dev QUOTE block: 8 header + four-word quantities = 136 bytes.
     uint constant Quote = B128;
 
@@ -112,9 +112,9 @@ library Specs {
 
     // Input and value blocks
 
-    uint constant AssetLimits = uint(bytes32(Keys.AssetLimits)) | Exact96;
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
-    uint constant PositionLimits = uint(bytes32(Keys.PositionLimits)) | Exact128;
+    uint constant BalanceConstraints = uint(bytes32(Keys.BalanceConstraints)) | Exact96;
+    uint constant PositionConstraints = uint(bytes32(Keys.PositionConstraints)) | Exact128;
     uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
@@ -254,33 +254,4 @@ library Specs {
     function allocation(uint spec, uint count) internal pure returns (uint capacity) {
         capacity = count * blockSize(spec);
     }
-}
-
-/// @notice Right-aligned eight-byte headers for exact-size built-in blocks.
-/// @dev High 32 bits contain the key; low 32 bits contain the payload length.
-/// Derived from Specs so each block layout has a single definition.
-library Headers {
-    uint64 constant Account = uint64(Specs.Account >> 192);
-    uint64 constant Asset = uint64(Specs.Asset >> 192);
-    uint64 constant Node = uint64(Specs.Node >> 192);
-    uint64 constant Status = uint64(Specs.Status >> 192);
-    uint64 constant Amount = uint64(Specs.Amount >> 192);
-    uint64 constant Balance = uint64(Specs.Balance >> 192);
-    uint64 constant AssetLiability = uint64(Specs.AssetLiability >> 192);
-    uint64 constant AccountAsset = uint64(Specs.AccountAsset >> 192);
-    uint64 constant Bootstrap = uint64(Specs.Bootstrap >> 192);
-    uint64 constant Allocation = uint64(Specs.Allocation >> 192);
-    uint64 constant Allowance = uint64(Specs.Allowance >> 192);
-    uint64 constant Custody = uint64(Specs.Custody >> 192);
-    uint64 constant AccountAmount = uint64(Specs.AccountAmount >> 192);
-    uint64 constant HostAmount = uint64(Specs.HostAmount >> 192);
-    uint64 constant HostAccountAsset = uint64(Specs.HostAccountAsset >> 192);
-    uint64 constant AssetLimits = uint64(Specs.AssetLimits >> 192);
-    uint64 constant Limits = uint64(Specs.Limits >> 192);
-    uint64 constant PositionLimits = uint64(Specs.PositionLimits >> 192);
-    uint64 constant Quote = uint64(Specs.Quote >> 192);
-    uint64 constant Position = uint64(Specs.Position >> 192);
-    uint64 constant HostAsset = uint64(Specs.HostAsset >> 192);
-    uint64 constant Transaction = uint64(Specs.Transaction >> 192);
-    uint64 constant HostAccountAmount = uint64(Specs.HostAccountAmount >> 192);
 }

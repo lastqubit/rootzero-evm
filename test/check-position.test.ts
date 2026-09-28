@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodePositionBlock, encodePositionLimitsBlock, encodeQuoteBlock, encodeContextBlock, endpointDescriptor, Keys } from "./helpers/blocks.js";
+import { concat, encodePositionBlock, encodePositionConstraintsBlock, encodeQuoteBlock, encodeContextBlock, endpointDescriptor, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("CheckPosition command", () => {
@@ -9,7 +9,7 @@ describe("CheckPosition command", () => {
   const liability = ethers.toBeHex(2n, 32);
   const counterparty = ethers.toBeHex(3n, 32);
   const position = (amount = 100n, debt = 40n) => encodePositionBlock(asset, amount, liability, debt, counterparty);
-  const limits = (amount = 100n, debt = 40n) => encodePositionLimitsBlock(asset, amount, liability, debt);
+  const limits = (amount = 100n, debt = 40n) => encodePositionConstraintsBlock(asset, amount, liability, debt);
   let host: any;
   before(async () => { host = await deploy("TestCheckPosition"); });
 
@@ -20,11 +20,11 @@ describe("CheckPosition command", () => {
     expect((await host.checkMemory(state, input, 0n))[1]).to.equal(state);
   });
 
-  it("registers the POSITION / POSITION_LIMITS / POSITION command", async () => {
+  it("registers the POSITION / POSITION_CONSTRAINTS / POSITION command", async () => {
     const id = await commandId("checkPosition(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.PositionLimits,
+      endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.PositionConstraints,
         output: BigInt(Keys.Position) << 224n | 160n << 136n }));
   });
 
@@ -55,7 +55,7 @@ describe("CheckPosition command", () => {
     });
 
     it("rejects either identifier mismatch before quantity errors", async () => {
-      for (const input of [encodePositionLimitsBlock(liability, 101n, liability, 39n), encodePositionLimitsBlock(asset, 101n, asset, 39n)]) {
+      for (const input of [encodePositionConstraintsBlock(liability, 101n, liability, 39n), encodePositionConstraintsBlock(asset, 101n, asset, 39n)]) {
         await expect(run(position(), input)).to.be.revertedWithCustomError(host, "UnexpectedValue");
       }
     });
@@ -70,11 +70,12 @@ describe("CheckPosition command", () => {
     });
 
     it("rejects missing, extra, truncated, and mismatched block streams", async () => {
-      for (const [state, input] of [
-        [position(), "0x"], ["0x", limits()], [position(), concat(limits(), limits())],
-        [position().slice(0, -2), limits()], [position(), limits().slice(0, -2)],
-        [concat(position(), position()), limits()],
-      ]) await expect(run(state, input)).to.be.revertedWithCustomError(host, memory ? "InvalidBlock" : "OutOfBounds");
+      for (const [state, input, error] of [
+        [position(), "0x", "InvalidBlock"], ["0x", limits(), "InvalidBlock"],
+        [position(), concat(limits(), limits()), "InvalidBlock"],
+        [position().slice(0, -2), limits(), "OutOfBounds"], [position(), limits().slice(0, -2), "OutOfBounds"],
+        [concat(position(), position()), limits(), "InvalidBlock"],
+      ]) await expect(run(state, input)).to.be.revertedWithCustomError(host, memory ? "InvalidBlock" : error);
     });
 
     it("validates exact keys and sizes for both block headers", async () => {

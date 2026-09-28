@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Blocks} from "../codec/Blocks.sol";
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 
 using Executions for Execution;
+using Blocks for uint;
 
 /// @notice Hook implemented by hosts that recover previously unresolved payloads.
 abstract contract RecoverPayableHook {
@@ -12,13 +14,13 @@ abstract contract RecoverPayableHook {
     /// @param resources Opaque packed chain-specific resources, not plain native
     /// value. EVM handlers extract the low 128-bit value lane with `useResourceValue`.
     /// @param key Recovery lookup key.
-    /// @param witness Witness payload used to prove and replay recovery.
+    /// @param witnessCur Bounded calldata cursor over the witness payload used for recovery.
     /// @param funds Shared execution containing the source value budget.
     function recover(
         uint handler,
         uint resources,
         bytes32 key,
-        bytes calldata witness,
+        uint witnessCur,
         Execution memory funds
     ) internal virtual;
 }
@@ -44,7 +46,7 @@ abstract contract RecoverPayable is CommandBase, RecoverPayableHook {
     }
 
     function recoverPayableOne(Execution memory exec) private {
-        (uint handler, uint resources, bytes32 key, bytes calldata witness) = exec.unpackRecover();
-        recover(handler, resources, key, witness, exec);
+        (uint handler, uint resources, bytes32 key, uint witnessCur) = exec.unpackRecover();
+        recover(handler, resources, key, witnessCur, exec);
     }
 }

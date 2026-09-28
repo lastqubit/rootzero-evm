@@ -1,3289 +1,1427 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Cursors} from "../utils/Cursors.sol";
 import {Keys} from "./Keys.sol";
-import {Sizes, Specs, Headers} from "./Specs.sol";
-import {max32} from "../utils/Utils.sol";
-import {Position} from "../core/Types.sol";
-import {OutOfRange, UnexpectedValue, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
+import {Headers} from "./Headers.sol";
+import {Position, BalanceConstraints, PositionConstraints} from "../core/Types.sol";
+import {INVALID_BLOCK, OUT_OF_BOUNDS, OutOfBounds, UnexpectedValue, OutOfRange} from "../utils/Errors.sol";
 
 /// @title Blocks
-/// @notice Stateless helpers for inspecting and encoding protocol blocks.
-/// @dev Blocks use `[key:4][payload length:4][payload]`. Calldata helpers use
-/// absolute positions. Bounded navigation helpers also take an absolute `end`;
-/// specialized absolute readers and unpackers intentionally omit logical-region
-/// checks. Their caller must validate consumed positions through a surrounding
-/// cursor, execution, or equivalent boundary.
-/// Dynamic unpackers return calldata views. Callers must validate containment
-/// before copying those views into memory, including STRING, LABEL, and SCHEMA.
-/// Full-header comparisons use right-aligned uint64 values. Readers that need
-/// individual fields extract the key and length directly from the calldata word.
-/// Encoded write words and specs remain uint256.
-///
-/// Fixed-width unpackers return decoded fields only because their following
-/// position is statically `abs + Sizes.X`. Dynamic leaf and composite unpackers
-/// return absolute `end` last because their encoded size is known only while
-/// decoding. Built-in composites use optimized assembly for fixed fields and
-/// semantic unpackers for child blocks. Custom schema decoders should favor
-/// `expect`, readable calldata slices, semantic child unpackers, and a final
-/// equality check proving that the children consume the complete payload.
-///
-/// Generic and specialized writers are unchecked: callers must validate inputs
-/// and reserve the complete destination region before calling them. Helpers are
-/// ordered as inspection, generic writes, specialized writes, decoding, and
-/// block factories; fixed layouts within a section are ordered from smaller to
-/// larger payloads. `write*` helpers copy dynamic inputs from memory, while
-/// `copy*` helpers copy dynamic inputs directly from calldata. Allocating
-/// factories use the semantic block name for memory inputs and append `Copy`
-/// for calldata inputs. Factories reuse validated lengths in private writers
-/// where delegating to standalone writers would repeat length calculations.
+/// @notice Calldata block helpers with bounded cursors and raw reads.
+/// @dev A cursor stores absolute position in bits 0-31 and exclusive end in
+/// bits 32-63. Selected ranges ignore source metadata and return clean cursors.
+/// Stream unpackers return decoded values followed by an advanced source cursor preserving its
+/// original end and metadata; decoded child ranges remain clean cursors. Exact selectors
+/// require one block to fill the entire source range and return no next cursor.
+/// Names use cur or a Cur suffix for packed cursors, and abs or an Abs suffix
+/// for absolute calldata byte positions (including exclusive endAbs boundaries).
+/// An absolute position never carries cursor metadata or an encoded end lane.
+/// Callers must establish that the supplied range belongs to calldata.
+/// These helpers validate logical containment, not the source's provenance.
+/// take returns a complete block, unpack returns its payload, and prefix enter
+/// returns the body position and remaining payload. Each also returns nextCur
+/// for the caller to assign, without repeating bounds checks or reconstructing advancement.
+/// The enclosing block's header/schema is checked before containment; prefix
+/// lengths and nested child shapes are checked afterward. A full-width end
+/// check proves header and payload containment, including for reversed ranges.
 library Blocks {
-    /// @dev A block header or declared payload exceeds the source region.
-    error MalformedBlocks();
-    /// @dev A block key or payload size does not match its expected shape.
-    error InvalidBlock();
-    /// @dev A scoped block run contained no blocks.
-    error EmptyRun();
+    // Encoding and block creation belong to Encoder; memory execute helpers
+    // belong to Execute.
 
     // -------------------------------------------------------------------------
-    // Calldata inspection and navigation
+    // Predicate primitives
     // -------------------------------------------------------------------------
 
-    /// @notice Decode a block header at an absolute calldata position.
-    /// @dev DANGER: This performs an unchecked calldata read and does not ensure the
-    /// complete header or payload lies within a logical calldata region.
-    /// @param abs Absolute calldata position of the header.
-    /// @return key Decoded block key.
-    /// @return len Decoded payload length.
-    function header(uint abs) internal pure returns (bytes4 key, uint len) {
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := and(word, 0xffffffff00000000000000000000000000000000000000000000000000000000)
-            len := and(shr(192, word), 0xffffffff)
-        }
-    }
-
-    /// @notice Decode a block header and validate its key at an absolute calldata position.
-    /// @dev DANGER: This performs an unchecked calldata read and does not ensure the
-    /// complete header or payload lies within a logical calldata region.
-    /// @param abs Absolute calldata position of the header.
-    /// @param expected Expected block key.
-    /// @return len Decoded payload length.
-    function header(uint abs, bytes4 expected) internal pure returns (uint len) {
-        uint key;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-        }
-        if (key != uint32(expected)) revert InvalidBlock();
-    }
-
-    /// @notice Decode a complete block header within an absolute calldata region.
-    /// @param abs Absolute position of the header.
-    /// @param end Absolute region boundary.
-    /// @return key Decoded block key.
-    /// @return len Decoded payload length.
-    function peek(uint abs, uint end) internal pure returns (bytes4 key, uint len) {
-        if (abs > end) revert MalformedBlocks();
-        unchecked {
-            uint remaining = end - abs;
-            if (remaining < Sizes.Header) revert MalformedBlocks();
-            (key, len) = header(abs);
-            if (len > remaining - Sizes.Header) revert MalformedBlocks();
-        }
-    }
-
-    /// @notice Validate and enter a block at the start of a calldata slice.
-    /// @dev DANGER: This extracts the slice's absolute base but does not prove
-    /// that the header or declared payload lies within the slice. The caller
-    /// must validate the returned bounds against `source.length`.
-    /// @param source Calldata slice beginning with the expected block.
-    /// @param spec Expected block specification.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    /// @return limit Absolute position immediately after the calldata slice.
-    function enter(bytes calldata source, uint spec) internal pure returns (uint body, uint end, uint limit) {
-        uint abs;
-        assembly ("memory-safe") {
-            abs := source.offset
-            limit := add(abs, source.length)
-        }
-        (body, end) = enter(abs, spec);
-    }
-
-    /// @notice Validate that a calldata slice is exactly one matching block.
-    /// @dev The specification may accept a payload-size range; exactness means
-    /// that the decoded block occupies the complete calldata slice.
-    /// @param source Complete calldata slice occupied by the expected block.
-    /// @param spec Expected block specification.
-    /// @return body Absolute position of the first payload byte.
-    function exact(bytes calldata source, uint spec) internal pure returns (uint body) {
-        uint end;
-        uint limit;
-        (body, end, limit) = enter(source, spec);
-        if (end != limit) revert InvalidBlock();
-    }
-
-    /// @notice Validate and enter a block at an absolute calldata position.
-    /// @dev DANGER: This performs an unchecked calldata read and does not ensure `end`
-    /// lies within the caller's logical calldata region. Only the key, minimum,
-    /// and maximum fields of `spec` are used.
-    /// @param abs Absolute calldata position of the header.
-    /// @param spec Expected block specification.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(uint abs, uint spec) internal pure returns (uint body, uint end) {
-        uint key;
-        uint len;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-        }
-        uint max = uint32(spec >> 160);
-        if (key != uint32(spec >> 224) || len < uint32(spec >> 192) || (max != 0 && len > max)) revert InvalidBlock();
-
-        unchecked {
-            body = abs + Sizes.Header;
-            end = body + len;
-        }
-    }
-
-    /// @notice Validate and enter a parent block and its first child.
-    /// @dev DANGER: Unchecked calldata reads. Validates both specifications but
-    /// not source bounds or child containment. The parent must begin with a
-    /// child block. Callers must validate bounds and complete consumption.
-    /// @param abs Absolute calldata position of the parent header.
-    /// @param parent Expected packed parent block specification.
-    /// @param child Expected packed child block specification.
-    /// @return body Absolute position of the first child payload byte.
-    /// @return end Absolute position immediately after the child payload.
-    /// @return outer Absolute position immediately after the parent payload.
-    function descend(uint abs, uint parent, uint child) internal pure returns (uint body, uint end, uint outer) {
-        (body, outer) = enter(abs, parent);
-        (body, end) = enter(body, child);
-    }
-
-    /// @notice Validate a block specification and enter after a fixed payload prefix.
-    /// @dev DANGER: This performs an unchecked calldata read and does not ensure
-    /// that the returned positions lie within the caller's logical calldata region.
-    /// @param abs Absolute calldata position of the header.
-    /// @param spec Expected block specification.
-    /// @param amount Number of initial payload bytes to advance over.
-    /// @return body Absolute position of the first payload byte.
-    /// @return next Absolute payload position after the fixed prefix.
-    /// @return end Absolute position immediately after the payload.
-    function enter(uint abs, uint spec, uint amount) internal pure returns (uint body, uint next, uint end) {
-        (body, end) = enter(abs, spec);
-        if (amount > end - body) revert InvalidBlock();
-        unchecked {
-            next = body + amount;
-        }
-    }
-
-    /// @notice Validate a known block key and return its payload bounds.
-    /// @dev DANGER: This performs an unchecked calldata read and validates only
-    /// the key. The caller must validate the known payload shape and returned end.
-    /// @param abs Absolute calldata position of the header.
-    /// @param key Expected block key.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(uint abs, bytes4 key) internal pure returns (uint body, uint end) {
-        uint actual;
-        uint len;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            actual := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-        }
-        if (actual != uint32(key)) revert InvalidBlock();
-        unchecked {
-            body = abs + Sizes.Header;
-            end = body + len;
-        }
-    }
-
-    /// @notice Validate a block key and enter after a fixed payload prefix.
-    /// @dev DANGER: This performs an unchecked calldata read, validates no
-    /// payload-size constraint, and does not ensure the returned positions lie
-    /// within the caller's logical calldata region.
-    /// @param abs Absolute calldata position of the header.
-    /// @param key Expected block key.
-    /// @param amount Number of initial payload bytes to advance over.
-    /// @return body Absolute position of the first payload byte.
-    /// @return next Absolute payload position after the fixed prefix.
-    /// @return end Absolute position immediately after the payload.
-    function enter(uint abs, bytes4 key, uint amount) internal pure returns (uint body, uint next, uint end) {
-        (body, end) = enter(abs, key);
-        if (amount > end - body) revert InvalidBlock();
-        unchecked {
-            next = body + amount;
-        }
-    }
-
-    /// @dev Validate the key and exact payload size of a fixed-width block.
-    /// @param abs Absolute calldata position of the header.
-    /// @param key Expected block key.
-    /// @param size Expected payload length.
-    /// @return body Absolute position of the payload.
-    /// @return end Absolute position after the payload.
-    function enterFixed(uint abs, bytes4 key, uint size) private pure returns (uint body, uint end) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, calldataload(abs))
-        }
-        uint64 expected = (uint64(uint32(key)) << 32) | uint64(size);
-        if (actual != expected) revert InvalidBlock();
-        unchecked {
-            body = abs + Sizes.Header;
-            end = body + size;
-        }
-    }
-
-    /// @notice Validate an empty block at an absolute calldata position.
-    /// @dev DANGER: This performs an unchecked calldata read. The caller must
-    /// validate the returned end against its logical calldata region.
-    /// @param abs Absolute position of the block header.
-    /// @param key Expected block key.
-    /// @return end Absolute position immediately after the empty block header.
-    function enterEmpty(uint abs, bytes4 key) internal pure returns (uint end) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, calldataload(abs))
-        }
-        uint64 expected = uint64(uint32(key)) << 32;
-        if (actual != expected) revert InvalidBlock();
-        return abs + Sizes.Header;
-    }
-
-    /// @notice Return whether `abs` identifies a header with `key` before an absolute end.
-    /// @param abs Absolute calldata position to inspect.
-    /// @param end Absolute region boundary.
-    /// @param key Expected block key.
-    /// @return Whether a complete matching header exists.
-    function hasAt(uint abs, uint end, bytes4 key) internal pure returns (bool) {
-        // Short-circuiting proves the subtraction cannot underflow.
-        unchecked {
-            if (abs > end || Sizes.Header > end - abs) return false;
-        }
-        return bytes4(read32(abs)) == key;
-    }
-
-    /// @notice Return whether `abs` identifies a complete empty block header.
-    /// @param abs Absolute position to inspect.
-    /// @param end Absolute region boundary.
-    /// @param key Expected block key.
-    /// @return Whether the expected key occurs with a zero-length payload.
-    function isEmpty(uint abs, uint end, bytes4 key) internal pure returns (bool) {
-        unchecked {
-            if (abs > end || Sizes.Header > end - abs) return false;
-        }
-        uint64 head = uint64(uint(read32(abs)) >> 192);
-        return head == uint64(uint32(key)) << 32;
-    }
-
-    /// @notice Find the first block with `key` at or after absolute position `abs`.
-    /// @param abs Absolute search position.
-    /// @param end Absolute region boundary.
-    /// @param key Block key to find.
-    /// @return Absolute position of the matching block, or `end` when absent.
-    function find(uint abs, uint end, bytes4 key) internal pure returns (uint) {
-        while (abs < end) {
-            (bytes4 current, uint len) = header(abs);
-            // len is uint32; the loop and region check prove these operations safe.
-            unchecked {
-                uint size = Sizes.Header + len;
-                if (size > end - abs) revert MalformedBlocks();
-                if (current == key) return abs;
-                abs += size;
-            }
-        }
-        return end;
-    }
-
-    /// @notice Count consecutive blocks with `key` from absolute position `abs`.
-    /// @param abs Absolute start position.
-    /// @param limit Absolute region boundary.
-    /// @param key Block key forming the run.
-    /// @return total Number of consecutive matching blocks.
-    /// @return end Absolute position after the run.
-    function run(uint abs, uint limit, bytes4 key) internal pure returns (uint total, uint end) {
-        end = abs;
-        while (end < limit) {
-            (bytes4 current, uint len) = header(end);
-            // Validate before testing the key, including a malformed nonmatching block.
-            unchecked {
-                uint size = Sizes.Header + len;
-                if (size > limit - end) revert MalformedBlocks();
-                if (current != key) break;
-                end += size;
-                ++total;
-            }
-        }
-    }
-
-    /// @notice Count consecutive blocks with `key` using a minimal hint-only scan.
-    /// @dev DANGER: This is not validation. It stops on a different key or when the
-    /// next declared block end exceeds `limit`; malformed or trailing data does not
-    /// revert. Use only for optional allocation hints whose result is later validated
-    /// by normal decoding and execution finalization.
-    /// @param abs Absolute start position.
-    /// @param limit Absolute region boundary.
-    /// @param key Block key forming the run.
-    /// @return total Number of complete consecutive matching blocks.
-    function runCount(uint abs, uint limit, bytes4 key) internal pure returns (uint total) {
-        uint expected = uint32(key);
-        assembly ("memory-safe") {
-            for {} lt(abs, limit) {} {
-                let word := calldataload(abs)
-                let actual := shr(224, word)
-                if iszero(eq(actual, expected)) {
-                    break
-                }
-
-                let len := and(shr(192, word), 0xffffffff)
-                let next := add(add(abs, 8), len)
-                if gt(next, limit) {
-                    break
-                }
-
-                abs := next
-                total := add(total, 1)
-            }
-        }
-    }
-
-    /// @notice Count a run that must consume the complete region.
-    /// @dev Reverts when any well-formed trailing block has a different key.
-    /// @param abs Absolute start position.
-    /// @param limit Absolute region boundary.
-    /// @param key Required block key for the complete region.
-    /// @return total Number of matching blocks.
-    /// @return end Absolute position equal to `limit`.
-    function runExact(uint abs, uint limit, bytes4 key) internal pure returns (uint total, uint end) {
-        (total, end) = run(abs, limit, key);
-        if (end != limit) revert InvalidBlock();
-    }
-
-    // Generic block writes
-
-    /// @notice Write an empty block header at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.Header` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param key Block key.
-    function writeEmpty(bytes memory dst, uint i, bytes4 key) internal pure {
-        uint word = uint(uint32(key)) << 224;
-        assembly ("memory-safe") {
-            mstore(add(add(dst, 0x20), i), word)
-        }
-    }
-
-    /// @notice Write a custom block with one payload word at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param key Block key.
-    /// @param a Payload word.
-    function write32(bytes memory dst, uint i, bytes4 key, bytes32 a) internal pure {
-        uint word = (uint(uint32(key)) << 224) | (uint(32) << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            mstore(add(p, 0x08), a)
-        }
-    }
-
-    /// @notice Write a custom block with two payload words at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param key Block key.
-    /// @param a First payload word.
-    /// @param b Second payload word.
-    function write64(bytes memory dst, uint i, bytes4 key, bytes32 a, bytes32 b) internal pure {
-        uint word = (uint(uint32(key)) << 224) | (uint(64) << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            mstore(add(p, 0x08), a)
-            mstore(add(p, 0x28), b)
-        }
-    }
-
-    /// @notice Write a custom block with three payload words at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param key Block key.
-    /// @param a First payload word.
-    /// @param b Second payload word.
-    /// @param c Third payload word.
-    function write96(bytes memory dst, uint i, bytes4 key, bytes32 a, bytes32 b, bytes32 c) internal pure {
-        uint word = (uint(uint32(key)) << 224) | (uint(96) << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            mstore(add(p, 0x08), a)
-            mstore(add(p, 0x28), b)
-            mstore(add(p, 0x48), c)
-        }
-    }
-
-    /// @notice Write a custom block with a dynamic payload at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must validate the payload
-    /// length and reserve `Sizes.Header + payload.length` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param key Block key.
-    /// @param payload Block payload.
-    function write(bytes memory dst, uint i, bytes4 key, bytes memory payload) internal pure {
-        uint len = max32(payload.length);
-        uint word = (uint(uint32(key)) << 224) | (len << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            mcopy(add(p, 0x08), add(payload, 0x20), len)
-        }
-    }
-
-    /// @dev DANGER: len must equal payload.length and fit uint32. The caller must
-    /// reserve the complete header/payload and trailing header scratch space.
-    /// The standalone writer stays direct to avoid extra helper-call overhead.
-    function writeSized(bytes memory dst, uint i, bytes4 key, bytes memory payload, uint len) internal pure {
-        uint word = (uint(uint32(key)) << 224) | (len << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            mcopy(add(p, 0x08), add(payload, 0x20), len)
-        }
-    }
-
-    // Fixed-width block writes
-
-    // One-word payloads
-
-    /// @notice Write an ACCOUNT block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param account Account identifier to encode.
-    function writeAccount(bytes memory dst, uint i, bytes32 account) internal pure {
-        uint spec = Specs.Account;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), account)
-        }
-    }
-
-    /// @notice Write an ASSET block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Asset identifier to encode.
-    function writeAsset(bytes memory dst, uint i, bytes32 asset) internal pure {
-        uint spec = Specs.Asset;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-        }
-    }
-
-    /// @notice Write a NODE block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param node Node identifier to encode.
-    function writeNode(bytes memory dst, uint i, uint node) internal pure {
-        uint spec = Specs.Node;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), node)
-        }
-    }
-
-    /// @notice Write a STATUS block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param code Status code to encode.
-    function writeStatus(bytes memory dst, uint i, uint code) internal pure {
-        uint spec = Specs.Status;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), code)
-        }
-    }
-
-    // Two-word payloads
-
-    /// @notice Write an AMOUNT block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Asset amount to encode.
-    function writeAmount(bytes memory dst, uint i, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Amount;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), amount)
-        }
-    }
-
-    /// @notice Write a BALANCE block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Balance amount to encode.
-    function writeBalance(bytes memory dst, uint i, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Balance;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), amount)
-        }
-    }
-
-    /// @notice Write an ASSET_LIABILITY block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Asset identifier to encode.
-    /// @param liability Liability identifier to encode.
-    function writeAssetLiability(bytes memory dst, uint i, bytes32 asset, bytes32 liability) internal pure {
-        uint spec = Specs.AssetLiability;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), liability)
-        }
-    }
-
-    /// @notice Write an ACCOUNT_ASSET block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param account Account identifier to encode.
-    /// @param asset Asset identifier to encode.
-    function writeAccountAsset(bytes memory dst, uint i, bytes32 account, bytes32 asset) internal pure {
-        uint spec = Specs.AccountAsset;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), account)
-            mstore(add(p, 0x28), asset)
-        }
-    }
-
-    /// @notice Write a HOST_ASSET block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param asset Asset identifier to encode.
-    function writeHostAsset(bytes memory dst, uint i, uint host, bytes32 asset) internal pure {
-        uint spec = Specs.HostAsset;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), asset)
-        }
-    }
-
-    // Three-word payloads
-
-    /// @notice Write a BOOTSTRAP block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.Bootstrap` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Asset identifier to bootstrap.
-    /// @param amount Balance amount to source.
-    /// @param budget Native-value budget to source.
-    function writeBootstrap(bytes memory dst, uint i, bytes32 asset, uint amount, uint budget) internal pure {
-        uint spec = Specs.Bootstrap;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), amount)
-            mstore(add(p, 0x48), budget)
-        }
-    }
-
-    /// @notice Write an ALLOCATION block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Allocation amount to encode.
-    function writeAllocation(bytes memory dst, uint i, uint host, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Allocation;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), asset)
-            mstore(add(p, 0x48), amount)
-        }
-    }
-
-    /// @notice Write an ALLOWANCE block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Allowance amount to encode.
-    function writeAllowance(bytes memory dst, uint i, uint host, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Allowance;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), asset)
-            mstore(add(p, 0x48), amount)
-        }
-    }
-
-    /// @notice Write a CUSTODY block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.Custody` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Custody amount to encode.
-    function writeCustody(bytes memory dst, uint i, uint host, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Custody;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), asset)
-            mstore(add(p, 0x48), amount)
-        }
-    }
-
-    /// @notice Write an ACCOUNT_AMOUNT block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param account Account identifier to encode.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Account amount to encode.
-    function writeAccountAmount(bytes memory dst, uint i, bytes32 account, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.AccountAmount;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), account)
-            mstore(add(p, 0x28), asset)
-            mstore(add(p, 0x48), amount)
-        }
-    }
-
-    /// @notice Write a HOST_AMOUNT block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Host amount to encode.
-    function writeHostAmount(bytes memory dst, uint i, uint host, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.HostAmount;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), asset)
-            mstore(add(p, 0x48), amount)
-        }
-    }
-
-    /// @notice Write a HOST_ACCOUNT_ASSET block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B96` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier to encode.
-    /// @param account Account identifier to encode.
-    /// @param asset Asset identifier to encode.
-    function writeHostAccountAsset(bytes memory dst, uint i, uint host, bytes32 account, bytes32 asset) internal pure {
-        uint spec = Specs.HostAccountAsset;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), account)
-            mstore(add(p, 0x48), asset)
-        }
-    }
-
-    /// @notice Write a LIMITS block with a packed inclusive minimum and maximum.
-    /// @dev Unchecked memory write; reserve Sizes.Limits bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
-    function writeLimits(bytes memory dst, uint i, uint limits) internal pure {
-        uint spec = Specs.Limits;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), limits)
-        }
-    }
-
-    /// @notice Write a QUOTE with full-width asset and liability quantities.
-    /// @dev Unchecked memory write; reserve Sizes.Quote bytes first.
-    function writeQuote(
-        bytes memory dst,
-        uint i,
-        bytes32 asset,
-        uint amount,
-        bytes32 liability,
-        uint debt
-    ) internal pure {
-        uint spec = Specs.Quote;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), amount)
-            mstore(add(p, 0x48), liability)
-            mstore(add(p, 0x68), debt)
-        }
-    }
-
-    // Position payload
-
-    /// @notice Write a POSITION block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.Position` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param asset Identifier for the asset side.
-    /// @param amount Quantity on the asset side.
-    /// @param liability Identifier for the liability side.
-    /// @param debt Quantity owed on the liability side.
-    /// @param counterparty Settlement counterparty: Rootzero (zero) or an account ID, including a host account.
-    function writePosition(
-        bytes memory dst,
-        uint i,
-        bytes32 asset,
-        uint amount,
-        bytes32 liability,
-        uint debt,
-        bytes32 counterparty
-    ) internal pure {
-        uint spec = Specs.Position;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), asset)
-            mstore(add(p, 0x28), amount)
-            mstore(add(p, 0x48), liability)
-            mstore(add(p, 0x68), debt)
-            mstore(add(p, 0x88), counterparty)
-        }
-    }
-
-    /// @notice Write a TRANSACTION block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B128` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param from Debit account identifier.
-    /// @param to Credit account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Transaction amount.
-    function writeTransaction(
-        bytes memory dst,
-        uint i,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure {
-        uint spec = Specs.Transaction;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), from)
-            mstore(add(p, 0x28), to)
-            mstore(add(p, 0x48), asset)
-            mstore(add(p, 0x68), amount)
-        }
-    }
-
-    /// @notice Write a HOST_ACCOUNT_AMOUNT block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B128` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param host Host identifier.
-    /// @param account Account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Host account amount.
-    function writeHostAccountAmount(
-        bytes memory dst,
-        uint i,
-        uint host,
-        bytes32 account,
-        bytes32 asset,
-        uint amount
-    ) internal pure {
-        uint spec = Specs.HostAccountAmount;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), host)
-            mstore(add(p, 0x28), account)
-            mstore(add(p, 0x48), asset)
-            mstore(add(p, 0x68), amount)
-        }
-    }
-
-    // Dynamic payloads
-
-    /// @notice Write a LIST block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param value Encoded list payload.
-    function writeList(bytes memory dst, uint i, bytes memory value) internal pure {
-        uint len = value.length;
-        uint key = uint32(Keys.List);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mcopy(add(p, 0x08), add(value, 0x20), len)
-        }
-    }
-
-    /// @notice Write a BYTES block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param value Byte payload.
-    function writeBytes(bytes memory dst, uint i, bytes memory value) internal pure {
-        uint len = value.length;
-        uint key = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mcopy(add(p, 0x08), add(value, 0x20), len)
-        }
-    }
-
-    /// @notice Write a STRING block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param value String payload.
-    function writeString(bytes memory dst, uint i, string memory value) internal pure {
-        uint len = bytes(value).length;
-        uint key = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mcopy(add(p, 0x08), add(value, 0x20), len)
-        }
-    }
-
-    /// @notice Write a STEP block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param cmd Command identifier.
-    /// @param value Native value assigned to the step.
-    /// @param input Command input.
-    function writeStep(bytes memory dst, uint i, uint cmd, uint value, bytes memory input) internal pure {
-        uint len = 64 + Sizes.Header + input.length;
-        uint key = uint32(Keys.Step);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    /// @notice Write a CALL block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param target Call target.
-    /// @param resources Packed resources.
-    /// @param payload Call payload.
-    function writeCall(bytes memory dst, uint i, uint target, uint resources, bytes memory payload) internal pure {
-        uint len = 64 + Sizes.Header + payload.length;
-        uint key = uint32(Keys.Call);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), target)
-            mstore(add(p, 0x28), resources)
-
-            let q := add(p, 0x48)
-            let payloadlen := mload(payload)
-            mstore(q, or(shl(224, byteskey), shl(192, payloadlen)))
-            mcopy(add(q, 0x08), add(payload, 0x20), payloadlen)
-        }
-    }
-
-    /// @notice Write a RELAY block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param input Command-specific handoff input.
-    /// @param steps Remaining pipeline steps.
-    function writeRelay(bytes memory dst, uint i, bytes memory input, bytes memory steps) internal pure {
-        uint len = 2 * Sizes.Header + input.length + steps.length;
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            let q := add(p, 0x08)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := mload(steps)
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            mcopy(add(q, 0x08), add(steps, 0x20), stepslen)
-        }
-    }
-
-    /// @notice Write a DISPATCH block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param portal Destination portal.
-    /// @param resources Packed resources.
-    /// @param payload Dispatch payload.
-    function writeDispatch(bytes memory dst, uint i, uint portal, uint resources, bytes memory payload) internal pure {
-        uint len = 64 + Sizes.Header + payload.length;
-        uint key = uint32(Keys.Dispatch);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), portal)
-            mstore(add(p, 0x28), resources)
-
-            let q := add(p, 0x48)
-            let payloadlen := mload(payload)
-            mstore(q, or(shl(224, byteskey), shl(192, payloadlen)))
-            mcopy(add(q, 0x08), add(payload, 0x20), payloadlen)
-        }
-    }
-
-    /// @notice Write a CONTEXT block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param account Account identifier.
-    /// @param state State payload.
-    /// @param input Input payload.
-    function writeContext(
-        bytes memory dst,
-        uint i,
-        bytes32 account,
-        bytes memory state,
-        bytes memory input
-    ) internal pure {
-        uint len = 32 + 2 * Sizes.Header + state.length + input.length;
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            mcopy(add(q, 0x08), add(state, 0x20), statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(r, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    /// @notice Write a RECOVER block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param handler Recovery handler.
-    /// @param resources Packed resources.
-    /// @param recoverykey Recovery key.
-    /// @param witness Recovery witness.
-    function writeRecover(
-        bytes memory dst,
-        uint i,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes memory witness
-    ) internal pure {
-        uint len = 96 + Sizes.Header + witness.length;
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := mload(witness)
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            mcopy(add(q, 0x08), add(witness, 0x20), witnesslen)
-        }
-    }
-
-    /// @notice Write a LABEL block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param namespace Label namespace.
-    /// @param name Label text.
-    function writeLabel(bytes memory dst, uint i, bytes32 namespace, string memory name) internal pure {
-        uint len = 32 + Sizes.Header + bytes(name).length;
-        uint key = uint32(Keys.Label);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), namespace)
-
-            let q := add(p, 0x28)
-            let namelen := mload(name)
-            mstore(q, or(shl(224, stringkey), shl(192, namelen)))
-            mcopy(add(q, 0x08), add(name, 0x20), namelen)
-        }
-    }
-
-    /// @notice Write a SCHEMA block at `i`.
-    /// @dev DANGER: Unchecked memory write. The caller must reserve the complete
-    /// block size and ensure the encoded payload length fits in uint32.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param spec Block specification.
-    /// @param body Schema DSL string, optionally prefixed with `name:`.
-    function writeSchema(bytes memory dst, uint i, uint spec, string memory body) internal pure {
-        uint len = 32 + Sizes.Header + bytes(body).length;
-        uint key = uint32(Keys.Schema);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), spec)
-
-            let q := add(p, 0x28)
-            let bodylen := mload(body)
-            mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
-            mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-        }
-    }
-
-    // Calldata copy writers
-
-    /// @notice Encode a custom block at `i`, copying its payload from calldata.
-    /// @dev DANGER: Unchecked memory write. The caller must validate the payload
-    /// length and reserve `Sizes.Header + payload.length` bytes first.
-    function copy(bytes memory dst, uint i, bytes4 key, bytes calldata payload) internal pure {
-        uint len = max32(payload.length);
-        uint word = (uint(uint32(key)) << 224) | (len << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            calldatacopy(add(p, 0x08), payload.offset, len)
-        }
-    }
-
-    /// @dev DANGER: len must equal payload.length and fit uint32. The caller must
-    /// reserve the full header/payload and trailing header scratch space.
-    /// Standalone copy retains its direct implementation and length validation.
-    function copySized(bytes memory dst, uint i, bytes4 key, bytes calldata payload, uint len) internal pure {
-        uint word = (uint(uint32(key)) << 224) | (len << 192);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, word)
-            calldatacopy(add(p, 0x08), payload.offset, len)
-        }
-    }
-
-    /// @notice Encode a LIST block at `i`, copying its payload from calldata.
-    function copyList(bytes memory dst, uint i, bytes calldata value) internal pure {
-        copy(dst, i, Keys.List, value);
-    }
-
-    /// @notice Encode a BYTES block at `i`, copying its payload from calldata.
-    function copyBytes(bytes memory dst, uint i, bytes calldata value) internal pure {
-        copy(dst, i, Keys.Bytes, value);
-    }
-
-    /// @notice Encode a STRING block at `i`, copying its payload from calldata.
-    function copyString(bytes memory dst, uint i, string calldata value) internal pure {
-        copy(dst, i, Keys.String, bytes(value));
-    }
-
-    /// @dev Encode a two-word composite with a nested BYTES block copied from calldata.
-    function copyComposite(
-        bytes memory dst,
-        uint i,
-        bytes4 blockkey,
-        uint a,
-        uint b,
-        bytes calldata value
-    ) private pure {
-        uint len = max32(64 + Sizes.Header + value.length);
-        uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), a)
-            mstore(add(p, 0x28), b)
-
-            let q := add(p, 0x48)
-            let valuelen := value.length
-            mstore(q, or(shl(224, byteskey), shl(192, valuelen)))
-            calldatacopy(add(q, 0x08), value.offset, valuelen)
-        }
-    }
-
-    /// @notice Encode a STEP block at `i`, copying its nested input from calldata.
-    function copyStep(bytes memory dst, uint i, uint cmd, uint value, bytes calldata input) internal pure {
-        uint len = max32(64 + Sizes.Header + input.length);
-        uint key = uint32(Keys.Step);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-        }
-    }
-
-    /// @notice Encode a CALL block at `i`, copying its nested payload from calldata.
-    function copyCall(bytes memory dst, uint i, uint target, uint resources, bytes calldata payload) internal pure {
-        copyComposite(dst, i, Keys.Call, target, resources, payload);
-    }
-
-    /// @notice Encode a RELAY block at `i`, copying its nested streams from calldata.
-    function copyRelay(bytes memory dst, uint i, bytes calldata input, bytes calldata steps) internal pure {
-        uint len = 2 * Sizes.Header + input.length + steps.length;
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            let q := add(p, 0x08)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := steps.length
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            calldatacopy(add(q, 0x08), steps.offset, stepslen)
-        }
-    }
-
-    /// @notice Encode a DISPATCH block at `i`, copying its nested payload from calldata.
-    function copyDispatch(bytes memory dst, uint i, uint portal, uint resources, bytes calldata payload) internal pure {
-        copyComposite(dst, i, Keys.Dispatch, portal, resources, payload);
-    }
-
-    /// @notice Encode a CONTEXT block at `i`, copying its nested streams from calldata.
-    function copyContext(
-        bytes memory dst,
-        uint i,
-        bytes32 account,
-        bytes calldata state,
-        bytes calldata input
-    ) internal pure {
-        uint len = max32(32 + 2 * Sizes.Header + state.length + input.length);
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            calldatacopy(add(q, 0x08), state.offset, statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(r, 0x08), input.offset, inputlen)
-        }
-    }
-
-    /// @notice Encode a RECOVER block at `i`, copying its nested witness from calldata.
-    function copyRecover(
-        bytes memory dst,
-        uint i,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes calldata witness
-    ) internal pure {
-        uint len = max32(96 + Sizes.Header + witness.length);
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, len)))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := witness.length
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            calldatacopy(add(q, 0x08), witness.offset, witnesslen)
-        }
-    }
-
-    /// @dev Factory-only writers. The destination's complete length has already
-    /// passed max32 and allocation; reuse it for the outer payload header.
-    function writeCompositeAllocated(
-        bytes memory dst,
-        bytes4 blockkey,
-        uint cmd,
-        uint value,
-        bytes memory input
-    ) private pure {
-        uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    function writeRelayAllocated(bytes memory dst, bytes memory input, bytes memory steps) private pure {
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            let q := add(p, 0x08)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := mload(steps)
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            mcopy(add(q, 0x08), add(steps, 0x20), stepslen)
-        }
-    }
-
-    function writeContextAllocated(
-        bytes memory dst,
-        bytes32 account,
-        bytes memory state,
-        bytes memory input
-    ) private pure {
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            mcopy(add(q, 0x08), add(state, 0x20), statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(r, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    function writeRecoverAllocated(
-        bytes memory dst,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes memory witness
-    ) private pure {
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := mload(witness)
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            mcopy(add(q, 0x08), add(witness, 0x20), witnesslen)
-        }
-    }
-
-    function copyCompositeAllocated(
-        bytes memory dst,
-        bytes4 blockkey,
-        uint cmd,
-        uint value,
-        bytes calldata input
-    ) private pure {
-        uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-        }
-    }
-
-    function copyRelayAllocated(bytes memory dst, bytes calldata input, bytes calldata steps) private pure {
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            let q := add(p, 0x08)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := steps.length
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            calldatacopy(add(q, 0x08), steps.offset, stepslen)
-        }
-    }
-
-    function copyContextAllocated(
-        bytes memory dst,
-        bytes32 account,
-        bytes calldata state,
-        bytes calldata input
-    ) private pure {
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            calldatacopy(add(q, 0x08), state.offset, statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(r, 0x08), input.offset, inputlen)
-        }
-    }
-
-    function copyRecoverAllocated(
-        bytes memory dst,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes calldata witness
-    ) private pure {
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := witness.length
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            calldatacopy(add(q, 0x08), witness.offset, witnesslen)
-        }
-    }
-
-    function writeLabelAllocated(bytes memory dst, bytes32 namespace, string memory name) private pure {
-        uint key = uint32(Keys.Label);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), namespace)
-
-            let q := add(p, 0x28)
-            let namelen := mload(name)
-            mstore(q, or(shl(224, stringkey), shl(192, namelen)))
-            mcopy(add(q, 0x08), add(name, 0x20), namelen)
-        }
-    }
-
-    function writeSchemaAllocated(bytes memory dst, uint spec, string memory body) private pure {
-        uint key = uint32(Keys.Schema);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(dst, 0x20)
-            mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
-            mstore(add(p, 0x08), spec)
-
-            let q := add(p, 0x28)
-            let bodylen := mload(body)
-            mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
-            mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeCompositeSized(
-        bytes memory dst,
-        uint i,
-        bytes4 blockkey,
-        uint cmd,
-        uint value,
-        bytes memory input,
-        uint size
-    ) internal pure {
-        uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeRelaySized(
-        bytes memory dst,
-        uint i,
-        bytes memory input,
-        bytes memory steps,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            let q := add(p, 0x08)
-            let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(q, 0x08), add(input, 0x20), inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := mload(steps)
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            mcopy(add(q, 0x08), add(steps, 0x20), stepslen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeContextSized(
-        bytes memory dst,
-        uint i,
-        bytes32 account,
-        bytes memory state,
-        bytes memory input,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            mcopy(add(q, 0x08), add(state, 0x20), statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            mcopy(add(r, 0x08), add(input, 0x20), inputlen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeRecoverSized(
-        bytes memory dst,
-        uint i,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes memory witness,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := mload(witness)
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            mcopy(add(q, 0x08), add(witness, 0x20), witnesslen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeLabelSized(bytes memory dst, uint i, bytes32 namespace, string memory name, uint size) internal pure {
-        uint key = uint32(Keys.Label);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), namespace)
-
-            let q := add(p, 0x28)
-            let namelen := mload(name)
-            mstore(q, or(shl(224, stringkey), shl(192, namelen)))
-            mcopy(add(q, 0x08), add(name, 0x20), namelen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function writeSchemaSized(bytes memory dst, uint i, uint spec, string memory body, uint size) internal pure {
-        uint key = uint32(Keys.Schema);
-        uint stringkey = uint32(Keys.String);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), spec)
-
-            let q := add(p, 0x28)
-            let bodylen := mload(body)
-            mstore(q, or(shl(224, stringkey), shl(192, bodylen)))
-            mcopy(add(q, 0x08), add(body, 0x20), bodylen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function copyCompositeSized(
-        bytes memory dst,
-        uint i,
-        bytes4 blockkey,
-        uint cmd,
-        uint value,
-        bytes calldata input,
-        uint size
-    ) internal pure {
-        uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), cmd)
-            mstore(add(p, 0x28), value)
-
-            let q := add(p, 0x48)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function copyRelaySized(
-        bytes memory dst,
-        uint i,
-        bytes calldata input,
-        bytes calldata steps,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Relay);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            let q := add(p, 0x08)
-            let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(q, 0x08), input.offset, inputlen)
-            q := add(add(q, 0x08), inputlen)
-            let stepslen := steps.length
-            mstore(q, or(shl(224, byteskey), shl(192, stepslen)))
-            calldatacopy(add(q, 0x08), steps.offset, stepslen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function copyContextSized(
-        bytes memory dst,
-        uint i,
-        bytes32 account,
-        bytes calldata state,
-        bytes calldata input,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), account)
-
-            let q := add(p, 0x28)
-            let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
-            calldatacopy(add(q, 0x08), state.offset, statelen)
-
-            let r := add(add(q, 0x08), statelen)
-            let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
-            calldatacopy(add(r, 0x08), input.offset, inputlen)
-        }
-    }
-
-    /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
-    /// prove size fits uint32, and pass the exact complete block size.
-    function copyRecoverSized(
-        bytes memory dst,
-        uint i,
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes calldata witness,
-        uint size
-    ) internal pure {
-        uint key = uint32(Keys.Recover);
-        uint byteskey = uint32(Keys.Bytes);
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
-            mstore(add(p, 0x08), handler)
-            mstore(add(p, 0x28), resources)
-            mstore(add(p, 0x48), recoverykey)
-
-            let q := add(p, 0x68)
-            let witnesslen := witness.length
-            mstore(q, or(shl(224, byteskey), shl(192, witnesslen)))
-            calldatacopy(add(q, 0x08), witness.offset, witnesslen)
+    /// @notice Combine two predicates without short-circuit branching.
+    /// @dev Both arguments are evaluated before this call. Use only when both
+    /// expressions are safe to evaluate, such as reads of already validated fields.
+    /// @param a First predicate.
+    /// @param b Second predicate.
+    /// @return result True if either predicate is true.
+    function either(bool a, bool b) private pure returns (bool result) {
+        assembly ("memory-safe") {
+            result := or(a, b)
         }
     }
 
     // -------------------------------------------------------------------------
-    // Calldata decoding
+    // Absolute-position primitives, helpers, and stream scans
     // -------------------------------------------------------------------------
 
-    // Raw reads
-
-    /// @notice Read one byte from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded one-byte value.
-    function read1(uint abs) internal pure returns (bytes1 value) {
-        return bytes1(read32(abs));
-    }
-
-    /// @notice Read two bytes from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded two-byte value.
-    function read2(uint abs) internal pure returns (bytes2 value) {
-        return bytes2(read32(abs));
-    }
-
-    /// @notice Read four bytes from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded four-byte value.
-    function read4(uint abs) internal pure returns (bytes4 value) {
-        return bytes4(read32(abs));
-    }
-
-    /// @notice Read eight bytes from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded eight-byte value.
-    function read8(uint abs) internal pure returns (bytes8 value) {
-        return bytes8(read32(abs));
-    }
-
-    /// @notice Read sixteen bytes from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded sixteen-byte value.
-    function read16(uint abs) internal pure returns (bytes16 value) {
-        return bytes16(read32(abs));
-    }
-
-    /// @notice Read one word from an absolute calldata position.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @return value Decoded word.
+    /// @notice Read one word from an absolute calldata position without validation.
+    /// @dev Performs no bounds, schema, or cursor checks. The caller must establish
+    /// any required logical bounds before trusting the value. Reads past calldata
+    /// use EVM zero-padding. Accepts the full uint256 position without narrowing.
+    /// @param abs Absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 32-byte word starting at abs.
     function read32(uint abs) internal pure returns (bytes32 value) {
         assembly ("memory-safe") {
             value := calldataload(abs)
         }
     }
 
-    // Comparison reads
-
-    /// @notice Read one word and require it to equal the word at another absolute calldata position.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Reverts with UnexpectedValue() when the words differ.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Matching word.
-    function readEqualAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            if iszero(eq(value, calldataload(otherAbs))) {
-                mstore(0, shl(224, UNEXPECTED_VALUE)) // UnexpectedValue()
-                revert(0, 4)
-            }
-        }
+    /// @notice Read 1 byte from an absolute calldata position without validation.
+    /// @dev Reuses read32 and retains its leading 1 byte. No bounds, schema,
+    /// or cursor checks; the caller establishes logical bounds. Uses EVM zero-padding.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 1-byte value starting at abs.
+    function read1(uint abs) internal pure returns (bytes1 value) {
+        return bytes1(read32(abs));
     }
 
-    /// @notice Read two words and require the first to differ from the second.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Compares unsigned words and reverts with UnexpectedValue() if the comparison fails.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Word at abs.
-    /// @return other Word at otherAbs.
-    function readNotEqualAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value, bytes32 other) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            other := calldataload(otherAbs)
-            if eq(value, other) {
-                mstore(0, shl(224, UNEXPECTED_VALUE)) // UnexpectedValue()
-                revert(0, 4)
-            }
-        }
+    /// @notice Read 2 bytes from an absolute calldata position without validation.
+    /// @dev Reuses read32 and retains its leading 2 bytes. No bounds, schema,
+    /// or cursor checks; the caller establishes logical bounds. Uses EVM zero-padding.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 2-byte value starting at abs.
+    function read2(uint abs) internal pure returns (bytes2 value) {
+        return bytes2(read32(abs));
     }
 
-    /// @notice Read two words and require the first to be less than the second.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Compares unsigned words and reverts with OutOfRange() if the comparison fails.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Word at abs.
-    /// @return other Word at otherAbs.
-    function readLtAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value, bytes32 other) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            other := calldataload(otherAbs)
-            if iszero(lt(value, other)) {
-                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
-                revert(0, 4)
-            }
-        }
+    /// @notice Read 4 bytes from an absolute calldata position without validation.
+    /// @dev Reuses read32 and retains its leading 4 bytes. No bounds, schema,
+    /// or cursor checks; the caller establishes logical bounds. Uses EVM zero-padding.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 4-byte value starting at abs.
+    function read4(uint abs) internal pure returns (bytes4 value) {
+        return bytes4(read32(abs));
     }
 
-    /// @notice Read two words and require the first to be less than or equal to the second.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Compares unsigned words and reverts with OutOfRange() if the comparison fails.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Word at abs.
-    /// @return other Word at otherAbs.
-    function readLeAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value, bytes32 other) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            other := calldataload(otherAbs)
-            if gt(value, other) {
-                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
-                revert(0, 4)
-            }
-        }
+    /// @notice Read 8 bytes from an absolute calldata position without validation.
+    /// @dev Reuses read32 and retains its leading 8 bytes. No bounds, schema,
+    /// or cursor checks; the caller establishes logical bounds. Uses EVM zero-padding.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 8-byte value starting at abs.
+    function read8(uint abs) internal pure returns (bytes8 value) {
+        return bytes8(read32(abs));
     }
 
-    /// @notice Read two words and require the first to be greater than the second.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Compares unsigned words and reverts with OutOfRange() if the comparison fails.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Word at abs.
-    /// @return other Word at otherAbs.
-    function readGtAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value, bytes32 other) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            other := calldataload(otherAbs)
-            if iszero(gt(value, other)) {
-                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
-                revert(0, 4)
-            }
-        }
+    /// @notice Read 16 bytes from an absolute calldata position without validation.
+    /// @dev Reuses read32 and retains its leading 16 bytes. No bounds, schema,
+    /// or cursor checks; the caller establishes logical bounds. Uses EVM zero-padding.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @return value Raw 16-byte value starting at abs.
+    function read16(uint abs) internal pure returns (bytes16 value) {
+        return bytes16(read32(abs));
     }
 
-    /// @notice Read two words and require the first to be greater than or equal to the second.
-    /// @dev DANGER: Unchecked calldata reads. Values beyond calldata are zero-padded.
-    ///      Compares unsigned words and reverts with OutOfRange() if the comparison fails.
-    /// @param abs Absolute calldata position to read and return.
-    /// @param otherAbs Absolute calldata position to compare against.
-    /// @return value Word at abs.
-    /// @return other Word at otherAbs.
-    function readGeAt32(uint abs, uint otherAbs) internal pure returns (bytes32 value, bytes32 other) {
-        assembly ("memory-safe") {
-            value := calldataload(abs)
-            other := calldataload(otherAbs)
-            if lt(value, other) {
-                mstore(0, shl(224, OUT_OF_RANGE)) // OutOfRange()
-                revert(0, 4)
-            }
-        }
+    /// @notice Require the 1-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 1 bytes.
+    function expect1(uint abs, bytes1 value) internal pure {
+        if (read1(abs) != value) revert UnexpectedValue();
     }
 
-    // Expectations
-
-    /// @notice Require the byte at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected byte.
-    function expect1(uint abs, bytes1 expected) internal pure {
-        if (read1(abs) != expected) revert UnexpectedValue();
+    /// @notice Require the 2-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 2 bytes.
+    function expect2(uint abs, bytes2 value) internal pure {
+        if (read2(abs) != value) revert UnexpectedValue();
     }
 
-    /// @notice Require the two bytes at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected two-byte value.
-    function expect2(uint abs, bytes2 expected) internal pure {
-        if (read2(abs) != expected) revert UnexpectedValue();
+    /// @notice Require the 4-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 4 bytes.
+    function expect4(uint abs, bytes4 value) internal pure {
+        if (read4(abs) != value) revert UnexpectedValue();
     }
 
-    /// @notice Require the four bytes at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected four-byte value.
-    function expect4(uint abs, bytes4 expected) internal pure {
-        if (read4(abs) != expected) revert UnexpectedValue();
+    /// @notice Require the 8-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 8 bytes.
+    function expect8(uint abs, bytes8 value) internal pure {
+        if (read8(abs) != value) revert UnexpectedValue();
     }
 
-    /// @notice Require the eight bytes at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected eight-byte value.
-    function expect8(uint abs, bytes8 expected) internal pure {
-        if (read8(abs) != expected) revert UnexpectedValue();
+    /// @notice Require the 16-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 16 bytes.
+    function expect16(uint abs, bytes16 value) internal pure {
+        if (read16(abs) != value) revert UnexpectedValue();
     }
 
-    /// @notice Require the sixteen bytes at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected sixteen-byte value.
-    function expect16(uint abs, bytes16 expected) internal pure {
-        if (read16(abs) != expected) revert UnexpectedValue();
+    /// @notice Require the 32-byte value at abs to match value.
+    /// @dev Unchecked absolute read; caller establishes logical bounds. Uses EVM
+    /// zero-padding beyond calldata and reverts UnexpectedValue on mismatch.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Expected leading 32 bytes.
+    function expect32(uint abs, bytes32 value) internal pure {
+        if (read32(abs) != value) revert UnexpectedValue();
     }
 
-    /// @notice Require the word at an absolute calldata position to match `expected`.
-    /// @dev DANGER: Unchecked calldata read. Values beyond calldata are zero-padded.
-    /// @param abs Absolute calldata position.
-    /// @param expected Expected word.
-    function expect32(uint abs, bytes32 expected) internal pure {
-        if (read32(abs) != expected) revert UnexpectedValue();
+    /// @notice Test whether the calldata word at abs is equal to value.
+    /// @dev Unchecked absolute read with EVM zero-padding; caller owns logical bounds.
+    /// Compares all 256 bits. The calldata word is the left operand.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Right-hand comparison value.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function equal32(uint abs, bytes32 value) internal pure returns (bool result) {
+        return read32(abs) == value;
     }
 
-    /// @notice Check quantities against a LIMITS block directly in calldata.
-    /// @dev The caller must bound the complete block. Validates the header before quantity errors.
-    /// @param abs Absolute LIMITS block position; not advanced.
-    /// @param amount Full-width final asset amount, checked against the inclusive minimum.
-    /// @param debt Full-width final debt, checked against the literal inclusive maximum.
-    function expectLimits(uint abs, uint amount, uint debt) internal pure {
-        uint64 head;
-        bool outside;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            let limits := calldataload(add(abs, 0x08))
-            outside := or(lt(amount, shr(128, limits)), gt(debt, and(limits, 0xffffffffffffffffffffffffffffffff)))
-        }
-        if (head != Headers.Limits) revert InvalidBlock();
-        if (outside) revert OutOfRange();
+    /// @notice Test whether the calldata word at abs is less than value.
+    /// @dev Unchecked absolute read with EVM zero-padding; caller owns logical bounds.
+    /// Ordering is unsigned over all 256 bits. The calldata word is the left operand.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Right-hand comparison value.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function lt32(uint abs, uint value) internal pure returns (bool result) {
+        return uint(read32(abs)) < value;
     }
 
-    /// @notice Check an asset and amount directly against calldata ASSET_LIMITS.
-    /// @dev The caller must bound the complete block. Validates the header, then
-    /// exact asset identity, then inclusive full-width quantity bounds.
-    /// @param abs Absolute ASSET_LIMITS block position; not advanced.
+    /// @notice Test whether the calldata word at abs is greater than value.
+    /// @dev Unchecked absolute read with EVM zero-padding; caller owns logical bounds.
+    /// Ordering is unsigned over all 256 bits. The calldata word is the left operand.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Right-hand comparison value.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function gt32(uint abs, uint value) internal pure returns (bool result) {
+        return uint(read32(abs)) > value;
+    }
+
+    /// @notice Test whether the calldata word at abs is less than or equal to value.
+    /// @dev Unchecked absolute read with EVM zero-padding; caller owns logical bounds.
+    /// Ordering is unsigned over all 256 bits. The calldata word is the left operand.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Right-hand comparison value.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function le32(uint abs, uint value) internal pure returns (bool result) {
+        return !gt32(abs, value);
+    }
+
+    /// @notice Test whether the calldata word at abs is greater than or equal to value.
+    /// @dev Unchecked absolute read with EVM zero-padding; caller owns logical bounds.
+    /// Ordering is unsigned over all 256 bits. The calldata word is the left operand.
+    /// @param abs Full-width absolute calldata byte position, not a packed cursor.
+    /// @param value Right-hand comparison value.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function ge32(uint abs, uint value) internal pure returns (bool result) {
+        return !lt32(abs, value);
+    }
+
+    /// @notice Test whether the word at abs is equal to the word at otherAbs.
+    /// @dev Both reads are unchecked and use EVM zero-padding. Caller owns both
+    /// logical bounds. Equality compares all 256 bits.
+    /// @param abs Full-width absolute position of the left operand.
+    /// @param otherAbs Full-width absolute position of the right operand.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function equalAt32(uint abs, uint otherAbs) internal pure returns (bool result) {
+        return read32(abs) == read32(otherAbs);
+    }
+
+    /// @notice Test whether the word at abs is less than the word at otherAbs.
+    /// @dev Both reads are unchecked and use EVM zero-padding. Caller owns both
+    /// logical bounds. Ordering is unsigned over all 256 bits.
+    /// @param abs Full-width absolute position of the left operand.
+    /// @param otherAbs Full-width absolute position of the right operand.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function ltAt32(uint abs, uint otherAbs) internal pure returns (bool result) {
+        return uint(read32(abs)) < uint(read32(otherAbs));
+    }
+
+    /// @notice Test whether the word at abs is greater than the word at otherAbs.
+    /// @dev Both reads are unchecked and use EVM zero-padding. Caller owns both
+    /// logical bounds. Ordering is unsigned over all 256 bits.
+    /// @param abs Full-width absolute position of the left operand.
+    /// @param otherAbs Full-width absolute position of the right operand.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function gtAt32(uint abs, uint otherAbs) internal pure returns (bool result) {
+        return uint(read32(abs)) > uint(read32(otherAbs));
+    }
+
+    /// @notice Test whether the word at abs is less than or equal to the word at otherAbs.
+    /// @dev Both reads are unchecked and use EVM zero-padding. Caller owns both
+    /// logical bounds. Ordering is unsigned over all 256 bits.
+    /// @param abs Full-width absolute position of the left operand.
+    /// @param otherAbs Full-width absolute position of the right operand.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function leAt32(uint abs, uint otherAbs) internal pure returns (bool result) {
+        return !gtAt32(abs, otherAbs);
+    }
+
+    /// @notice Test whether the word at abs is greater than or equal to the word at otherAbs.
+    /// @dev Both reads are unchecked and use EVM zero-padding. Caller owns both
+    /// logical bounds. Ordering is unsigned over all 256 bits.
+    /// @param abs Full-width absolute position of the left operand.
+    /// @param otherAbs Full-width absolute position of the right operand.
+    /// @return result Comparison result; a failed comparison does not revert.
+    function geAt32(uint abs, uint otherAbs) internal pure returns (bool result) {
+        return !ltAt32(abs, otherAbs);
+    }
+
+    /// @notice Check an already-validated BALANCE_CONSTRAINTS payload against a balance.
+    /// @dev Unchecked absolute calldata reads: the caller must establish that abs points
+    /// to the complete 96-byte payload of a validated BALANCE_CONSTRAINTS block,
+    /// for example through unpackFixed. abs points after the header, not at it.
+    /// Checks asset identity before inclusive full-width minimum/maximum bounds.
+    /// Zero maximum is literal. Does not validate header, containment, or provenance.
+    /// Reverts UnexpectedValue or OutOfRange on value mismatch.
+    /// @param abs Absolute start of the already-validated payload.
     /// @param asset Expected balance asset identifier.
     /// @param amount Full-width balance amount to check against both bounds.
-    function expectAssetLimits(uint abs, bytes32 asset, uint amount) internal pure {
-        uint64 head;
-        bool mismatch;
-        bool outside;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            mismatch := iszero(eq(asset, calldataload(add(abs, 0x08))))
-            outside := or(lt(amount, calldataload(add(abs, 0x28))), gt(amount, calldataload(add(abs, 0x48))))
+    function checkBalanceConstraints(uint abs, bytes32 asset, uint amount) internal pure {
+        unchecked {
+            if (!equal32(abs, asset)) revert UnexpectedValue();
+            if (either(gt32(abs + 32, amount), lt32(abs + 64, amount))) revert OutOfRange();
         }
-        if (head != Headers.AssetLimits) revert InvalidBlock();
-        if (mismatch) revert UnexpectedValue();
-        if (outside) revert OutOfRange();
     }
 
-    /// @notice Check calldata POSITION_LIMITS against a position without unpacking its payload.
-    /// @dev DANGER: Unchecked calldata reads. Caller must bound the complete
-    /// 136-byte POSITION_LIMITS block. Validates the header, then identifiers, then inclusive
-    /// quantity limits. Does not advance a cursor or validate the counterparty.
-    /// @param abs Absolute calldata position of the POSITION_LIMITS header.
+    /// @notice Check an already-validated POSITION_CONSTRAINTS payload against a position.
+    /// @dev Unchecked absolute calldata reads: the caller must establish that abs points
+    /// to the complete 128-byte payload of a validated POSITION_CONSTRAINTS block,
+    /// for example through unpackFixed. abs points after the header, not at it.
+    /// Checks identifiers before inclusive quantity bounds; zero maximum debt is literal.
+    /// Does not validate header, containment, or provenance, modify position, or check
+    /// its counterparty. Reverts UnexpectedValue or OutOfRange on value mismatch.
+    /// @param abs Absolute start of the already-validated payload.
     /// @param position Position whose identifiers and full-width quantities are checked.
-    function expectPositionLimits(uint abs, Position memory position) internal pure {
-        uint64 head;
-        bool mismatch;
-        bool outside;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            mismatch := or(
-                iszero(eq(calldataload(add(abs, 0x08)), mload(position))),
-                iszero(eq(calldataload(add(abs, 0x48)), mload(add(position, 0x40))))
-            )
-            outside := or(
-                lt(mload(add(position, 0x20)), calldataload(add(abs, 0x28))),
-                gt(mload(add(position, 0x60)), calldataload(add(abs, 0x68)))
-            )
+    function checkPositionConstraints(uint abs, Position memory position) internal pure {
+        unchecked {
+            if (either(!equal32(abs, position.asset), !equal32(abs + 64, position.liability))) revert UnexpectedValue();
+            if (either(gt32(abs + 32, position.amount), lt32(abs + 96, position.debt))) revert OutOfRange();
         }
-        if (head != Headers.PositionLimits) revert InvalidBlock();
-        if (mismatch) revert UnexpectedValue();
-        if (outside) revert OutOfRange();
     }
 
-    // Generic block unpackers
+    // Header validation: exact header, key only, or packed specification.
 
-    /// @notice Validate a block against `spec` and return its payload.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return value Decoded payload.
-    /// @return end Absolute position after the block.
-    function unpackRaw(uint abs, uint spec) internal pure returns (bytes calldata value, uint end) {
-        (abs, end) = enter(abs, spec);
-        value = msg.data[abs:end];
+    /// @notice Require a matching key and return the declared payload length.
+    /// @dev Does not establish containment or narrow abs. Callers must prove
+    /// containment before packing cursors or trusting field loads.
+    /// @param abs Absolute header position, possibly not yet proven to fit uint32.
+    /// @param key Required block key; mismatch reverts InvalidBlock.
+    /// @return len Declared uint32 payload length, widened to uint256.
+    function expectKey(uint abs, bytes4 key) private pure returns (uint len) {
+        assembly ("memory-safe") {
+            let head := calldataload(abs)
+            if iszero(eq(shr(224, head), shr(224, key))) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+            len := and(shr(192, head), 0xffffffff)
+        }
     }
 
-    /// @notice Decode a spec-validated one-word block at `abs`.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return a First payload word.
-    /// @return end Absolute position after the block.
-    function unpack32(uint abs, uint spec) internal pure returns (bytes32 a, uint end) {
-        (abs, end) = enterFixed(abs, Specs.key(spec), 32);
-        a = read32(abs);
+    /// @notice Require a matching key and length range, returning the declared payload length.
+    /// @dev Reads one header. Does not check header or payload containment; the caller
+    /// must establish it before using the length for trusted reads. Reverts InvalidBlock
+    /// on a key or length mismatch. A zero maximum is unbounded.
+    /// @param abs Absolute header position; does not establish containment.
+    /// @param spec Key in bits 224-255, minimum in 192-223, maximum in 160-191.
+    /// @return len Declared uint32 payload length, widened to uint256.
+    function expectSpec(uint abs, uint spec) private pure returns (uint len) {
+        assembly ("memory-safe") {
+            let head := calldataload(abs)
+            len := and(shr(192, head), 0xffffffff)
+            let maximum := and(shr(160, spec), 0xffffffff)
+            if or(
+                or(iszero(eq(shr(224, head), shr(224, spec))), lt(len, and(shr(192, spec), 0xffffffff))),
+                and(iszero(iszero(maximum)), gt(len, maximum))
+            ) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+        }
     }
 
-    /// @notice Decode a spec-validated two-word block at `abs`.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
+    /// @notice Validate the eight-byte header at an absolute calldata position.
+    /// @dev Checks the key and declared payload length together. Reverts InvalidBlock
+    /// on mismatch. Does not check containment; calldata reads are zero-padded.
+    /// @param abs Absolute header position, not a packed cursor.
+    /// @param header Right-aligned eight-byte key/length header; nonzero upper bits fail validation.
+    function expectHeader(uint abs, uint header) internal pure {
+        assembly ("memory-safe") {
+            if iszero(eq(shr(192, calldataload(abs)), header)) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+        }
+    }
+
+    /// @notice Validate a header against a key and exact payload length.
+    /// @dev Requires len <= uint32.max. Delegates to the packed-header check;
+    /// does not establish containment.
+    /// @param abs Absolute header position.
+    /// @param key Required block key.
+    /// @param len Required payload length, excluding the eight-byte header.
+    function expectHeader(uint abs, bytes4 key, uint len) private pure {
+        expectHeader(abs, (uint(uint32(key)) << 32) | len);
+    }
+
+    /// @notice Pack a clean cursor from two already validated absolute positions.
+    /// @dev Performs no validation or masking. Requires abs <= endAbs <= uint32.max,
+    /// proven by containment, exactness, or final-child validation before calling.
+    /// @param abs Validated inclusive position, with no cursor metadata or end lane.
+    /// @param endAbs Validated exclusive end of the selected range.
+    /// @return resultCur Packed position/end cursor with zero metadata.
+    function pack(uint abs, uint endAbs) private pure returns (uint resultCur) {
+        return Cursors.pack(abs, endAbs);
+    }
+
+    /// @notice Validate a final child block and select its payload.
+    /// @dev Requires an already bounded endAbs fitting uint32, abs at or after
+    /// the parent payload start, and abs + 8 not overflowing uint256.
+    /// Checks body <= endAbs before accepting the expected key/length header. This proves
+    /// the preceding fixed prefix and child header fit and the child consumes the
+    /// parent remainder exactly. Reverts InvalidBlock on any mismatch.
+    /// @param abs Absolute child-header position, kept full-width until validation.
+    /// @param endAbs Exclusive end of the already validated parent.
+    /// @param key Required child key.
+    /// @return payloadCur Clean child-payload cursor; its end equals the parent end.
+    function tail(uint abs, uint endAbs, bytes4 key) private pure returns (uint payloadCur) {
+        assembly ("memory-safe") {
+            let body := add(abs, 8)
+            let len := sub(endAbs, body)
+            if or(lt(endAbs, body), iszero(eq(shr(192, calldataload(abs)), or(shl(32, shr(224, key)), len)))) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+            payloadCur := or(body, shl(32, endAbs))
+        }
+    }
+
+    /// @notice Validate two same-key children occupying a parent's remainder.
+    /// @dev Requires a bounded uint32 endAbs, abs at or after the parent payload
+    /// start, and abs + 16 + uint32.max not overflowing uint256. The first
+    /// child's end stays full-width until tail proves the final child fits.
+    /// That proof also bounds the first child and preceding fixed prefix;
+    /// no separate intermediate containment check is needed.
+    /// @param abs Absolute first-child header position.
+    /// @param endAbs Exclusive end of the already validated parent.
+    /// @param key Required key for both children.
+    /// @return firstCur Clean cursor over the first child's payload.
+    /// @return lastCur Clean cursor over the final child's payload, ending at endAbs.
+    function pair(uint abs, uint endAbs, bytes4 key) private pure returns (uint firstCur, uint lastCur) {
+        uint len = expectKey(abs, key);
+        unchecked {
+            uint body = abs + 8;
+            uint nextAbs = body + len;
+            lastCur = tail(nextAbs, endAbs, key);
+            firstCur = pack(body, nextAbs);
+        }
+    }
+
+    /// @notice Count a matching run as a hint between absolute positions.
+    /// @dev Unchecked calldata reads; neither malformed data nor reversed ranges revert.
+    /// Requires abs and endAbs to fit uint32 so full-width end arithmetic cannot overflow.
+    /// @param abs Absolute start of the candidate run.
+    /// @param endAbs Exclusive source boundary.
+    /// @param key Key forming the consecutive run.
+    /// @return total Number of complete matching blocks before the first stopping condition.
+    function runCountAt(uint abs, uint endAbs, bytes4 key) private pure returns (uint total) {
+        uint expected = uint32(key);
+        assembly ("memory-safe") {
+            for {} lt(abs, endAbs) {} {
+                let head := calldataload(abs)
+                if iszero(eq(shr(224, head), expected)) {
+                    break
+                }
+                let nextAbs := add(add(abs, 8), and(shr(192, head), 0xffffffff))
+                if gt(nextAbs, endAbs) {
+                    break
+                }
+                abs := nextAbs
+                total := add(total, 1)
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Packed-cursor primitives: cur / ...Cur
+    // -------------------------------------------------------------------------
+
+    /// @notice Return the number of bytes remaining in the cursor.
+    /// @dev Requires current <= end; performs no bounds or provenance checks.
+    /// Ignores metadata and does not advance the cursor or skip a block header.
+    /// @param cur Validated source cursor.
+    /// @return size Remaining byte count.
+    function length(uint cur) internal pure returns (uint size) {
+        return Cursors.length(cur);
+    }
+
+    /// @notice Advance a cursor by exactly size bytes after checking containment.
+    /// @dev Requires size <= uint32.max + 8. This precondition prevents overflow
+    /// in the full-width position addition; arbitrary uint256 sizes are unsupported.
+    /// Rejects reversed ranges and advances beyond the source end with OutOfBounds.
+    /// Preserves the end and metadata. Does not validate headers or calldata provenance.
+    /// @param cur Bounded source cursor.
+    /// @param size Total bytes to advance, including any header required by the caller.
+    /// @return nextCur Advanced source cursor with the original end and metadata.
+    function advance(uint cur, uint size) internal pure returns (uint nextCur) {
+        assembly ("memory-safe") {
+            if gt(add(and(cur, 0xffffffff), size), and(shr(32, cur), 0xffffffff)) {
+                mstore(0, OUT_OF_BOUNDS)
+                revert(28, 4)
+            }
+            // Containment proves no carry into the end lane.
+            nextCur := add(cur, size)
+        }
+    }
+
+    /// @notice Validate containment and select the payload after a fixed prefix.
+    /// @dev Requires a schema-validated uint32 length. Checks block containment once,
+    /// then rejects amount > len with InvalidBlock. The payloadCur proves the skipped
+    /// prefix fits, allowing trusted fixed-field loads without another bounds check.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param len Validated payload length, excluding the header.
+    /// @param amount Payload bytes to skip; may equal len to produce an empty range.
+    /// @return abs Original payload start, before the validated prefix.
+    /// @return payloadCur Clean cursor covering the payload remainder through the block end.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function payload(uint cur, uint len, uint amount) private pure returns (uint abs, uint payloadCur, uint nextCur) {
+        unchecked {
+            nextCur = advance(cur, 8 + len);
+        }
+        assembly ("memory-safe") {
+            if gt(amount, len) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+            abs := add(and(cur, 0xffffffff), 8)
+            payloadCur := or(add(abs, amount), shl(32, and(nextCur, 0xffffffff)))
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cursor hashing and conversions
+    // -------------------------------------------------------------------------
+
+    /// @notice Compute keccak256 over the cursor's remaining calldata range.
+    /// @dev Requires current <= end <= calldatasize; performs no repeated bounds
+    /// or header checks. Ignores metadata and does not advance the cursor. Copies
+    /// to temporary free memory because KECCAK256 reads memory, but does not
+    /// allocate a bytes value or advance the free-memory pointer. No header is skipped.
+    /// @param cur Validated calldata cursor over exactly the bytes to hash.
+    /// @return digest Keccak-256 digest of the selected range.
+    function hash(uint cur) internal pure returns (bytes32 digest) {
+        assembly ("memory-safe") {
+            let abs := and(cur, 0xffffffff)
+            let size := sub(and(shr(32, cur), 0xffffffff), abs)
+            let scratch := mload(0x40)
+            calldatacopy(scratch, abs, size)
+            digest := keccak256(scratch, size)
+        }
+    }
+
+    /// @notice Expose the cursor's remaining range as bytes in calldata.
+    /// @dev Requires a validated range: current <= end <= calldatasize.
+    /// Performs no header, bounds, or provenance checks. Ignores metadata and
+    /// neither advances the cursor nor copies or allocates memory. Does not skip a header.
+    /// @param cur Validated calldata cursor; use a payload cursor to exclude its header.
+    /// @return data Calldata view of the remaining range.
+    function toBytes(uint cur) internal pure returns (bytes calldata data) {
+        return Cursors.toBytes(cur);
+    }
+
+    /// @notice Validate the cursor's bounds and expose its remaining calldata range.
+    /// @dev Requires current <= end <= calldatasize; otherwise reverts OutOfBounds.
+    /// A zero cursor returns msg.data[0:0]. Ignores metadata and performs no block
+    /// or schema validation. Neither advances the cursor nor copies or allocates memory.
+    function toBytesChecked(uint cur) internal pure returns (bytes calldata data) {
+        return Cursors.toBytesChecked(cur);
+    }
+
+    /// @notice Expose the cursor's remaining range as a string in calldata.
+    /// @dev Shares toBytes's validated-range requirement and performs no UTF-8
+    /// validation. Neither advances the cursor nor copies or allocates memory.
+    /// Assignment to string memory copies only when the caller requests it.
+    /// @param cur Validated calldata cursor over the desired string bytes.
+    /// @return data Calldata string view of the remaining range.
+    function toString(uint cur) internal pure returns (string calldata data) {
+        return Cursors.toString(cur);
+    }
+
+    // -------------------------------------------------------------------------
+    // Whole-stream validation
+    // -------------------------------------------------------------------------
+
+    /// @notice Validate the entire remaining stream as zero or more blocks with key.
+    /// @dev Checks complete headers before reading them, then keys and payload bounds.
+    /// Empty ranges pass. Reverts OutOfBounds for reversed or truncated ranges and
+    /// InvalidBlock for key mismatches. Does not advance or inspect payload contents.
+    /// Callers establish calldata provenance; cursor metadata is ignored.
+    function expectRun(uint cur, bytes4 key) internal pure {
+        uint abs = uint32(cur);
+        uint end = uint32(cur >> 32);
+        if (abs > end) revert OutOfBounds();
+        while (abs < end) {
+            unchecked {
+                if (end - abs < 8) revert OutOfBounds();
+                uint size = 8 + expectKey(abs, key);
+                if (size > end - abs) revert OutOfBounds();
+                abs += size;
+            }
+        }
+    }
+
+    /// @notice Validate the entire remaining stream as zero or more fixed-size blocks.
+    /// @dev Checks each block's containment before its complete header, in stream order.
+    /// Reverts OutOfBounds for reversed ranges or incomplete blocks, and InvalidBlock
+    /// for header mismatches. Empty ranges pass. Does not read payloads, advance the
+    /// caller's cursor, or validate calldata provenance. Cursor metadata is ignored.
+    /// @param cur Bounded source cursor over the complete stream to validate.
+    /// @param header Right-aligned key/length header; callers supply zero upper bits.
+    function expectRunFixed(uint cur, uint header) internal pure {
+        uint abs = uint32(cur);
+        uint endAbs = uint32(cur >> 32);
+        uint size = 8 + uint(uint32(header));
+        if (abs > endAbs) revert OutOfBounds();
+        while (abs < endAbs) {
+            unchecked {
+                if (endAbs - abs < size) revert OutOfBounds();
+                expectHeader(abs, header);
+                abs += size;
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cursor scan hints
+    // -------------------------------------------------------------------------
+
+    /// @notice Estimate the number of consecutive complete blocks with key.
+    /// @dev Hint only: does not validate schemas or malformed/trailing data. Stops
+    /// before a different key or a declared block that exceeds the source end.
+    /// Empty or reversed ranges return zero. Normal decoding must still validate
+    /// the input; callers establish calldata provenance. Metadata is ignored.
+    /// @param cur Source cursor positioned at the first candidate block header.
+    /// @param key Key forming the consecutive run.
+    /// @return total Number of complete matching blocks within the supplied boundary.
+    function runCount(uint cur, bytes4 key) internal pure returns (uint total) {
+        return runCountAt(uint32(cur), uint32(cur >> 32), key);
+    }
+
+    // -------------------------------------------------------------------------
+    // Cursor selection helpers: enter, take, unpack
+    // -------------------------------------------------------------------------
+
+    /// @notice Enter a matching payload after skipping a fixed prefix.
+    /// @dev Checks schema, containment, then prefix length, in that order.
+    /// A prefix longer than the payload reverts InvalidBlock.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param spec Packed key/minimum/maximum specification, as accepted by take.
+    /// @param amount Number of payload bytes to skip, excluding the block header.
+    /// @return abs Original payload start; reads within the validated amount-byte prefix are in bounds.
+    /// @return payloadCur Clean cursor after the prefix; skipping the entire payload is valid.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function enter(uint cur, uint spec, uint amount) internal pure returns (uint abs, uint payloadCur, uint nextCur) {
+        return payload(cur, expectSpec(uint32(cur), spec), amount);
+    }
+
+    /// @notice Enter a keyed payload after skipping a fixed prefix.
+    /// @dev Checks key, containment, then prefix length, in that order.
+    /// A prefix longer than the payload reverts InvalidBlock.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @param amount Number of payload bytes to skip, excluding the block header.
+    /// @return abs Original payload start; reads within the validated amount-byte prefix are in bounds.
+    /// @return payloadCur Clean cursor after the prefix; skipping the entire payload is valid.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function enter(uint cur, bytes4 key, uint amount) internal pure returns (uint abs, uint payloadCur, uint nextCur) {
+        return payload(cur, expectKey(uint32(cur), key), amount);
+    }
+
+    /// @notice Enter an exact-header block after validating a fixed prefix.
+    /// @dev Checks the header, containment, then prefix length, once each in that order.
+    /// Does not interpret the prefix or remaining payload; an empty remainder is valid.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param header Right-aligned key/length header; nonzero upper bits fail validation.
+    /// @param amount Payload bytes to skip after proving they fit.
+    /// @return abs Original payload start, before the validated prefix.
+    /// @return payloadCur Clean cursor over the remaining payload after the prefix.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function enterFixed(
+        uint cur,
+        uint header,
+        uint amount
+    ) internal pure returns (uint abs, uint payloadCur, uint nextCur) {
+        expectHeader(uint32(cur), header);
+        return payload(cur, uint32(header), amount);
+    }
+
+    /// @notice Enter a matching block occupying the entire range and skip a fixed prefix.
+    /// @dev Reuses unpackExact validation, then checks only the prefix length.
+    /// Schema mismatch, truncation, trailing bytes, and oversized prefixes revert InvalidBlock.
+    /// @param cur Source cursor covering exactly one block, including its header.
+    /// @param spec Packed key/minimum/maximum specification, as accepted by take.
+    /// @param amount Payload bytes to skip; may equal the full payload length.
+    /// @return abs Original payload start; the amount-byte prefix is safe to read.
+    /// @return payloadCur Clean cursor over the remaining payload; no source remainder is returned.
+    function enterExact(uint cur, uint spec, uint amount) internal pure returns (uint abs, uint payloadCur) {
+        payloadCur = unpackExact(cur, spec);
+        assembly ("memory-safe") {
+            abs := and(payloadCur, 0xffffffff)
+            if gt(amount, sub(shr(32, payloadCur), abs)) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+            payloadCur := add(payloadCur, amount)
+        }
+    }
+
+    /// @notice Select the complete next block, including its eight-byte header.
+    /// @dev Checks header and payload containment; does not constrain the key or payload shape.
+    /// Reverts OutOfBounds if the declared block exceeds the cursor end.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @return blockCur Clean cursor covering the header and payload; trailing source bytes are excluded.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function take(uint cur) internal pure returns (uint blockCur, uint nextCur) {
+        uint len;
+        assembly ("memory-safe") {
+            len := and(shr(192, calldataload(and(cur, 0xffffffff))), 0xffffffff)
+        }
+        unchecked {
+            nextCur = advance(cur, 8 + len);
+            blockCur = pack(uint32(cur), uint32(nextCur));
+        }
+    }
+
+    /// @notice Select a complete block matching a packed specification.
+    /// @dev Checks key and payload length before containment. A zero maximum is unbounded.
+    /// Reverts InvalidBlock on schema mismatch or OutOfBounds on failed containment.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param spec Packed specification: key in bits 224-255, minimum in 192-223,
+    /// maximum in 160-191. Other lanes are ignored.
+    /// @return blockCur Clean cursor covering the matching block's header and payload.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function take(uint cur, uint spec) internal pure returns (uint blockCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectSpec(abs, spec));
+            blockCur = pack(abs, uint32(nextCur));
+        }
+    }
+
+    /// @notice Select a complete block with the required key.
+    /// @dev Checks the key before containment; imposes no payload length constraint.
+    /// Reverts InvalidBlock on key mismatch or OutOfBounds on failed containment.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @return blockCur Clean cursor covering the matching block's header and payload.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function take(uint cur, bytes4 key) internal pure returns (uint blockCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, key));
+            blockCur = pack(abs, uint32(nextCur));
+        }
+    }
+
+    /// @notice Select a block with an exact key and payload length.
+    /// @dev Validates the full header once, then checks containment.
+    /// Reverts InvalidBlock on header mismatch or OutOfBounds on failed containment.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param header Right-aligned header: key in bits 32-63, payload length in bits 0-31.
+    /// @return blockCur Clean cursor covering the exact header and its payload.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function takeFixed(uint cur, uint header) internal pure returns (uint blockCur, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, header);
+        unchecked {
+            nextCur = advance(cur, 8 + uint(uint32(header)));
+            blockCur = pack(abs, uint32(nextCur));
+        }
+    }
+
+    /// @notice Select a matching block occupying the entire supplied range.
+    /// @dev End equality proves containment without a separate bounds check.
+    /// Schema mismatch, truncation, and trailing bytes all revert InvalidBlock.
+    /// @param cur Source cursor covering exactly one expected block, including its header.
+    /// @param spec Packed key/minimum/maximum specification, as accepted by take.
+    /// @return blockCur Clean cursor including the header; no source remainder is returned.
+    function takeExact(uint cur, uint spec) internal pure returns (uint blockCur) {
+        uint abs = uint32(cur);
+        uint endAbs;
+        unchecked {
+            // Both position and declared length fit uint32; keep the sum full-width.
+            endAbs = abs + 8 + expectSpec(abs, spec);
+        }
+        assembly ("memory-safe") {
+            if iszero(eq(endAbs, and(shr(32, cur), 0xffffffff))) {
+                mstore(0, INVALID_BLOCK)
+                revert(28, 4)
+            }
+        }
+        blockCur = pack(abs, endAbs);
+    }
+
+    /// @notice Select a keyed block's payload and advance the source cursor.
+    /// @dev Checks the key before complete containment, once each. Does not validate
+    /// payload contents. Empty payloads are valid; calldata provenance is caller-owned.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @return payloadCur Clean cursor over the payload, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpack(uint cur, bytes4 key) internal pure returns (uint payloadCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, key));
+            payloadCur = pack(abs + 8, uint32(nextCur));
+        }
+    }
+
+    /// @notice Select a specification-matching payload and advance the source cursor.
+    /// @dev Checks key and payload length before complete containment, once each.
+    /// A zero maximum is unbounded. Does not validate payload contents or calldata provenance.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param spec Packed key/minimum/maximum specification, as accepted by take.
+    /// @return payloadCur Clean cursor over the payload, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpack(uint cur, uint spec) internal pure returns (uint payloadCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectSpec(abs, spec));
+            payloadCur = pack(abs + 8, uint32(nextCur));
+        }
+    }
+
+    /// @notice Select an exact-header block's payload and advance the source cursor.
+    /// @dev Reuses takeFixed's header and containment checks without repeating them.
+    /// The validated header fits, so skipping it cannot carry into the end lane.
+    /// Does not validate payload contents; empty payloads are valid.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param header Right-aligned key/length header; nonzero upper bits fail validation.
+    /// @return payloadCur Clean cursor over the payload, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpackFixed(uint cur, uint header) internal pure returns (uint payloadCur, uint nextCur) {
+        (payloadCur, nextCur) = takeFixed(cur, header);
+        unchecked {
+            payloadCur += 8;
+        }
+    }
+
+    /// @notice Select the payload of a matching block occupying the entire range.
+    /// @dev Reuses takeExact's schema and end-equality checks. Skipping the validated
+    /// header cannot carry into the end lane. Does not inspect payload contents.
+    /// Schema mismatch, truncation, and trailing bytes all revert InvalidBlock.
+    /// @param cur Source cursor covering exactly one block, including its header.
+    /// @param spec Packed key/minimum/maximum specification, as accepted by take.
+    /// @return payloadCur Clean payload cursor excluding the header; no remainder is returned.
+    function unpackExact(uint cur, uint spec) internal pure returns (uint payloadCur) {
+        unchecked { payloadCur = takeExact(cur, spec) + 8; }
+    }
+
+    // Named payload wrappers: delegate validation and advancement to unpack.
+
+    /// @notice Select BYTES's payload and return the advanced source cursor.
+    /// @dev Delegates key and containment checks to unpack; empty payloads are valid.
+    /// @param cur Bounded source cursor positioned at the BYTES header.
+    /// @return payloadCur Clean cursor over the bytes payload, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpackBytes(uint cur) internal pure returns (uint payloadCur, uint nextCur) {
+        return unpack(cur, Keys.Bytes);
+    }
+
+    /// @notice Select STRING's payload and return the advanced source cursor.
+    /// @dev Delegates key and containment checks to unpack. Empty strings are valid;
+    /// does not validate text encoding or interpret the payload.
+    /// @param cur Bounded source cursor positioned at the STRING header.
+    /// @return payloadCur Clean cursor over the string bytes, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpackString(uint cur) internal pure returns (uint payloadCur, uint nextCur) {
+        return unpack(cur, Keys.String);
+    }
+
+    /// @notice Select LIST's contents and return the advanced source cursor.
+    /// @dev Validates the LIST key and complete containment once. Does not validate
+    /// individual items; an empty list is valid. Header mismatch reverts InvalidBlock
+    /// before containment failures revert OutOfBounds.
+    /// @param cur Bounded source cursor positioned at the LIST header.
+    /// @return itemsCur Clean cursor over the list payload, excluding its header.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpackList(uint cur) internal pure returns (uint itemsCur, uint nextCur) {
+        return unpack(cur, Keys.List);
+    }
+
+    /// @notice Decode exactly 32 payload bytes as full-width words.
+    /// @dev Checks the key/length header and containment once before trusted reads.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @return a Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpack32(uint cur, bytes4 key) internal pure returns (bytes32 a, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, key, 32);
+        nextCur = advance(cur, 40);
+        unchecked {
+            a = read32(abs + 8);
+        }
+    }
+
+    /// @notice Decode a block containing exactly two 32-byte words.
+    /// @dev Checks the exact key/64-byte header and containment once, then loads
+    /// both fields without additional bounds checks. Does not interpret field values.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
     /// @return a First payload word.
     /// @return b Second payload word.
-    /// @return end Absolute position after the block.
-    function unpack64(uint abs, uint spec) internal pure returns (bytes32 a, bytes32 b, uint end) {
-        (abs, end) = enterFixed(abs, Specs.key(spec), 64);
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpack64(uint cur, bytes4 key) internal pure returns (bytes32 a, bytes32 b, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, key, 64);
+        nextCur = advance(cur, 8 + 64);
         assembly ("memory-safe") {
-            a := calldataload(abs)
-            b := calldataload(add(abs, 0x20))
+            a := calldataload(add(abs, 8))
+            b := calldataload(add(abs, 40))
         }
     }
 
-    /// @notice Decode a spec-validated three-word block at `abs`.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return a First payload word.
-    /// @return b Second payload word.
-    /// @return c Third payload word.
-    /// @return end Absolute position after the block.
-    function unpack96(uint abs, uint spec) internal pure returns (bytes32 a, bytes32 b, bytes32 c, uint end) {
-        (abs, end) = enterFixed(abs, Specs.key(spec), 96);
-        assembly ("memory-safe") {
-            a := calldataload(abs)
-            b := calldataload(add(abs, 0x20))
-            c := calldataload(add(abs, 0x40))
+    /// @notice Decode exactly 96 payload bytes as full-width words.
+    /// @dev Checks the key/length header and containment once before trusted reads.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @return a Decoded payload value.
+    /// @return b Decoded payload value.
+    /// @return c Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpack96(uint cur, bytes4 key) internal pure returns (bytes32 a, bytes32 b, bytes32 c, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, key, 96);
+        nextCur = advance(cur, 104);
+        unchecked {
+            a = read32(abs + 8);
+            b = read32(abs + 40);
+            c = read32(abs + 72);
         }
     }
 
-    /// @notice Decode a spec-validated four-word block at `abs`.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return a First payload word.
-    /// @return b Second payload word.
-    /// @return c Third payload word.
-    /// @return d Fourth payload word.
-    /// @return end Absolute position after the block.
-    function unpack128(
-        uint abs,
-        uint spec
-    ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, uint end) {
-        (abs, end) = enterFixed(abs, Specs.key(spec), 128);
-        assembly ("memory-safe") {
-            a := calldataload(abs)
-            b := calldataload(add(abs, 0x20))
-            c := calldataload(add(abs, 0x40))
-            d := calldataload(add(abs, 0x60))
+    /// @notice Decode exactly 128 payload bytes as full-width words.
+    /// @dev Checks the key/length header and containment once before trusted reads.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
+    /// @return a Decoded payload value.
+    /// @return b Decoded payload value.
+    /// @return c Decoded payload value.
+    /// @return d Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpack128(uint cur, bytes4 key) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, key, 128);
+        nextCur = advance(cur, 136);
+        unchecked {
+            a = read32(abs + 8);
+            b = read32(abs + 40);
+            c = read32(abs + 72);
+            d = read32(abs + 104);
         }
     }
 
-    /// @notice Decode a spec-validated five-word block at `abs`.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
+    /// @notice Decode a block containing exactly five 32-byte words.
+    /// @dev Validates the exact header and containment once before trusted loads.
+    /// @param cur Bounded source cursor positioned at the block header.
+    /// @param key Required block key.
     /// @return a First payload word.
     /// @return b Second payload word.
     /// @return c Third payload word.
     /// @return d Fourth payload word.
     /// @return e Fifth payload word.
-    /// @return end Absolute position after the block.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
     function unpack160(
-        uint abs,
-        uint spec
-    ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, bytes32 e, uint end) {
-        (abs, end) = enterFixed(abs, Specs.key(spec), 160);
+        uint cur,
+        bytes4 key
+    ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, bytes32 e, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, key, 160);
+        nextCur = advance(cur, 8 + 160);
         assembly ("memory-safe") {
-            a := calldataload(abs)
-            b := calldataload(add(abs, 0x20))
-            c := calldataload(add(abs, 0x40))
-            d := calldataload(add(abs, 0x60))
-            e := calldataload(add(abs, 0x80))
+            a := calldataload(add(abs, 8))
+            b := calldataload(add(abs, 40))
+            c := calldataload(add(abs, 72))
+            d := calldataload(add(abs, 104))
+            e := calldataload(add(abs, 136))
         }
     }
 
-    /// @notice Decode a spec-validated asset and amount pair.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    /// @return end Absolute position after the block.
-    function unpackAssetAmount(uint abs, uint spec) internal pure returns (bytes32 asset, uint amount, uint end) {
-        bytes32 value;
-        (asset, value, end) = unpack64(abs, spec);
-        amount = uint(value);
+    // Named fixed blocks, ordered by payload size.
+
+    /// @notice Decode ACCOUNT and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return account Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAccount(uint cur) internal pure returns (bytes32 account, uint nextCur) {
+        (account, nextCur) = unpack32(cur, Keys.Account);
     }
 
-    /// @notice Decode a spec-validated account, asset, and amount tuple.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    /// @return end Absolute position after the block.
-    function unpackAccountAmount(
-        uint abs,
-        uint spec
-    ) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint end) {
-        bytes32 value;
-        (account, asset, value, end) = unpack96(abs, spec);
-        amount = uint(value);
+    /// @notice Decode ASSET and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAsset(uint cur) internal pure returns (bytes32 asset, uint nextCur) {
+        (asset, nextCur) = unpack32(cur, Keys.Asset);
     }
 
-    /// @notice Decode a spec-validated host, asset, and amount tuple.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    /// @return end Absolute position after the block.
-    function unpackHostAmount(
-        uint abs,
-        uint spec
-    ) internal pure returns (uint host, bytes32 asset, uint amount, uint end) {
-        bytes32 value;
-        bytes32 raw;
-        (raw, asset, value, end) = unpack96(abs, spec);
-        host = uint(raw);
-        amount = uint(value);
+    /// @notice Decode NODE and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return node Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackNode(uint cur) internal pure returns (uint node, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Node);
+        node = uint(a);
     }
 
-    /// @notice Decode a spec-validated host, account, and asset tuple.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return host Decoded host identifier.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return end Absolute position after the block.
-    function unpackHostAccountAsset(
-        uint abs,
-        uint spec
-    ) internal pure returns (uint host, bytes32 account, bytes32 asset, uint end) {
-        bytes32 raw;
-        (raw, account, asset, end) = unpack96(abs, spec);
-        host = uint(raw);
+    /// @notice Decode STATUS and return the advanced source cursor.
+    /// @dev Validates the exact header and containment through unpack32.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return code Full-width status value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackStatus(uint cur) internal pure returns (uint code, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Status);
+        code = uint(a);
     }
 
-    /// @notice Decode a spec-validated transaction tuple.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    /// @return end Absolute position after the block.
-    function unpackTransaction(
-        uint abs,
-        uint spec
-    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint end) {
-        bytes32 value;
-        (from, to, asset, value, end) = unpack128(abs, spec);
-        amount = uint(value);
+    /// @notice Decode LIMITS and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return limits Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackLimits(uint cur) internal pure returns (uint limits, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Limits);
+        limits = uint(a);
     }
 
-    // Fixed-width block unpackers
+    /// @notice Decode AMOUNT and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAmount(uint cur) internal pure returns (bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (asset, a, nextCur) = unpack64(cur, Keys.Amount);
+        amount = uint(a);
+    }
 
-    /// @dev The fixed-width decoders below validate only the block key and
-    /// payload length. Callers must ensure the complete block lies within
-    /// their logical calldata region.
+    /// @notice Decode BALANCE and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// The source boundary and all metadata are preserved; only position changes.
+    /// @param cur Bounded source cursor positioned at the BALANCE header.
+    /// @return asset Encoded asset identifier.
+    /// @return amount Unsigned balance amount.
+    /// @return nextCur Source cursor positioned immediately after this block.
+    function unpackBalance(uint cur) internal pure returns (bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (asset, a, nextCur) = unpack64(cur, Keys.Balance);
+        amount = uint(a);
+    }
 
-    // One-word payloads
+    /// @notice Decode ASSETLIABILITY and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return liability Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAssetLiability(uint cur) internal pure returns (bytes32 asset, bytes32 liability, uint nextCur) {
+        (asset, liability, nextCur) = unpack64(cur, Keys.AssetLiability);
+    }
 
-    /// @notice Decode a low-level fixed-width ACCOUNT block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return account Decoded account identifier.
-    function unpackAccount(uint abs) internal pure returns (bytes32 account) {
-        uint64 head;
+    /// @notice Decode ACCOUNTASSET and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return account Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAccountAsset(uint cur) internal pure returns (bytes32 account, bytes32 asset, uint nextCur) {
+        (account, asset, nextCur) = unpack64(cur, Keys.AccountAsset);
+    }
+
+    /// @notice Decode HOSTASSET and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackHostAsset(uint cur) internal pure returns (uint host, bytes32 asset, uint nextCur) {
+        bytes32 a;
+        (a, asset, nextCur) = unpack64(cur, Keys.HostAsset);
+        host = uint(a);
+    }
+
+    /// @notice Decode BOOTSTRAP and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return budget Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackBootstrap(uint cur) internal pure returns (bytes32 asset, uint amount, uint budget, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (asset, a, b, nextCur) = unpack96(cur, Keys.Bootstrap);
+        amount = uint(a);
+        budget = uint(b);
+    }
+
+    /// @notice Decode ALLOCATION and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAllocation(uint cur) internal pure returns (uint host, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (a, asset, b, nextCur) = unpack96(cur, Keys.Allocation);
+        host = uint(a);
+        amount = uint(b);
+    }
+
+    /// @notice Decode ALLOWANCE and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAllowance(uint cur) internal pure returns (uint host, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (a, asset, b, nextCur) = unpack96(cur, Keys.Allowance);
+        host = uint(a);
+        amount = uint(b);
+    }
+
+    /// @notice Decode CUSTODY and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackCustody(uint cur) internal pure returns (uint host, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (a, asset, b, nextCur) = unpack96(cur, Keys.Custody);
+        host = uint(a);
+        amount = uint(b);
+    }
+
+    /// @notice Decode ACCOUNTAMOUNT and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return account Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAccountAmount(uint cur) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (account, asset, a, nextCur) = unpack96(cur, Keys.AccountAmount);
+        amount = uint(a);
+    }
+
+    /// @notice Decode HOST_AMOUNT and return the advanced source cursor.
+    /// @dev Validates the exact header and containment through unpack96.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Full-width host value.
+    /// @return asset Encoded asset identifier.
+    /// @return amount Full-width amount.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackHostAmount(uint cur) internal pure returns (uint host, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (a, asset, b, nextCur) = unpack96(cur, Keys.HostAmount);
+        host = uint(a);
+        amount = uint(b);
+    }
+
+    /// @notice Decode HOSTACCOUNTASSET and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Decoded payload value.
+    /// @return account Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackHostAccountAsset(uint cur) internal pure returns (uint host, bytes32 account, bytes32 asset, uint nextCur) {
+        bytes32 a;
+        (a, account, asset, nextCur) = unpack96(cur, Keys.HostAccountAsset);
+        host = uint(a);
+    }
+
+    /// @notice Decode BALANCECONSTRAINTS without enforcing its quantity constraints.
+    /// @dev Validates header and containment once, then copies the full-width fields into the struct.
+    function unpackBalanceConstraints(uint cur) internal pure returns (BalanceConstraints memory value, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, Headers.BalanceConstraints);
+        nextCur = advance(cur, 8 + 96);
         assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            account := calldataload(add(abs, 0x08))
+            calldatacopy(value, add(abs, 8), 96)
         }
-        if (head != Headers.Account) revert InvalidBlock();
     }
 
-    /// @notice Decode a low-level fixed-width ASSET block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset identifier.
-    function unpackAsset(uint abs) internal pure returns (bytes32 asset) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-        }
-        if (head != Headers.Asset) revert InvalidBlock();
+    /// @notice Decode QUOTE and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return liability Decoded payload value.
+    /// @return debt Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackQuote(uint cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (asset, a, liability, b, nextCur) = unpack128(cur, Keys.Quote);
+        amount = uint(a);
+        debt = uint(b);
     }
 
-    /// @notice Decode a low-level fixed-width NODE block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return node Decoded node identifier.
-    function unpackNode(uint abs) internal pure returns (uint node) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            node := calldataload(add(abs, 0x08))
-        }
-        if (head != Headers.Node) revert InvalidBlock();
+    /// @notice Decode TRANSACTION and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return from Decoded payload value.
+    /// @return to Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackTransaction(uint cur) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (from, to, asset, a, nextCur) = unpack128(cur, Keys.Transaction);
+        amount = uint(a);
     }
 
-    /// @notice Decode a low-level fixed-width STATUS block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return code Decoded status code.
-    function unpackStatus(uint abs) internal pure returns (uint code) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            code := calldataload(add(abs, 0x08))
-        }
-        if (head != Headers.Status) revert InvalidBlock();
+    /// @notice Decode HOST_ACCOUNT_AMOUNT and return the advanced source cursor.
+    /// @dev Validates the exact header and containment through unpack128.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return host Full-width host value.
+    /// @return account Encoded account identifier.
+    /// @return asset Encoded asset identifier.
+    /// @return amount Full-width amount.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackHostAccountAmount(uint cur) internal pure returns (uint host, bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (a, account, asset, b, nextCur) = unpack128(cur, Keys.HostAccountAmount);
+        host = uint(a);
+        amount = uint(b);
     }
 
-    // Two-word payloads
-
-    /// @notice Decode a low-level fixed-width AMOUNT block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
-        uint64 head;
+    /// @notice Decode POSITIONCONSTRAINTS without enforcing its quantity constraints.
+    /// @dev Validates header and containment once, then copies the full-width fields into the struct.
+    function unpackPositionConstraints(uint cur) internal pure returns (PositionConstraints memory value, uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, Headers.PositionConstraints);
+        nextCur = advance(cur, 8 + 128);
         assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            amount := calldataload(add(abs, 0x28))
+            calldatacopy(value, add(abs, 8), 128)
         }
-        if (head != Headers.Amount) revert InvalidBlock();
     }
 
-    /// @notice Decode a low-level fixed-width BALANCE block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded balance.
-    function unpackBalance(uint abs) internal pure returns (bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            amount := calldataload(add(abs, 0x28))
-        }
-        if (head != Headers.Balance) revert InvalidBlock();
+    /// @notice Decode POSITION and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return liability Decoded payload value.
+    /// @return debt Decoded payload value.
+    /// @return counterparty Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackPosition(uint cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (asset, a, liability, b, counterparty, nextCur) = unpack160(cur, Keys.Position);
+        amount = uint(a);
+        debt = uint(b);
     }
 
-    /// @notice Decode a low-level fixed-width ASSET_LIABILITY block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset identifier.
-    /// @return liability Decoded liability identifier.
-    function unpackAssetLiability(uint abs) internal pure returns (bytes32 asset, bytes32 liability) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            liability := calldataload(add(abs, 0x28))
-        }
-        if (head != Headers.AssetLiability) revert InvalidBlock();
-    }
+    // Composite blocks: fixed fields followed by validated child cursors.
 
-    /// @notice Decode a low-level fixed-width ACCOUNT_ASSET block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    function unpackAccountAsset(uint abs) internal pure returns (bytes32 account, bytes32 asset) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            account := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-        }
-        if (head != Headers.AccountAsset) revert InvalidBlock();
-    }
-
-    // Three-word payloads
-
-    /// @notice Decode a low-level fixed-width BOOTSTRAP block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded balance amount.
-    /// @return budget Decoded native-value budget contribution.
-    function unpackBootstrap(uint abs) internal pure returns (bytes32 asset, uint amount, uint budget) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            amount := calldataload(add(abs, 0x28))
-            budget := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.Bootstrap) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width ALLOCATION block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded allocation.
-    function unpackAllocation(uint abs) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-            amount := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.Allocation) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width ALLOWANCE block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded allowance.
-    function unpackAllowance(uint abs) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-            amount := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.Allowance) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width CUSTODY block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded custody amount.
-    function unpackCustody(uint abs) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-            amount := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.Custody) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width ACCOUNT_AMOUNT block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackAccountAmount(uint abs) internal pure returns (bytes32 account, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            account := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-            amount := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.AccountAmount) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width HOST_AMOUNT block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackHostAmount(uint abs) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-            amount := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.HostAmount) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width HOST_ACCOUNT_ASSET block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    function unpackHostAccountAsset(uint abs) internal pure returns (uint host, bytes32 account, bytes32 asset) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            account := calldataload(add(abs, 0x28))
-            asset := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.HostAccountAsset) revert InvalidBlock();
-    }
-
-    /// @notice Decode a LIMITS block at an in-bounds absolute calldata position.
-    /// @param abs Absolute block position.
-    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
-    function unpackLimits(uint abs) internal pure returns (uint limits) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            limits := calldataload(add(abs, 0x08))
-        }
-        if (head != Headers.Limits) revert InvalidBlock();
-    }
-
-    /// @notice Decode ASSET_LIMITS at an in-bounds absolute calldata position.
-    function unpackAssetLimits(uint abs) internal pure returns (bytes32 asset, uint min, uint max) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            min := calldataload(add(abs, 0x28))
-            max := calldataload(add(abs, 0x48))
-        }
-        if (head != Headers.AssetLimits) revert InvalidBlock();
-    }
-
-    // Quote and position payloads
-
-    /// @notice Decode POSITION_LIMITS with exact denominations and inclusive full-width bounds.
-    /// @dev Caller must bound the complete block at this absolute calldata position.
-    function unpackPositionLimits(uint abs) internal pure returns (bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            minAmount := calldataload(add(abs, 0x28))
-            liability := calldataload(add(abs, 0x48))
-            maxDebt := calldataload(add(abs, 0x68))
-        }
-        if (head != Headers.PositionLimits) revert InvalidBlock();
-    }
-
-    /// @notice Decode a QUOTE at an in-bounds absolute calldata position.
-    /// Layout matches the first four fields of POSITION.
-    function unpackQuote(uint abs) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            amount := calldataload(add(abs, 0x28))
-            liability := calldataload(add(abs, 0x48))
-            debt := calldataload(add(abs, 0x68))
-        }
-        if (head != Headers.Quote) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width POSITION block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return asset Decoded asset-side identifier.
-    /// @return amount Decoded asset-side quantity.
-    /// @return liability Decoded liability-side identifier.
-    /// @return debt Decoded liability-side debt.
-    /// @return counterparty Decoded settlement counterparty.
-    function unpackPosition(
-        uint abs
-    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 0x08))
-            amount := calldataload(add(abs, 0x28))
-            liability := calldataload(add(abs, 0x48))
-            debt := calldataload(add(abs, 0x68))
-            counterparty := calldataload(add(abs, 0x88))
-        }
-        if (head != Headers.Position) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width HOST_ASSET block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    function unpackHostAsset(uint abs) internal pure returns (uint host, bytes32 asset) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            asset := calldataload(add(abs, 0x28))
-        }
-        if (head != Headers.HostAsset) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width TRANSACTION block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    function unpackTransaction(uint abs) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            from := calldataload(add(abs, 0x08))
-            to := calldataload(add(abs, 0x28))
-            asset := calldataload(add(abs, 0x48))
-            amount := calldataload(add(abs, 0x68))
-        }
-        if (head != Headers.Transaction) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width HOST_ACCOUNT_AMOUNT block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return host Decoded host identifier.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackHostAccountAmount(
-        uint abs
-    ) internal pure returns (uint host, bytes32 account, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            host := calldataload(add(abs, 0x08))
-            account := calldataload(add(abs, 0x28))
-            asset := calldataload(add(abs, 0x48))
-            amount := calldataload(add(abs, 0x68))
-        }
-        if (head != Headers.HostAccountAmount) revert InvalidBlock();
-    }
-
-    // Dynamic leaf blocks
-
-    /// @notice Decode one LIST payload and its absolute end position.
-    /// @param abs Absolute block position.
-    /// @return value Decoded list payload.
-    /// @return end Absolute position after the block.
-    function unpackList(uint abs) internal pure returns (bytes calldata value, uint end) {
-        uint key;
-        uint len;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-            value.offset := add(abs, 0x08)
-            value.length := len
-        }
-        if (key != uint32(Keys.List)) revert InvalidBlock();
-        // len came from uint32: adding the header cannot overflow. One
-        // checked addition retains the original absolute-position overflow panic.
+    /// @notice Decode RELAY's input and continuation BYTES children.
+    /// @dev Validates the parent once. The final child proves both children fit
+    /// and consume the parent exactly; malformed children revert InvalidBlock.
+    /// @param cur Bounded source cursor positioned at the RELAY header.
+    /// @return inputCur Clean cursor over the first BYTES payload.
+    /// @return stepsCur Clean cursor over the final BYTES payload; its end is RELAY's end.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function unpackRelay(uint cur) internal pure returns (uint inputCur, uint stepsCur, uint nextCur) {
+        uint abs = uint32(cur);
         unchecked {
-            len += Sizes.Header;
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Relay));
+            (inputCur, stepsCur) = pair(abs + 8, uint32(nextCur), Keys.Bytes);
         }
-        end = abs + len;
     }
 
-    /// @notice Decode one BYTES payload and its absolute end position.
-    /// @param abs Absolute block position.
-    /// @return value Decoded byte payload.
-    /// @return end Absolute position after the block.
-    function unpackBytes(uint abs) internal pure returns (bytes calldata value, uint end) {
-        uint key;
-        uint len;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-            value.offset := add(abs, 0x08)
-            value.length := len
-        }
-        if (key != uint32(Keys.Bytes)) revert InvalidBlock();
-        // len came from uint32: adding the header cannot overflow. One
-        // checked addition retains the original absolute-position overflow panic.
+    /// @notice Decode ANNOTATION and retain its final BYTES payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackAnnotation(uint cur) internal pure returns (uint entity, uint dataCur, uint nextCur) {
+        uint abs = uint32(cur);
         unchecked {
-            len += Sizes.Header;
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Annotation));
+            abs += 8;
+            entity = uint(read32(abs));
+            dataCur = tail(abs + 32, uint32(nextCur), Keys.Bytes);
         }
-        end = abs + len;
     }
 
-    /// @notice Decode one STRING payload and its absolute end position.
-    /// @param abs Absolute block position.
-    /// @return value Decoded string bytes.
-    /// @return end Absolute position after the block.
-    function unpackString(uint abs) internal pure returns (bytes calldata value, uint end) {
-        uint key;
-        uint len;
-        assembly ("memory-safe") {
-            let word := calldataload(abs)
-            key := shr(224, word)
-            len := and(shr(192, word), 0xffffffff)
-            value.offset := add(abs, 0x08)
-            value.length := len
-        }
-        if (key != uint32(Keys.String)) revert InvalidBlock();
-        // len came from uint32: adding the header cannot overflow. One
-        // checked addition retains the original absolute-position overflow panic.
+    /// @notice Decode LABEL and retain its final STRING payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackLabel(uint cur) internal pure returns (bytes32 namespace, uint nameCur, uint nextCur) {
+        uint abs = uint32(cur);
         unchecked {
-            len += Sizes.Header;
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Label));
+            abs += 8;
+            namespace = read32(abs);
+            nameCur = tail(abs + 32, uint32(nextCur), Keys.String);
         }
-        end = abs + len;
     }
 
-    // Composite blocks
-
-    /// @dev Validate the final BYTES child against the parent's known end.
-    /// Called only after validating a nonzero outer key. Fixed offsets are still
-    /// checked by the caller; a matching child header also implies its position
-    /// is in calldata. No logical-region bounds are added here.
-    function unpackTailBytes(uint abs, uint end) private pure returns (bytes calldata value) {
-        uint byteskey = uint32(Keys.Bytes);
-        bool valid;
-        assembly ("memory-safe") {
-            let body := add(abs, 8)
-            let len := sub(end, body)
-            valid := and(iszero(gt(len, 0xffffffff)), eq(shr(192, calldataload(abs)), or(shl(32, byteskey), len)))
-            value.offset := body
-            value.length := len
+    /// @notice Decode SCHEMA and retain its final STRING payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackSchema(uint cur) internal pure returns (uint spec, uint bodyCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Schema));
+            abs += 8;
+            spec = uint(read32(abs));
+            bodyCur = tail(abs + 32, uint32(nextCur), Keys.String);
         }
-        if (!valid) revert InvalidBlock();
     }
 
-    /// @dev STRING variant of unpackTailBytes; an underflowed end fails the
-    /// uint32 length check.
-    function unpackTailString(uint abs, uint end) private pure returns (bytes calldata value) {
-        uint stringkey = uint32(Keys.String);
-        bool valid;
-        assembly ("memory-safe") {
-            let body := add(abs, 8)
-            let len := sub(end, body)
-            valid := and(iszero(gt(len, 0xffffffff)), eq(shr(192, calldataload(abs)), or(shl(32, stringkey), len)))
-            value.offset := body
-            value.length := len
-        }
-        if (!valid) revert InvalidBlock();
-    }
-
-    // One fixed word
-
-    /// @notice Decode one ANNOTATION block and its nested block stream.
-    /// @param abs Absolute block position.
-    /// @return entity Decoded entity identifier.
-    /// @return stream Decoded annotation block stream.
-    /// @return end Absolute position after the block.
-    function unpackAnnotation(uint abs) internal pure returns (uint entity, bytes calldata stream, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Annotation);
-        assembly ("memory-safe") {
-            entity := calldataload(abs)
-        }
-        stream = unpackTailBytes(abs + 32, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one CONTEXT block and all nested byte blocks.
-    /// @param abs Absolute block position.
-    /// @return account Decoded account identifier.
-    /// @return state Decoded state payload.
-    /// @return input Decoded input payload.
-    /// @return end Absolute position after the block.
+    /// @notice Decode CONTEXT's account and its state/input BYTES children.
+    /// @dev Final-child validation proves the fixed account word and both children
+    /// fit before the account is loaded. Child shape failures revert InvalidBlock.
+    /// @param cur Bounded source cursor positioned at the CONTEXT header.
+    /// @return account Encoded account identifier; no account semantics are checked.
+    /// @return stateCur Clean cursor over the first BYTES payload.
+    /// @return inputCur Clean cursor over the final BYTES payload; its end is CONTEXT's end.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
     function unpackContext(
-        uint abs
-    ) internal pure returns (bytes32 account, bytes calldata state, bytes calldata input, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Context);
-        assembly ("memory-safe") {
-            account := calldataload(abs)
+        uint cur
+    ) internal pure returns (bytes32 account, uint stateCur, uint inputCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Context));
+            // Children first saves 9 gas/block in the viaIR consuming-loop benchmark.
+            (stateCur, inputCur) = pair(abs + 40, uint32(nextCur), Keys.Bytes);
         }
-        (state, end) = unpackBytes(abs + 32);
-        input = unpackTailBytes(end, limit);
-        end = limit;
-    }
-
-    // Two fixed words
-
-    /// @notice Decode one STEP block and its nested input.
-    /// @param abs Absolute block position.
-    /// @return cmd Decoded command identifier.
-    /// @return value Decoded native value.
-    /// @return input Decoded command input.
-    /// @return end Absolute position after the block.
-    function unpackStep(uint abs) internal pure returns (uint cmd, uint value, bytes calldata input, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Step);
         assembly ("memory-safe") {
-            cmd := calldataload(abs)
-            value := calldataload(add(abs, 0x20))
-        }
-        input = unpackTailBytes(abs + 64, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one CALL block and its nested payload.
-    /// @param abs Absolute block position.
-    /// @return target Decoded call target.
-    /// @return resources Decoded packed resources.
-    /// @return payload Decoded call payload.
-    /// @return end Absolute position after the block.
-    function unpackCall(
-        uint abs
-    ) internal pure returns (uint target, uint resources, bytes calldata payload, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Call);
-        assembly ("memory-safe") {
-            target := calldataload(abs)
-            resources := calldataload(add(abs, 0x20))
-        }
-        payload = unpackTailBytes(abs + 64, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one RELAY block and its nested input and continuation.
-    /// @param abs Absolute block position.
-    /// @return input Decoded command-specific input.
-    /// @return steps Decoded remaining pipeline steps.
-    /// @return end Absolute position after the block.
-    function unpackRelay(uint abs) internal pure returns (bytes calldata input, bytes calldata steps, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Relay);
-        (input, abs) = unpackBytes(abs);
-        steps = unpackTailBytes(abs, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one DISPATCH block and its nested payload.
-    /// @param abs Absolute block position.
-    /// @return portal Decoded destination portal.
-    /// @return resources Decoded packed resources.
-    /// @return payload Decoded dispatch payload.
-    /// @return end Absolute position after the block.
-    function unpackDispatch(
-        uint abs
-    ) internal pure returns (uint portal, uint resources, bytes calldata payload, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Dispatch);
-        assembly ("memory-safe") {
-            portal := calldataload(abs)
-            resources := calldataload(add(abs, 0x20))
-        }
-        payload = unpackTailBytes(abs + 64, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one LABEL block and its nested name.
-    /// @param abs Absolute block position.
-    /// @return namespace Decoded label namespace.
-    /// @return name Calldata view of the label text, without copying.
-    /// @return end Absolute position after the block.
-    function unpackLabel(uint abs) internal pure returns (bytes32 namespace, bytes calldata name, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Label);
-        assembly ("memory-safe") {
-            namespace := calldataload(abs)
-        }
-        name = unpackTailString(abs + 32, limit);
-        end = limit;
-    }
-
-    /// @notice Decode one SCHEMA block and its nested body.
-    /// @param abs Absolute block position.
-    /// @return spec Decoded block specification.
-    /// @return body Calldata view of the schema DSL text, including any `name:` prefix.
-    /// @return end Absolute position after the block.
-    function unpackSchema(uint abs) internal pure returns (uint spec, bytes calldata body, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Schema);
-        assembly ("memory-safe") {
-            spec := calldataload(abs)
-        }
-        body = unpackTailString(abs + 32, limit);
-        end = limit;
-    }
-
-    // Three fixed words
-
-    /// @notice Decode one RECOVER block and its nested witness.
-    /// @param abs Absolute block position.
-    /// @return handler Decoded recovery handler.
-    /// @return resources Decoded packed resources.
-    /// @return key Decoded recovery key.
-    /// @return witness Decoded recovery witness.
-    /// @return end Absolute position after the block.
-    function unpackRecover(
-        uint abs
-    ) internal pure returns (uint handler, uint resources, bytes32 key, bytes calldata witness, uint end) {
-        uint limit;
-        (abs, limit) = enter(abs, Keys.Recover);
-        assembly ("memory-safe") {
-            handler := calldataload(abs)
-            resources := calldataload(add(abs, 0x20))
-            key := calldataload(add(abs, 0x40))
-        }
-        witness = unpackTailBytes(abs + 96, limit);
-        end = limit;
-    }
-
-    // -------------------------------------------------------------------------
-    // Block factory helpers
-    // -------------------------------------------------------------------------
-
-    /// @dev Allocate an exact-length result with one trailing scratch word for
-    /// unchecked writers that store an eight-byte header with `mstore`.
-    function allocate(uint len) private pure returns (bytes memory value) {
-        // Every factory overwrites the complete logical result. Only initialize
-        // padding and the trailing scratch word, including when memory is dirty.
-        // Factory lengths are bounded by uint32 (plus a fixed header).
-        assembly ("memory-safe") {
-            value := mload(0x40)
-            let padded := and(add(len, 31), not(31))
-            let tail := add(add(value, 0x20), padded)
-            mstore(0x40, add(tail, 0x20))
-            mstore(value, len)
-            mstore(add(add(value, 0x20), len), 0)
+            account := calldataload(add(abs, 8))
         }
     }
 
-    // Generic factories
-
-    /// @notice Encode an empty block.
-    /// @param key Block type key.
-    /// @return value Encoded empty block header.
-    function createEmpty(bytes4 key) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Header);
-        writeEmpty(value, 0, key);
-    }
-
-    /// @notice Encode a block with a raw payload.
-    /// @param key Block type key.
-    /// @param payload Raw payload bytes.
-    /// @return value Encoded block bytes.
-    function create(bytes4 key, bytes memory payload) internal pure returns (bytes memory value) {
-        uint len = max32(payload.length);
-        value = allocate(Sizes.Header + len);
-        writeSized(value, 0, key, payload, len);
-    }
-
-    /// @notice Encode a block by copying its raw payload from calldata.
-    function createCopy(bytes4 key, bytes calldata payload) internal pure returns (bytes memory value) {
-        uint len = max32(payload.length);
-        value = allocate(Sizes.Header + len);
-        copySized(value, 0, key, payload, len);
-    }
-
-    // Dynamic leaf factories
-
-    /// @notice Encode a LIST block.
-    function createList(bytes memory value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(value.length);
-        blockdata = allocate(Sizes.Header + len);
-        writeList(blockdata, 0, value);
-    }
-
-    /// @notice Encode a LIST block by copying its payload from calldata.
-    function createListCopy(bytes calldata value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(value.length);
-        blockdata = allocate(Sizes.Header + len);
-        copySized(blockdata, 0, Keys.List, value, len);
-    }
-
-    /// @notice Encode a BYTES block with a raw payload.
-    /// @param value Raw payload bytes.
-    /// @return blockdata Encoded BYTES block bytes.
-    function createBytes(bytes memory value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(value.length);
-        blockdata = allocate(Sizes.Header + len);
-        writeBytes(blockdata, 0, value);
-    }
-
-    /// @notice Encode a BYTES block by copying its payload from calldata.
-    function createBytesCopy(bytes calldata value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(value.length);
-        blockdata = allocate(Sizes.Header + len);
-        copySized(blockdata, 0, Keys.Bytes, value, len);
-    }
-
-    /// @notice Encode a STRING block with a UTF-8 payload.
-    /// @param value String payload.
-    /// @return blockdata Encoded STRING block bytes.
-    function createString(string memory value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(bytes(value).length);
-        blockdata = allocate(Sizes.Header + len);
-        writeString(blockdata, 0, value);
-    }
-
-    /// @notice Encode a STRING block by copying its payload from calldata.
-    function createStringCopy(string calldata value) internal pure returns (bytes memory blockdata) {
-        uint len = max32(bytes(value).length);
-        blockdata = allocate(Sizes.Header + len);
-        copySized(blockdata, 0, Keys.String, bytes(value), len);
-    }
-
-    // Annotation factories
-
-    /// @notice Encode a LABEL block.
-    /// @param namespace Label namespace.
-    /// @param name Label text.
-    /// @return value Encoded LABEL block bytes.
-    function createLabel(bytes32 namespace, string memory name) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B32 + bytes(name).length);
-        value = allocate(Sizes.Header + len);
-        writeLabelAllocated(value, namespace, name);
-    }
-
-    /// @notice Encode a command loop-group annotation containing its description string.
-    /// @dev The grouping syntax is interpreted offchain, not validated here.
-    function createGroups(string memory description) internal pure returns (bytes memory value) {
-        return create(Keys.Groups, createString(description));
-    }
-
-    /// @notice Encode an ACTION annotation block.
-    /// @param actionid Canonical semantic action identifier.
-    /// @return value Encoded ACTION block bytes.
-    function createAction(uint actionid) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.B32);
-        write32(value, 0, Keys.Action, bytes32(actionid));
-    }
-
-    /// @notice Encode a COUNTERPARTY annotation block.
-    /// @param account Counterparty account ID, or zero for Rootzero.
-    /// @return value Encoded COUNTERPARTY block bytes.
-    function createCounterparty(bytes32 account) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.B32);
-        write32(value, 0, Keys.Counterparty, account);
-    }
-
-    /// @notice Encode an EXECUTION_COST annotation block.
-    /// @param base Fixed execution cost per invocation in destination-local units.
-    /// @param batch Additional execution cost per logical batch in the same units.
-    /// @return value Encoded EXECUTION_COST block bytes.
-    function createExecutionCost(uint base, uint batch) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.B64);
-        write64(value, 0, Keys.ExecutionCost, bytes32(base), bytes32(batch));
-    }
-
-    /// @notice Encode a SCHEMA block.
-    /// @param spec Block specification.
-    /// @param body Schema DSL string, optionally prefixed with `name:`.
-    /// @return value Encoded SCHEMA block bytes.
-    function createSchema(uint spec, string memory body) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B32 + bytes(body).length);
-        value = allocate(Sizes.Header + len);
-        writeSchemaAllocated(value, spec, body);
-    }
-
-    // Fixed-width factories
-
-    /// @notice Encode a BOOTSTRAP block.
-    /// @param asset Asset identifier.
-    /// @param amount Balance amount to source.
-    /// @param budget Native-value budget to source.
-    /// @return value Encoded BOOTSTRAP block bytes.
-    function createBootstrap(bytes32 asset, uint amount, uint budget) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Bootstrap);
-        writeBootstrap(value, 0, asset, amount, budget);
-    }
-
-    /// @notice Encode an AMOUNT block.
-    /// @param asset Asset identifier.
-    /// @param amount Token amount.
-    /// @return value Encoded AMOUNT block bytes.
-    function createAmount(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Amount);
-        writeAmount(value, 0, asset, amount);
-    }
-
-    /// @notice Encode a BALANCE block.
-    /// @param asset Asset identifier.
-    /// @param amount Token amount.
-    /// @return value Encoded BALANCE block bytes.
-    function createBalance(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Balance);
-        writeBalance(value, 0, asset, amount);
-    }
-
-    /// @notice Encode an ASSET_LIABILITY block.
-    /// @param asset Asset identifier.
-    /// @param liability Liability identifier.
-    /// @return value Encoded ASSET_LIABILITY block bytes.
-    function createAssetLiability(bytes32 asset, bytes32 liability) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.B64);
-        writeAssetLiability(value, 0, asset, liability);
-    }
-
-    /// @notice Encode a CUSTODY block.
-    /// @param host Host node ID holding the custody.
-    /// @param asset Asset identifier.
-    /// @param amount Token amount.
-    /// @return value Encoded CUSTODY block bytes.
-    function createCustody(uint host, bytes32 asset, uint amount) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Custody);
-        writeCustody(value, 0, host, asset, amount);
-    }
-
-    /// @notice Encode a LIMITS block with a packed inclusive minimum and maximum.
-    /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
-    /// @return value Encoded LIMITS block.
-    function createLimits(uint limits) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Limits);
-        writeLimits(value, 0, limits);
-    }
-
-    /// @notice Encode a QUOTE block.
-    function createQuote(
-        bytes32 asset,
-        uint amount,
-        bytes32 liability,
-        uint debt
-    ) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Quote);
-        writeQuote(value, 0, asset, amount, liability, debt);
-    }
-
-    /// @notice Encode a POSITION block.
-    /// @param asset Identifier for the asset side.
-    /// @param amount Quantity on the asset side.
-    /// @param liability Identifier for the liability side.
-    /// @param debt Quantity owed on the liability side.
-    /// @param counterparty Settlement counterparty: Rootzero (zero) or an account ID, including a host account.
-    /// @return value Encoded POSITION block bytes.
-    function createPosition(
-        bytes32 asset,
-        uint amount,
-        bytes32 liability,
-        uint debt,
-        bytes32 counterparty
-    ) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Position);
-        writePosition(value, 0, asset, amount, liability, debt, counterparty);
-    }
-
-    /// @notice Encode a TRANSACTION block.
-    /// @param from Source account identifier.
-    /// @param to Destination account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Transfer amount.
-    /// @return value Encoded TRANSACTION block bytes.
-    function createTransaction(
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Transaction);
-        writeTransaction(value, 0, from, to, asset, amount);
-    }
-
-    // Composite factories
-
-    /// @notice Encode a STEP block.
-    /// @param cmd Command identifier.
-    /// @param value Native value assigned to the step.
-    /// @param input Raw nested input payload.
-    /// @return encoded Encoded STEP block bytes.
-    function createStep(uint cmd, uint value, bytes memory input) internal pure returns (bytes memory encoded) {
-        uint len = max32(Sizes.Step + input.length);
-        encoded = allocate(len);
-        writeCompositeAllocated(encoded, Keys.Step, cmd, value, input);
-    }
-
-    /// @notice Encode a STEP block by copying its nested input from calldata.
-    function createStepCopy(uint cmd, uint value, bytes calldata input) internal pure returns (bytes memory encoded) {
-        uint len = max32(Sizes.Step + input.length);
-        encoded = allocate(len);
-        copyCompositeAllocated(encoded, Keys.Step, cmd, value, input);
-    }
-
-    /// @notice Encode a CALL block.
-    /// @param target Target node identifier.
-    /// @param resources Packed resources assigned to the call.
-    /// @param payload Raw calldata payload for the target.
-    /// @return value Encoded CALL block bytes.
-    function createCall(uint target, uint resources, bytes memory payload) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
-        value = allocate(len);
-        writeCompositeAllocated(value, Keys.Call, target, resources, payload);
-    }
-
-    /// @notice Encode a CALL block by copying its nested payload from calldata.
-    function createCallCopy(
-        uint target,
-        uint resources,
-        bytes calldata payload
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
-        value = allocate(len);
-        copyCompositeAllocated(value, Keys.Call, target, resources, payload);
-    }
-
-    /// @notice Encode a RELAY block.
-    /// @param input Nested command-specific input block stream.
-    /// @param steps Nested remaining STEP block stream.
-    /// @return value Encoded RELAY block bytes.
-    function createRelay(bytes memory input, bytes memory steps) internal pure returns (bytes memory value) {
-        uint len = max32(3 * Sizes.Header + input.length + steps.length);
-        value = allocate(len);
-        writeRelayAllocated(value, input, steps);
-    }
-
-    /// @notice Encode a RELAY block by copying its nested streams from calldata.
-    function createRelayCopy(bytes calldata input, bytes calldata steps) internal pure returns (bytes memory value) {
-        uint len = max32(3 * Sizes.Header + input.length + steps.length);
-        value = allocate(len);
-        copyRelayAllocated(value, input, steps);
-    }
-
-    /// @notice Encode a DISPATCH block.
-    /// @param portal Destination portal implementation's host ID, passed through
-    /// without semantic validation.
-    /// @param resources Chain-specific resources for the destination dispatch.
-    /// @param payload Encoded payload.
-    /// @return value Encoded DISPATCH block bytes.
-    function createDispatch(
-        uint portal,
-        uint resources,
-        bytes memory payload
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
-        value = allocate(len);
-        writeCompositeAllocated(value, Keys.Dispatch, portal, resources, payload);
-    }
-
-    /// @notice Encode a DISPATCH block by copying its nested payload from calldata.
-    function createDispatchCopy(
-        uint portal,
-        uint resources,
-        bytes calldata payload
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
-        value = allocate(len);
-        copyCompositeAllocated(value, Keys.Dispatch, portal, resources, payload);
-    }
-
-    /// @notice Encode a CONTEXT block.
-    function createContext(
-        bytes32 account,
-        bytes memory state,
-        bytes memory input
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
-        value = allocate(len);
-        writeContextAllocated(value, account, state, input);
-    }
-
-    /// @notice Encode a CONTEXT block by copying its nested streams from calldata.
-    function createContextCopy(
-        bytes32 account,
-        bytes calldata state,
-        bytes calldata input
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
-        value = allocate(len);
-        copyContextAllocated(value, account, state, input);
-    }
-
-    /// @notice Encode a RECOVER block.
-    function createRecover(
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes memory witness
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
-        value = allocate(len);
-        writeRecoverAllocated(value, handler, resources, recoverykey, witness);
-    }
-
-    /// @notice Encode a RECOVER block by copying its nested witness from calldata.
-    function createRecoverCopy(
-        uint handler,
-        uint resources,
-        bytes32 recoverykey,
-        bytes calldata witness
-    ) internal pure returns (bytes memory value) {
-        uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
-        value = allocate(len);
-        copyRecoverAllocated(value, handler, resources, recoverykey, witness);
-    }
-}
-
-/// @title Memory
-/// @notice Fixed-stride decoding for homogeneous block streams held in memory.
-/// @dev The unpackers are intentionally unchecked beyond their exact header
-/// comparison. Callers must obtain bounds with `bounds`, advance by the matching
-/// complete encoded block size, and stop at the returned end position.
-library Memory {
-    /// @notice Return absolute bounds for a fixed-stride memory block stream.
-    /// @dev DANGER: Empty streams are valid and `size` must be nonzero. The size
-    /// must include the complete block header and payload.
-    /// @param source Memory block stream.
-    /// @param size Complete encoded size of each block.
-    /// @return abs Absolute memory position of the first block header.
-    /// @return end Absolute memory position immediately after the source.
-    function bounds(bytes memory source, uint size) internal pure returns (uint abs, uint end) {
-        uint len = source.length;
-        uint remainder;
-        assembly ("memory-safe") {
-            remainder := mod(len, size)
-            abs := add(source, 0x20)
-            end := add(abs, len)
+    /// @notice Decode STEP's words and input, returning the advanced source cursor.
+    /// @dev Reuses the parent and final-child validation primitives without rechecking bounds.
+    /// The returned input range is independent of the enclosing source cursor.
+    /// @param cur Bounded source cursor positioned at the STEP header.
+    /// @return cmd Encoded command identifier.
+    /// @return value Unsigned native value.
+    /// @return inputCur Clean cursor over the final BYTES payload only.
+    /// @return nextCur Source cursor after STEP, retaining its original end and metadata.
+    function unpackStep(uint cur) internal pure returns (uint cmd, uint value, uint inputCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Step));
+            abs += 8;
+            // Tail first saves 3 gas/block in minimal viaIR consuming loops.
+            inputCur = tail(abs + 64, uint32(nextCur), Keys.Bytes);
+            cmd = uint(read32(abs));
+            value = uint(read32(abs + 32));
         }
-        if (remainder != 0) revert Blocks.InvalidBlock();
     }
 
-    /// @notice Decode ASSET_LIMITS at an in-bounds absolute memory position.
-    function unpackAssetLimits(uint abs) internal pure returns (bytes32 asset, uint min, uint max) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, mload(abs))
-            asset := mload(add(abs, 0x08))
-            min := mload(add(abs, 0x28))
-            max := mload(add(abs, 0x48))
+    /// @notice Decode CALL and retain its final BYTES payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackCall(uint cur) internal pure returns (uint target, uint resources, uint payloadCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Call));
+            abs += 8;
+            target = uint(read32(abs));
+            resources = uint(read32(abs + 32));
+            payloadCur = tail(abs + 64, uint32(nextCur), Keys.Bytes);
         }
-        if (head != Headers.AssetLimits) revert Blocks.InvalidBlock();
     }
 
-    /// @notice Decode a LIMITS block at an in-bounds absolute memory position.
-    /// @param abs Absolute block position obtained from bounds.
-    /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
-    function unpackLimits(uint abs) internal pure returns (uint limits) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, mload(abs))
-            limits := mload(add(abs, 0x08))
+    /// @notice Decode DISPATCH and retain its final BYTES payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackDispatch(uint cur) internal pure returns (uint portal, uint resources, uint payloadCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Dispatch));
+            abs += 8;
+            portal = uint(read32(abs));
+            resources = uint(read32(abs + 32));
+            payloadCur = tail(abs + 64, uint32(nextCur), Keys.Bytes);
         }
-        if (actual != Headers.Limits) revert Blocks.InvalidBlock();
     }
 
-    /// @notice Decode a BALANCE block at an in-bounds absolute memory position.
-    function unpackBalance(uint abs) internal pure returns (bytes32 asset, uint amount) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, mload(abs))
-            asset := mload(add(abs, 0x08))
-            amount := mload(add(abs, 0x28))
+    /// @notice Decode RECOVER and retain its final BYTES payload as a cursor.
+    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
+    /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    function unpackRecover(uint cur) internal pure returns (uint handler, uint resources, bytes32 key, uint witnessCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Recover));
+            abs += 8;
+            handler = uint(read32(abs));
+            resources = uint(read32(abs + 32));
+            key = read32(abs + 64);
+            witnessCur = tail(abs + 96, uint32(nextCur), Keys.Bytes);
         }
-        if (actual != Headers.Balance) revert Blocks.InvalidBlock();
     }
 
-    /// @notice Decode a POSITION block at an in-bounds absolute memory position.
-    function unpackPosition(
-        uint abs
-    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, mload(abs))
-            asset := mload(add(abs, 0x08))
-            amount := mload(add(abs, 0x28))
-            liability := mload(add(abs, 0x48))
-            debt := mload(add(abs, 0x68))
-            counterparty := mload(add(abs, 0x88))
+    /// @notice Check LIMITS against full-width quantities and advance the source.
+    /// @dev Validates header and containment once. The high 128 bits are the inclusive
+    /// minimum amount; the low 128 bits are the literal inclusive maximum debt.
+    function expectLimits(uint cur, uint amount, uint debt) internal pure returns (uint nextCur) {
+        uint limits;
+        (limits, nextCur) = unpackLimits(cur);
+        if (amount < (limits >> 128) || debt > uint128(limits)) revert OutOfRange();
+    }
+
+    /// @notice Check BALANCE_CONSTRAINTS against a balance and advance the source cursor.
+    /// @dev Validates the exact header, containment, asset, then inclusive full-width
+    /// quantity bounds, once each in that order. Zero maximum is literal, not unbounded.
+    /// Reverts InvalidBlock for a header mismatch, OutOfBounds for failed containment,
+    /// UnexpectedValue for an asset mismatch, or OutOfRange for a quantity violation.
+    /// @param cur Bounded source cursor positioned at the constraints header.
+    /// @param asset Expected balance asset identifier.
+    /// @param amount Full-width balance amount to check against both bounds.
+    /// @return nextCur Advanced source cursor preserving its original end and metadata.
+    function expectBalanceConstraints(uint cur, bytes32 asset, uint amount) internal pure returns (uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, Headers.BalanceConstraints);
+        nextCur = advance(cur, 8 + 96);
+        unchecked {
+            checkBalanceConstraints(abs + 8, asset, amount);
         }
-        if (actual != Headers.Position) revert Blocks.InvalidBlock();
     }
 
-    /// @notice Decode a POSITION struct at an in-bounds absolute memory position.
-    /// @dev Validates the exact header and preserves all fields, including counterparty.
-    function unpackPositionValue(uint abs) internal pure returns (Position memory value) {
-        (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(abs);
-    }
-
-    /// @notice Decode a TRANSACTION block at an in-bounds absolute memory position.
-    function unpackTransaction(uint abs) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, mload(abs))
-            from := mload(add(abs, 0x08))
-            to := mload(add(abs, 0x28))
-            asset := mload(add(abs, 0x48))
-            amount := mload(add(abs, 0x68))
+    /// @notice Check POSITION_CONSTRAINTS directly against a position.
+    /// @dev Validates the exact header, containment, identifiers, then inclusive
+    /// quantity bounds, in that order. Does not allocate a constraints struct,
+    /// modify the position or check its counterparty. Returns the advanced source
+    /// cursor for the caller to assign, preserving its original end and metadata.
+    /// Identifier mismatch reverts UnexpectedValue; a quantity violation reverts
+    /// OutOfRange. Zero maximum debt is a literal zero, not an unbounded sentinel.
+    /// @param cur Bounded source cursor positioned at the constraints header.
+    /// @param position Position whose exact identifiers and full-width amounts are checked.
+    /// @return nextCur Source cursor positioned immediately after the constraints block.
+    function expectPositionConstraints(uint cur, Position memory position) internal pure returns (uint nextCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, Headers.PositionConstraints);
+        nextCur = advance(cur, 8 + 128);
+        unchecked {
+            checkPositionConstraints(abs + 8, position);
         }
-        if (actual != Headers.Transaction) revert Blocks.InvalidBlock();
     }
 }

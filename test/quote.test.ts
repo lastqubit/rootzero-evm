@@ -14,9 +14,9 @@ describe("Quote codec", () => {
   let helper: Awaited<ReturnType<typeof deploy>>;
   before(async () => { helper = await deploy("TestQuote"); });
 
-  it("keeps QUOTE distinct from POSITION_LIMITS despite their matching payload size", async () => {
-    const limits = concat(Keys.PositionLimits, ethers.toBeHex(128, 4), ethers.dataSlice(encoded, 8));
-    await expect(helper.decode(limits, false)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+  it("keeps QUOTE distinct from POSITION_CONSTRAINTS despite their matching payload size", async () => {
+    const limits = concat(Keys.PositionConstraints, ethers.toBeHex(128, 4), ethers.dataSlice(encoded, 8));
+    await expect(helper.decode(limits)).to.be.revertedWithCustomError(helper, "InvalidBlock");
   });
 
   it("advertises four full-width words in position field order", async () => {
@@ -36,8 +36,8 @@ describe("Quote codec", () => {
       const block = encodeQuoteBlock(asset, amount, liability, debt);
       expect(await helper.create(value)).to.equal(block);
       for (const scalar of [true, false]) {
-        expect(await helper.write(value, scalar)).to.equal(block);
-        expect(Array.from(await helper.decode(block, scalar))).to.deep.equal(value);
+        expect(await helper.write(value)).to.equal(block);
+        expect(Array.from(await helper.decode(block))).to.deep.equal(value);
         expect(await helper.execute(encodeContextBlock(ethers.ZeroHash, state, block), scalar)).to.equal(block);
       }
     });
@@ -51,16 +51,16 @@ describe("Quote codec", () => {
     });
 
     it(`rejects truncation and incorrect headers (${scalar})`, async () => {
-      await expect(helper.decode(ethers.dataSlice(encoded, 0, 135), scalar))
+      await expect(helper.decode(ethers.dataSlice(encoded, 0, 135)))
         .to.be.revertedWithCustomError(helper, "OutOfBounds");
-      await expect(helper.decode(state, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+      await expect(helper.decode(state)).to.be.revertedWithCustomError(helper, "InvalidBlock");
       for (const payload of [
         concat(asset, liability, ethers.toBeHex(packLimits(123n, 456n), 32)),
         concat(asset, ethers.toBeHex(123n, 32), liability, ethers.toBeHex(456n, 32), counterparty),
       ]) {
         // Trailing data makes the old short format readable; its header must still fail.
         const malformed = concat(encodeBlock(Keys.Quote, payload), encoded);
-        await expect(helper.decode(malformed, scalar)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+        await expect(helper.decode(malformed)).to.be.revertedWithCustomError(helper, "InvalidBlock");
         await expect(helper.execute(encodeContextBlock(ethers.ZeroHash, state, malformed), scalar))
           .to.be.revertedWithCustomError(helper, "InvalidBlock");
       }

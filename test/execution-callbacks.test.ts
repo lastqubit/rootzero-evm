@@ -75,7 +75,7 @@ describe("Execution runners", () => {
   it("does not silently finish when input is exhausted but state remains", async () => {
     const context = encodeContextBlock(account, encodeBalanceBlock(asset, 7n), encodeAmountBlock(asset, 3n));
     await expect(helper.execute(context, { gasLimit: 1_000_000 }))
-      .to.be.revertedWithCustomError(helper, "OutOfBounds");
+      .to.be.revertedWithCustomError(helper, "InvalidBlock");
     expect(await helper.processed()).to.equal(0n);
   });
 
@@ -100,7 +100,7 @@ describe("Execution runners", () => {
 
   it("runCommandOnce lets the callback reject missing required input and propagates hook errors", async () => {
     await expect(helper.executeOnce(encodeContextBlock(account, "0x", "0x")))
-      .to.be.revertedWithCustomError(helper, "OutOfBounds");
+      .to.be.revertedWithCustomError(helper, "InvalidBlock");
     await expect(helper.executeOnce(encodeContextBlock(account, "0x", encodeAmountBlock(asset, 13n))))
       .to.be.revertedWithCustomError(helper, "RejectedRequest");
     expect(await helper.processed()).to.equal(0n);
@@ -140,7 +140,7 @@ describe("Execution runners", () => {
     const first = encodeAmountBlock(asset, 3n);
     for (const [input, value, error] of [
       [concat(first, first), 1n, "InsufficientValue"],
-      [concat(first, "0x01"), 5n, "OutOfBounds"],
+      [concat(first, "0x01"), 5n, "InvalidBlock"],
       [concat(first, encodeAmountBlock(asset, 13n)), 5n, "RejectedRequest"],
     ] as const) {
       await expect(helper.executePort(input, { value, gasLimit: 1_000_000 }))

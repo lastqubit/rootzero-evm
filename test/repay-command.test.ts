@@ -69,7 +69,7 @@ describe("Repay command", () => {
     });
     it("rejects nonempty input and malformed position streams", async () => {
       const state = encodePositionBlock(asset, 100n, liability, 5n);
-      await expect(invoke(state, "0x01")).to.be.revertedWithCustomError(host, "OutOfBounds");
+      await expect(invoke(state, "0x01")).to.be.revertedWithCustomError(host, "InvalidBlock");
       await expect(invoke(concat(state, ethers.dataSlice(state, 0, 167)))).to.be.revertedWithCustomError(host, "OutOfBounds");
       await expect(invoke("0xffffffff" + state.slice(10))).to.be.revertedWithCustomError(host, "InvalidBlock");
       expect(await host.balance(account, liability)).to.equal(40n);

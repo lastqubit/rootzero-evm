@@ -75,6 +75,23 @@ struct HostAccountAmount {
     uint amount;
 }
 
+/// @notice Exact balance asset and inclusive full-width amount bounds.
+struct BalanceConstraints {
+    bytes32 asset;
+    uint min;
+    uint max;
+}
+
+/// @notice Exact position identifiers and inclusive full-width quantity bounds.
+struct PositionConstraints {
+    bytes32 asset;
+    /// @dev Inclusive minimum asset receipt.
+    uint amount;
+    bytes32 liability;
+    /// @dev Inclusive maximum liability payment.
+    uint debt;
+}
+
 /// @notice Quoted asset and liability quantities, independent of live position state.
 /// @dev Consumers define quotation semantics. Both quantities are full-width uints; counterparty is separate.
 struct Quote {

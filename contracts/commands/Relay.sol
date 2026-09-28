@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Execution, Executions, CommandBase, Flags, Specs, Blocks} from "./Base.sol";
+import {Encoder} from "../codec/Encoder.sol";
+import {Blocks} from "../codec/Blocks.sol";
+import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 
 using Executions for Execution;
+using Blocks for uint;
 
 /// @notice Hook implemented by hosts that relay command contexts.
 abstract contract RelayPayableHook {
@@ -15,7 +18,7 @@ abstract contract RelayPayableHook {
     /// pipeline's complete remaining budget. Implementations must consume or
     /// forward `context`; the command returns empty state when the hook completes.
     /// @param account Destination command account, also encoded in `context`.
-    /// @param input Command-specific input supplied by the handoff step.
+    /// @param inputCur Cursor over command-specific input supplied by the handoff step.
     /// Implementations define and decode this stream according to their transport.
     /// @param context Canonical CONTEXT block containing the command account,
     /// complete forwarded state, and remaining STEP stream as its input.
@@ -23,7 +26,7 @@ abstract contract RelayPayableHook {
     /// destination resource funding.
     function relay(
         bytes32 account,
-        bytes calldata input,
+        uint inputCur,
         bytes memory context,
         Execution memory funds
     ) internal virtual;
@@ -44,8 +47,8 @@ abstract contract RelayPayable is CommandBase, RelayPayableHook {
     }
 
     function relayPayableOnce(Execution memory exec) private {
-        (bytes calldata input, bytes calldata steps) = exec.unpackRelay();
-        relay(exec.account, input, Blocks.createContextCopy(exec.account, steps[0:0], steps), exec);
+        (uint inputCur, uint stepsCur) = exec.unpackRelay();
+        relay(exec.account, inputCur, Encoder.createContext(exec.account, 0, stepsCur), exec);
     }
 }
 
@@ -70,8 +73,8 @@ abstract contract RelayBalancePayable is CommandBase, RelayPayableHook {
     }
 
     function relayBalancePayableOnce(Execution memory exec) private {
-        (bytes calldata input, bytes calldata steps) = exec.unpackRelay();
-        bytes calldata state = exec.takeRawBalances();
-        relay(exec.account, input, Blocks.createContextCopy(exec.account, state, steps), exec);
+        (uint inputCur, uint stepsCur) = exec.unpackRelay();
+        uint stateCur = exec.takeBalances();
+        relay(exec.account, inputCur, Encoder.createContext(exec.account, stateCur, stepsCur), exec);
     }
 }

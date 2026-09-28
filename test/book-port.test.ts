@@ -60,7 +60,7 @@ describe("BookPort", () => {
   for (const length of [1, 7, 8, 103, 104, 105, 207]) {
     it(`rejects an incomplete pair of ${length} bytes and rolls back earlier pairs`, async () => {
       await expect(peer.portBook(concat(booking, ethers.dataSlice(booking, 0, length))))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, length % 104 < 8 ? "InvalidBlock" : "OutOfBounds");
       expect(await balances()).to.deep.equal([80n, 0n]);
     });
   }
@@ -83,7 +83,7 @@ describe("BookPort", () => {
   });
   it("rejects an unmatched final ACCOUNT_AMOUNT block", async () => {
     await expect(peer.portBook(concat(booking, debit)))
-      .to.be.revertedWithCustomError(host, "OutOfBounds");
+      .to.be.revertedWithCustomError(host, "InvalidBlock");
     expect(await balances()).to.deep.equal([80n, 0n]);
   });
   it("rolls back earlier pairs when a later debit fails", async () => {

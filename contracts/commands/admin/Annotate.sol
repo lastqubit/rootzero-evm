@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Blocks} from "../../codec/Blocks.sol";
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
 using Executions for Execution;
+using Blocks for uint;
 
 /// @title Annotate
 /// @notice Admin command that attaches encoded annotation block streams to entities.
@@ -25,8 +27,8 @@ abstract contract Annotate is AdminBase {
         Execution memory exec = openAdminCommand(context, descriptor);
 
         while (exec.more()) {
-            (uint entity, bytes calldata data) = exec.unpackAnnotation();
-            emit Annotation(entity, data);
+            (uint entity, uint dataCur) = exec.unpackAnnotation();
+            emit Annotation(entity, dataCur.toBytes());
         }
 
         return exec.close();

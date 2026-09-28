@@ -4,15 +4,18 @@ pragma solidity ^0.8.33;
 import {CommandAccess} from "./Access.sol";
 import {STEP_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
 import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
+import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 
 /// @notice Hook implemented by hosts that execute encoded step streams.
 abstract contract PipeHook {
-    /// @notice Execute a step stream and return its remaining native-value budget.
+    /// @notice Execute a bounded calldata STEP cursor and return its remaining native-value budget.
+    /// @dev stepsCur uses absolute start/end lanes in bits 0-31/32-63. Callers
+    /// establish calldata provenance. State remains an owned memory buffer.
     function pipe(
         bytes32 account,
         bytes memory state,
-        bytes calldata steps,
+        uint stepsCur,
         uint budget
     ) internal virtual returns (uint remaining);
 }
@@ -23,13 +26,14 @@ abstract contract ExecuteHook {
     /// @dev Implementations returning `handled = true` are responsible for
     /// authorizing the command. Return false without side effects to delegate to
     /// the trusted normal external entrypoint. Handoff commands must be delegated
-    /// because this hook receives ordinary input without the continuation that
+    /// because this hook receives an ordinary input payload cursor without the continuation that
     /// Pipeline adds to the RELAY envelope. Implementations may revert instead.
+    /// Input is a validated calldata payload cursor; state and output remain memory buffers.
     function execute(
         uint cmd,
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal virtual returns (bool handled, bytes memory output, uint credit);
 }
@@ -41,19 +45,16 @@ abstract contract ExecuteHook {
 /// selector, target, or flag placement, or to those block layouts, must update
 /// the corresponding assembly and packed-cursor logic here.
 abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
-    /// @dev Private pipeline cursor layout:
-    /// bits 0-31 current STEP offset, 32-63 stream end,
-    /// 64-95 command-input offset, 96-127 command-input length.
-    /// Offsets and lengths start as uint32 values; adding two such values
-    /// plus at most 80 cannot overflow uint256. Exact child consumption and
-    /// end <= uint32(streamEnd) prove input and end fit their packed lanes.
-    function takeStep(uint cursor) private pure returns (uint cmd, uint value, uint updated) {
+    /// @dev Decode one STEP into its command, value, clean input cursor, and
+    /// advanced stream cursor. Both cursors use standard absolute start/end lanes.
+    /// The exact child end and stream bound prove both cursors fit uint32 lanes.
+    function takeStep(uint cur) private pure returns (uint cmd, uint value, uint inputCur, uint nextCur) {
         assembly ("memory-safe") {
             function fail(selector) {
                 mstore(0, selector)
                 revert(28, 4)
             }
-            let abs := and(cursor, 0xffffffff)
+            let abs := and(cur, 0xffffffff)
             let head := calldataload(abs)
             if iszero(eq(shr(224, head), STEP_KEY)) {
                 fail(INVALID_BLOCK)
@@ -70,37 +71,30 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             if iszero(eq(add(input, size), end)) {
                 fail(INVALID_BLOCK)
             }
-            if gt(end, and(shr(32, cursor), 0xffffffff)) {
+            if gt(end, and(shr(32, cur), 0xffffffff)) {
                 fail(OUT_OF_BOUNDS)
             }
-            updated := or(or(end, and(cursor, 0xffffffff00000000)), or(shl(64, input), shl(96, size)))
+            inputCur := or(input, shl(32, end))
+            nextCur := or(end, and(cur, not(0xffffffff)))
         }
     }
 
-    function rawInput(uint cursor) private pure returns (bytes calldata input) {
-        assembly ("memory-safe") {
-            input.offset := and(shr(64, cursor), 0xffffffff)
-            input.length := and(shr(96, cursor), 0xffffffff)
-        }
-    }
-
-    /// @dev Execute the prepared command call and strictly decode `(bytes, uint)`.
-    /// `run` passes either a 64-bit input offset/length pair for ordinary calls,
-    /// or the complete cursor for handoffs. A complete cursor always has a nonzero
-    /// command-input offset in bits 64-95, even when that input is empty, because
-    /// takeStep obtained it from a BYTES block inside the current calldata.
+    /// @dev Execute a prepared command and strictly decode (bytes, uint).
+    /// inputCur is its payload cursor. stepsCur is zero for ordinary calls or the
+    /// remaining STEP cursor for handoffs (nonzero even when that range is empty).
     function invokeCommand(
         bytes4 selector,
         address target,
         uint value,
         bytes32 account,
         bytes memory state,
-        uint input
+        uint inputCur,
+        uint stepsCur
     ) private returns (bytes memory output, uint credit) {
         assembly ("memory-safe") {
             // Encode selector(bytes): ABI prefix, CONTEXT(account, state, input),
             // then zero padding. The allocation remains temporary until the call.
-            function encodeCall(ptr, callSelector, activeAccount, stateBytes, inputCursor) -> size {
+            function encodeCall(ptr, callSelector, activeAccount, stateBytes, inputCursor, stepsCursor) -> size {
                 let context := add(ptr, 0x44)
                 let stateBlock := add(context, 40)
                 let stateLength := mload(stateBytes)
@@ -108,24 +102,24 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 mcopy(add(stateBlock, 8), add(stateBytes, 32), stateLength)
                 let inputPtr := add(add(stateBlock, 8), stateLength)
                 let end
+                let inputAbs := and(inputCursor, 0xffffffff)
+                let inputLength := sub(and(shr(32, inputCursor), 0xffffffff), inputAbs)
                 // Ordinary calls carry BYTES input; handoffs carry RELAY(input, remaining steps).
-                switch iszero(shr(64, inputCursor))
+                switch iszero(stepsCursor)
                 case 1 {
-                    let inputLength := and(shr(32, inputCursor), 0xffffffff)
                     mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, inputLength)))
-                    calldatacopy(add(inputPtr, 8), and(inputCursor, 0xffffffff), inputLength)
+                    calldatacopy(add(inputPtr, 8), inputAbs, inputLength)
                     end := add(add(inputPtr, 8), inputLength)
                 }
                 default {
-                    let inputLength := and(shr(96, inputCursor), 0xffffffff)
-                    let stepsOffset := and(inputCursor, 0xffffffff)
-                    let stepsLength := sub(and(shr(32, inputCursor), 0xffffffff), stepsOffset)
+                    let stepsOffset := and(stepsCursor, 0xffffffff)
+                    let stepsLength := sub(and(shr(32, stepsCursor), 0xffffffff), stepsOffset)
                     let relayLength := add(16, add(inputLength, stepsLength))
                     mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, add(8, relayLength))))
                     mstore(add(inputPtr, 8), or(shl(224, RELAY_KEY), shl(192, relayLength)))
                     let inputBlock := add(inputPtr, 16)
                     mstore(inputBlock, or(shl(224, BYTES_KEY), shl(192, inputLength)))
-                    calldatacopy(add(inputBlock, 8), and(shr(64, inputCursor), 0xffffffff), inputLength)
+                    calldatacopy(add(inputBlock, 8), inputAbs, inputLength)
                     let stepsBlock := add(add(inputBlock, 8), inputLength)
                     mstore(stepsBlock, or(shl(224, BYTES_KEY), shl(192, stepsLength)))
                     calldatacopy(add(stepsBlock, 8), stepsOffset, stepsLength)
@@ -180,7 +174,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             }
 
             let scratch := mload(0x40)
-            let size := encodeCall(scratch, selector, account, state, input)
+            let size := encodeCall(scratch, selector, account, state, inputCur, stepsCur)
             let callTarget := and(target, 0xffffffffffffffffffffffffffffffffffffffff)
             if iszero(call(gas(), callTarget, value, scratch, size, 0, 0)) {
                 revertCall(scratch, callTarget, selector)
@@ -194,17 +188,18 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         bytes32 account,
         bytes memory state,
         uint value,
-        uint cursor
-    ) private returns (bytes memory output, uint credit, uint updated) {
+        uint inputCur,
+        uint cur
+    ) private returns (bytes memory output, uint credit, uint nextCur) {
         if (address(uint160(cmd)) == address(this)) {
             bool handled;
-            (handled, output, credit) = execute(cmd, account, state, rawInput(cursor), value);
-            if (handled) return (output, credit, cursor);
+            (handled, output, credit) = execute(cmd, account, state, inputCur, value);
+            if (handled) return (output, credit, cur);
         }
         (bytes4 selector, address target) = enforceCommand(cmd);
         bool handoff = uint8(cmd >> 224) & Flags.Handoff != 0;
-        (output, credit) = invokeCommand(selector, target, value, account, state, handoff ? cursor : cursor >> 64);
-        updated = handoff ? (cursor & ~uint(type(uint32).max)) | uint32(cursor >> 32) : cursor;
+        (output, credit) = invokeCommand(selector, target, value, account, state, inputCur, handoff ? cur : 0);
+        nextCur = handoff ? Cursors.exhaust(cur) : cur;
     }
 
     /// @notice Execute a STEP block stream through the pipeline.
@@ -212,29 +207,27 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// Callers remain responsible for settling the returned unspent value.
     /// @param account Account identifier used for each dispatched step.
     /// @param state Initial state block stream passed to the first step.
-    /// @param steps STEP block stream to execute.
+    /// @param stepsCur Bounded calldata cursor over the STEP stream to execute.
     /// @param budget Native-value budget shared across all steps.
     /// @return remaining Native value remaining after every step executes.
     function pipe(
         bytes32 account,
         bytes memory state,
-        bytes calldata steps,
+        uint stepsCur,
         uint budget
     ) internal virtual override returns (uint remaining) {
-        uint cursor;
-        assembly ("memory-safe") {
-            cursor := or(steps.offset, shl(32, add(steps.offset, steps.length)))
-        }
+        uint cur = stepsCur;
 
-        while (uint32(cursor) < uint32(cursor >> 32)) {
+        while (Cursors.more(cur)) {
             uint cmd;
             uint value;
-            (cmd, value, cursor) = takeStep(cursor);
+            uint inputCur;
+            (cmd, value, inputCur, cur) = takeStep(cur);
             if (value > budget) revert InsufficientValue();
             unchecked {
                 budget -= value;
             }
-            (state, value, cursor) = run(cmd, account, state, value, cursor);
+            (state, value, cur) = run(cmd, account, state, value, inputCur, cur);
             assembly ("memory-safe") {
                 let total := add(budget, value)
                 if lt(total, budget) {

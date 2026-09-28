@@ -2,10 +2,9 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {BALANCE_HEADER, ASSET_LIMITS_HEADER} from "../codec/Specs.sol";
-import {INVALID_BLOCK, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
+import {Execute} from "../codec/Execute.sol";
 
-/// @notice Check each BALANCE amount against paired inclusive ASSET_LIMITS and preserve the balance.
+/// @notice Check each BALANCE amount against paired inclusive BALANCE_CONSTRAINTS and preserve the balance.
 /// @dev Checks asset identity and quantity, not authorization or backing.
 abstract contract CheckBalance is CommandBase {
     using Executions for Execution;
@@ -14,7 +13,7 @@ abstract contract CheckBalance is CommandBase {
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("checkBalance", Specs.Balance, Specs.AssetLimits, Specs.Balance, 0);
+        (id, descriptor) = command("checkBalance", Specs.Balance, Specs.BalanceConstraints, Specs.Balance, 0);
     }
 
     /// @notice Return the registered checkBalance command ID.
@@ -23,7 +22,7 @@ abstract contract CheckBalance is CommandBase {
     }
 
     /// @notice Require the expected asset and minimum <= amount <= maximum for each balance.
-    /// @param context Command context with one ASSET_LIMITS input per BALANCE state block.
+    /// @param context Command context with one BALANCE_CONSTRAINTS input per BALANCE state block.
     /// @return Unchanged BALANCE blocks.
     /// @return Zero native budget credit.
     function checkBalance(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
@@ -32,7 +31,7 @@ abstract contract CheckBalance is CommandBase {
 
     function checkBalanceOne(Execution memory exec) private pure {
         (bytes32 asset, uint amount) = exec.unpackBalance();
-        exec.expectAssetLimits(asset, amount);
+        exec.expectBalanceConstraints(asset, amount);
         exec.outputBalance(asset, amount);
     }
 }
@@ -41,7 +40,7 @@ abstract contract CheckBalance is CommandBase {
 abstract contract ExecuteCheckBalance is CheckBalance {
     /// @notice Validate balances in place without unpacking or copying their blocks.
     /// @param state BALANCE block stream in memory.
-    /// @param input Exactly one calldata ASSET_LIMITS block per balance.
+    /// @param inputCur Cursor over exactly one calldata BALANCE_CONSTRAINTS block per balance.
     /// @param value Assigned native budget, returned unused.
     /// @return handled Always true.
     /// @return output The original state buffer, unchanged.
@@ -49,44 +48,10 @@ abstract contract ExecuteCheckBalance is CheckBalance {
     function executeCheckBalance(
         bytes32,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal pure returns (bool handled, bytes memory output, uint credit) {
-        assembly ("memory-safe") {
-            function fail(selector) {
-                mstore(0, selector)
-                revert(28, 4)
-            }
-            let size := mload(state)
-            // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
-            if or(mod(input.length, 104), iszero(eq(size, mul(div(input.length, 104), 72)))) {
-                fail(INVALID_BLOCK)
-            }
-            let start := add(state, 32)
-            let end := add(start, size)
-            let q := input.offset
-            // Strides include each block's eight-byte header.
-            for {
-                let p := start
-            } lt(p, end) {
-                p := add(p, 72)
-                q := add(q, 104)
-            } {
-                if or(
-                    iszero(eq(shr(192, mload(p)), BALANCE_HEADER)),
-                    iszero(eq(shr(192, calldataload(q)), ASSET_LIMITS_HEADER))
-                ) {
-                    fail(INVALID_BLOCK)
-                }
-                if iszero(eq(mload(add(p, 0x08)), calldataload(add(q, 0x08)))) {
-                    fail(UNEXPECTED_VALUE)
-                }
-                let amount := mload(add(p, 0x28))
-                if or(lt(amount, calldataload(add(q, 0x28))), gt(amount, calldataload(add(q, 0x48)))) {
-                    fail(OUT_OF_RANGE)
-                }
-            }
-        }
+        Execute.checkBalances(state, inputCur);
 
         return (true, state, value);
     }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Encoder} from "../codec/Encoder.sol";
 
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Specs} from "../codec/Specs.sol";
-import {Buffers} from "../codec/Buffers.sol";
 
 /// @dev Benchmark only: no-source executions with zero or one-block capacity hints.
 contract TestOutputAllocation {
@@ -36,7 +36,7 @@ contract TestOutputAllocation {
         private pure returns (bytes memory)
     {
         Execution memory exec;
-        exec.writer = Buffers.cursor(seed ? uint32(descriptor >> 64) : 0);
+        (exec.buffer, exec.output) = Encoder.init(seed ? uint32(descriptor >> 64) : 0);
         for (uint i; i < count; ++i) {
             if (workload == 0) exec.outputBalance(bytes32(uint(1)), i + 1);
             else if (workload == 1) exec.outputPosition(bytes32(uint(1)), i + 1, bytes32(uint(2)), i + 1, 0);

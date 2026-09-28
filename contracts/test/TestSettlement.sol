@@ -36,7 +36,6 @@ contract TestSettlement is Settlement, Balances {
         settle(account, position);
     }
 
-
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal virtual override {
         debitFrom(account, asset, amount);
         emit AccountOperation(true, account, asset, amount);

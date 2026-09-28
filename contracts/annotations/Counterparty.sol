@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AnnotationEvent} from "../events/Annotation.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 /// @title CounterpartyAnnot
 /// @notice Associates an entity with an account as counterparty.
@@ -13,6 +13,6 @@ abstract contract CounterpartyAnnot is AnnotationEvent {
     /// @param entity Entity receiving the annotation.
     /// @param account Counterparty account ID, or zero for Rootzero.
     function annotateCounterparty(uint entity, bytes32 account) internal virtual {
-        emit Annotation(entity, Blocks.createCounterparty(account));
+        emit Annotation(entity, Encoder.createCounterparty(account));
     }
 }

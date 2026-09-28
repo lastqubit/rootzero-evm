@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Cursors} from "../utils/Cursors.sol";
 
 import {ExecuteCheckBalance} from "../commands/Balance.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
@@ -23,7 +24,7 @@ contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
         external view returns (uint used, bool handled, bytes memory output, uint credit)
     {
         uint initial = gasleft();
-        (handled, output, credit) = executeCheckBalance(bytes32(0), state, input, value);
+        (handled, output, credit) = executeCheckBalance(bytes32(0), state, Cursors.wrap(input), value);
         used = initial - gasleft();
         bool same;
         assembly ("memory-safe") { same := eq(state, output) }
@@ -34,7 +35,7 @@ contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
         external returns (uint used, bool handled, bytes memory output, uint credit)
     {
         uint initial = gasleft();
-        (handled, output, credit) = executeBootstrap(bytes32(0), state, input, value);
+        (handled, output, credit) = executeBootstrap(bytes32(0), state, Cursors.wrap(input), value);
         used = initial - gasleft();
     }
 
@@ -43,8 +44,8 @@ contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
     {
         bytes memory empty = new bytes(0);
         uint initial = gasleft();
-        (, bytes memory state, uint budget) = executeBootstrap(bytes32(0), empty, input, value);
-        (handled, output, credit) = executeCheckBalance(bytes32(0), state, limits, budget);
+        (, bytes memory state, uint budget) = executeBootstrap(bytes32(0), empty, Cursors.wrap(input), value);
+        (handled, output, credit) = executeCheckBalance(bytes32(0), state, Cursors.wrap(limits), budget);
         used = initial - gasleft();
         bool same;
         assembly ("memory-safe") { same := eq(state, output) }

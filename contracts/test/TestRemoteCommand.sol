@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
 
-import {Blocks} from "../codec/Blocks.sol";
 import {Cursors} from "../utils/Cursors.sol";
 
 contract TestRemoteCommand {
@@ -12,7 +12,7 @@ contract TestRemoteCommand {
         uint amount
     ) private pure returns (bytes memory output, uint returnedCredit) {
         (uint abs, ) = Cursors.bounds(context);
-        (, bytes calldata state, , ) = Blocks.unpackContext(abs);
+        (, bytes calldata state, , ) = LegacyBlocks.unpackContext(abs);
         return (state, amount);
     }
 

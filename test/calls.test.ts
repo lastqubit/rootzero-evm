@@ -5,6 +5,21 @@ import { concat, encodeContextBlock, encodeRelayBlock, encodeStepBlock } from ".
 import "./helpers/matchers.js";
 
 describe("Command calls", () => {
+  it("passes selected cursor ranges, ignores metadata, and leaves cursors unchanged", async () => {
+    const helper = await deploy("TestCommandCalls");
+    const source = "0x" + "ab".repeat(100);
+    for (const [start, end] of [[0, 0], [1, 2], [7, 40], [3, 100]]) {
+      for (const metadata of [0n, ethers.MaxUint256]) {
+        const r = await helper.testCursorCalls.staticCall(source, start, end, metadata);
+        expect(r.out).eq(ethers.dataSlice(source, start, end));
+        expect(r.credit).eq(0n);
+        expect(r.success).eq(true);
+        expect(r.nextCur >> 64n).eq(metadata >> 64n);
+        expect(((r.nextCur >> 32n) & 0xffffffffn) - (r.nextCur & 0xffffffffn)).eq(BigInt(end - start));
+      }
+    }
+  });
+
   for (const method of ["testExecutionRawCall", "testExecutionRawCallCopy"]) {
     describe(method, () => {
       let helper: Awaited<ReturnType<typeof deploy>>;

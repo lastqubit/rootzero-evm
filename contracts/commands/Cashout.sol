@@ -2,7 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {Memory} from "../codec/Blocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
@@ -48,7 +49,7 @@ abstract contract ExecuteCashout is Cashout {
     /// @notice Execute cashout directly against chain-asset BALANCE state held in memory.
     /// @param account Account whose chain asset is withdrawn.
     /// @param state BALANCE block stream held in pipeline memory.
-    /// @param input Empty input required by the command schema.
+    /// @param inputCur Cursor over empty input required by the command schema.
     /// @param value Native value assigned to this command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
@@ -56,14 +57,14 @@ abstract contract ExecuteCashout is Cashout {
     function executeCashout(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (input.length != 0) revert UnexpectedInput();
-        (uint abs, uint end) = Memory.bounds(state, Sizes.Balance);
+        if (!Cursors.done(inputCur)) revert UnexpectedInput();
+        (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = Memory.unpackBalance(abs);
+            (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
             if (asset != chainAsset) revert InvalidAsset();
             cashout(account, amount);
             unchecked {

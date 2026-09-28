@@ -84,7 +84,7 @@ describe("Settle command", () => {
 
       it("rejects LIMITS input and leaves balances unchanged", async () => {
         await expect(run(encodePositionBlock(asset, 10n, liability, 5n), encodeLimitsBlock(10n, 5n)))
-          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "OutOfBounds");
+          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "InvalidBlock");
         expect(await balances()).to.deep.equal([0n, 40n]);
       });
 
@@ -117,16 +117,16 @@ describe("Settle command", () => {
       });
       it("rejects limits without a position", async () => {
         await expect(run("0x", encodeLimitsBlock(0n, 0n)))
-          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "OutOfBounds");
+          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "InvalidBlock");
         expect(await balances()).to.deep.equal([0n, 40n]);
       });
       it("rejects partial limits even when state is empty", async () => {
         await expect(run("0x", "0x01"))
-          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "OutOfBounds");
+          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "InvalidBlock");
       });
       it("rejects truncated limits", async () => {
         await expect(run(encodePositionBlock(asset, 1n, liability, 1n), "0x01"))
-          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "OutOfBounds");
+          .to.be.revertedWithCustomError(host, memory ? "UnexpectedInput" : "InvalidBlock");
       });
       it("rejects a truncated final POSITION and rolls back the batch", async () => {
         const position = encodePositionBlock(asset, 1n, liability, 1n);

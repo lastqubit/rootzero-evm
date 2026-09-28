@@ -80,7 +80,7 @@ describe("Limits codec", () => {
       it("rejects empty and truncated input", async () => {
         for (const input of ["0x", ethers.dataSlice(encodeLimitsBlock(10n, 20n), 0, 39)]) {
           await expect(helper.check(input, 10n, 20n, execution))
-            .to.be.revertedWithCustomError(helper, "OutOfBounds");
+            .to.be.revertedWithCustomError(helper, input === "0x" ? "InvalidBlock" : "OutOfBounds");
         }
       });
     });

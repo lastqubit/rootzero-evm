@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Blocks} from "../codec/Blocks.sol";
 
 import {OutOfRange} from "../utils/Errors.sol";
 
-import { Host } from "../core/Host.sol";
-import { RequestAllowancePort } from "../ports/Allowance.sol";
-import { CreditAccountPort } from "../ports/Credit.sol";
-import { DebitAccountPort } from "../ports/Debit.sol";
-import { PipePayablePort } from "../ports/Pipe.sol";
-import { DispatchPayablePort } from "../ports/Dispatch.sol";
-import { BookPort } from "../ports/Book.sol";
-import { RequestAssetPort } from "../ports/Asset.sol";
-import { Settlement } from "../core/Settlement.sol";
-import { Pipeline } from "../core/Pipeline.sol";
-import { Position } from "../core/Types.sol";
-import { Execution } from "../execution/Execution.sol";
+import {Host} from "../core/Host.sol";
+import {RequestAllowancePort} from "../ports/Allowance.sol";
+import {CreditAccountPort} from "../ports/Credit.sol";
+import {DebitAccountPort} from "../ports/Debit.sol";
+import {PipePayablePort} from "../ports/Pipe.sol";
+import {DispatchPayablePort} from "../ports/Dispatch.sol";
+import {BookPort} from "../ports/Book.sol";
+import {RequestAssetPort} from "../ports/Asset.sol";
+import {Settlement} from "../core/Settlement.sol";
+import {Pipeline} from "../core/Pipeline.sol";
+import {Position} from "../core/Types.sol";
+import {Execution} from "../execution/Execution.sol";
 
 contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, CreditAccountPort, DebitAccountPort, BookPort, RequestAssetPort, PipePayablePort, DispatchPayablePort {
     event PortRequestAllowanceCalled(uint peer, bytes32 asset, uint amount);
@@ -61,16 +62,15 @@ contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, Credi
         settle(account, position);
     }
 
-
-    function dispatchTo(uint portal, uint resources, bytes memory payload, Execution memory funds) internal override {
-        emit PortDispatchCalled(portal, payload, resources, funds.budget);
+    function dispatchTo(uint portal, uint resources, uint payloadCur, Execution memory funds) internal override {
+        emit PortDispatchCalled(portal, Blocks.toBytes(payloadCur), resources, funds.budget);
     }
 
     function execute(
         uint,
         bytes32,
         bytes memory state,
-        bytes calldata,
+        uint,
         uint
     ) internal pure override returns (bool handled, bytes memory nextState, uint returnedCredit) {
         return (false, state, 0);
@@ -78,6 +78,4 @@ contract TestPortHost is Host, Settlement, Pipeline, RequestAllowancePort, Credi
 
     function getAdminAccount() external view returns (bytes32) { return admin; }
 }
-
-
 

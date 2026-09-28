@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Blocks} from "../codec/Blocks.sol";
-import {Buffers} from "../codec/Buffers.sol";
+
 
 /// @dev Benchmark only. Production allocation policy is unchanged.
 contract TestBufferAllocation {
@@ -48,23 +50,23 @@ contract TestBufferAllocation {
             exec.openInput(descriptor, 0, input);
         } else {
             // Same decoder initialization as openInput, without the hint scan.
-            uint decoders;
+            uint cur;
             assembly ("memory-safe") {
-                decoders := or(input.offset, shl(32, add(input.offset, input.length)))
+                cur := or(input.offset, shl(32, add(input.offset, input.length)))
             }
-            exec.decoders = decoders;
+            exec.input = cur;
             uint capacity = strategy == 0 ? scannedCapacity(input, descriptor)
                 : strategy == 6 ? ceilingCapacity(input.length, descriptor)
                 : strategy == 5 ? hintedCapacity(input, descriptor)
                 : strategy == 1 ? 0 : input.length * (1 << (strategy - 2));
-            exec.writer = Buffers.cursor(capacity);
+            (exec.buffer, exec.output) = Encoder.init(capacity);
         }
         uint index;
         while (exec.more()) {
             bytes32 asset;
             uint amount;
             if (workload == 2 || workload == 3 || workload >= 6) {
-                bytes calldata payload = exec.unpackBytes();
+                bytes calldata payload = Blocks.toBytes(exec.unpackBytes());
                 asset = bytes32(uint(1));
                 amount = payload.length;
             } else {
@@ -88,7 +90,7 @@ contract TestBufferAllocation {
         } else {
             uint start;
             assembly ("memory-safe") { start := input.offset }
-            count = Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128)));
+            count = LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128)));
         }
         return count * uint32(descriptor >> 64);
     }
@@ -104,7 +106,7 @@ contract TestBufferAllocation {
     function scannedCapacity(bytes calldata input, uint descriptor) private pure returns (uint) {
         uint start;
         assembly ("memory-safe") { start := input.offset }
-        return Blocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128))) * uint32(descriptor >> 64);
+        return LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128))) * uint32(descriptor >> 64);
     }
 
 }

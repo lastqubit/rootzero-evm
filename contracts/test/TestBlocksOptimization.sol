@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {MalformedBlocks} from "./LegacyErrors.sol";
+import {LegacyBlocks} from "./LegacyBlocks.sol";
 
-import {Blocks} from "../codec/Blocks.sol";
+
 import {Keys} from "../codec/Keys.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {max32} from "../utils/Utils.sol";
@@ -10,8 +12,8 @@ import {max32} from "../utils/Utils.sol";
 library PreviousBlockScans {
     function find(uint abs, uint end, bytes4 key) internal pure returns (uint) {
         while (abs < end) {
-            (bytes4 current, uint len) = Blocks.header(abs);
-            if (Sizes.Header + len > end - abs) revert Blocks.MalformedBlocks();
+            (bytes4 current, uint len) = LegacyBlocks.header(abs);
+            if (Sizes.Header + len > end - abs) revert MalformedBlocks();
             if (current == key) return abs;
             abs += Sizes.Header + len;
         }
@@ -21,8 +23,8 @@ library PreviousBlockScans {
     function run(uint abs, uint limit, bytes4 key) internal pure returns (uint total, uint end) {
         end = abs;
         while (end < limit) {
-            (bytes4 current, uint len) = Blocks.header(end);
-            if (Sizes.Header + len > limit - end) revert Blocks.MalformedBlocks();
+            (bytes4 current, uint len) = LegacyBlocks.header(end);
+            if (Sizes.Header + len > limit - end) revert MalformedBlocks();
             if (current != key) break;
             end += Sizes.Header + len;
             unchecked { ++total; }
@@ -40,29 +42,24 @@ library PreviousBlockFactories {
     function createCopy(bytes calldata payload) internal pure returns (bytes memory value) {
         uint len = max32(payload.length);
         value = allocate(Sizes.Header + len);
-        Blocks.copy(value, 0, Keys.Bytes, payload);
+        LegacyBlocks.copy(value, 0, Keys.Bytes, payload);
     }
 
     function create(bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(payload.length);
         value = allocate(Sizes.Header + len);
-        Blocks.write(value, 0, Keys.Bytes, payload);
+        LegacyBlocks.write(value, 0, Keys.Bytes, payload);
     }
 
     function createContextCopy(bytes calldata state, bytes calldata input) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
         value = allocate(len);
-        Blocks.copyContext(value, 0, bytes32(uint(1)), state, input);
-    }
-
-    function createEmpty() internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Header);
-        Blocks.writeEmpty(value, 0, Keys.Bytes);
+        LegacyBlocks.copyContext(value, 0, bytes32(uint(1)), state, input);
     }
 
     function createBalance() internal pure returns (bytes memory value) {
         value = allocate(Sizes.Balance);
-        Blocks.writeBalance(value, 0, bytes32(uint(1)), 2);
+        LegacyBlocks.writeBalance(value, 0, bytes32(uint(1)), 2);
     }
 }
 
@@ -82,10 +79,10 @@ contract TestBlocksOptimization {
         uint limit = abs + length;
         uint initial = gasleft();
         if (findKey) {
-            end = optimized ? Blocks.find(abs + start, limit, key)
+            end = optimized ? LegacyBlocks.find(abs + start, limit, key)
                 : PreviousBlockScans.find(abs + start, limit, key);
         } else {
-            if (optimized) (total, end) = Blocks.run(abs + start, limit, key);
+            if (optimized) (total, end) = LegacyBlocks.run(abs + start, limit, key);
             else (total, end) = PreviousBlockScans.run(abs + start, limit, key);
         }
         usedGas = initial - gasleft();
@@ -99,7 +96,7 @@ contract TestBlocksOptimization {
         bytes memory output;
         bytes memory memoryInput = a;
         uint len = kind == 2 ? max32(Sizes.B32 + 2 * Sizes.Header + a.length + b.length)
-            : kind == 3 ? Sizes.Header : kind == 4 ? Sizes.B64 : Sizes.Header + max32(a.length);
+            : kind == 3 ? Sizes.B64 : Sizes.Header + max32(a.length);
         uint start;
         uint memoryEnd;
         // Poison the free memory region and one guard word. Both strategies must
@@ -112,11 +109,10 @@ contract TestBlocksOptimization {
             }
         }
         uint initial = gasleft();
-        if (kind == 0) output = optimized ? Blocks.createCopy(Keys.Bytes, a) : PreviousBlockFactories.createCopy(a);
-        else if (kind == 1) output = optimized ? Blocks.create(Keys.Bytes, memoryInput) : PreviousBlockFactories.create(memoryInput);
-        else if (kind == 2) output = optimized ? Blocks.createContextCopy(bytes32(uint(1)), a, b) : PreviousBlockFactories.createContextCopy(a, b);
-        else if (kind == 3) output = optimized ? Blocks.createEmpty(Keys.Bytes) : PreviousBlockFactories.createEmpty();
-        else output = optimized ? Blocks.createBalance(bytes32(uint(1)), 2) : PreviousBlockFactories.createBalance();
+        if (kind == 0) output = optimized ? LegacyBlocks.createCopy(Keys.Bytes, a) : PreviousBlockFactories.createCopy(a);
+        else if (kind == 1) output = optimized ? LegacyBlocks.create(Keys.Bytes, memoryInput) : PreviousBlockFactories.create(memoryInput);
+        else if (kind == 2) output = optimized ? LegacyBlocks.createContextCopy(bytes32(uint(1)), a, b) : PreviousBlockFactories.createContextCopy(a, b);
+        else output = optimized ? LegacyBlocks.createBalance(bytes32(uint(1)), 2) : PreviousBlockFactories.createBalance();
         result.usedGas = initial - gasleft();
         result.output = output;
         assembly ("memory-safe") {

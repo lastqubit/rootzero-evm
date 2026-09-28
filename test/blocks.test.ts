@@ -61,7 +61,7 @@ describe("Cursors", () => {
     utils = await deploy("TestUtils");
   });
 
-  describe("Writers", () => {
+  describe("Block encoding", () => {
     const asset = ethers.zeroPadValue("0x01", 32);
     const amount = 12345n;
 
@@ -197,12 +197,6 @@ describe("Cursors", () => {
       ]);
     });
 
-    it("encodes empty blocks through factories, writers, and executions", async () => {
-      const expected = encodeBlock(Keys.Balance, "0x");
-      expect(await helper.testToEmptyBlock(Keys.Balance)).to.equal(expected);
-      expect(await helper.testWriteEmptyBlock(Keys.Balance)).to.equal(expected);
-      expect(await blocksHelper.executionOutputEmpty(Keys.Balance)).to.equal(expected);
-    });
 
     it("position block round-trips through writers and decoders", async () => {
       const liability = ethers.zeroPadValue("0x02", 32);
@@ -258,9 +252,8 @@ describe("Cursors", () => {
         await expect(helper.testMemoryUnpackPosition(data)).to.be.revertedWithCustomError(helper, "InvalidBlock");
         await expect(helper.testMemoryUnpackPositionValue(data)).to.be.revertedWithCustomError(helper, "InvalidBlock");
         await expect(helper.testUnpackPosition(data)).to.be.revertedWithCustomError(helper,
-          ethers.dataLength(data) < 168 ? "OutOfBounds" : "InvalidBlock");
-        await expect(blocksHelper.executionUnpackPosition(encodeContextBlock(ethers.ZeroHash, data, "0x"))).to.be.revertedWithCustomError(blocksHelper,
-          ethers.dataLength(data) < 168 ? "OutOfBounds" : "InvalidBlock");
+          "InvalidBlock");
+        await expect(blocksHelper.executionUnpackPosition(encodeContextBlock(ethers.ZeroHash, data, "0x"))).to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
       }
       expect(await helper.testWritePositionCounterparty(ethers.ZeroHash))
         .to.equal(encodePositionBlock(ethers.ZeroHash, 0n, ethers.ZeroHash, 0n));
@@ -818,10 +811,10 @@ describe("Cursors", () => {
       const [stateCursor, stateWriter, inputCursor, inputWriter] =
         await blocksHelper.descriptorOpens(encodeContextBlock(ethers.ZeroHash, "0x1234", "0x"), "0xaabbcc");
 
-      expect(((stateCursor >> 96n) & 0xffffffffn) - ((stateCursor >> 64n) & 0xffffffffn)).to.equal(2n);
-      expect(stateCursor >> 128n).to.equal(3n);
+      expect(((stateCursor >> 32n) & 0xffffffffn) - (stateCursor & 0xffffffffn)).to.equal(2n);
+      expect(stateCursor >> 64n).to.equal(0n);
       expect(((inputCursor >> 32n) & 0xffffffffn) - (inputCursor & 0xffffffffn)).to.equal(3n);
-      expect(inputCursor >> 64n).to.equal(2n << 64n);
+      expect(inputCursor >> 64n).to.equal(0n);
       expect((stateWriter >> 32n) & 0xffffffffn).to.equal(0n);
       expect(stateWriter >> 64n).to.equal(0n);
       expect((inputWriter >> 32n) & 0xffffffffn).to.equal(0n);
@@ -851,7 +844,7 @@ describe("Cursors", () => {
       expect(specialized * 100n).to.be.lessThan(legacy * 101n);
     });
 
-    it("next32 consumes raw words from an entered execution parent", async () => {
+    it("reads raw words from a validated execution prefix", async () => {
       const first = ethers.zeroPadValue("0x41", 32);
       const second = ethers.zeroPadValue("0x42", 32);
       const input = encodeListBlock(first, second);
@@ -859,7 +852,7 @@ describe("Cursors", () => {
       expect(await blocksHelper.executionEnterWords(input)).to.deep.equal([first, second]);
     });
 
-    it("consumes power-of-two byte widths from an entered execution parent", async () => {
+    it("reads power-of-two byte widths from one validated execution prefix", async () => {
       const fields = [
         "0x01",
         "0x0203",
@@ -871,6 +864,17 @@ describe("Cursors", () => {
       const input = encodeListBlock(...fields);
 
       expect(await blocksHelper.executionEnterSized(input)).to.deep.equal(fields);
+    });
+
+    it("bounds the complete execution prefix before raw reads and rejects leftover bytes", async () => {
+      for (const [method, size] of [["executionEnterWords", 64], ["executionEnterSized", 63]] as const) {
+        for (const length of [0, 1, size - 1]) {
+          await expect(blocksHelper[method](encodeBlock(Keys.List, "0x" + "ab".repeat(length))))
+            .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
+        }
+        await expect(blocksHelper[method](encodeBlock(Keys.List, "0x" + "ab".repeat(size + 1))))
+          .to.be.revertedWithCustomError(blocksHelper, "UnexpectedPosition");
+      }
     });
 
     it("copies calldata payloads through factories, writers, and executions", async () => {
@@ -932,8 +936,8 @@ describe("Cursors", () => {
       expect(data).to.equal(encodeBalanceBlock(asset, amount));
     });
 
-    it("returns an unallocated writer for a zero block count", async () => {
-      expect(await blocksHelper.emptyWriter()).to.deep.equal([0n, 0n, 0n]);
+    it("allocates retained scratch for a zero-capacity writer", async () => {
+      expect(await blocksHelper.emptyWriter()).to.deep.equal([0n, 0n, 32n]);
     });
 
     it("lazily allocates a buffer with packed position and capacity", async () => {
@@ -1091,11 +1095,11 @@ describe("Cursors", () => {
     const otherAsset = ethers.zeroPadValue("0xbb", 32);
     const amount = 9999n;
 
-    it("packs consumer flags directly above cursor bounds", async () => {
-      const [cur, flags] = await helper.testSpanMeta(0x56);
-
-      expect(cur).to.equal(0x56n << 64n);
-      expect(flags).to.equal(0x56n);
+    it("creates metadata-free cursor bounds and rejects invalid ranges", async () => {
+      expect(await helper.testCreate(7, 19)).eq(7n | (19n << 32n));
+      expect(await helper.testCreate(0, 0)).eq(0n);
+      await expect(helper.testCreate(20, 19)).revertedWithCustomError(helper, "OutOfBounds");
+      await expect(helper.testCreate(0, 1n << 32n)).revertedWithCustomError(helper, "ValueOverflow");
     });
 
     it("returns the unread absolute cursor bounds", async () => {
@@ -1138,7 +1142,7 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(helper, "OutOfBounds");
     });
 
-    it("open(source) creates an cursor over the complete source", async () => {
+    it("wrap(source) creates a cursor over the complete source", async () => {
       const a = encodeAmountBlock(asset, 1n);
       const b = encodeBalanceBlock(asset, 2n);
       const source = concat(a, b);
@@ -1148,22 +1152,22 @@ describe("Cursors", () => {
       expect(flags).to.equal(0n);
     });
 
-    it("open(source) accepts an empty source", async () => {
+    it("wrap(source) accepts an empty source", async () => {
       const [sourceStart, pos, end, flags] = await helper.testOpen("0x");
       expect(pos).to.equal(sourceStart);
       expect(end).to.equal(pos);
       expect(flags).to.equal(0n);
     });
 
-    it("close succeeds after the complete decoder source is consumed", async () => {
+    it("expect(end) succeeds after the complete cursor is consumed", async () => {
       const source = encodeAmountBlock(asset, 1n);
       expect(await helper.testClose(source, ethers.getBytes(source).length)).to.equal(true);
     });
 
-    it("close rejects unread decoder data", async () => {
+    it("expect(end) rejects unread cursor data", async () => {
       const source = encodeAmountBlock(asset, 1n);
       await expect(helper.testClose(source, 0n))
-        .to.be.revertedWithCustomError(helper, "UnconsumedData");
+        .to.be.revertedWithCustomError(helper, "UnexpectedPosition");
     });
 
     it("peek returns the next key and payload length", async () => {
@@ -1171,7 +1175,7 @@ describe("Cursors", () => {
       expect(await helper.testPeek(source, 0n)).to.deep.equal([Keys.Balance, 64n]);
     });
 
-    it("enter advances into a parent payload so child blocks can be unpacked", async () => {
+    it("unpack returns a bounded parent payload for child blocks", async () => {
       const child = encodeAmountBlock(asset, amount);
       const source = encodeListBlock(child);
 
@@ -1184,7 +1188,7 @@ describe("Cursors", () => {
         ]);
     });
 
-    it("next32 consumes raw words from an entered decoder parent", async () => {
+    it("read32 reads raw words from a validated parent prefix", async () => {
       const first = ethers.zeroPadValue("0x51", 32);
       const second = ethers.zeroPadValue("0x52", 32);
       const source = encodeListBlock(first, second);
@@ -1193,7 +1197,7 @@ describe("Cursors", () => {
         .to.deep.equal([first, second]);
     });
 
-    it("consumes power-of-two byte widths from an entered decoder parent", async () => {
+    it("reads power-of-two byte widths from a validated parent prefix", async () => {
       const fields = [
         "0x01",
         "0x0203",
@@ -1242,8 +1246,10 @@ describe("Cursors", () => {
 
       const input = encodeListBlock(first, second);
       expect(await blocksHelper.executionAdvance(input, 64n)).to.deep.equal([8n, first, true]);
-      await expect(blocksHelper.executionAdvance(input, 65n))
-        .to.be.revertedWithCustomError(blocksHelper, "OutOfBounds");
+      for (const amount of [65n, ethers.MaxUint256]) {
+        await expect(blocksHelper.executionAdvance(input, amount))
+          .to.be.revertedWithCustomError(blocksHelper, "OutOfBounds");
+      }
     });
 
     it("takes raw bytes and returns their starting absolute position", async () => {
@@ -1279,27 +1285,7 @@ describe("Cursors", () => {
       expect(await helper.testIsAtCurrent(source, Keys.Balance)).to.equal(true);
     });
 
-    it("detects an empty block without consuming it", async () => {
-      const empty = encodeBlock(Keys.Balance, "0x");
-      expect(await helper.testIsEmptyCurrent(empty, Keys.Balance)).to.equal(true);
-      expect(await helper.testIsEmptyCurrent(empty, Keys.Amount)).to.equal(false);
-      expect(await helper.testIsEmptyCurrent(encodeBalanceBlock(asset, amount), Keys.Balance)).to.equal(false);
-      expect(await helper.testIsEmptyCurrent(Keys.Balance, Keys.Balance)).to.equal(false);
-    });
 
-    it("conditionally consumes an empty block header", async () => {
-      const empty = encodeBlock(Keys.Balance, "0x");
-      const balance = encodeBalanceBlock(asset, amount);
-      expect(await helper.testTryConsumeEmpty(empty, Keys.Balance)).to.deep.equal([true, 8n, false]);
-      expect(await helper.testTryConsumeEmpty(empty, Keys.Amount)).to.deep.equal([false, 0n, true]);
-      expect(await helper.testTryConsumeEmpty(balance, Keys.Balance)).to.deep.equal([false, 0n, true]);
-
-      const malformed = "0x" + Keys.Balance.slice(2) + "00000040";
-      await expect(helper.testTryConsumeEmpty(malformed, Keys.Balance))
-        .to.be.revertedWithCustomError(helper, "MalformedBlocks");
-      await expect(helper.testUnpackBalance(empty))
-        .to.be.revertedWithCustomError(helper, "OutOfBounds");
-    });
 
     it("uses less gas than the removed relative generic cursor", async () => {
       const source = concat(
@@ -1313,22 +1299,6 @@ describe("Cursors", () => {
       expect(absolute).to.be.lessThan(relative);
     });
 
-    it("detects and consumes empty blocks through execution input", async () => {
-      const empty = encodeBlock(Keys.Balance, "0x");
-      expect(await blocksHelper.executionIsEmpty(empty, exactSpec(Keys.Balance, 64), Keys.Balance))
-        .to.equal(true);
-      expect(await blocksHelper.executionTryConsumeEmpty(empty, exactSpec(Keys.Balance, 64), Keys.Balance))
-        .to.deep.equal([true, false]);
-      expect(await blocksHelper.executionTryConsumeEmpty(empty, exactSpec(Keys.Balance, 64), Keys.Amount))
-        .to.deep.equal([false, true]);
-      expect(
-        await blocksHelper.executionTryConsumeEmpty(
-          encodeBalanceBlock(asset, amount),
-          exactSpec(Keys.Balance, 64),
-          Keys.Balance,
-        ),
-      ).to.deep.equal([false, true]);
-    });
 
     it("hasAt checks a block key at an arbitrary source position", async () => {
       const a = encodeAmountBlock(asset, 1n);
@@ -1517,7 +1487,7 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
-    it("execution takeBlock returns the full block and preserves state", async () => {
+    it("execution take exposes the full block as calldata and preserves state", async () => {
       const custom = localKey(1);
       const input = encodeBlock(custom, encodeAccountBlock(encodeUserAccount("0x12")));
       const state = encodeBalanceBlock(asset, amount);
@@ -1526,7 +1496,7 @@ describe("Cursors", () => {
         .to.deep.equal([input, asset, amount, true]);
     });
 
-    it("execution takeBlock reverts when the current block key does not match", async () => {
+    it("execution take reverts when the current block key does not match", async () => {
       const custom = localKey(1);
       const other = localKey(2);
       const input = encodeBlock(custom, "0x1234");
@@ -1548,28 +1518,26 @@ describe("Cursors", () => {
       expect(await helper.testDecoderRaw(concat(first, second), 32n)).to.equal(second);
     });
 
-    it("takeRawState returns the unread state source and consumes it", async () => {
+    it("takeState returns the unread state source and consumes it", async () => {
       const state = encodeBalanceBlock(asset, amount);
-      expect(await blocksHelper.executionTakeRawState(encodeContextBlock(ethers.ZeroHash, state, "0x"))).to.deep.equal([state, true]);
+      expect(await blocksHelper.executionTakeState(encodeContextBlock(ethers.ZeroHash, state, "0x"))).to.deep.equal([state, true]);
     });
 
-    it("takeRawInput returns the unread input source and consumes it", async () => {
+    it("takeInput returns the unread input source and consumes it", async () => {
       const input = encodeAmountBlock(asset, amount);
-      expect(await blocksHelper.executionTakeRawInput(input)).to.deep.equal([input, true]);
+      expect(await blocksHelper.executionTakeInput(input)).to.deep.equal([input, true]);
     });
 
-    it("raw forwarding preserves independent EMPTY lane restrictions", async () => {
+    it("explicit stream forwarding works independently of EMPTY descriptor declarations", async () => {
       const state = encodeBalanceBlock(asset, amount);
       const input = encodeAmountBlock(asset, amount);
       const stateSpec = exactSpec(Keys.Balance, 64);
       const inputSpec = exactSpec(Keys.Amount, 64);
-      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, inputSpec)).to.equal("0x");
-      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, inputSpec)).to.equal("0x");
-      expect(await blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, "0x"), stateSpec, 0)).to.equal("0x");
-      await expect(blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), 0, inputSpec))
-        .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
-      await expect(blocksHelper.executionForwardRaw(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, 0))
-        .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
+      expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, "0x"), stateSpec, 0)).to.equal("0x");
+      expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, input), 0, inputSpec)).to.equal("0x");
+      expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, 0)).to.equal("0x");
     });
 
     it("finish rejects unread execution data", async () => {
@@ -1703,7 +1671,7 @@ describe("Cursors", () => {
       const source = encodeSchemaBlock(spec, "assets: many #asset as assets");
       for (let length = 0; length < ethers.dataLength(source); length++) {
         await expect(stringHelper.testUnpackSchema(ethers.dataSlice(source, 0, length)))
-          .to.be.revertedWithCustomError(stringHelper, length < 48 ? "InvalidBlock" : "OutOfBounds");
+          .to.be.revertedWithCustomError(stringHelper, length < 4 ? "InvalidBlock" : "OutOfBounds");
       }
       for (const payload of [
         pad32(spec),

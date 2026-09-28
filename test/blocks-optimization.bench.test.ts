@@ -10,13 +10,12 @@ describe("Blocks optimization benchmark", function () {
   it("preserves factory bytes, padding, scratch space, and allocation in dirty memory", async () => {
     const helper = await deploy("TestBlocksOptimization");
     const rows: object[] = [];
-    for (const kind of [0, 1, 2, 3, 4]) {
+    for (const kind of [0, 1, 2, 3]) {
       for (const size of kind >= 3 ? [0] : [0, 1, 7, 8, 9, 23, 24, 25, 31, 32, 33, 63, 64, 65, 256, 4096, 65536]) {
         const a = "0x" + "ab".repeat(size);
         const b = "0x" + "cd".repeat(size % 35);
         const expected = kind == 2 ? encodeContextBlock(ethers.toBeHex(1, 32), a, b)
-          : kind == 3 ? encodeBytesBlock("0x")
-          : kind == 4 ? encodeBalanceBlock(ethers.toBeHex(1, 32), 2n) : encodeBytesBlock(a);
+          : kind == 3 ? encodeBalanceBlock(ethers.toBeHex(1, 32), 2n) : encodeBytesBlock(a);
         const before = await helper.factory(false, kind, a, b);
         const after = await helper.factory(true, kind, a, b);
         for (const result of [before, after]) {

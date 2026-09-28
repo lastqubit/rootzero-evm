@@ -36,7 +36,6 @@ describe("Leaf decoding and fixed header optimization", function () {
     for (const size of [32, 64, 96, 128, 160]) {
       await compare("unpack" + size, encodeBlock(Keys.List, blob(size)), size, [exactSpec(Keys.List, size)]);
     }
-    await compare("enterEmpty", encodeBlock(Keys.List, "0x"), 0, [Keys.List]);
     mkdirSync(".npm-cache", { recursive: true });
     writeFileSync(".npm-cache/leaf-fixed-results.json", JSON.stringify(rows, null, 2) + "\n");
     console.table(rows.filter(row => row.size === 0 || /^unpack\d/.test(row.operation)));
@@ -63,13 +62,13 @@ describe("Leaf decoding and fixed header optimization", function () {
     }
   });
 
-  it("preserves fixed sizes, arbitrary keys, spec handling, and empty-header overflow", async () => {
+  it("preserves fixed sizes, arbitrary keys, spec handling, and extreme positions", async () => {
     const helper = await deploy("TestLeafFixed");
     for (const key of [Keys.List, "0x00000000", "0xffffffff"]) {
-      for (const size of [0, 32, 64, 96, 128, 160]) {
-        const method = helper[size ? "unpack" + size : "enterEmpty"];
+      for (const size of [32, 64, 96, 128, 160]) {
+        const method = helper["unpack" + size];
         // Fixed unpackers use only the spec key and enforce their own fixed size.
-        const extra = size ? rangedSpec(key, 1, 2, 0) : key;
+        const extra = rangedSpec(key, 1, 2, 0);
         const valid = encodeBlock(key, blob(size));
         const inputs = [valid, "0x", encodeBlock(key, blob(size + 1)),
           encodeBlock(Keys.String, blob(size)), ethers.concat([key, "0xffffffff"]),
@@ -81,9 +80,6 @@ describe("Leaf decoding and fixed header optimization", function () {
         }
         for (const abs of [ethers.MaxUint256, ethers.MaxUint256 - 7n, ethers.MaxUint256 - 8n, 1n << 32n]) {
           const before = await outcome(() => method(false, valid, abs, true, extra));
-          if (!size && key === "0x00000000" && abs > ethers.MaxUint256 - 8n) {
-            expect(before.error).to.equal(ethers.concat(["0x4e487b71", ethers.toBeHex(0x11, 32)]));
-          }
           expect(await outcome(() => method(true, valid, abs, true, extra))).to.deep.equal(before);
         }
       }

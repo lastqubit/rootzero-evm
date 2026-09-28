@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Cursors} from "../utils/Cursors.sol";
 
 import {Realize} from "../commands/Realize.sol";
 import {ExecuteCheckPosition} from "../commands/Position.sol";
@@ -35,7 +36,7 @@ contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettl
 
     function run(bytes32 account, bytes memory state, bytes calldata steps) external returns (uint) {
         enforceCaller(msg.sender);
-        return pipe(account, state, steps, 0);
+        return pipe(account, state, Cursors.wrap(steps), 0);
     }
 
     function enforceCaller(address caller) internal view override returns (address) {
@@ -48,17 +49,17 @@ contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettl
         return Nodes.decode(cmd);
     }
 
-    function execute(uint cmd, bytes32 account, bytes memory state, bytes calldata input, uint value)
+    function execute(uint cmd, bytes32 account, bytes memory state, uint inputCur, uint value)
         internal override returns (bool, bytes memory, uint)
     {
         if (memorySettlement && cmd == checkPositionId()) {
             enforceCommand(cmd);
-            return executeCheckPosition(account, state, input, value);
+            return executeCheckPosition(account, state, inputCur, value);
         }
         if (memorySettlement && cmd == settleId()) {
             enforceCommand(cmd);
             ++memorySettlements;
-            return executeSettle(account, state, input, value);
+            return executeSettle(account, state, inputCur, value);
         }
         return (false, state, 0);
     }
@@ -72,7 +73,6 @@ contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettl
         Position memory result = Position(position.asset, position.amount, position.liability, position.debt, bytes32(0));
         return result;
     }
-
 
     function settle(bytes32 account, Position memory position)
         internal override(Settlement, SettleHook)

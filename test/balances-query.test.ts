@@ -14,7 +14,7 @@ describe("BalancesQuery", () => {
     expect(await query.getBalance.staticCall("0x")).to.equal("0x");
     const account = encodeUserAccount(await (await getSigner()).getAddress());
     const input = concat(encodeAccountAssetBlock(account, await query.tokenAsset()), "0x01");
-    await expect(query.getBalance.staticCall(input)).to.be.revertedWithCustomError(query, "OutOfBounds");
+    await expect(query.getBalance.staticCall(input)).to.be.revertedWithCustomError(query, "InvalidBlock");
   });
 
   it("queries the host account through the same account balance endpoint", async () => {

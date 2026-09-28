@@ -16,16 +16,16 @@ pragma solidity ^0.8.33;
 // - `#x as (a, b)` expands to `#x as a, #x as b` in declaration order; it adds
 //   no container or header and preserves the referenced key for every child
 // - alias lists require at least two valid alias paths and an unmodified schema
-//   reference; use expanded items with `maybe`, `many`, or `at` modifiers
+//   reference; use expanded items with `many` or `at` modifiers
 // - empty entries, trailing commas, nested lists, and colliding alias paths are invalid
 // - braces are presentation-only and do not change payload layout
 // - command inputs are a single run when the input schema is non-empty
 // - command state is a single active state run without trailing globals
 // - run items may repeat at top level for batching
-// - every declared child block header is present when its parent is non-empty
-// - any block may use a zero-length payload as its empty form
-// - `maybe #x` hints that the onchain consumer accepts the empty form of `#x`
-//   when emptiness is not already intrinsic to the referenced block type
+// - every declared child block header is present in declaration order
+// - payload validity is block-specific: bytes, strings, and lists may be empty;
+//   fixed and composite blocks must satisfy their declared payload layouts
+// - there is no universal empty-block marker or optional-item modifier
 // - `many #x` alongside other items emits one generic list block containing
 //   zero or more repeated `#x` items; the list header is always present
 // - a custom schema consisting of exactly one `many #x` item uses its custom
@@ -133,7 +133,7 @@ library Schemas {
 
     // Three-word payloads
 
-    string constant AssetLimits = "bytes32 asset, uint min, uint max";
+    string constant BalanceConstraints = "bytes32 asset, uint min, uint max";
     string constant Bootstrap = "bytes32 asset, uint amount, uint budget";
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     string constant Allowance = "uint host, bytes32 asset, uint amount";
@@ -149,7 +149,7 @@ library Schemas {
     // Four-word input payloads
 
     /// @dev Exact identifiers and full-width inclusive quantity bounds.
-    string constant PositionLimits = "bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt";
+    string constant PositionConstraints = "bytes32 asset, uint amount, bytes32 liability, uint debt";
     string constant Quote = "bytes32 asset, uint amount, bytes32 liability, uint debt";
 
     // Composite payloads

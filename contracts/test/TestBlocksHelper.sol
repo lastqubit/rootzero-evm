@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
 
-import {UnexpectedValue} from "../utils/Errors.sol";
-
+import {Encoder} from "../codec/Encoder.sol";
+import {UnexpectedValue, UnexpectedPosition, InvalidBlock} from "../utils/Errors.sol";
 import {Blocks} from "../codec/Blocks.sol";
-import {Buffers} from "../codec/Buffers.sol";
+
+import {LegacyBuffers} from "./LegacyBuffers.sol";
 import {Sizes, Specs} from "../codec/Specs.sol";
-import {Writer, Writers} from "../codec/Writers.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
-import {Cursors, Cur} from "../utils/Cursors.sol";
+import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 import {Budget, Budgets} from "../core/Budget.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {CounterpartyAnnot} from "../annotations/Counterparty.sol";
 
-using Writers for Writer;
 using Budgets for Budget;
 using Executions for Execution;
 
@@ -92,8 +92,8 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         Execution memory inputExec;
         stateExec.openContext(descriptor, 0, context);
         inputExec.openInput(descriptor, 0, input);
-        (stateCursor, stateWriter) = (stateExec.decoders, stateExec.writer);
-        (inputCursor, inputWriter) = (inputExec.decoders, inputExec.writer);
+        (stateCursor, stateWriter) = (stateExec.state, stateExec.output);
+        (inputCursor, inputWriter) = (inputExec.input, inputExec.output);
     }
 
     function executionWriterHint(
@@ -104,7 +104,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external view returns (uint len) {
         uint descriptor = Executions.describe(stateSpec, inputSpec, outputSpec, 0);
         Execution memory exec = openExecution(context, descriptor);
-        len = Cursors.limit(exec.writer);
+        len = Cursors.limit(exec.output);
     }
 
     function executionOutputPosition(
@@ -116,13 +116,6 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Position, 0);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
         Executions.outputPosition(exec, asset, amount, liability, debt, bytes32(0));
-        output = Executions.finish(exec);
-    }
-
-    function executionOutputEmpty(bytes4 key) external view returns (bytes memory output) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Balance, 0);
-        Execution memory exec = openInput(msg.data[0:0], descriptor);
-        Executions.outputEmpty(exec, key);
         output = Executions.finish(exec);
     }
 
@@ -141,32 +134,18 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         return exec.unpackPosition();
     }
 
-    function executionIsEmpty(bytes calldata input, uint spec, bytes4 key) external view returns (bool) {
-        uint descriptor = Executions.describe(Specs.Empty, spec, Specs.Empty, 0);
-        Execution memory exec = openInput(input, descriptor);
-        return exec.isEmpty(key);
-    }
-
-    function executionTryConsumeEmpty(
-        bytes calldata input,
-        uint spec,
-        bytes4 key
-    ) external view returns (bool empty, bool more) {
-        uint descriptor = Executions.describe(Specs.Empty, spec, Specs.Empty, 0);
-        Execution memory exec = openInput(input, descriptor);
-        empty = exec.tryConsumeEmpty(key);
-        return (empty, Executions.more(exec));
-    }
-
     function executionEnterAmount(
         bytes calldata context
     ) external view returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount) {
         uint descriptor = Executions.describe(Specs.Balance, Specs.List, Specs.Empty, 0);
         Execution memory exec = openExecution(context, descriptor);
-        (, uint end) = exec.enter(Specs.List);
+        uint payloadCur = exec.unpackList();
+        uint end = uint32(payloadCur >> 32);
+        // This harness explicitly scopes its remaining reads to the selected payload.
+        exec.input = payloadCur;
         (stateAsset, stateAmount) = exec.unpackBalance();
         (inputAsset, inputAmount) = exec.unpackAmount();
-        Executions.expect(exec, end);
+        if (uint32(exec.input) != end) revert UnexpectedPosition();
     }
 
     /// @notice Gas baseline reproducing the removed tagged, relative two-lane cursor path.
@@ -176,8 +155,8 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external pure returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount) {
         uint abs;
         assembly ("memory-safe") { abs := context.offset }
-        (, bytes calldata state, bytes calldata input, uint endContext) = Blocks.unpackContext(abs);
-        if (endContext != abs + context.length) revert Blocks.InvalidBlock();
+        (, bytes calldata state, bytes calldata input, uint endContext) = LegacyBlocks.unpackContext(abs);
+        if (endContext != abs + context.length) revert InvalidBlock();
         return legacyEnterAmount(state, input);
     }
 
@@ -204,17 +183,17 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint inputAbs = legacyAbsolute(decoders);
         uint next;
         uint end;
-        (, next, end) = Blocks.enter(inputAbs, Specs.List, 0);
+        (, next, end) = LegacyBlocks.enter(inputAbs, Specs.List, 0);
         decoders = legacySeekAbs(decoders, next);
 
         decoders = legacySelect(decoders, 2);
         uint stateAbs;
         (decoders, stateAbs) = legacyConsume(decoders, Sizes.Balance);
-        (stateAsset, stateAmount) = Blocks.unpackBalance(stateAbs);
+        (stateAsset, stateAmount) = LegacyBlocks.unpackBalance(stateAbs);
 
         decoders = legacySelect(decoders, 1);
         (decoders, inputAbs) = legacyConsume(decoders, Sizes.Amount);
-        (inputAsset, inputAmount) = Blocks.unpackAmount(inputAbs);
+        (inputAsset, inputAmount) = LegacyBlocks.unpackAmount(inputAbs);
         if (legacyAbsolute(decoders) != end) revert();
     }
 
@@ -247,8 +226,8 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionList(bytes calldata input, uint spec) external view returns (uint itemsLen, bool complete) {
         uint descriptor = Executions.describe(Specs.Empty, spec, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        Cur memory items = exec.list(spec);
-        itemsLen = Cursors.limit(items.state) - Cursors.position(items.state);
+        uint itemsCur = exec.unpackList(spec);
+        itemsLen = Cursors.limit(itemsCur) - Cursors.position(itemsCur);
         complete = !Executions.more(exec);
     }
 
@@ -260,7 +239,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint inputSpec = Specs.create(inputKey, 0, 0, 0);
         uint descriptor = Executions.describe(Specs.Balance, inputSpec, Specs.Empty, 0);
         Execution memory exec = openExecution(context, descriptor);
-        data = exec.takeBlock(expectedKey);
+        data = Blocks.toBytes(exec.take(expectedKey));
         (asset, amount) = exec.unpackBalance();
         complete = !Executions.more(exec);
     }
@@ -270,10 +249,10 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external view returns (bytes calldata beforeState, bytes calldata afterState, bytes calldata rawInput) {
         uint descriptor = Executions.describe(Specs.Balance, Specs.Amount, Specs.Empty, 0);
         Execution memory exec = openExecution(context, descriptor);
-        beforeState = Executions.rawState(exec);
+        beforeState = Blocks.toBytesChecked(exec.state);
         exec.unpackBalance();
-        afterState = Executions.rawState(exec);
-        rawInput = Executions.rawInput(exec);
+        afterState = Blocks.toBytesChecked(exec.state);
+        rawInput = Blocks.toBytesChecked(exec.input);
     }
 
     function executionRawEmptyState(
@@ -281,33 +260,33 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external view returns (bytes calldata state) {
         uint descriptor = Executions.describe(Specs.Empty, Specs.Amount, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        return Executions.rawState(exec);
+        return Blocks.toBytesChecked(exec.state);
     }
 
-    function executionTakeRawState(
+    function executionTakeState(
         bytes calldata context
     ) external view returns (bytes calldata data, bool complete) {
         uint descriptor = Executions.describe(Specs.Balance, Specs.Empty, Specs.Empty, 0);
         Execution memory exec = openExecution(context, descriptor);
-        data = Executions.takeRawState(exec);
+        data = Blocks.toBytesChecked(Executions.takeState(exec, Specs.key(Specs.Balance)));
         complete = !Executions.more(exec);
     }
 
-    function executionTakeRawInput(
+    function executionTakeInput(
         bytes calldata input
     ) external view returns (bytes calldata data, bool complete) {
         uint descriptor = Executions.describe(Specs.Empty, Specs.Amount, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        data = Executions.takeRawInput(exec);
+        data = Blocks.toBytesChecked(Executions.takeInput(exec, Specs.key(Specs.Amount)));
         complete = !Executions.more(exec);
     }
 
-    function executionForwardRaw(bytes calldata context, uint stateSpec, uint inputSpec)
+    function executionForwardStreams(bytes calldata context, uint stateSpec, uint inputSpec)
         external view returns (bytes memory)
     {
         Execution memory exec = openExecution(context, Executions.describe(stateSpec, inputSpec, Specs.Empty, 0));
-        Executions.takeRawState(exec);
-        Executions.takeRawInput(exec);
+        Executions.takeState(exec, Specs.key(Specs.Balance));
+        Executions.takeInput(exec, Specs.key(Specs.Amount));
         return exec.finish();
     }
 
@@ -326,10 +305,12 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionEnterWords(bytes calldata input) external view returns (bytes32 first, bytes32 second) {
         uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        (, uint end) = exec.enter(Specs.List);
-        first = exec.next32();
-        second = exec.next32();
-        Executions.expect(exec, end);
+        (uint abs, uint payloadCur) = exec.enter(Specs.List, 64);
+        unchecked {
+            first = Blocks.read32(abs);
+            second = Blocks.read32(abs + 32);
+        }
+        if (uint32(payloadCur) != uint32(payloadCur >> 32)) revert UnexpectedPosition();
     }
 
     function executionEnterKeyAdvance(
@@ -344,8 +325,10 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
         uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        (body, end) = exec.enter(key, amount);
-        i = exec.absolute();
+        uint payloadCur;
+        (body, payloadCur) = exec.enter(key, amount);
+        end = uint32(payloadCur >> 32);
+        i = uint32(payloadCur);
         return (body - offset, i - offset, end - offset);
     }
 
@@ -360,10 +343,13 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
         uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        (, uint end) = exec.enter(Specs.List);
-        abs = exec.absolute();
+        uint payloadCur = exec.unpackList();
+        uint end = uint32(payloadCur >> 32);
+        // This harness explicitly scopes its remaining reads to the selected payload.
+        exec.input = payloadCur;
+        abs = uint32(exec.input);
         exec.advance(amount);
-        value = Blocks.read32(abs);
+        value = LegacyBlocks.read32(abs);
         complete = amount == end - abs;
         return (abs - offset, value, complete);
     }
@@ -379,9 +365,12 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
         uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        (, uint end) = exec.enter(Specs.List);
-        abs = exec.take(amount);
-        value = Blocks.read32(abs);
+        uint payloadCur = exec.unpackList();
+        uint end = uint32(payloadCur >> 32);
+        // This harness explicitly scopes its remaining reads to the selected payload.
+        exec.input = payloadCur;
+        abs = exec.advance(amount);
+        value = LegacyBlocks.read32(abs);
         complete = amount == end - abs;
         return (abs - offset, value, complete);
     }
@@ -393,50 +382,55 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     {
         uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
         Execution memory exec = openInput(input, descriptor);
-        (, uint end) = exec.enter(Specs.List);
-        a = exec.next1();
-        b = exec.next2();
-        c = exec.next4();
-        d = exec.next8();
-        e = exec.next16();
-        f = exec.next32();
-        Executions.expect(exec, end);
+        (uint abs, uint payloadCur) = exec.enter(Specs.List, 63);
+        unchecked {
+            a = Blocks.read1(abs);
+            b = Blocks.read2(abs + 1);
+            c = Blocks.read4(abs + 3);
+            d = Blocks.read8(abs + 7);
+            e = Blocks.read16(abs + 15);
+            f = Blocks.read32(abs + 31);
+        }
+        if (uint32(payloadCur) != uint32(payloadCur >> 32)) revert UnexpectedPosition();
     }
 
     function writerCopies(bytes calldata value) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(0);
-        writer.copyBlock(Specs.create(TestKey, 0, 0, 0), value);
-        writer.copyList(value);
-        writer.copyBytes(value);
-        writer.copyStep(1, 2, value);
-        writer.copyCall(3, 4, value);
-        writer.appendRelay(abi.encode(uint(5), uint(6)), value);
-        writer.copyDispatch(7, 8, value);
-        writer.copyContext(bytes32(uint(9)), value, value);
-        writer.copyRecover(10, 11, bytes32(uint(12)), value);
-        return writer.finish();
+        (bytes memory buffer, uint writer) = Encoder.init(0);
+        uint cur = Cursors.wrap(value);
+        (buffer, writer) = Encoder.writeBlock(writer, buffer, TestKey, cur);
+        (buffer, writer) = Encoder.writeList(writer, buffer, cur);
+        (buffer, writer) = Encoder.writeBytes(writer, buffer, cur);
+        (buffer, writer) = Encoder.writeStepWrap(writer, buffer, 1, 2, cur);
+        (buffer, writer) = Encoder.writeCallWrap(writer, buffer, 3, 4, cur);
+        (buffer, writer) = Encoder.writeRelayWrap(writer, buffer, abi.encode(uint(5), uint(6)), value);
+        (buffer, writer) = Encoder.writeDispatchWrap(writer, buffer, 7, 8, cur);
+        (buffer, writer) = Encoder.writeContextWrap(writer, buffer, bytes32(uint(9)), cur, cur);
+        (buffer, writer) = Encoder.writeRecoverWrap(writer, buffer, 10, 11, bytes32(uint(12)), cur);
+        return Encoder.finish(writer, buffer);
     }
 
     function writerCopy(bytes calldata value) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(0);
-        writer.append32(bytes32(uint(0xaa) << 248), 1);
-        writer.copy(value);
-        writer.append32(bytes32(uint(0xbb) << 248), 1);
-        return writer.finish();
+        (bytes memory buffer, uint writer) = Encoder.init(value.length + 2);
+        uint abs;
+        (buffer, abs, writer) = Encoder.reserve(writer, buffer, value.length + 2);
+        assembly ("memory-safe") { mstore8(abs, 0xaa) }
+        abs = Encoder.copy(abs + 1, Cursors.wrap(value));
+        assembly ("memory-safe") { mstore8(abs, 0xbb) }
+        return Encoder.finish(writer, buffer);
     }
 
     function stringCopies(
         string calldata value
     ) external view returns (bytes memory factory, bytes memory written, bytes memory output) {
-        factory = Blocks.createStringCopy(value);
+        factory = LegacyBlocks.createStringCopy(value);
 
-        Writer memory writer = Writers.init(Specs.String, 1);
-        writer.copyString(value);
-        written = writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.String, 1));
+        (writerBuffer, writer) = Encoder.writeString(writer, writerBuffer, Cursors.wrap(bytes(value)));
+        written = Encoder.finish(writer, writerBuffer);
 
         uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.String, 0);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
-        Executions.outputCopyString(exec, value);
+        Executions.outputStringWrap(exec, Cursors.wrap(bytes(value)));
         output = Executions.finish(exec);
     }
 
@@ -446,64 +440,64 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes calldata value
     ) external pure returns (bytes memory buffer, uint next) {
         buffer = new bytes(capacity);
-        next = Buffers.copy(buffer, offset, value);
+        next = LegacyBuffers.copy(buffer, offset, value);
     }
 
     function factoryCopies(bytes calldata value) external pure returns (bytes memory) {
         bytes memory leaves = bytes.concat(
-            Blocks.createCopy(TestKey, value),
-            Blocks.createListCopy(value),
-            Blocks.createBytesCopy(value)
+            LegacyBlocks.createCopy(TestKey, value),
+            LegacyBlocks.createListCopy(value),
+            LegacyBlocks.createBytesCopy(value)
         );
         bytes memory composites = bytes.concat(
-            Blocks.createStepCopy(1, 2, value),
-            Blocks.createCallCopy(3, 4, value),
-            Blocks.createRelay(abi.encode(uint(5), uint(6)), value),
-            Blocks.createDispatchCopy(7, 8, value)
+            LegacyBlocks.createStepCopy(1, 2, value),
+            LegacyBlocks.createCallCopy(3, 4, value),
+            LegacyBlocks.createRelay(abi.encode(uint(5), uint(6)), value),
+            LegacyBlocks.createDispatchCopy(7, 8, value)
         );
         return bytes.concat(
             leaves,
             composites,
-            Blocks.createContextCopy(bytes32(uint(9)), value, value),
-            Blocks.createRecoverCopy(10, 11, bytes32(uint(12)), value)
+            LegacyBlocks.createContextCopy(bytes32(uint(9)), value, value),
+            LegacyBlocks.createRecoverCopy(10, 11, bytes32(uint(12)), value)
         );
     }
 
     function executionCopies(bytes calldata value) external view returns (bytes memory) {
         uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Bytes, 0);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
-        Executions.outputCopyBlock(exec, Specs.create(TestKey, 0, 0, 0), value);
-        Executions.outputCopyList(exec, value);
-        Executions.outputCopyBytes(exec, value);
-        Executions.outputCopyStep(exec, 1, 2, value);
-        Executions.outputCopyCall(exec, 3, 4, value);
+        Executions.outputBlockWrap(exec, Specs.create(TestKey, 0, 0, 0), Cursors.wrap(value));
+        Executions.outputListWrap(exec, Cursors.wrap(value));
+        Executions.outputBytesWrap(exec, Cursors.wrap(value));
+        Executions.outputStepWrap(exec, 1, 2, Cursors.wrap(value));
+        Executions.outputCallWrap(exec, 3, 4, Cursors.wrap(value));
         Executions.outputRelay(exec, abi.encode(uint(5), uint(6)), value);
-        Executions.outputCopyDispatch(exec, 7, 8, value);
-        Executions.outputCopyContext(exec, bytes32(uint(9)), value, value);
-        Executions.outputCopyRecover(exec, 10, 11, bytes32(uint(12)), value);
+        Executions.outputDispatchWrap(exec, 7, 8, Cursors.wrap(value));
+        Executions.outputContextWrap(exec, bytes32(uint(9)), Cursors.wrap(value), Cursors.wrap(value));
+        Executions.outputRecoverWrap(exec, 10, 11, bytes32(uint(12)), Cursors.wrap(value));
         return Executions.finish(exec);
     }
 
     function lazyBalance(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(Specs.Balance, 1);
-        writer.appendBalance(asset, amount);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.Balance, 1));
+        (writerBuffer, writer) = Encoder.writeBalance(writer, writerBuffer, asset, amount);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function appendHostAsset(uint host, bytes32 asset) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(Specs.HostAsset, 1);
-        writer.appendHostAsset(host, asset);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.HostAsset, 1));
+        (writerBuffer, writer) = Encoder.writeHostAsset(writer, writerBuffer, host, asset);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function createAssetLiability(bytes32 asset, bytes32 liability) external pure returns (bytes memory) {
-        return Blocks.createAssetLiability(asset, liability);
+        return LegacyBlocks.createAssetLiability(asset, liability);
     }
 
     function appendAssetLiability(bytes32 asset, bytes32 liability) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(Specs.AssetLiability, 1);
-        writer.appendAssetLiability(asset, liability);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.AssetLiability, 1));
+        (writerBuffer, writer) = Encoder.writeAssetLiability(writer, writerBuffer, asset, liability);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function executionUnpackAssetLiability(
@@ -516,14 +510,14 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
     function writeHostAsset(uint offset, uint host, bytes32 asset) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.HostAsset);
-        Blocks.writeHostAsset(dst, offset, host, asset);
+        LegacyBlocks.writeHostAsset(dst, offset, host, asset);
     }
 
     function emptyWriter() external pure returns (uint i, uint len, uint length) {
-        Writer memory writer = Writers.init(Specs.Bytes, 0);
-        i = Cursors.position(writer.cur);
-        len = Cursors.limit(writer.cur);
-        length = writer.dst.length;
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.Bytes, 0));
+        i = Cursors.position(writer);
+        len = Cursors.limit(writer);
+        length = writerBuffer.length;
     }
 
     /// @notice Reserve a lazily allocated buffer and expose its resulting metadata.
@@ -532,9 +526,9 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint advance,
         uint touch
     ) external pure returns (uint i, uint next, uint capacity, uint physical) {
-        uint cur = Buffers.cursor(len);
+        uint cur = LegacyBuffers.cursor(len);
         bytes memory buffer;
-        (cur, buffer, i) = Buffers.reserve(cur, buffer, advance, touch);
+        (cur, buffer, i) = LegacyBuffers.reserve(cur, buffer, advance, touch);
         next = Cursors.position(cur);
         capacity = Cursors.limit(cur);
         physical = buffer.length;
@@ -542,13 +536,13 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
     /// @notice Grow a buffer across two writes and return its finalized bytes.
     function growBuffer(bytes32 a, bytes32 b) external pure returns (bytes memory buffer) {
-        uint cur = Buffers.cursor(32);
+        uint cur = LegacyBuffers.cursor(32);
         uint i;
-        (cur, buffer, i) = Buffers.reserve(cur, buffer, 32, 32);
-        Buffers.write32(buffer, i, a);
-        (cur, buffer, i) = Buffers.reserve(cur, buffer, 32, 32);
-        Buffers.write32(buffer, i, b);
-        return Buffers.finish(cur, buffer);
+        (cur, buffer, i) = LegacyBuffers.reserve(cur, buffer, 32, 32);
+        LegacyBuffers.write32(buffer, i, a);
+        (cur, buffer, i) = LegacyBuffers.reserve(cur, buffer, 32, 32);
+        LegacyBuffers.write32(buffer, i, b);
+        return LegacyBuffers.finish(cur, buffer);
     }
 
     /// @notice Spend the value lane of `resources` and drain the remainder.
@@ -605,58 +599,60 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
 
     function growSecond32(bytes32 value) external pure returns (bytes memory) {
         uint spec = Specs.create(TestKey, 32, 32, 32);
-        Writer memory writer = Writers.init(spec, 1);
-        writer.appendBlock32(spec, value);
-        writer.appendBlock32(spec, value);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(spec, 1));
+        (writerBuffer, writer) = Encoder.writeBlock(writer, writerBuffer, Specs.key(spec), abi.encode(value));
+        (writerBuffer, writer) = Encoder.writeBlock(writer, writerBuffer, Specs.key(spec), abi.encode(value));
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function rejectOversizedDynamic(bytes memory data) external pure returns (bytes memory) {
         uint spec = Specs.create(Specs.key(Specs.Bytes), 32, 32, 32);
-        Writer memory writer = Writers.init(spec, 1);
-        writer.appendBlock(spec, data);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(spec, 1));
+        Specs.validate(spec, data.length);
+        (writerBuffer, writer) = Encoder.writeBlock(writer, writerBuffer, Specs.key(spec), data);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function rejectOutOfRange(bytes memory data) external pure returns (bytes memory) {
         uint spec = Specs.create(Specs.key(Specs.Bytes), 2, 4, 32);
-        Writer memory writer = Writers.init(spec, 1);
-        writer.appendBlock(spec, data);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(spec, 1));
+        Specs.validate(spec, data.length);
+        (writerBuffer, writer) = Encoder.writeBlock(writer, writerBuffer, Specs.key(spec), data);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function read32(bytes calldata source, uint i) external pure returns (bytes32) {
-        return Blocks.read32(position(source) + i);
+        return LegacyBlocks.read32(position(source) + i);
     }
 
     function readEqualAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32) {
         uint abs = position(source);
-        return Blocks.readEqualAt32(abs + i, abs + j);
+        return LegacyBlocks.readEqualAt32(abs + i, abs + j);
     }
 
     function readNotEqualAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
         uint abs = position(source);
-        return Blocks.readNotEqualAt32(abs + i, abs + j);
+        return LegacyBlocks.readNotEqualAt32(abs + i, abs + j);
     }
 
     function readLtAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
         uint abs = position(source);
-        return Blocks.readLtAt32(abs + i, abs + j);
+        return LegacyBlocks.readLtAt32(abs + i, abs + j);
     }
 
     function readLeAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
         uint abs = position(source);
-        return Blocks.readLeAt32(abs + i, abs + j);
+        return LegacyBlocks.readLeAt32(abs + i, abs + j);
     }
 
     function readGtAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
         uint abs = position(source);
-        return Blocks.readGtAt32(abs + i, abs + j);
+        return LegacyBlocks.readGtAt32(abs + i, abs + j);
     }
 
     function readGeAt32(bytes calldata source, uint i, uint j) external pure returns (bytes32, bytes32) {
         uint abs = position(source);
-        return Blocks.readGeAt32(abs + i, abs + j);
+        return LegacyBlocks.readGeAt32(abs + i, abs + j);
     }
 
     function readWidths(
@@ -665,46 +661,46 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external pure returns (bytes1, bytes2, bytes4, bytes8, bytes16, bytes32) {
         uint abs = position(source) + i;
         return (
-            Blocks.read1(abs),
-            Blocks.read2(abs),
-            Blocks.read4(abs),
-            Blocks.read8(abs),
-            Blocks.read16(abs),
-            Blocks.read32(abs)
+            LegacyBlocks.read1(abs),
+            LegacyBlocks.read2(abs),
+            LegacyBlocks.read4(abs),
+            LegacyBlocks.read8(abs),
+            LegacyBlocks.read16(abs),
+            LegacyBlocks.read32(abs)
         );
     }
 
     function expectWidth(bytes calldata source, uint i, uint width, bytes32 expected) external pure {
         uint abs = position(source) + i;
         if (width == 1) {
-            Blocks.expect1(abs, bytes1(expected));
+            LegacyBlocks.expect1(abs, bytes1(expected));
             return;
         }
         if (width == 2) {
-            Blocks.expect2(abs, bytes2(expected));
+            LegacyBlocks.expect2(abs, bytes2(expected));
             return;
         }
         if (width == 4) {
-            Blocks.expect4(abs, bytes4(expected));
+            LegacyBlocks.expect4(abs, bytes4(expected));
             return;
         }
         if (width == 8) {
-            Blocks.expect8(abs, bytes8(expected));
+            LegacyBlocks.expect8(abs, bytes8(expected));
             return;
         }
         if (width == 16) {
-            Blocks.expect16(abs, bytes16(expected));
+            LegacyBlocks.expect16(abs, bytes16(expected));
             return;
         }
         if (width == 32) {
-            Blocks.expect32(abs, expected);
+            LegacyBlocks.expect32(abs, expected);
             return;
         }
         revert UnexpectedValue();
     }
 
     function read32AsUint(bytes calldata source, uint i) external pure returns (uint) {
-        return uint(Blocks.read32(position(source) + i));
+        return uint(LegacyBlocks.read32(position(source) + i));
     }
 
     function enterAbsolute(
@@ -712,7 +708,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint spec
     ) external pure returns (uint i, uint end) {
         uint head = position(source);
-        (uint abs, uint limit) = Blocks.enter(head, spec);
+        (uint abs, uint limit) = LegacyBlocks.enter(head, spec);
         i = abs - head;
         end = limit - head;
     }
@@ -723,7 +719,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint child
     ) external pure returns (uint body, uint end, uint outer) {
         uint base = position(source);
-        (body, end, outer) = Blocks.descend(base, parent, child);
+        (body, end, outer) = LegacyBlocks.descend(base, parent, child);
         body -= base;
         end -= base;
         outer -= base;
@@ -735,7 +731,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint amount
     ) external pure returns (uint body, uint next, uint end) {
         uint base = position(source);
-        (body, next, end) = Blocks.enter(base, spec, amount);
+        (body, next, end) = LegacyBlocks.enter(base, spec, amount);
         body -= base;
         next -= base;
         end -= base;
@@ -747,7 +743,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint amount
     ) external pure returns (uint body, uint next, uint end) {
         uint base = position(source);
-        (body, next, end) = Blocks.enter(base, key, amount);
+        (body, next, end) = LegacyBlocks.enter(base, key, amount);
         body -= base;
         next -= base;
         end -= base;
@@ -758,7 +754,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint spec
     ) external pure returns (uint body, uint end, uint limit) {
         uint base = position(source);
-        (body, end, limit) = Blocks.enter(source, spec);
+        (body, end, limit) = LegacyBlocks.enter(source, spec);
         body -= base;
         end -= base;
         limit -= base;
@@ -769,16 +765,16 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint spec
     ) external pure returns (uint body) {
         uint base = position(source);
-        body = Blocks.exact(source, spec);
+        body = LegacyBlocks.exact(source, spec);
         body -= base;
     }
 
     function headerAbsolute(bytes calldata source) external pure returns (bytes4 key, uint len) {
-        return Blocks.header(position(source));
+        return LegacyBlocks.header(position(source));
     }
 
     function headerAbsolute(bytes calldata source, bytes4 key) external pure returns (uint len) {
-        return Blocks.header(position(source), key);
+        return LegacyBlocks.header(position(source), key);
     }
 
     function writeBalance(
@@ -787,7 +783,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint amount
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Balance);
-        Blocks.writeBalance(dst, offset, asset, amount);
+        LegacyBlocks.writeBalance(dst, offset, asset, amount);
     }
 
     function writePosition(
@@ -798,22 +794,22 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint debt
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Position);
-        Blocks.writePosition(dst, offset, asset, amount, liability, debt, bytes32(0));
+        LegacyBlocks.writePosition(dst, offset, asset, amount, liability, debt, bytes32(0));
     }
 
     function writeList(uint offset, bytes memory value) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Header + value.length);
-        Blocks.writeList(dst, offset, value);
+        LegacyBlocks.writeList(dst, offset, value);
     }
 
     function writeBytes(uint offset, bytes memory value) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Header + value.length);
-        Blocks.writeBytes(dst, offset, value);
+        LegacyBlocks.writeBytes(dst, offset, value);
     }
 
     function writeString(uint offset, string memory value) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Header + bytes(value).length);
-        Blocks.writeString(dst, offset, value);
+        LegacyBlocks.writeString(dst, offset, value);
     }
 
     function writeStep(
@@ -823,7 +819,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes memory input
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Step + input.length);
-        Blocks.writeStep(dst, offset, cmd, value, input);
+        LegacyBlocks.writeStep(dst, offset, cmd, value, input);
     }
 
     function writeCall(
@@ -833,7 +829,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes memory payload
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B64 + Sizes.Header + payload.length);
-        Blocks.writeCall(dst, offset, target, resources, payload);
+        LegacyBlocks.writeCall(dst, offset, target, resources, payload);
     }
 
     function writeRelay(
@@ -844,7 +840,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     ) external pure returns (bytes memory dst) {
         bytes memory input = abi.encode(portal, resources);
         dst = new bytes(offset + 3 * Sizes.Header + input.length + steps.length);
-        Blocks.writeRelay(dst, offset, input, steps);
+        LegacyBlocks.writeRelay(dst, offset, input, steps);
     }
 
     function writeDispatch(
@@ -854,7 +850,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes memory payload
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B64 + Sizes.Header + payload.length);
-        Blocks.writeDispatch(dst, offset, portal, resources, payload);
+        LegacyBlocks.writeDispatch(dst, offset, portal, resources, payload);
     }
 
     function writeContext(
@@ -864,7 +860,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes memory input
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
-        Blocks.writeContext(dst, offset, account, state, input);
+        LegacyBlocks.writeContext(dst, offset, account, state, input);
     }
 
     function writeRecover(
@@ -875,7 +871,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes memory witness
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B96 + Sizes.Header + witness.length);
-        Blocks.writeRecover(dst, offset, handler, resources, key, witness);
+        LegacyBlocks.writeRecover(dst, offset, handler, resources, key, witness);
     }
 
     function writeLabel(
@@ -884,7 +880,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         string memory name
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B32 + Sizes.Header + bytes(name).length);
-        Blocks.writeLabel(dst, offset, namespace, name);
+        LegacyBlocks.writeLabel(dst, offset, namespace, name);
     }
 
     function writeSchema(
@@ -893,7 +889,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         string memory body
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.B32 + Sizes.Header + bytes(body).length);
-        Blocks.writeSchema(dst, offset, spec, body);
+        LegacyBlocks.writeSchema(dst, offset, spec, body);
     }
 
     function position(bytes calldata source) private pure returns (uint abs) {
@@ -903,90 +899,90 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     }
 
     function unpackAccount(bytes calldata source) external pure returns (bytes32) {
-        return Blocks.unpackAccount(position(source));
+        return LegacyBlocks.unpackAccount(position(source));
     }
 
     function unpackAsset(bytes calldata source) external pure returns (bytes32) {
-        return Blocks.unpackAsset(position(source));
+        return LegacyBlocks.unpackAsset(position(source));
     }
 
     function unpackNode(bytes calldata source) external pure returns (uint) {
-        return Blocks.unpackNode(position(source));
+        return LegacyBlocks.unpackNode(position(source));
     }
 
     function unpackStatus(bytes calldata source) external pure returns (uint) {
-        return Blocks.unpackStatus(position(source));
+        return LegacyBlocks.unpackStatus(position(source));
     }
 
     function unpackBootstrap(bytes calldata source) external pure returns (bytes32, uint, uint) {
-        return Blocks.unpackBootstrap(position(source));
+        return LegacyBlocks.unpackBootstrap(position(source));
     }
 
     function unpackAmount(bytes calldata source) external pure returns (bytes32, uint) {
-        return Blocks.unpackAmount(position(source));
+        return LegacyBlocks.unpackAmount(position(source));
     }
 
     function unpackBalance(bytes calldata source) external pure returns (bytes32, uint) {
-        return Blocks.unpackBalance(position(source));
+        return LegacyBlocks.unpackBalance(position(source));
     }
 
     function unpackPosition(bytes calldata source) external pure returns (bytes32, uint, bytes32, uint, bytes32) {
-        return Blocks.unpackPosition(position(source));
+        return LegacyBlocks.unpackPosition(position(source));
     }
 
     function unpackAccountAsset(bytes calldata source) external pure returns (bytes32, bytes32) {
-        return Blocks.unpackAccountAsset(position(source));
+        return LegacyBlocks.unpackAccountAsset(position(source));
     }
 
     function unpackAssetLiability(bytes calldata source) external pure returns (bytes32, bytes32) {
-        return Blocks.unpackAssetLiability(position(source));
+        return LegacyBlocks.unpackAssetLiability(position(source));
     }
 
     function unpackHostAsset(bytes calldata source) external pure returns (uint, bytes32) {
-        return Blocks.unpackHostAsset(position(source));
+        return LegacyBlocks.unpackHostAsset(position(source));
     }
 
     function unpackAllocation(bytes calldata source) external pure returns (uint, bytes32, uint) {
-        return Blocks.unpackAllocation(position(source));
+        return LegacyBlocks.unpackAllocation(position(source));
     }
 
     function unpackAllowance(bytes calldata source) external pure returns (uint, bytes32, uint) {
-        return Blocks.unpackAllowance(position(source));
+        return LegacyBlocks.unpackAllowance(position(source));
     }
 
     function unpackCustody(bytes calldata source) external pure returns (uint, bytes32, uint) {
-        return Blocks.unpackCustody(position(source));
+        return LegacyBlocks.unpackCustody(position(source));
     }
 
     function unpackAccountAmount(bytes calldata source) external pure returns (bytes32, bytes32, uint) {
-        return Blocks.unpackAccountAmount(position(source));
+        return LegacyBlocks.unpackAccountAmount(position(source));
     }
 
     function unpackHostAmount(bytes calldata source) external pure returns (uint, bytes32, uint) {
-        return Blocks.unpackHostAmount(position(source));
+        return LegacyBlocks.unpackHostAmount(position(source));
     }
 
     function unpackHostAccountAsset(bytes calldata source) external pure returns (uint, bytes32, bytes32) {
-        return Blocks.unpackHostAccountAsset(position(source));
+        return LegacyBlocks.unpackHostAccountAsset(position(source));
     }
 
     function unpackTransaction(
         bytes calldata source
     ) external pure returns (bytes32, bytes32, bytes32, uint) {
-        return Blocks.unpackTransaction(position(source));
+        return LegacyBlocks.unpackTransaction(position(source));
     }
 
     function unpackHostAccountAmount(
         bytes calldata source
     ) external pure returns (uint, bytes32, bytes32, uint) {
-        return Blocks.unpackHostAccountAmount(position(source));
+        return LegacyBlocks.unpackHostAccountAmount(position(source));
     }
 
     function unpackList(bytes calldata source) external pure returns (bytes memory data, uint length) {
         uint abs = position(source);
         bytes calldata value;
         uint end;
-        (value, end) = Blocks.unpackList(abs);
+        (value, end) = LegacyBlocks.unpackList(abs);
         data = value;
         length = end - abs;
     }
@@ -995,7 +991,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint abs = position(source);
         bytes calldata value;
         uint end;
-        (value, end) = Blocks.unpackBytes(abs);
+        (value, end) = LegacyBlocks.unpackBytes(abs);
         data = value;
         length = end - abs;
     }
@@ -1004,7 +1000,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint abs = position(source);
         bytes calldata value;
         uint end;
-        (value, end) = Blocks.unpackString(abs);
+        (value, end) = LegacyBlocks.unpackString(abs);
         data = value;
         length = end - abs;
     }
@@ -1017,6 +1013,6 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint amount
     ) external pure returns (bytes memory dst) {
         dst = new bytes(offset + Sizes.Transaction);
-        Blocks.writeTransaction(dst, offset, from, to, asset, amount);
+        LegacyBlocks.writeTransaction(dst, offset, from, to, asset, amount);
     }
 }

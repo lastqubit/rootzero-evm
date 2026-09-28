@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Cursors} from "../utils/Cursors.sol";
 
 import {Repay} from "../commands/Repay.sol";
 import {ExecuteSettle} from "../commands/Settle.sol";
@@ -19,7 +20,7 @@ contract TestRepayCommand is Repay, ExecuteSettle, Settlement, Balances, Pipelin
     function balance(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
     function run(bytes32 account, bytes memory state, bytes calldata steps) external payable returns (uint) {
         enforceCaller(msg.sender);
-        return pipe(account, state, steps, msg.value);
+        return pipe(account, state, Cursors.wrap(steps), msg.value);
     }
     function enforceCaller(address caller) internal view override returns (address) {
         if (caller != tester && caller != address(this)) revert AccessDenied();
@@ -29,12 +30,12 @@ contract TestRepayCommand is Repay, ExecuteSettle, Settlement, Balances, Pipelin
         if (cmd != Nodes.toCommand("repay", address(this), 0) && cmd != settleId()) revert AccessDenied();
         return Nodes.decode(cmd);
     }
-    function execute(uint cmd, bytes32 account, bytes memory state, bytes calldata input, uint value)
+    function execute(uint cmd, bytes32 account, bytes memory state, uint inputCur, uint value)
         internal override returns (bool, bytes memory, uint)
     {
         enforceCommand(cmd);
         if (cmd != settleId()) return (false, "", 0);
-        return executeSettle(account, state, input, value);
+        return executeSettle(account, state, inputCur, value);
     }
     function repay(bytes32 account, Position memory position) internal override(Settlement, RepayHook) {
         Settlement.repay(account, position);

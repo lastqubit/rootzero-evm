@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
 
 import {Calls} from "../core/Calls.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Nodes} from "../utils/Nodes.sol";
-import {Blocks} from "../codec/Blocks.sol";
+
 import {Execution, Executions} from "../execution/Execution.sol";
 
 contract TestCommandCalls is Pipeline {
@@ -20,7 +22,7 @@ contract TestCommandCalls is Pipeline {
         uint start;
         assembly ("memory-safe") { start := mload(0x40) }
         uint beforeGas = gasleft();
-        pipe(account, state, steps, 0);
+        pipe(account, state, Cursors.wrap(steps), 0);
         usedGas = beforeGas - gasleft();
         assembly ("memory-safe") { allocated := sub(mload(0x40), start) }
     }
@@ -30,7 +32,7 @@ contract TestCommandCalls is Pipeline {
         bytes memory state,
         bytes calldata steps
     ) external payable returns (uint remaining) {
-        return pipe(account, state, steps, msg.value);
+        return pipe(account, state, Cursors.wrap(steps), msg.value);
     }
 
     function testTryRawCall(
@@ -48,7 +50,7 @@ contract TestCommandCalls is Pipeline {
         uint value,
         bytes calldata input
     ) external payable returns (bool) {
-        return Calls.tryRawCopy(selector, target, value, input);
+        return Calls.tryRaw(selector, target, value, Cursors.wrap(input));
     }
 
     function testTryRawCallGas(
@@ -68,7 +70,7 @@ contract TestCommandCalls is Pipeline {
         uint gasLimit,
         bytes calldata input
     ) external payable returns (bool) {
-        return Calls.tryRawCopy(selector, target, value, gasLimit, input);
+        return Calls.tryRaw(selector, target, value, gasLimit, Cursors.wrap(input));
     }
 
     function testRawCall(
@@ -88,7 +90,16 @@ contract TestCommandCalls is Pipeline {
         bytes calldata input,
         bool expectEmpty
     ) external payable returns (bytes memory, uint) {
-        return Calls.rawCopy(selector, target, value, input, expectEmpty);
+        return Calls.raw(selector, target, value, Cursors.wrap(input), expectEmpty);
+    }
+
+    function testCursorCalls(bytes calldata source, uint start, uint end, uint metadata)
+        external returns (bytes memory out, uint credit, bool success, uint nextCur)
+    {
+        uint cur = Cursors.wrap(source[start:end]) | (metadata & ~uint(type(uint64).max));
+        (out, credit) = Calls.raw(this.echoPort.selector, address(this), 0, cur, false);
+        success = Calls.tryRaw(this.echoPort.selector, address(this), 0, 100_000, cur);
+        nextCur = cur;
     }
 
     function echoPort(bytes calldata data) external payable returns (bytes memory, uint) {
@@ -108,7 +119,7 @@ contract TestCommandCalls is Pipeline {
         bytes4 selector, address target, uint value, bytes calldata input, bool expectEmpty
     ) external payable returns (bytes memory out, uint remaining) {
         Execution memory exec = Executions.open();
-        out = Executions.rawCallCopy(exec, selector, target, value, input, expectEmpty);
+        out = Executions.rawCall(exec, selector, target, value, Cursors.wrap(input), expectEmpty);
         remaining = exec.budget;
     }
 
@@ -157,7 +168,7 @@ contract TestCommandCalls is Pipeline {
     function replaceState(bytes calldata context) external payable returns (bytes memory, uint) {
         uint abs;
         assembly ("memory-safe") { abs := context.offset }
-        (, , bytes calldata input, ) = Blocks.unpackContext(abs);
+        (, , bytes calldata input, ) = LegacyBlocks.unpackContext(abs);
         emit ContextCalled(context, msg.value);
         return (input, msg.value);
     }
@@ -214,7 +225,7 @@ contract TestCommandCalls is Pipeline {
         uint,
         bytes32,
         bytes memory state,
-        bytes calldata,
+        uint,
         uint
     ) internal pure override returns (bool, bytes memory, uint) {
         return (false, state, 0);

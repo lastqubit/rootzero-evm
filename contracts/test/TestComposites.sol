@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {Blocks} from "../codec/Blocks.sol";
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {InvalidBlock} from "../utils/Errors.sol";
+
 import {Keys} from "../codec/Keys.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {max32} from "../utils/Utils.sol";
@@ -35,12 +37,12 @@ library PreviousComposites {
     function createLabel(bytes32 namespace, string memory name) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + bytes(name).length);
         value = allocate(Sizes.Header + len);
-        Blocks.writeLabel(value, 0, namespace, name);
+        LegacyBlocks.writeLabel(value, 0, namespace, name);
     }
 
     function unpackLabel(uint abs) internal pure returns (bytes32 namespace, string memory name, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Label);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Label);
         assembly ("memory-safe") {
             namespace := calldataload(abs)
         }
@@ -53,12 +55,12 @@ library PreviousComposites {
     function createSchema(uint spec, string memory body) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + bytes(body).length);
         value = allocate(Sizes.Header + len);
-        Blocks.writeSchema(value, 0, spec, body);
+        LegacyBlocks.writeSchema(value, 0, spec, body);
     }
 
     function unpackSchema(uint abs) internal pure returns (uint spec, string memory body, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Schema);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Schema);
         assembly ("memory-safe") {
             spec := calldataload(abs)
         }
@@ -69,7 +71,6 @@ library PreviousComposites {
         body = string(value);
     }
 
-    error InvalidBlock();
     function allocate(uint len) private pure returns (bytes memory value) {
         // Every factory overwrites the complete logical result. Only initialize
         // padding and the trailing scratch word, including when memory is dirty.
@@ -87,31 +88,31 @@ library PreviousComposites {
     function createStep(uint cmd, uint value, bytes memory input) internal pure returns (bytes memory encoded) {
         uint len = max32(Sizes.Step + input.length);
         encoded = allocate(len);
-        Blocks.writeStep(encoded, 0, cmd, value, input);
+        LegacyBlocks.writeStep(encoded, 0, cmd, value, input);
     }
 
     function createStepCopy(uint cmd, uint value, bytes calldata input) internal pure returns (bytes memory encoded) {
         uint len = max32(Sizes.Step + input.length);
         encoded = allocate(len);
-        Blocks.copyStep(encoded, 0, cmd, value, input);
+        LegacyBlocks.copyStep(encoded, 0, cmd, value, input);
     }
 
     function createCall(uint target, uint resources, bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        Blocks.writeCall(value, 0, target, resources, payload);
+        LegacyBlocks.writeCall(value, 0, target, resources, payload);
     }
 
     function createCallCopy(uint target, uint resources, bytes calldata payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        Blocks.copyCall(value, 0, target, resources, payload);
+        LegacyBlocks.copyCall(value, 0, target, resources, payload);
     }
 
     function createDispatch(uint portal, uint resources, bytes memory payload) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        Blocks.writeDispatch(value, 0, portal, resources, payload);
+        LegacyBlocks.writeDispatch(value, 0, portal, resources, payload);
     }
 
     function createDispatchCopy(
@@ -121,19 +122,19 @@ library PreviousComposites {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B64 + Sizes.Header + payload.length);
         value = allocate(len);
-        Blocks.copyDispatch(value, 0, portal, resources, payload);
+        LegacyBlocks.copyDispatch(value, 0, portal, resources, payload);
     }
 
     function createRelay(bytes memory input, bytes memory steps) internal pure returns (bytes memory value) {
         uint len = max32(3 * Sizes.Header + input.length + steps.length);
         value = allocate(len);
-        Blocks.writeRelay(value, 0, input, steps);
+        LegacyBlocks.writeRelay(value, 0, input, steps);
     }
 
     function createRelayCopy(bytes calldata input, bytes calldata steps) internal pure returns (bytes memory value) {
         uint len = max32(3 * Sizes.Header + input.length + steps.length);
         value = allocate(len);
-        Blocks.copyRelay(value, 0, input, steps);
+        LegacyBlocks.copyRelay(value, 0, input, steps);
     }
 
     function createContext(
@@ -143,7 +144,7 @@ library PreviousComposites {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
         value = allocate(len);
-        Blocks.writeContext(value, 0, account, state, input);
+        LegacyBlocks.writeContext(value, 0, account, state, input);
     }
 
     function createContextCopy(
@@ -153,7 +154,7 @@ library PreviousComposites {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B32 + 2 * Sizes.Header + state.length + input.length);
         value = allocate(len);
-        Blocks.copyContext(value, 0, account, state, input);
+        LegacyBlocks.copyContext(value, 0, account, state, input);
     }
 
     function createRecover(
@@ -164,7 +165,7 @@ library PreviousComposites {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
         value = allocate(len);
-        Blocks.writeRecover(value, 0, handler, resources, recoverykey, witness);
+        LegacyBlocks.writeRecover(value, 0, handler, resources, recoverykey, witness);
     }
 
     function createRecoverCopy(
@@ -175,14 +176,14 @@ library PreviousComposites {
     ) internal pure returns (bytes memory value) {
         uint len = max32(Sizes.B96 + Sizes.Header + witness.length);
         value = allocate(len);
-        Blocks.copyRecover(value, 0, handler, resources, recoverykey, witness);
+        LegacyBlocks.copyRecover(value, 0, handler, resources, recoverykey, witness);
     }
 
     function unpackStep(
         uint abs
     ) internal pure returns (uint cmd, uint value, bytes calldata input, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Step);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Step);
         assembly ("memory-safe") {
             cmd := calldataload(abs)
             value := calldataload(add(abs, 0x20))
@@ -195,7 +196,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (uint target, uint resources, bytes calldata payload, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Call);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Call);
         assembly ("memory-safe") {
             target := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
@@ -208,7 +209,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (uint portal, uint resources, bytes calldata payload, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Dispatch);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Dispatch);
         assembly ("memory-safe") {
             portal := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
@@ -221,7 +222,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (bytes calldata input, bytes calldata steps, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Relay);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Relay);
         (input, abs) = unpackBytes(abs);
         (steps, end) = unpackBytes(abs);
         if (end != limit) revert InvalidBlock();
@@ -231,7 +232,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (bytes32 account, bytes calldata state, bytes calldata input, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Context);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Context);
         assembly ("memory-safe") {
             account := calldataload(abs)
         }
@@ -244,7 +245,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (uint handler, uint resources, bytes32 key, bytes calldata witness, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Recover);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Recover);
         assembly ("memory-safe") {
             handler := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
@@ -258,7 +259,7 @@ library PreviousComposites {
         uint abs
     ) internal pure returns (uint entity, bytes calldata stream, uint end) {
         uint limit;
-        (abs, limit) = Blocks.enter(abs, Keys.Annotation);
+        (abs, limit) = LegacyBlocks.enter(abs, Keys.Annotation);
         assembly ("memory-safe") {
             entity := calldataload(abs)
         }
@@ -295,7 +296,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createStep(11, 22, ma) : PreviousComposites.createStep(11, 22, ma);
+        output = optimized ? LegacyBlocks.createStep(11, 22, ma) : PreviousComposites.createStep(11, 22, ma);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -307,7 +308,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createStepCopy(11, 22, a) : PreviousComposites.createStepCopy(11, 22, a);
+        output = optimized ? LegacyBlocks.createStepCopy(11, 22, a) : PreviousComposites.createStepCopy(11, 22, a);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -319,7 +320,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createCall(11, 22, ma) : PreviousComposites.createCall(11, 22, ma);
+        output = optimized ? LegacyBlocks.createCall(11, 22, ma) : PreviousComposites.createCall(11, 22, ma);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -331,7 +332,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createCallCopy(11, 22, a) : PreviousComposites.createCallCopy(11, 22, a);
+        output = optimized ? LegacyBlocks.createCallCopy(11, 22, a) : PreviousComposites.createCallCopy(11, 22, a);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -343,7 +344,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createDispatch(11, 22, ma) : PreviousComposites.createDispatch(11, 22, ma);
+        output = optimized ? LegacyBlocks.createDispatch(11, 22, ma) : PreviousComposites.createDispatch(11, 22, ma);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -355,7 +356,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createDispatchCopy(11, 22, a) : PreviousComposites.createDispatchCopy(11, 22, a);
+        output = optimized ? LegacyBlocks.createDispatchCopy(11, 22, a) : PreviousComposites.createDispatchCopy(11, 22, a);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -368,7 +369,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createRelay(ma, mb) : PreviousComposites.createRelay(ma, mb);
+        output = optimized ? LegacyBlocks.createRelay(ma, mb) : PreviousComposites.createRelay(ma, mb);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -380,7 +381,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createRelayCopy(a, b) : PreviousComposites.createRelayCopy(a, b);
+        output = optimized ? LegacyBlocks.createRelayCopy(a, b) : PreviousComposites.createRelayCopy(a, b);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -393,7 +394,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createContext(bytes32(uint(33)), ma, mb) : PreviousComposites.createContext(bytes32(uint(33)), ma, mb);
+        output = optimized ? LegacyBlocks.createContext(bytes32(uint(33)), ma, mb) : PreviousComposites.createContext(bytes32(uint(33)), ma, mb);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -405,7 +406,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createContextCopy(bytes32(uint(33)), a, b) : PreviousComposites.createContextCopy(bytes32(uint(33)), a, b);
+        output = optimized ? LegacyBlocks.createContextCopy(bytes32(uint(33)), a, b) : PreviousComposites.createContextCopy(bytes32(uint(33)), a, b);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -417,7 +418,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createRecover(11, 22, bytes32(uint(33)), ma) : PreviousComposites.createRecover(11, 22, bytes32(uint(33)), ma);
+        output = optimized ? LegacyBlocks.createRecover(11, 22, bytes32(uint(33)), ma) : PreviousComposites.createRecover(11, 22, bytes32(uint(33)), ma);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -429,7 +430,7 @@ contract TestComposites {
             assembly ("memory-safe") { a.length := forgedLength mstore(ma, forgedLength) }
         }
         uint initial = gasleft();
-        output = optimized ? Blocks.createRecoverCopy(11, 22, bytes32(uint(33)), a) : PreviousComposites.createRecoverCopy(11, 22, bytes32(uint(33)), a);
+        output = optimized ? LegacyBlocks.createRecoverCopy(11, 22, bytes32(uint(33)), a) : PreviousComposites.createRecoverCopy(11, 22, bytes32(uint(33)), a);
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -439,7 +440,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint cmd; uint value; bytes calldata input; uint end;
         uint initial = gasleft();
-        if (optimized) (cmd, value, input, end) = Blocks.unpackStep(abs);
+        if (optimized) (cmd, value, input, end) = LegacyBlocks.unpackStep(abs);
         else (cmd, value, input, end) = PreviousComposites.unpackStep(abs);
         usedGas = initial - gasleft();
         output = abi.encode(cmd, value, input, end - base);
@@ -450,7 +451,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint target; uint resources; bytes calldata payload; uint end;
         uint initial = gasleft();
-        if (optimized) (target, resources, payload, end) = Blocks.unpackCall(abs);
+        if (optimized) (target, resources, payload, end) = LegacyBlocks.unpackCall(abs);
         else (target, resources, payload, end) = PreviousComposites.unpackCall(abs);
         usedGas = initial - gasleft();
         output = abi.encode(target, resources, payload, end - base);
@@ -461,7 +462,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint portal; uint resources; bytes calldata payload; uint end;
         uint initial = gasleft();
-        if (optimized) (portal, resources, payload, end) = Blocks.unpackDispatch(abs);
+        if (optimized) (portal, resources, payload, end) = LegacyBlocks.unpackDispatch(abs);
         else (portal, resources, payload, end) = PreviousComposites.unpackDispatch(abs);
         usedGas = initial - gasleft();
         output = abi.encode(portal, resources, payload, end - base);
@@ -472,7 +473,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         bytes calldata input; bytes calldata steps; uint end;
         uint initial = gasleft();
-        if (optimized) (input, steps, end) = Blocks.unpackRelay(abs);
+        if (optimized) (input, steps, end) = LegacyBlocks.unpackRelay(abs);
         else (input, steps, end) = PreviousComposites.unpackRelay(abs);
         usedGas = initial - gasleft();
         output = abi.encode(input, steps, end - base);
@@ -483,7 +484,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         bytes32 account; bytes calldata state; bytes calldata input; uint end;
         uint initial = gasleft();
-        if (optimized) (account, state, input, end) = Blocks.unpackContext(abs);
+        if (optimized) (account, state, input, end) = LegacyBlocks.unpackContext(abs);
         else (account, state, input, end) = PreviousComposites.unpackContext(abs);
         usedGas = initial - gasleft();
         output = abi.encode(account, state, input, end - base);
@@ -494,7 +495,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint handler; uint resources; bytes32 key; bytes calldata witness; uint end;
         uint initial = gasleft();
-        if (optimized) (handler, resources, key, witness, end) = Blocks.unpackRecover(abs);
+        if (optimized) (handler, resources, key, witness, end) = LegacyBlocks.unpackRecover(abs);
         else (handler, resources, key, witness, end) = PreviousComposites.unpackRecover(abs);
         usedGas = initial - gasleft();
         output = abi.encode(handler, resources, key, witness, end - base);
@@ -505,7 +506,7 @@ contract TestComposites {
         uint abs = absolute ? start : base + start;
         uint entity; bytes calldata stream; uint end;
         uint initial = gasleft();
-        if (optimized) (entity, stream, end) = Blocks.unpackAnnotation(abs);
+        if (optimized) (entity, stream, end) = LegacyBlocks.unpackAnnotation(abs);
         else (entity, stream, end) = PreviousComposites.unpackAnnotation(abs);
         usedGas = initial - gasleft();
         output = abi.encode(entity, stream, end - base);
@@ -516,7 +517,7 @@ contract TestComposites {
         dirty(48 + a.length);
         if (forgedLength != 0) { assembly ("memory-safe") { mstore(ma, forgedLength) } }
         uint initial = gasleft();
-        output = optimized ? Blocks.createLabel(bytes32(uint(33)), string(ma)) : PreviousComposites.createLabel(bytes32(uint(33)), string(ma));
+        output = optimized ? LegacyBlocks.createLabel(bytes32(uint(33)), string(ma)) : PreviousComposites.createLabel(bytes32(uint(33)), string(ma));
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -526,7 +527,7 @@ contract TestComposites {
         dirty(80 + a.length);
         if (forgedLength != 0) { assembly ("memory-safe") { mstore(ma, forgedLength) } }
         uint initial = gasleft();
-        output = optimized ? Blocks.createSchema(11, string(ma)) : PreviousComposites.createSchema(11, string(ma));
+        output = optimized ? LegacyBlocks.createSchema(11, string(ma)) : PreviousComposites.createSchema(11, string(ma));
         usedGas = initial - gasleft();
         cleanTail = clean(output);
     }
@@ -538,7 +539,7 @@ contract TestComposites {
         uint initial = gasleft();
         if (optimized) {
             bytes calldata value;
-            (namespace, value, end) = Blocks.unpackLabel(abs);
+            (namespace, value, end) = LegacyBlocks.unpackLabel(abs);
             name = string(value);
         }
         else (namespace, name, end) = PreviousComposites.unpackLabel(abs);
@@ -553,7 +554,7 @@ contract TestComposites {
         uint initial = gasleft();
         if (optimized) {
             bytes calldata value;
-            (spec, value, end) = Blocks.unpackSchema(abs);
+            (spec, value, end) = LegacyBlocks.unpackSchema(abs);
             body = string(value);
         }
         else (spec, body, end) = PreviousComposites.unpackSchema(abs);

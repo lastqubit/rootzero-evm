@@ -4,7 +4,7 @@ import { deploy } from "./helpers/setup.js";
 import { concat, encodeBalanceBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
-describe("Executions.scaleOutput", () => {
+describe("Buffers.scale", () => {
   let helper: any;
   before(async () => { helper = await deploy("TestScaleOutput"); });
   const max = (1n << 32n) - 1n;
@@ -17,30 +17,21 @@ describe("Executions.scaleOutput", () => {
   ]) {
     it(`scales ${capacity} by ${numerator}/${denominator} without allocation`, async () => {
       expect(await helper.scale(flags | (capacity << 32n), numerator, denominator)).to.equal(flags | (expected << 32n));
-      expect(Array.from(await helper.inspect(flags | (capacity << 32n), numerator, denominator, 0)))
-        .to.deep.equal([flags | (expected << 32n), 0n, 0n]);
     });
   }
   it("rejects a zero denominator even for an empty hint", async () => {
     for (const capacity of [0n, 72n]) {
       await expect(helper.scale(capacity << 32n, 1, 0)).to.be.revertedWithCustomError(helper, "ZeroAmount");
-      await expect(helper.inspect(capacity << 32n, 1, 0, 0)).to.be.revertedWithCustomError(helper, "ZeroAmount");
     }
   });
   it("rejects capacity and intermediate-product overflow", async () => {
     for (const [capacity, numerator, denominator] of [[max, 2n, 1n], [2n, ethers.MaxUint256, ethers.MaxUint256]]) {
       await expect(helper.scale(capacity << 32n, numerator, denominator))
         .to.be.revertedWithCustomError(helper, "ValueOverflow");
-      await expect(helper.inspect(capacity << 32n, numerator, denominator, 0))
-        .to.be.revertedWithCustomError(helper, "ValueOverflow");
     }
   });
-  it("rejects scaling after any reservation, including a zero-byte reservation", async () => {
-    for (const mode of [1, 2]) {
-      await expect(helper.inspect(72n << 32n, 2, 1, mode)).to.be.revertedWithCustomError(helper, "UnexpectedPosition");
-    }
+  it("rejects scaling after the cursor advances", async () => {
     await expect(helper.scale((72n << 32n) | 1n, 2, 1)).to.be.revertedWithCustomError(helper, "UnexpectedPosition");
-    await expect(helper.inspect((72n << 32n) | 1n, 2, 1, 0)).to.be.revertedWithCustomError(helper, "UnexpectedPosition");
   });
   it("preserves output and grows beyond reduced or cleared hints", async () => {
     const expected = concat(...Array.from({ length: 3 }, (_, i) => encodeBalanceBlock(ethers.toBeHex(1, 32), BigInt(i + 1))));

@@ -44,7 +44,7 @@ describe("Separate more/enter versus historical enterNext", function () {
     writeFileSync(".npm-cache/enter-next-results.json", JSON.stringify(rows, null, 2) + "\n");
   });
 
-  it("preserves both-lane exhaustion, exact errors, and packed metadata", async () => {
+  it("checks frozen in-place behavior and consuming selection errors", async () => {
     const baseline = await deploy("TestEnterNextBaseline", spec);
     const candidate = await deploy("TestEnterNextCurrent", spec);
     const inlineVersion = await deploy("TestEnterNextInline", spec);
@@ -54,10 +54,9 @@ describe("Separate more/enter versus historical enterNext", function () {
         for (const [position, limit] of [[0, ethers.dataLength(input)], [0, 0], [0, 7], [1, 0]]) {
           for (const state of [0n, 1n << 32n, (8n << 32n) | 8n, 9n]) {
             const args = [input, expected, position, limit, state, ethers.MaxUint256 >> 128n];
-            expect(await outcome(() => candidate.enterOnce(...args)))
-              .to.deep.equal(await outcome(() => baseline.enterOnce(...args)));
+            // Frozen in-place implementations retain their historical semantics.
             expect(await outcome(() => inlineVersion.enterOnce(...args)))
-              .to.deep.equal(await outcome(() => candidate.enterOnce(...args)));
+              .to.deep.equal(await outcome(() => baseline.enterOnce(...args)));
           }
         }
       }
@@ -69,13 +68,20 @@ describe("Separate more/enter versus historical enterNext", function () {
       .to.deep.equal(error);
     const ended = await candidate.enterOnce("0x", spec, 0, 0, 0, 0);
     expect(ended.entered).to.equal(false);
-    // Incomplete parents and invalid children still fail during the loop body.
-    for (const input of [ethers.dataSlice(parent, 0, 8), ethers.dataSlice(parent, 0, 112),
-      parent + "00", encodeBlock(Keys.Bytes, "0x" + "00".repeat(208))]) {
+    // Consuming selection validates parent containment before reading children.
+    // Frozen in-place entry reaches a missing child and reports InvalidBlock instead.
+    for (const [input, currentError] of [
+      [ethers.dataSlice(parent, 0, 8), "OutOfBounds"],
+      [ethers.dataSlice(parent, 0, 112), "OutOfBounds"],
+      [parent + "00", "InvalidBlock"],
+      [encodeBlock(Keys.Bytes, "0x" + "00".repeat(208)), "InvalidBlock"],
+    ]) {
       expect(await outcome(() => candidate.measure(input)))
-        .to.deep.equal(await outcome(() => baseline.measure(input)));
+        .to.deep.equal({ error: ethers.id(`${currentError}()`).slice(0, 10) });
+      expect(await outcome(() => baseline.measure(input)))
+        .to.deep.equal({ error: ethers.id("InvalidBlock()").slice(0, 10) });
       expect(await outcome(() => inlineVersion.measure(input)))
-        .to.deep.equal(await outcome(() => candidate.measure(input)));
+        .to.deep.equal(await outcome(() => baseline.measure(input)));
     }
   });
 });

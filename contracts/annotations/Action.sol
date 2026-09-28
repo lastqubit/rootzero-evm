@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AnnotationEvent} from "../events/Annotation.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 /// @title ActionAnnot
 /// @notice Emits a primary semantic action annotation for an entity.
@@ -12,6 +12,6 @@ abstract contract ActionAnnot is AnnotationEvent {
     /// @param entity Entity receiving the action annotation.
     /// @param value Canonical action identifier, such as a value from `Actions`.
     function annotateAction(uint entity, uint value) internal virtual {
-        emit Annotation(entity, Blocks.createAction(value));
+        emit Annotation(entity, Encoder.createAction(value));
     }
 }

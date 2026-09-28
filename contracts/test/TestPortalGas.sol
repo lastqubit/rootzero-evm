@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Cursors} from "../utils/Cursors.sol";
 
 import {Portal} from "../core/Portal.sol";
 import {Runtime} from "../core/Runtime.sol";
@@ -23,7 +24,7 @@ contract TestPortalGasReserve is Portal {
     {
         // Exercise a transport that has already allocated memory before forwarding.
         bytes memory prior = new bytes(priorMemory);
-        miss = forward(key, message, msg.value);
+        miss = forward(key, Cursors.wrap(message), msg.value);
         // Keep the earlier allocation live without adding storage/event overhead.
         assembly ("memory-safe") { mstore(prior, 0) }
     }
@@ -38,7 +39,7 @@ contract TestPortalGas is Portal {
     constructor(uint cmdr) Runtime(cmdr) {}
 
     function testForward(bytes32 key, bytes calldata message) external payable returns (bytes32) {
-        return forward(key, message, msg.value);
+        return forward(key, Cursors.wrap(message), msg.value);
     }
 
     function getUnresolved(bytes32 key) external view returns (bytes32) {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Sizes} from "../Codec.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {QueryBase} from "../queries/Base.sol";
@@ -13,8 +13,9 @@ using Executions for Execution;
 
 function output32(Execution memory exec, uint spec, bytes32 value) pure {
     uint len = Specs.exact(spec, 1, 32);
-    uint i = exec.reserve(Sizes.Header + len, Sizes.B32);
-    Blocks.write32(exec.output, i, Specs.key(spec), value);
+    uint abs = exec.reserve(Sizes.Header + len);
+    abs = Encoder.writeHeader(abs, Specs.key(spec), len);
+    Encoder.write32(abs, value);
 }
 
 contract TestQuery is QueryBase {

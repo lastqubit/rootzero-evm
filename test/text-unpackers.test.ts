@@ -40,14 +40,14 @@ describe("Text unpacker bounds before memory copies", function () {
           }
         });
 
-        it("keeps header errors ahead of source bounds errors", async () => {
+        it("checks the parent header before bounds and child headers after parent containment", async () => {
           const block = encoders[kind]("text");
           for (const offset of kind === 0 ? [0] : [0, 40, 47]) {
             const bad = ethers.getBytes(block);
             bad[offset] ^= 0xff;
             for (const length of [1, bad.length]) {
               await expect(helper.decode(kind, execution, bad, length))
-                .to.be.revertedWithCustomError(helper, "InvalidBlock");
+                .to.be.revertedWithCustomError(helper, offset !== 0 && length === 1 ? "OutOfBounds" : "InvalidBlock");
             }
           }
         });

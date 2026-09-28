@@ -2,9 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {CommandBase, Specs} from "./Base.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
-import {Cursors} from "../utils/Cursors.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
@@ -50,7 +49,7 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     /// @notice Execute bootstrap directly against a calldata BOOTSTRAP stream.
     /// @param account Account funding the pipeline.
     /// @param state Empty pipeline state required by the command schema.
-    /// @param input BOOTSTRAP block stream.
+    /// @param inputCur Cursor over BOOTSTRAP block stream.
     /// @param value Native value available to fund chain-asset balances.
     /// @return handled Always true because this helper executed the command.
     /// @return output One BALANCE block per BOOTSTRAP input.
@@ -58,25 +57,23 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     function executeBootstrap(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Cursors.bounds(input, Sizes.Bootstrap);
-        // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
+        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Bootstrap);
+        uint i;
         unchecked {
-            output = new bytes(input.length / Sizes.Bootstrap * Sizes.Balance);
+            (i, output) = Execute.allocateBalances((end - abs) / Sizes.Bootstrap);
         }
         credit = value;
-        uint i;
 
         while (abs < end) {
-            (bytes32 asset, uint amount, uint budget) = Blocks.unpackBootstrap(abs);
+            (bytes32 asset, uint amount, uint budget) = Execute.unpackBootstrap(abs);
             credit = bootstrap(account, asset, amount, budget, credit);
-            Blocks.writeBalance(output, i, asset, amount);
+            i = Execute.writeBalance(i, asset, amount);
             unchecked {
                 abs += Sizes.Bootstrap;
-                i += Sizes.Balance;
             }
         }
 

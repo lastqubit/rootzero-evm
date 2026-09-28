@@ -1,14 +1,14 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBootstrapBlock, encodeAssetLimitsBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeBootstrapBlock, encodeBalanceConstraintsBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Balance and bootstrap adapter boundaries", () => {
   const asset = ethers.toBeHex(1n, 32);
   const balance = encodeBalanceBlock(asset, 100n);
   const bootstrap = encodeBootstrapBlock(asset, 100n, 3n);
-  const limits = encodeAssetLimitsBlock(asset, 100n, 100n);
+  const limits = encodeBalanceConstraintsBlock(asset, 100n, 100n);
   let host: any;
   let native: string;
   async function expectOverflow(call: Promise<unknown>) {
@@ -97,7 +97,7 @@ describe("Balance and bootstrap adapter boundaries", () => {
     expect(await host.balances(asset)).to.equal(9_900n);
     expect(await host.balances(native)).to.equal(9_997n);
     await expectOverflow(host.measureBootstrap("0x", concat(bootstrap, encodeBootstrapBlock(asset, 10_000n, 0n)), 0n, { gasLimit: 1_000_000 }));
-    await expect(host.measureBoth(bootstrap, encodeAssetLimitsBlock(asset, 101n, 101n), 0n, { gasLimit: 1_000_000 }))
+    await expect(host.measureBoth(bootstrap, encodeBalanceConstraintsBlock(asset, 101n, 101n), 0n, { gasLimit: 1_000_000 }))
       .to.be.revertedWithCustomError(host, "OutOfRange");
     expect(await host.balances(asset)).to.equal(9_900n);
     expect(await host.balances(native)).to.equal(9_997n);

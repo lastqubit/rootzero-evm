@@ -1,14 +1,14 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeAssetLimitsBlock, encodePositionBlock, encodePositionLimitsBlock, encodeLimitsBlock, encodeContextBlock, endpointDescriptor, Keys, MaxUint128 } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeBalanceConstraintsBlock, encodePositionBlock, encodePositionConstraintsBlock, encodeLimitsBlock, encodeContextBlock, endpointDescriptor, Keys, MaxUint128 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("CheckBalance command", () => {
   const asset = ethers.toBeHex(1n, 32);
   const account = ethers.toBeHex(3n, 32);
   const balance = (amount = 100n) => encodeBalanceBlock(asset, amount);
-  const limits = (minimum = 90n, maximum = 110n) => encodeAssetLimitsBlock(asset, minimum, maximum);
+  const limits = (minimum = 90n, maximum = 110n) => encodeBalanceConstraintsBlock(asset, minimum, maximum);
   let host: any;
   before(async () => { host = await deploy("TestCheckBalance"); });
 
@@ -18,7 +18,7 @@ describe("CheckBalance command", () => {
     expect(await host.checkBalance.staticCall(encodeContextBlock(account, balance(), limits())))
       .to.deep.equal([balance(), 0n]);
     expect(await host.checkPosition.staticCall(encodeContextBlock(account, position,
-      encodePositionLimitsBlock(asset, 100n, liability, 40n))))
+      encodePositionConstraintsBlock(asset, 100n, liability, 40n))))
       .to.deep.equal([position, 0n]);
   });
 
@@ -29,11 +29,11 @@ describe("CheckBalance command", () => {
     expect((await host.checkMemory(state, input, 0n))[1]).to.equal(state);
   });
 
-  it("registers the BALANCE / ASSET_LIMITS / BALANCE command", async () => {
+  it("registers the BALANCE / BALANCE_CONSTRAINTS / BALANCE command", async () => {
     const id = await commandId("checkBalance(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ state: Keys.Balance, stateHint: 64, input: Keys.AssetLimits,
+      endpointDescriptor({ state: Keys.Balance, stateHint: 64, input: Keys.BalanceConstraints,
         output: BigInt(Keys.Balance) << 224n | 64n << 136n }));
   });
 
@@ -53,7 +53,7 @@ describe("CheckBalance command", () => {
     it("preserves empty state, batch quantities, and distinct asset identifiers", async () => {
       expect(await run("0x", "0x")).to.equal("0x");
       const state = concat(balance(), encodeBalanceBlock(ethers.toBeHex(ethers.MaxUint256, 32), 0n), balance(MaxUint128));
-      expect(await run(state, concat(limits(), encodeAssetLimitsBlock(ethers.toBeHex(ethers.MaxUint256, 32), 0n, 0n), limits(MaxUint128, MaxUint128)))).to.equal(state);
+      expect(await run(state, concat(limits(), encodeBalanceConstraintsBlock(ethers.toBeHex(ethers.MaxUint256, 32), 0n, 0n), limits(MaxUint128, MaxUint128)))).to.equal(state);
     });
 
     it("accepts inclusive lower and upper bounds and interior amounts", async () => {
@@ -67,16 +67,16 @@ describe("CheckBalance command", () => {
 
     it("rejects the wrong asset before quantity bounds, including zero balances", async () => {
       for (const amount of [0n, 100n]) {
-        await expect(run(balance(amount), encodeAssetLimitsBlock(account, 101n, 99n)))
+        await expect(run(balance(amount), encodeBalanceConstraintsBlock(account, 101n, 99n)))
           .to.be.revertedWithCustomError(host, "UnexpectedValue");
       }
-      await expect(run(concat(balance(), balance()), concat(limits(), encodeAssetLimitsBlock(account, 0n, ethers.MaxUint256))))
+      await expect(run(concat(balance(), balance()), concat(limits(), encodeBalanceConstraintsBlock(account, 0n, ethers.MaxUint256))))
         .to.be.revertedWithCustomError(host, "UnexpectedValue");
     });
 
     it("rejects the former packed LIMITS input", async () => {
       await expect(run(balance(), encodeLimitsBlock(90n, 110n)))
-        .to.be.revertedWithCustomError(host, memory ? "InvalidBlock" : "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
     it("rejects either violated bound, inverted ranges, and full-width values without truncation", async () => {
@@ -91,11 +91,13 @@ describe("CheckBalance command", () => {
     });
 
     it("rejects missing, extra, truncated, and mismatched block streams", async () => {
-      for (const [state, input] of [
-        [balance(), "0x"], ["0x", limits()], [balance(), concat(limits(), limits())],
-        [balance().slice(0, -2), limits()], [balance(), limits().slice(0, -2)],
-        [concat(balance(), balance()), limits()],
-      ]) await expect(run(state, input)).to.be.revertedWithCustomError(host, memory ? "InvalidBlock" : "OutOfBounds");
+      for (const [state, input, error] of [
+        [balance(), "0x", "InvalidBlock"], ["0x", limits(), "InvalidBlock"],
+        [balance(), concat(limits(), limits()), "InvalidBlock"],
+        [balance().slice(0, -2), limits(), "OutOfBounds"],
+        [balance(), limits().slice(0, -2), "OutOfBounds"],
+        [concat(balance(), balance()), limits(), "InvalidBlock"],
+      ]) await expect(run(state, input)).to.be.revertedWithCustomError(host, memory ? "InvalidBlock" : error);
     });
 
     it("validates exact keys and sizes before checking amounts", async () => {

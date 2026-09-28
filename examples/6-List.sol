@@ -9,10 +9,15 @@ pragma solidity ^0.8.33;
 // Keep explicit iteration here to carry a local batch index across outer lists.
 
 import {Host} from "../contracts/Core.sol";
-import {CommandBase, Cur, Decoders, Execution, Executions, Specs} from "../contracts/Commands.sol";
+import {CommandBase, Execution, Executions, Specs} from "../contracts/Commands.sol";
+
+import {Blocks} from "../contracts/codec/Blocks.sol";
+import {Headers} from "../contracts/codec/Headers.sol";
+import {Cursors} from "../contracts/utils/Cursors.sol";
 
 using Executions for Execution;
-using Decoders for Cur;
+using Blocks for uint;
+using Cursors for uint;
 
 abstract contract MyCommand is CommandBase {
     string private constant INPUT = "many #asset";
@@ -32,10 +37,12 @@ abstract contract MyCommand is CommandBase {
         uint batch;
 
         while (exec.more()) {
-            Cur memory items = exec.list(inputSpec);
+            uint itemsCur = exec.unpackList(inputSpec);
 
-            while (items.more()) {
-                emit AssetSeen(batch, items.unpackAsset());
+            while (itemsCur.more()) {
+                uint abs;
+                (abs,, itemsCur) = itemsCur.enterFixed(Headers.Asset, 32);
+                emit AssetSeen(batch, Blocks.read32(abs));
             }
 
             unchecked {

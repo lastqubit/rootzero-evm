@@ -1,5 +1,6 @@
 import * as chai from "chai";
 import type { BaseContract, ContractTransactionResponse, Log } from "ethers";
+import { id } from "ethers";
 
 function tryDecodeErrorName(contract: BaseContract, data: string): string | null {
   try {
@@ -24,6 +25,8 @@ function getErrorData(e: unknown): string | null {
   const err = e as Record<string, unknown>;
   // Direct data field
   if (typeof err["data"] === "string") return err["data"];
+  const rpcError = err["error"] as Record<string, unknown> | undefined;
+  if (typeof rpcError?.["data"] === "string") return rpcError["data"];
   // Nested in e.info.error.data (Hardhat UNKNOWN_ERROR pattern)
   const info = err["info"] as Record<string, unknown> | undefined;
   const innerErr = info?.["error"] as Record<string, unknown> | undefined;
@@ -117,6 +120,9 @@ chai.use((chaiLib, utils) => {
             (typeof err["errorName"] === "string" ? err["errorName"] : null) ??
             (typeof revert?.["name"] === "string" ? (revert["name"] as string) : null) ??
             (data ? tryDecodeErrorName(contract, data) : null) ??
+            // Assembly-only reverts may be absent from the generated contract ABI.
+            // Match the complete four-byte payload for parameterless errors.
+            (data === id(errorName + "()").slice(0, 10) ? errorName : null) ??
             extractFromMessage(String(err["message"] ?? ""));
           if (actualName !== errorName) {
             throw new chai.AssertionError(

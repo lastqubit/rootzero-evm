@@ -23,18 +23,26 @@ abstract contract ExecutePayable is AdminBase {
 
     /// @dev Execute arbitrary calldata while ignoring successful returndata.
     /// Returndata is copied only when needed to report a failed call.
-    function callTarget(uint target, uint value, bytes calldata data) private {
+    function callTarget(uint target, uint value, uint dataCur) private {
         address addr = Nodes.addr(target);
-        bytes4 selector = bytes4(data);
+        bytes4 selector;
         bool success;
         bytes memory err;
 
         assembly ("memory-safe") {
             let scratch := mload(0x40)
-            calldatacopy(scratch, data.offset, data.length)
-            success := call(gas(), addr, value, scratch, data.length, 0, 0)
+            let abs := and(dataCur, 0xffffffff)
+            let len := sub(and(shr(32, dataCur), 0xffffffff), abs)
+            calldatacopy(scratch, abs, len)
+            success := call(gas(), addr, value, scratch, len, 0, 0)
 
             if iszero(success) {
+                selector := mload(scratch)
+                // Match bytes4 conversion: short input is right-padded with zeros.
+                if lt(len, 4) {
+                    let shift := sub(256, mul(len, 8))
+                    selector := shl(shift, shr(shift, selector))
+                }
                 let size := returndatasize()
                 err := scratch
                 mstore(err, size)
@@ -57,8 +65,8 @@ abstract contract ExecutePayable is AdminBase {
         Execution memory exec = openAdminCommand(context, descriptor);
 
         while (exec.more()) {
-            (uint target, uint resources, bytes calldata data) = exec.unpackCall();
-            callTarget(target, exec.useResourceValue(resources), data);
+            (uint target, uint resources, uint dataCur) = exec.unpackCall();
+            callTarget(target, exec.useResourceValue(resources), dataCur);
         }
 
         return exec.close();

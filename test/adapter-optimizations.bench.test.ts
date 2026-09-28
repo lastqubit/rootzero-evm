@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBootstrapBlock, encodeAssetLimitsBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeBootstrapBlock, encodeBalanceConstraintsBlock } from "./helpers/blocks.js";
 
 describe("Balance and bootstrap adapter gas", function () {
   this.timeout(120_000);
@@ -14,7 +14,7 @@ describe("Balance and bootstrap adapter gas", function () {
     for (const count of [0, 1, 2, 4, 8, 16, 32]) {
       const state = concat(...Array(count).fill(encodeBalanceBlock(asset, 100n)));
       const input = concat(...Array(count).fill(encodeBootstrapBlock(asset, 100n, 3n)));
-      const limits = concat(...Array(count).fill(encodeAssetLimitsBlock(asset, 90n, 110n)));
+      const limits = concat(...Array(count).fill(encodeBalanceConstraintsBlock(asset, 90n, 110n)));
       const balance = await host.measureBalance(state, limits, 7n);
       const bootstrap = await host.measureBootstrap.staticCall("0x", input, 7n);
       const both = await host.measureBoth.staticCall(input, limits, 7n);

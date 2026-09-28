@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Blocks} from "../codec/Blocks.sol";
 import {Calls} from "./Calls.sol";
 import {Runtime} from "./Runtime.sol";
 import {ResolvedEvent} from "../events/Resolved.sol";
@@ -9,12 +10,12 @@ import {PortPipePayableSelector} from "../ports/Pipe.sol";
 
 /// @notice Hook for forwarding a recoverable message through a transport boundary.
 abstract contract ForwardHook {
-    /// @notice Attempt to forward `message`, recording or returning its failure digest as needed.
+    /// @notice Attempt to forward the message cursor, recording or returning its failure digest as needed.
     /// @param key Forwarding and recovery lookup key.
-    /// @param message Encoded message to forward.
+    /// @param messageCur Cursor over the encoded message to forward.
     /// @param value Native EVM value assigned to the forwarding attempt.
     /// @return miss Message digest retained for recovery when forwarding fails; zero on success.
-    function forward(bytes32 key, bytes calldata message, uint value) internal virtual returns (bytes32 miss);
+    function forward(bytes32 key, uint messageCur, uint value) internal virtual returns (bytes32 miss);
 }
 
 /// @title Portal
@@ -37,7 +38,7 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
             free := mload(0x40)
         }
         uint words = (length + 31) / 32;
-        // ABI header, padded message, and trailing zero write in Calls.tryRawCopy.
+        // ABI header, padded message, and trailing zero write in Calls.tryRaw.
         uint endWords = (free + 68 + words * 32 + 32 + 31) / 32;
         // Two calldata copies and KECCAK cost 12 gas per message word.
         uint reserve = gasReserve + 12 * words + 3 * endWords + (endWords * endWords) / 512;
@@ -46,21 +47,21 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
         gas = gas > reserve ? gas - reserve : 0;
     }
 
-    /// @notice Try to forward `message` to the commander's payable pipeline port.
+    /// @notice Try to forward the message cursor to the commander's payable pipeline port.
     /// @dev Records the digest when forwarding fails or is skipped for lack of gas.
     /// Recording itself still reverts if the remaining gas is insufficient.
     /// Successful return data is ignored. The commander's pipeline port settles
     /// any remainder to the last context's account and returns zero credit;
     /// this transport does not decode the message or perform account settlement.
     /// @param key Forwarding/recovery lookup key.
-    /// @param message Encoded CONTEXT block stream to forward.
+    /// @param messageCur Cursor over the encoded CONTEXT block stream to forward.
     /// @param value Native EVM value assigned to the forwarding attempt.
     /// @return miss Message digest recorded for recovery when forwarding fails; zero on success.
-    function forward(bytes32 key, bytes calldata message, uint value) internal override returns (bytes32 miss) {
-        uint gas = forwardGas(message.length, value);
-        if (gas > 0 && Calls.tryRawCopy(PortPipePayableSelector, commanderAddr, value, gas, message)) return bytes32(0);
+    function forward(bytes32 key, uint messageCur, uint value) internal override returns (bytes32 miss) {
+        uint gas = forwardGas(Blocks.length(messageCur), value);
+        if (gas > 0 && Calls.tryRaw(PortPipePayableSelector, commanderAddr, value, gas, messageCur)) return bytes32(0);
 
-        miss = keccak256(message);
+        miss = Blocks.hash(messageCur);
         unresolved[key] = miss;
         emit Unresolved(host, key, miss);
     }
@@ -69,12 +70,12 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
     /// @dev The witness must hash to the digest stored under `key`.
     /// If a later recovery operation reverts, this deletion is rolled back with it.
     /// @param key Recovery lookup key.
-    /// @param witness Witness payload used to prove and replay recovery.
-    /// @return resolved The validated witness payload.
-    function resolve(bytes32 key, bytes calldata witness) internal returns (bytes calldata resolved) {
-        if (unresolved[key] != keccak256(witness)) revert BadWitness();
+    /// @param witnessCur Cursor over the witness payload used to prove and replay recovery.
+    /// @return resolvedCur The validated witness payload cursor.
+    function resolve(bytes32 key, uint witnessCur) internal returns (uint resolvedCur) {
+        if (unresolved[key] != Blocks.hash(witnessCur)) revert BadWitness();
 
         delete unresolved[key];
-        return witness;
+        return witnessCur;
     }
 }

@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {LegacyMemory} from "./LegacyMemory.sol";
 
-import {Blocks, Cur, Decoders, Specs, Writer, Writers} from "../Codec.sol";
-import {Memory} from "../codec/Blocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
+import {Specs} from "../Codec.sol";
+
 import {Sizes} from "../codec/Specs.sol";
 import {Schemas} from "../codec/Schema.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
-
 import {OutOfRange} from "../utils/Errors.sol";
 
 contract TestLimits {
-    using Decoders for Cur;
-    using Writers for Writer;
     using Executions for Execution;
 
     function metadata() external pure returns (uint, uint, string memory) {
@@ -19,18 +21,18 @@ contract TestLimits {
     }
 
     function create(uint limits) external pure returns (bytes memory) {
-        return Blocks.createLimits(limits);
+        return LegacyBlocks.createLimits(limits);
     }
 
     function write(uint[] calldata values) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(Specs.Limits, 1);
-        for (uint i; i < values.length; i++) writer.appendLimits(values[i]);
-        return writer.finish();
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.Limits, 1));
+        for (uint i; i < values.length; i++) (writerBuffer, writer) = Encoder.writeLimits(writer, writerBuffer, values[i]);
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function decode(bytes calldata input) external pure returns (uint limits) {
-        Cur memory cur = Decoders.open(input);
-        return cur.unpackLimits();
+        uint cur = Cursors.wrap(input);
+        (limits,) = Blocks.unpackLimits(cur);
     }
 
     function check(bytes calldata input, uint amount, uint debt, bool execution)
@@ -42,27 +44,29 @@ contract TestLimits {
             exec.expectLimits(amount, debt);
             return exec.unpackLimits();
         }
-        Cur memory cur = Decoders.open(input);
-        uint limits = cur.unpackLimits();
+        uint cur = Cursors.wrap(input);
+        (uint limits, uint nextCur) = Blocks.unpackLimits(cur);
         if (amount < limits >> 128 || debt > uint128(limits)) revert OutOfRange();
-        return cur.unpackLimits();
+        (nextLimits,) = Blocks.unpackLimits(nextCur);
     }
 
     function roundtrip(bytes calldata input, bool memorySource) external pure returns (bytes memory) {
-        Writer memory writer = Writers.init(Specs.Limits, 1);
+        (bytes memory writerBuffer, uint writer) = Encoder.init(Specs.allocation(Specs.Limits, 1));
         if (memorySource) {
-            (uint abs, uint end) = Memory.bounds(input, Sizes.Limits);
+            (uint abs, uint end) = LegacyMemory.bounds(input, Sizes.Limits);
             while (abs < end) {
-                writer.appendLimits(Memory.unpackLimits(abs));
+                (writerBuffer, writer) = Encoder.writeLimits(writer, writerBuffer, LegacyMemory.unpackLimits(abs));
                 abs += Sizes.Limits;
             }
         } else {
-            Cur memory cur = Decoders.open(input);
-            while (cur.more()) {
-                writer.appendLimits(cur.unpackLimits());
+            uint cur = Cursors.wrap(input);
+            while (Cursors.more(cur)) {
+                (uint limits, uint nextCur) = Blocks.unpackLimits(cur);
+                cur = nextCur;
+                (writerBuffer, writer) = Encoder.writeLimits(writer, writerBuffer, limits);
             }
         }
-        return writer.finish();
+        return Encoder.finish(writer, writerBuffer);
     }
 
     function execute(bytes calldata input) external pure returns (bytes memory) {

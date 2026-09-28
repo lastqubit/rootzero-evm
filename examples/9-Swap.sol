@@ -27,9 +27,13 @@ pragma solidity ^0.8.33;
 //   }
 
 import {Host, SchemaAnnot} from "../contracts/Core.sol";
-import {Blocks, CommandBase, Cur, Decoders, Execution, Executions, Position, Specs} from "../contracts/Commands.sol";
+import {CommandBase, Execution, Executions, Position, Specs} from "../contracts/Commands.sol";
 
-using Decoders for Cur;
+import {Blocks} from "../contracts/codec/Blocks.sol";
+import {Cursors} from "../contracts/utils/Cursors.sol";
+
+using Blocks for uint;
+using Cursors for uint;
 using Executions for Execution;
 
 abstract contract SwapHopInput is SchemaAnnot {
@@ -42,23 +46,24 @@ abstract contract SwapHopInput is SchemaAnnot {
         uint32 fee;
         int32 tickSpacing;
         uint hook;
-        bytes hookData;
+        // Validated calldata payload; convert with toBytes only when needed.
+        uint hookDataCur;
     }
 
     constructor(uint32 key) {
         inputSpec = schema(INPUT, key, 80, 0, 128);
     }
 
-    function unpackSwapHop(Cur memory hops) internal view returns (SwapHop memory value) {
-        (uint abs, uint end) = hops.enter(inputSpec, 72);
+    function unpackSwapHop(uint hopsCur) internal view returns (SwapHop memory value, uint nextCur) {
+        uint abs;
+        uint payloadCur;
+        (abs, payloadCur, nextCur) = hopsCur.enter(inputSpec, 72);
 
         value.asset = Blocks.read32(abs);
         value.fee = uint32(Blocks.read4(abs + 32));
         value.tickSpacing = int32(uint32(Blocks.read4(abs + 36)));
         value.hook = uint(Blocks.read32(abs + 40));
-        value.hookData = hops.unpackBytes();
-
-        hops.expect(end);
+        value.hookDataCur = payloadCur.unpackExact(Specs.Bytes);
     }
 }
 
@@ -72,7 +77,8 @@ abstract contract SwapInput is SchemaAnnot {
         uint32 fee;
         int32 tickSpacing;
         uint hook;
-        bytes hookData;
+        // Validated calldata payload; convert with toBytes only when needed.
+        uint hookDataCur;
     }
 
     constructor(uint32 key) {
@@ -81,21 +87,20 @@ abstract contract SwapInput is SchemaAnnot {
 
     function unpackSwap(
         Execution memory exec
-    ) internal view returns (Position memory position, SwapContext memory context, Cur memory hops) {
-        (uint abs, uint end) = exec.enter(swapSpec, 40);
+    ) internal view returns (Position memory position, SwapContext memory context, uint hopsCur) {
+        (uint abs, uint payloadCur) = exec.enter(swapSpec, 40);
 
         context.fee = uint32(Blocks.read4(abs));
         context.tickSpacing = int32(uint32(Blocks.read4(abs + 4)));
         context.hook = uint(Blocks.read32(abs + 8));
-        context.hookData = exec.unpackBytes();
-        uint positionAbs = exec.take(128);
+        (context.hookDataCur, payloadCur) = payloadCur.unpackBytes();
+        uint positionAbs = uint32(payloadCur);
+        payloadCur = Blocks.advance(payloadCur, 128);
         position.asset = Blocks.read32(positionAbs);
         position.amount = uint(Blocks.read32(positionAbs + 32));
         position.liability = Blocks.read32(positionAbs + 64);
         position.debt = uint(Blocks.read32(positionAbs + 96));
-        hops = exec.list();
-
-        exec.expect(end);
+        hopsCur = payloadCur.unpackExact(Specs.List);
     }
 }
 
@@ -106,8 +111,8 @@ abstract contract SwapCommand is CommandBase, SwapHopInput, SwapInput {
         (, descriptor) = command("swap", Specs.Empty, swapSpec, Specs.Empty, 0);
     }
 
-    function swap(Position memory, SwapContext memory, Cur memory hops) internal virtual {
-        while (hops.more()) unpackSwapHop(hops);
+    function swap(Position memory, SwapContext memory, uint hopsCur) internal virtual {
+        while (hopsCur.more()) (, hopsCur) = unpackSwapHop(hopsCur);
     }
 
     function swap(
@@ -117,8 +122,8 @@ abstract contract SwapCommand is CommandBase, SwapHopInput, SwapInput {
     }
 
     function swapOne(Execution memory exec) private {
-        (Position memory position, SwapContext memory context, Cur memory hops) = unpackSwap(exec);
-        swap(position, context, hops);
+        (Position memory position, SwapContext memory context, uint hopsCur) = unpackSwap(exec);
+        swap(position, context, hopsCur);
     }
 }
 

@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, hostId } from "./helpers/setup.js";
 import {
-  encodePositionLimitsBlock, concat, encodeHostAccount, encodeContextBlock, encodePositionBlock,  encodeStepBlock, encodeUserAccount,
+  encodePositionConstraintsBlock, concat, encodeHostAccount, encodeContextBlock, encodePositionBlock,  encodeStepBlock, encodeUserAccount,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -11,7 +11,7 @@ describe("Counterparty pipeline", () => {
   const counterparty = encodeUserAccount("0x22");
   const asset = ethers.toBeHex(1n, 32);
   const liability = ethers.toBeHex(2n, 32);
-  const limits = encodePositionLimitsBlock(asset, 100n, liability, 40n);
+  const limits = encodePositionConstraintsBlock(asset, 100n, liability, 40n);
 
   for (const memory of [false, true]) {
     describe(memory ? "memory settlement" : "calldata settlement", () => {
@@ -64,7 +64,7 @@ describe("Counterparty pipeline", () => {
           ]);
           data = failure.args.err;
         }
-        expect(host.interface.parseError(data!)?.name).to.equal(error);
+        expect(data).to.equal(ethers.id(error + "()").slice(0, 10));
         let reverted = false;
         try {
           const tx = await host.run(account, position, input, { gasLimit: 5_000_000 });
@@ -120,7 +120,7 @@ describe("Counterparty pipeline", () => {
 
       it("rolls back earlier realizations when the later checkPosition command fails", async () => {
         await rejectsUnchanged(concat(state, state),
-          steps(concat(limits, encodePositionLimitsBlock(asset, 101n, liability, 40n))),
+          steps(concat(limits, encodePositionConstraintsBlock(asset, 101n, liability, 40n))),
           "OutOfRange");
       });
 
@@ -152,7 +152,7 @@ describe("Counterparty pipeline", () => {
 
       it("rolls back realization and earlier booking when a later liability cannot be paid", async () => {
         const second = encodePositionBlock(asset, 100n, liability, 41n, hostCounterparty);
-        const secondLimits = encodePositionLimitsBlock(asset, 100n, liability, 41n);
+        const secondLimits = encodePositionConstraintsBlock(asset, 100n, liability, 41n);
         await rejectsUnchanged(concat(state, second), steps(concat(limits, secondLimits)), "InsufficientFunds");
       });
 
@@ -161,8 +161,8 @@ describe("Counterparty pipeline", () => {
       });
 
       for (const [label, invalidLimits, error] of [
-        ["asset minimum", encodePositionLimitsBlock(asset, 101n, liability, 40n), "OutOfRange"],
-        ["debt maximum", encodePositionLimitsBlock(asset, 100n, liability, 39n), "OutOfRange"],
+        ["asset minimum", encodePositionConstraintsBlock(asset, 101n, liability, 40n), "OutOfRange"],
+        ["debt maximum", encodePositionConstraintsBlock(asset, 100n, liability, 39n), "OutOfRange"],
         ["truncated limits", ethers.dataSlice(limits, 0, 135), memory ? "InvalidBlock" : "OutOfBounds"],
       ]) {
         it(`rolls back backing changes for a later invalid ${label}`, async () => {
@@ -181,7 +181,7 @@ describe("Counterparty pipeline", () => {
           const amount = debtOnly ? 0n : 100n;
           const debt = debtOnly ? 40n : 0n;
           await host.run(account, encodePositionBlock(a, amount, l, debt, hostCounterparty),
-            steps(encodePositionLimitsBlock(a, amount, l, debt)));
+            steps(encodePositionConstraintsBlock(a, amount, l, debt)));
           expect(await snapshot()).to.deep.equal([
             200n - amount, debt, amount, 80n - debt, 0n, 0n, 1n, memory ? 1n : 0n,
           ]);

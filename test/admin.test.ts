@@ -361,6 +361,22 @@ describe("Admin Commands", () => {
         .withArgs(await host.getAddress(), 0n, 123n, "0x123456");
     });
 
+    it("right-pads short selectors in failed raw cursor calls", async () => {
+      const target = await deploy("TestExecuteTarget");
+      const addr = await target.getAddress();
+      const targetId = await hostId(addr);
+      const errors = new ethers.Interface(["error FailedCall(address addr, bytes4 selector, bytes err)"]);
+      for (const data of ["0x", "0xff", "0xffab", "0xffabcd", "0xffabcdef", "0xffabcdef12"]) {
+        // The following block supplies nonzero bytes immediately after the selected input.
+        const input = concat(encodeCallBlock(targetId, 0n, data), encodeCallBlock(targetId, 0n, "0x11223344"));
+        let failure: string | undefined;
+        try { await callAs(0, "executePayable", adminCtx(input)); }
+        catch (error: any) { failure = error.data ?? error.info?.error?.data; }
+        const selector = (data.slice(0, 10) + "00000000").slice(0, 10);
+        expect(failure).eq(errors.encodeErrorResult("FailedCall", [addr, selector, "0x"]));
+      }
+    });
+
     it("ignores arbitrary successful returndata", async () => {
       const target = await deploy("TestExecuteTarget");
       const targetId = await hostId(await target.getAddress());

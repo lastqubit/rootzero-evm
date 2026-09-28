@@ -46,6 +46,6 @@ describe("BookHook entrypoints", () => {
   it("rejects settlement input and reverts custom book hook effects", async () => {
     await expect(host.settle(encodeContextBlock(from,
       encodePositionBlock(asset, 100n, liability, 40n), encodeLimitsBlock(101n, 40n))))
-      .to.be.revertedWithCustomError(host, "OutOfBounds");
+      .to.be.revertedWithCustomError(host, "InvalidBlock");
   });
 });

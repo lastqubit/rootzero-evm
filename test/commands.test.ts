@@ -227,10 +227,10 @@ describe("Commands", () => {
       expect(await host.deposit.staticCall(...ctx())).to.deep.equal(["0x", 0n]);
     });
 
-    it("reverts OutOfBounds for input with only 4 garbage bytes", async () => {
+    it("reverts InvalidBlock for input with only 4 garbage bytes", async () => {
       await expect(
         callAs(0, "deposit", ctx({ input: "0xdeadbeef" }))
-      ).to.be.revertedWithCustomError(host, "OutOfBounds");
+      ).to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
     it("rejects more than one context block", async () => {
@@ -248,7 +248,7 @@ describe("Commands", () => {
       const input = encodeAmountBlock(asset, 10n);
 
       await expect(callAs(0, "deposit", ctx({ state, input })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
   describe("depositPayable", () => {
@@ -479,7 +479,7 @@ describe("Commands", () => {
       });
       it("rejects any input", async () => {
         for (const input of [encodeLimitsBlock(100n, 40n), "0x01", encodeAmountBlock(asset, 1n)]) {
-          await expect(run(input)).to.be.revertedWithCustomError(host, method === "memory" ? "UnexpectedInput" : "OutOfBounds");
+          await expect(run(input)).to.be.revertedWithCustomError(host, method === "memory" ? "UnexpectedInput" : "InvalidBlock");
         }
       });
     });
@@ -576,7 +576,7 @@ describe("Commands", () => {
       const input = encodeAmountBlock(asset, 1n);
 
       await expect(callAs(0, "settle", ctx({ state, input })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
 
@@ -645,7 +645,7 @@ describe("Commands", () => {
       const input = encodeAmountBlock(asset, 1n);
 
       await expect(callAs(0, "settlePayable", ctx({ state, input }), { value: 5n }))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
 
@@ -681,7 +681,7 @@ describe("Commands", () => {
       await expect(tx).to.emit(host, "PayoutCalled").withArgs(userAccount, to2, asset2, 20n);
     });
 
-    it("reverts OutOfBounds when input accounts run out before state balances", async () => {
+    it("reverts InvalidBlock when input accounts run out before state balances", async () => {
       const state = concat(
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
@@ -689,7 +689,7 @@ describe("Commands", () => {
       const input = encodeAccountBlock(encodeUserAccount("0xd003"));
 
       await expect(callAs(0, "payout", ctx({ state, input: input })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
     it("reverts InvalidBlock when the paired input block is not an ACCOUNT", async () => {
@@ -754,11 +754,11 @@ describe("Commands", () => {
     it("rejects nonempty input and malformed state", async () => {
       const state = encodePositionBlock(asset, 100n, liability, 80n, encodeHostAccount(await host.host()));
       for (const input of ["0x01", encodeLimitsBlock(0n, MaxUint128), encodeQuoteBlock(asset, 0n, liability, 80n)]) {
-        await expect(callAs(0, "realize", ctx({ state, input }))).to.be.revertedWithCustomError(host, "OutOfBounds");
-        await expect(callAs(0, "realize", ctx({ input }))).to.be.revertedWithCustomError(host, "OutOfBounds");
+        await expect(callAs(0, "realize", ctx({ state, input }))).to.be.revertedWithCustomError(host, "InvalidBlock");
+        await expect(callAs(0, "realize", ctx({ input }))).to.be.revertedWithCustomError(host, "InvalidBlock");
       }
       await expect(callAs(0, "realize", ctx({ state: encodeBalanceBlock(asset, 100n) })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
 
@@ -880,7 +880,7 @@ describe("Commands", () => {
       expect(transactions).to.equal(0n);
     });
 
-    it("reverts OutOfBounds when NODE input runs out before BALANCE state", async () => {
+    it("reverts InvalidBlock when NODE input runs out before BALANCE state", async () => {
       const asset = ethers.zeroPadValue("0x63", 32);
       const state = concat(
         encodeBalanceBlock(asset, 100n),
@@ -889,7 +889,7 @@ describe("Commands", () => {
       const input = encodeNodeBlock(111n);
 
       await expect(callAs(0, "allocate", ctx({ state, input })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
     it("reverts InvalidBlock for non-NODE input", async () => {
@@ -921,11 +921,11 @@ describe("Commands", () => {
       expect(transactions).to.equal(0n);
     });
 
-    it("reverts OutOfBounds when input cannot decode as an ALLOCATION block", async () => {
+    it("reverts InvalidBlock when input cannot decode as an ALLOCATION block", async () => {
       const hostId = 654321n;
       const input = encodeNodeBlock(hostId);
       await expect(callAs(0, "provision", ctx({ input: input })))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
     it("emits ProvisionCalled for each ALLOCATION block in a batch", async () => {

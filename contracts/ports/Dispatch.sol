@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Blocks} from "../codec/Blocks.sol";
 import {PortBase} from "./Base.sol";
 import {Flags} from "../utils/Flags.sol";
 import {Specs} from "../Codec.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
+using Blocks for uint;
 
 /// @notice Hook implemented by hosts that forward funded dispatch payloads.
 abstract contract DispatchPayableHook {
@@ -16,10 +18,10 @@ abstract contract DispatchPayableHook {
     /// @param resources Opaque packed chain-specific destination resources, not
     /// plain native value. EVM adapters extract the low 128-bit value lane with
     /// `useResourceValue`; higher bits may encode execution gas or other data.
-    /// @param payload Encoded payload ready for the transport layer.
+    /// @param payloadCur Calldata payload cursor; convert only when the transport needs bytes.
     /// @param funds Execution used for source value available for transport fees
     /// and destination resource funding.
-    function dispatchTo(uint portal, uint resources, bytes memory payload, Execution memory funds) internal virtual;
+    function dispatchTo(uint portal, uint resources, uint payloadCur, Execution memory funds) internal virtual;
 }
 
 /// @title DispatchPayablePort
@@ -43,7 +45,7 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
     }
 
     function portDispatchPayableOne(Execution memory exec) private {
-        (uint portal, uint resources, bytes calldata payload) = exec.unpackDispatch();
-        dispatchTo(portal, resources, payload, exec);
+        (uint portal, uint resources, uint payloadCur) = exec.unpackDispatch();
+        dispatchTo(portal, resources, payloadCur, exec);
     }
 }

@@ -6,7 +6,8 @@ import {Position} from "../core/Types.sol";
 import {SettleHook} from "../core/Settlement.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
-import {Memory} from "../codec/Blocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {UnexpectedInput} from "../utils/Errors.sol";
 
@@ -92,7 +93,7 @@ abstract contract ExecuteSettle is Settle {
     /// @dev The hook validates the counterparty and authorizes the exchange.
     /// @param account Account for which each position is settled.
     /// @param state POSITION block stream held in pipeline memory.
-    /// @param input Empty command input.
+    /// @param inputCur Cursor over empty command input.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
@@ -100,14 +101,14 @@ abstract contract ExecuteSettle is Settle {
     function executeSettle(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (input.length != 0) revert UnexpectedInput();
-        (uint abs, uint end) = Memory.bounds(state, Sizes.Position);
+        if (!Cursors.done(inputCur)) revert UnexpectedInput();
+        (uint abs, uint end) = Execute.bounds(state, Sizes.Position);
 
         while (abs < end) {
-            settle(account, Memory.unpackPositionValue(abs));
+            settle(account, Execute.unpackPositionMemory(abs));
             unchecked {
                 abs += Sizes.Position;
             }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Cursors} from "../utils/Cursors.sol";
 
 import {ExecuteSettle} from "../commands/Settle.sol";
 import {Settlement, SettleHook} from "../core/Settlement.sol";
@@ -24,7 +25,7 @@ contract TestSettleCommand is ExecuteSettle, Settlement, Balances, Pipeline {
 
     function run(bytes32 account, bytes memory state, bytes calldata steps) external payable returns (uint) {
         enforceCaller(msg.sender);
-        return pipe(account, state, steps, msg.value);
+        return pipe(account, state, Cursors.wrap(steps), msg.value);
     }
 
     function enforceCaller(address caller) internal view override returns (address) {
@@ -37,11 +38,11 @@ contract TestSettleCommand is ExecuteSettle, Settlement, Balances, Pipeline {
         return Nodes.decode(cmd);
     }
 
-    function execute(uint cmd, bytes32 account, bytes memory state, bytes calldata input, uint value)
+    function execute(uint cmd, bytes32 account, bytes memory state, uint inputCur, uint value)
         internal override returns (bool, bytes memory, uint)
     {
         enforceCommand(cmd);
-        return executeSettle(account, state, input, value);
+        return executeSettle(account, state, inputCur, value);
     }
 
     function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)

@@ -15,7 +15,7 @@ const context = (state: string, input: string) => block("context", ethers.concat
 ]));
 
 describe("Command runner validation", function () {
-    it("preserves account, both cursor lanes, declared flags, writer capacity, and full-width budget", async function () {
+    it("preserves account, both metadata-free cursors, writer capacity, and full-width budget", async function () {
         const helper = await deploy("TestCommandContext");
         const key = BigInt(ethers.id("#balance").slice(0, 10));
         const max = (1n << 256n) - 1n;
@@ -27,24 +27,41 @@ describe("Command runner validation", function () {
             const end = state + 72n;
             const input = end + 8n;
             expect(exec.account).to.equal(word(1n));
-            expect(exec.decoders).to.equal(input | ((input + 72n) << 32n)
-                | (state << 64n) | (end << 96n) | (flags << 128n));
-            expect(exec.writer).to.equal(72n << 32n);
-            expect(exec.output).to.equal("0x");
+            expect(exec.input).to.equal(input | ((input + 72n) << 32n));
+            expect(exec.state).to.equal(state | (end << 32n));
+            expect(exec.output).to.equal(72n << 32n);
+            // 72 logical bytes rounded to 96, plus one retained scratch word.
+            // The unwritten contents are deliberately unspecified.
+            expect(ethers.dataLength(exec.buffer)).to.equal(128);
             expect(exec.budget).to.equal(max);
         }
     });
 
-    it("retains the uint32 capacity limit on fixed-size and scanned counting paths", async function () {
+    it("runs empty, input-only, state-only, and paired batches without cursor flags", async function () {
+        const runner = await deploy("CommandRunnerBenchmark");
+        for (const mode of [0, 1, 2, 3]) for (const count of [0, 1, 3]) {
+            const state = mode === 2 ? "0x" : ethers.concat(Array(count).fill(balance));
+            const input = mode >= 2 ? ethers.concat(Array(count).fill(amount)) : "0x";
+            const resultBlock = mode === 2 ? block("balance", ethers.concat([asset, word(3n)]))
+                : mode === 3 ? block("balance", ethers.concat([asset, word(10n)])) : balance;
+            const expected = mode === 0 ? "0x" : ethers.concat(Array(count).fill(resultBlock));
+            expect(await runner.batch.staticCall(context(state, input), mode, { value: 23n })).deep.eq([expected, 23n]);
+        }
+    });
+
+    it("rejects uint32 capacity overflow before allocation on fixed-size and scanned paths", async function () {
         const helper = await deploy("TestCommandContext");
         const key = BigInt(ethers.id("#balance").slice(0, 10));
         const max = 0xffffffffn;
         for (const blockSize of [0n, 72n]) {
             const descriptor = (key << 160n) | (key << 128n) | (blockSize << 96n)
                 | (max << 64n) | (64n << 56n) | (1n << 48n);
-            const [exec] = await helper.inspect(context(balance, "0x"), descriptor, 0n);
-            expect(exec.writer).to.equal(max << 32n);
-            expect(exec.output).to.equal("0x"); // A hint does not allocate memory.
+            // Opening is eager: a max-capacity output would require a 4 GiB
+            // allocation, so test practical allocation and overflow separately.
+            const practical = (descriptor & ~(max << 64n)) | (72n << 64n);
+            const [exec] = await helper.inspect(context(balance, "0x"), practical, 0n);
+            expect(exec.output).to.equal(72n << 32n);
+            expect(ethers.dataLength(exec.buffer)).to.equal(128);
             await expect(helper.inspect(context(ethers.concat([balance, balance]), "0x"), descriptor, 0n))
                 .to.be.revertedWithCustomError(helper, "ValueOverflow");
         }
@@ -67,10 +84,10 @@ describe("Command runner validation", function () {
             bytes[offset] ^= 0xff;
             await expect(runner.batch(bytes, 1)).to.be.revertedWithCustomError(runner, "InvalidBlock");
         }
-        await expect(runner.batch(context(balance, "0x"), 3)).to.be.revertedWithCustomError(runner, "OutOfBounds");
-        await expect(runner.batch(context(balance, ethers.concat([amount, amount])), 3)).to.be.revertedWithCustomError(runner, "OutOfBounds");
+        await expect(runner.batch(context(balance, "0x"), 3)).to.be.revertedWithCustomError(runner, "InvalidBlock");
+        await expect(runner.batch(context(balance, ethers.concat([amount, amount])), 3)).to.be.revertedWithCustomError(runner, "InvalidBlock");
         expect(await runner.single.staticCall(valid, { value: 23n })).to.deep.equal([balance, 23n]);
-        await expect(runner.single(context("0x", "0x"))).to.be.revertedWithCustomError(runner, "OutOfBounds");
+        await expect(runner.single(context("0x", "0x"))).to.be.revertedWithCustomError(runner, "InvalidBlock");
         await expect(runner.single(context(ethers.concat([balance, balance]), "0x"))).to.be.revertedWithCustomError(runner, "UnconsumedData");
     });
 });

@@ -3,7 +3,8 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {CreditAccountHook} from "../core/Settlement.sol";
-import {Blocks, Memory} from "../codec/Blocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {UnexpectedInput} from "../utils/Errors.sol";
 
@@ -47,7 +48,7 @@ abstract contract ExecuteCreditAccount is CreditAccount {
     /// @notice Execute the inherited credit-account command from an internal pipeline.
     /// @param account Account credited by each balance.
     /// @param state BALANCE block stream held in pipeline memory.
-    /// @param input Empty input required by the command schema.
+    /// @param inputCur Cursor over empty input required by the command schema.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output Empty output state.
@@ -55,14 +56,14 @@ abstract contract ExecuteCreditAccount is CreditAccount {
     function executeCreditAccount(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
-        if (input.length != 0) revert UnexpectedInput();
-        (uint abs, uint end) = Memory.bounds(state, Sizes.Balance);
+        if (!Cursors.done(inputCur)) revert UnexpectedInput();
+        (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = Memory.unpackBalance(abs);
+            (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
             creditAccount(account, asset, amount);
             unchecked {
                 abs += Sizes.Balance;

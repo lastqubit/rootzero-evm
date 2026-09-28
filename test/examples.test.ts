@@ -49,7 +49,7 @@ describe("Examples", () => {
       expect(output).to.equal(encodeBalanceBlock(asset, 12n));
       expect(transactions).to.equal(0n);
       await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", "0x")))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
       const amount = encodeAmountBlock(asset, 12n);
       await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", concat(amount, amount))))
         .to.be.revertedWithCustomError(host, "UnconsumedData");
@@ -118,7 +118,7 @@ describe("Examples", () => {
   });
 
   describe("7-CustomInput", () => {
-    it("decodes populated and empty child blocks with the custom unpack helper", async () => {
+    it("requires a complete status child, including for zero values", async () => {
       const signer = await getSigner(0);
       const commander = await signer.getAddress();
       const host = await deploy("TestFrameExampleHost", await hostId(commander));
@@ -133,10 +133,14 @@ describe("Examples", () => {
         .to.emit(host, "PaymentSeen")
         .withArgs(asset, amount, status);
 
-      const emptyStatus = encodeBlock(Payment, concat(asset, pad32(amount), encodeBlock(Keys.Status, "0x")));
-      await expect(host.myCommand(encodeContextBlock(account, "0x", emptyStatus)))
+      const zeroStatus = encodeBlock(Payment, concat(asset, pad32(amount), encodeStatusBlock(0n)));
+      await expect(host.myCommand(encodeContextBlock(account, "0x", zeroStatus)))
         .to.emit(host, "PaymentSeen")
         .withArgs(asset, amount, 0n);
+
+      const emptyStatus = encodeBlock(Payment, concat(asset, pad32(amount), encodeBlock(Keys.Status, "0x")));
+      await expect(host.myCommand(encodeContextBlock(account, "0x", emptyStatus)))
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
 
       const missingStatus = encodeBlock(Payment, concat(asset, pad32(amount)));
       await expect(host.myCommand(encodeContextBlock(account, "0x", missingStatus)))
@@ -210,6 +214,25 @@ describe("Examples", () => {
       );
       expect(output).to.equal("0x");
       expect(transactions).to.equal(0n);
+
+      // A child's declared payload cannot consume the next hop's bytes.
+      const truncatedHop = encodeBlock(SwapHop, concat(
+        firstHopAsset, uint32(500n), int32(-10n), pad32(11n),
+        encodeBytesBlock("0xcccc").slice(0, -2),
+      ));
+      const swapInput = (hops: string[]) => encodeBlock(Swap, concat(
+        uint32(100n), int32(-5n), pad32(9n), encodeBytesBlock(hookData),
+        asset, pad32(100n), liability, pad32(25n), encodeListBlock(...hops),
+      ));
+      await expect(host.swap.staticCall(encodeContextBlock(account, "0x", swapInput([truncatedHop, secondHop]))))
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      const extraChild = encodeBlock(SwapHop, concat(
+        firstHopAsset, uint32(500n), int32(-10n), pad32(11n),
+        encodeBytesBlock("0x"), encodeBytesBlock("0x"),
+      ));
+      await expect(host.swap.staticCall(encodeContextBlock(account, "0x", swapInput([extraChild]))))
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      expect((await host.swap.staticCall(encodeContextBlock(account, "0x", swapInput([]))))[0]).eq("0x");
     });
   });
 });

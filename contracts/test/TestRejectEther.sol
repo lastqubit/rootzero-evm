@@ -7,5 +7,3 @@ contract TestRejectEther {
     }
 }
 
-
-

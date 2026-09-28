@@ -2,9 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
-import {Blocks} from "../../codec/Blocks.sol";
+import {Execute} from "../../codec/Execute.sol";
 import {Sizes} from "../../codec/Specs.sol";
-import {Cursors} from "../../utils/Cursors.sol";
 import {UnexpectedState} from "../../utils/Errors.sol";
 using Executions for Execution;
 
@@ -52,7 +51,7 @@ abstract contract ExecuteAuthorize is Authorize {
     /// @notice Authorize each NODE input block from an internal pipeline.
     /// @param account Authenticated pipeline account, required to be the admin.
     /// @param state Empty command state.
-    /// @param input NODE block stream.
+    /// @param inputCur Cursor over NODE block stream.
     /// @param value Assigned native value, returned unused as credit.
     /// @return handled Always true after successful execution.
     /// @return output Empty output state.
@@ -60,15 +59,15 @@ abstract contract ExecuteAuthorize is Authorize {
     function executeAuthorize(
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         enforceAdmin(account, address(this));
         if (state.length != 0) revert UnexpectedState();
 
-        (uint abs, uint end) = Cursors.bounds(input, Sizes.B32);
+        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.B32);
         while (abs < end) {
-            authorizeNode(Blocks.unpackNode(abs));
+            authorizeNode(Execute.unpackNode(abs));
             unchecked {
                 abs += Sizes.B32;
             }

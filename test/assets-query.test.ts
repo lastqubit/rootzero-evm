@@ -14,7 +14,7 @@ describe("AssetStatus", () => {
     expect(await query["assetStatus(bytes)"].staticCall("0x")).to.equal("0x");
     const input = concat(encodeAssetBlock(await query.allowedAssetId()), "0x01");
     await expect(query["assetStatus(bytes)"].staticCall(input))
-      .to.be.revertedWithCustomError(query, "OutOfBounds");
+      .to.be.revertedWithCustomError(query, "InvalidBlock");
   });
 
   it("returns one status block for one asset query", async () => {

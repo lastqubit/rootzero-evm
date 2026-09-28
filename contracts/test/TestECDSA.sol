@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { ECDSA } from "../utils/ECDSA.sol";
+import {ECDSA} from "../utils/ECDSA.sol";
 
 contract TestECDSA {
     using ECDSA for bytes32;
@@ -14,6 +14,4 @@ contract TestECDSA {
         return hash.tryRecoverCalldata(signature);
     }
 }
-
-
 

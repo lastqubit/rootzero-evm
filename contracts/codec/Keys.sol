@@ -41,12 +41,12 @@ library Keys {
 
     // Input and value blocks
 
-    /// @dev Exact asset and full-width inclusive minimum/maximum amount.
-    bytes4 constant AssetLimits = bytes4(keccak256("#assetLimits"));
     /// @dev Packed bounds: high 128 bits inclusive minimum, low 128 bits inclusive maximum; context defines meaning.
     bytes4 constant Limits = bytes4(keccak256("#limits"));
-    /// @dev Exact asset/liability identifiers and inclusive minAmount/maxDebt bounds.
-    bytes4 constant PositionLimits = bytes4(keccak256("#positionLimits"));
+    /// @dev Exact asset and full-width inclusive minimum/maximum amount.
+    bytes4 constant BalanceConstraints = bytes4(keccak256("#balanceConstraints"));
+    /// @dev Exact asset/liability identifiers and inclusive minimum amount / maximum debt bounds.
+    bytes4 constant PositionConstraints = bytes4(keccak256("#positionConstraints"));
     /// @dev Quoted asset and liability quantities; interpretation belongs to the consumer.
     bytes4 constant Quote = bytes4(keccak256("#quote"));
 

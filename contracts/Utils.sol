@@ -9,7 +9,7 @@ import { Accounts } from "./utils/Accounts.sol";
 import { Actions } from "./utils/Actions.sol";
 import { Effects } from "./utils/Effects.sol";
 import { Amounts, Assets } from "./utils/Assets.sol";
-import { Cur, Cursors } from "./utils/Cursors.sol";
+import { Cursors } from "./utils/Cursors.sol";
 import { ECDSA } from "./utils/ECDSA.sol";
 import { Fees } from "./utils/Fees.sol";
 import { Ids } from "./utils/Ids.sol";
@@ -22,11 +22,12 @@ import { addrOr, applyBps, beforeBps, bytes32ToInt, bytes32ToString, clear8, cle
 import {
     INVALID_BLOCK,
     OUT_OF_BOUNDS,
-    UNEXPECTED_VALUE,
     OUT_OF_RANGE,
+    UNEXPECTED_VALUE,
     InsufficientValue,
     InvalidAccount,
     InvalidAsset,
+    InvalidBlock,
     InvalidContract,
     InvalidId,
     InvalidPreimage,

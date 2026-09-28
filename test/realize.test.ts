@@ -59,7 +59,7 @@ describe("Realization failure atomicity", () => {
         encodeQuoteBlock(asset, 0n, liability, MaxUint128), encodeAssetLiabilityBlock(to, liability),
         concat(encodeAmountBlock(to, 1n), encodeAmountBlock(to, 0n))]) {
         for (const state of ["0x", position, concat(position, position)]) {
-          await rejectsWithoutChanges(method, state, input, "OutOfBounds");
+          await rejectsWithoutChanges(method, state, input, "InvalidBlock");
         }
       }
     });
@@ -71,7 +71,7 @@ describe("Realization failure atomicity", () => {
 
     it("rolls back earlier hooks for malformed trailing state", async () => {
       for (const [invalid, error] of [
-        [balance, "OutOfBounds"], [ethers.dataSlice(state, 0, 7), "OutOfBounds"],
+        [balance, "InvalidBlock"], [ethers.dataSlice(state, 0, 7), "InvalidBlock"],
         [state.slice(0, -2), "OutOfBounds"], ["0xffffffff" + state.slice(10), "InvalidBlock"],
         [state.slice(0, 10) + "00000000" + state.slice(18), "InvalidBlock"],
       ]) await rejectsWithoutChanges(method, concat(state, invalid), "0x", error);

@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Blocks as CodecBlocks} from "../Codec.sol";
+import {Blocks as CommandBlocks} from "../Commands.sol";
 
 import {Headers as CodecHeaders} from "../Codec.sol";
 import {Headers as CommandHeaders} from "../Commands.sol";
+
+import {BalanceConstraints as CoreBalanceConstraints, PositionConstraints as CorePositionConstraints} from "../Core.sol";
+import {BalanceConstraints as CodecBalanceConstraints, PositionConstraints as CodecPositionConstraints} from "../Codec.sol";
+import {BalanceConstraints as CommandBalanceConstraints, PositionConstraints as CommandPositionConstraints} from "../Commands.sol";
 
 import {Quote as CoreQuote} from "../Core.sol";
 import {Quote as CodecQuote} from "../Codec.sol";
@@ -57,7 +63,6 @@ import {AssetLiability as CodecAssetLiability} from "../Codec.sol";
 import {Execution as CodecExecution} from "../Codec.sol";
 import {Executions as CodecExecutions} from "../Codec.sol";
 import {Flags as CodecFlags} from "../Codec.sol";
-import {Memory as CodecMemory} from "../Codec.sol";
 import {HostAsset as CommandHostAsset} from "../Commands.sol";
 import {AssetLiability as CommandAssetLiability} from "../Commands.sol";
 import {Execution as CommandExecution} from "../Commands.sol";
@@ -198,4 +203,4 @@ import {
 } from "../Utils.sol";
 
 import {Quote as CommandQuote, ActionAnnot as CommandActionAnnot, CounterpartyAnnot as CommandCounterpartyAnnot, LabelAnnot as CommandLabelAnnot, SchemaAnnot as CommandSchemaAnnot} from "../Commands.sol";
-import {Cur as UtilsCur, Cursors as UtilsCursors} from "../Utils.sol";
+import {Cursors as UtilsCursors} from "../Utils.sol";

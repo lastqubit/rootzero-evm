@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { Accounts } from "../utils/Accounts.sol";
-import { Assets } from "../utils/Assets.sol";
+import {Accounts} from "../utils/Accounts.sol";
+import {Assets} from "../utils/Assets.sol";
 import {InvalidAsset} from "../utils/Errors.sol";
-import { GetBalance } from "../queries/Balance.sol";
+import {GetBalance} from "../queries/Balance.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 contract TestErc20BalanceToken {

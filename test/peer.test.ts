@@ -286,9 +286,9 @@ describe("Port Entrypoints", () => {
       await callAs(1, method);
     });
 
-    it("reverts OutOfBounds when input cannot decode as an ACCOUNT_AMOUNT block", async () => {
+    it("reverts InvalidBlock when input cannot decode as an ACCOUNT_AMOUNT block", async () => {
       await expect(callAs(1, method, encodeBalanceBlock(asset, 123n)))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
 
@@ -340,9 +340,9 @@ describe("Port Entrypoints", () => {
       await callAs(1, method);
     });
 
-    it("reverts OutOfBounds when input cannot decode as an ACCOUNT_AMOUNT block", async () => {
+    it("reverts InvalidBlock when input cannot decode as an ACCOUNT_AMOUNT block", async () => {
       await expect(callAs(1, method, encodeBalanceBlock(asset, 123n)))
-        .to.be.revertedWithCustomError(host, "OutOfBounds");
+        .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
   });
 

@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Headers} from "../codec/Headers.sol";
 import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 import {BYTES_KEY, CONTEXT_KEY} from "../codec/Keys.sol";
-import {Buffers} from "../codec/Buffers.sol";
-import {Sizes, Specs, Headers} from "../codec/Specs.sol";
-import {Cursors, Cur} from "../utils/Cursors.sol";
-import {InsufficientValue, OutOfBounds, UnexpectedPosition, UnconsumedData, INVALID_BLOCK} from "../utils/Errors.sol";
+import {Specs} from "../codec/Specs.sol";
+import {Cursors} from "../utils/Cursors.sol";
+import {
+    InsufficientValue,
+    OutOfBounds,
+    UnconsumedData,
+    ValueOverflow,
+    ZeroAmount,
+    INVALID_BLOCK
+} from "../utils/Errors.sol";
 import {Budget} from "../core/Budget.sol";
 import {Calls} from "../core/Calls.sol";
 import {
@@ -17,28 +25,35 @@ import {
     AccountAmount,
     HostAmount,
     HostAccountAsset,
+    BalanceConstraints,
+    PositionConstraints,
     Quote,
     Position,
     Tx
 } from "../core/Types.sol";
 
 /// @notice Mutable state shared across one endpoint execution.
-/// @dev `decoders` stores input current/end in bits 0-63 and state current/end
-/// in bits 64-127 (32 bits per position). Bits 128 and 129 record declared state and input lanes.
-/// Remaining bits are reserved; this is not a generic cursor.
+/// @dev `input` and `state` are independent packed calldata cursors: current
+/// position in bits 0-31 and exclusive end in bits 32-63. Higher bits are unused.
 struct Execution {
     bytes32 account;
     uint budget;
-    uint decoders;
-    uint writer;
-    bytes output;
+    uint input;
+    uint state;
+    /// @dev Packed output cursor: written offset in bits 0-31, capacity in bits 32-63.
+    uint output;
+    /// @dev Growable memory backing the output cursor; finish exposes only written bytes.
+    bytes buffer;
 }
 
 /// @title Executions
 /// @notice Opening, decoding, output, and value helpers for executions.
-/// @dev `output*` helpers consume memory inputs; `outputCopy*` helpers copy
-/// calldata inputs directly to the output stream.
+/// @dev Cursor output helpers copy complete validated blocks; cursor Wrap helpers
+/// add headers around payloads. Memory output overloads retain their payload API.
 library Executions {
+    using Encoder for uint;
+    using Blocks for uint;
+
     // -------------------------------------------------------------------------
     // Description and opening
     // -------------------------------------------------------------------------
@@ -47,7 +62,7 @@ library Executions {
     /// @dev Layout: [state key:4][input key:4][output key:4][source key:4]
     /// [source block size:4][output block size:4][source shift:1][lanes:1][reserved:5][flags:1].
     /// Source shift: 64 = state, 0 = input or none. Sizes include headers.
-    /// Lane bits: 0 = state declared, 1 = input declared; copied into decoder bits 128-135.
+    /// Lane bits describe declared sources for metadata consumers; cursors carry no flags.
     /// Declared state takes precedence over input, including when supplied state is empty.
     function describe(uint state, uint input, uint output, uint8 flags) internal pure returns (uint descriptor) {
         uint32 stateKey = uint32(Specs.key(state));
@@ -65,64 +80,53 @@ library Executions {
     }
 
     /// @dev Capacity is only a hint; decoding validates the stream and buffers can grow.
-    function writerCursor(uint decoders, uint descriptor) private pure returns (uint writer) {
+    function outputCapacity(uint input, uint state, uint descriptor) private pure returns (uint capacity) {
         if (uint32(descriptor >> 160) == 0) return 0;
         uint count = 1;
         bytes4 key = bytes4(uint32(descriptor >> 128));
         if (key != bytes4(0)) {
-            uint source = decoders >> uint8(descriptor >> 56);
+            uint source = uint8(descriptor >> 56) == 64 ? state : input;
             uint abs = uint32(source);
             uint end = uint32(source >> 32);
             uint blockSize = uint32(descriptor >> 96);
             if (blockSize != 0 && (end - abs) % blockSize == 0) {
                 count = (end - abs) / blockSize;
             } else {
-                count = Blocks.runCount(abs, end, key);
+                count = source.runCount(key);
             }
         }
         // Source positions and block sizes are uint32. Both counting paths
         // produce at most uint32.max blocks, so the product fits uint64.
-        // Buffers.cursor still enforces the uint32 capacity limit.
+        // Encoder.init enforces the uint32 capacity limit.
         unchecked {
-            writer = Buffers.cursor(count * uint32(descriptor >> 64));
+            capacity = count * uint32(descriptor >> 64);
         }
     }
 
-    /// @notice Open an execution containing only the current call-value budget.
-    /// @dev Decoders, writer, and output remain empty.
-    /// @return exec Budget-only execution initialized with `msg.value`.
-    function open() internal view returns (Execution memory exec) {
-        exec.budget = msg.value;
+    /// @dev Scale an allocation hint with floor division before allocating.
+    /// The unit ratio is an identity; Encoder.init checks the final uint32 limit.
+    function scaledCapacity(uint capacity, uint numerator, uint denominator) private pure returns (uint) {
+        if (denominator == 0) revert ZeroAmount();
+        if (numerator == 1 && denominator == 1) return capacity;
+        if (capacity != 0 && numerator > type(uint).max / capacity) revert ValueOverflow();
+        unchecked {
+            return (capacity * numerator) / denominator;
+        }
     }
 
-    /// @notice Initialize an input-only execution and its native-value budget.
-    /// @dev `exec` must be newly allocated or otherwise empty.
-    /// @param exec Execution to initialize.
-    /// @param descriptor Packed endpoint descriptor.
-    /// @param budget Initial native-value budget.
-    /// @param input Descriptor-backed input source.
-    function openInput(Execution memory exec, uint descriptor, uint budget, bytes calldata input) internal pure {
-        uint decoders;
-        assembly ("memory-safe") {
-            decoders := or(
-                or(input.offset, shl(32, add(input.offset, input.length))),
-                shl(128, and(byte(25, descriptor), 2))
-            )
-        }
+    /// @dev Initialize the input source without allocating output.
+    function inputSource(Execution memory exec, uint budget, bytes calldata input) private pure returns (uint cur) {
+        cur = Cursors.wrap(input);
         exec.budget = budget;
-        exec.decoders = decoders;
-        exec.writer = writerCursor(decoders, descriptor);
+        exec.input = cur;
     }
 
-    /// @notice Decode exactly one context and initialize a complete command execution.
-    /// @dev `exec` must be newly allocated or otherwise empty. Input always
-    /// occupies bits 0-63 and state bits 64-127. Rejects trailing context bytes.
-    /// @param exec Execution to initialize.
-    /// @param descriptor Packed command descriptor.
-    /// @param budget Initial native-value budget.
-    /// @param context Exactly one CONTEXT block carrying account, state, and input.
-    function openContext(Execution memory exec, uint descriptor, uint budget, bytes calldata context) internal pure {
-        uint decoders;
+    /// @dev Decode and initialize a bounded context without allocating output.
+    function contextSource(
+        Execution memory exec,
+        uint budget,
+        bytes calldata context
+    ) private pure returns (uint input, uint state) {
         bytes32 account;
         // A genuine bounded calldata slice plus uint32 nested lengths cannot
         // overflow uint256 offsets. The tail check rejects subtraction underflow;
@@ -159,15 +163,92 @@ library Executions {
             if iszero(eq(limit, add(start, context.length))) {
                 fail(INVALID_BLOCK)
             }
-            decoders := or(
-                or(inputStart, shl(32, limit)),
-                or(shl(64, or(stateStart, shl(32, stateEnd))), shl(128, byte(25, descriptor)))
-            )
+            input := or(inputStart, shl(32, limit))
+            state := or(stateStart, shl(32, stateEnd))
         }
         exec.account = account;
         exec.budget = budget;
-        exec.decoders = decoders;
-        exec.writer = writerCursor(decoders, descriptor);
+        exec.input = input;
+        exec.state = state;
+    }
+
+    /// @notice Open an execution containing only the current call-value budget.
+    /// @dev Input/state cursors remain empty; initializes a growable output writer.
+    /// @return exec Budget-only execution initialized with `msg.value`.
+    function open() internal view returns (Execution memory exec) {
+        exec.budget = msg.value;
+        (exec.buffer, exec.output) = Encoder.init(0);
+    }
+
+    /// @notice Initialize an input-only execution and its native-value budget.
+    /// @dev `exec` must be newly allocated or otherwise empty.
+    /// @param exec Execution to initialize.
+    /// @param descriptor Packed endpoint descriptor.
+    /// @param budget Initial native-value budget.
+    /// @param input Descriptor-backed input source.
+    function openInput(Execution memory exec, uint descriptor, uint budget, bytes calldata input) internal pure {
+        uint cur = inputSource(exec, budget, input);
+        (exec.buffer, exec.output) = Encoder.init(outputCapacity(cur, 0, descriptor));
+    }
+
+    /// @notice Open an execution with its output-capacity hint scaled before allocation.
+    /// @dev Requires an empty exec. The ratio changes only allocation, not source validation
+    /// or output limits; the buffer can grow. Division rounds down. A zero denominator
+    /// reverts ZeroAmount; product overflow or a final capacity above uint32.max reverts ValueOverflow.
+    /// @param exec Execution to initialize.
+    /// @param descriptor Packed endpoint descriptor used to calculate the base capacity once.
+    /// @param budget Initial native-value budget.
+    /// @param input Calldata source, decoded identically to the default overload.
+    /// @param numerator Capacity multiplier; zero starts with zero logical capacity.
+    /// @param denominator Nonzero capacity divisor.
+    function openInput(
+        Execution memory exec,
+        uint descriptor,
+        uint budget,
+        bytes calldata input,
+        uint numerator,
+        uint denominator
+    ) internal pure {
+        uint cur = inputSource(exec, budget, input);
+        (exec.buffer, exec.output) = Encoder.init(
+            scaledCapacity(outputCapacity(cur, 0, descriptor), numerator, denominator)
+        );
+    }
+
+    /// @notice Decode exactly one context and initialize a complete command execution.
+    /// @dev `exec` must be newly allocated or otherwise empty. Initializes both
+    /// source cursors independently. Rejects trailing context bytes.
+    /// @param exec Execution to initialize.
+    /// @param descriptor Packed command descriptor.
+    /// @param budget Initial native-value budget.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    function openContext(Execution memory exec, uint descriptor, uint budget, bytes calldata context) internal pure {
+        (uint input, uint state) = contextSource(exec, budget, context);
+        (exec.buffer, exec.output) = Encoder.init(outputCapacity(input, state, descriptor));
+    }
+
+    /// @notice Open an execution with its output-capacity hint scaled before allocation.
+    /// @dev Requires an empty exec. The ratio changes only allocation, not source validation
+    /// or output limits; the buffer can grow. Division rounds down. A zero denominator
+    /// reverts ZeroAmount; product overflow or a final capacity above uint32.max reverts ValueOverflow.
+    /// @param exec Execution to initialize.
+    /// @param descriptor Packed endpoint descriptor used to calculate the base capacity once.
+    /// @param budget Initial native-value budget.
+    /// @param context Calldata source, decoded identically to the default overload.
+    /// @param numerator Capacity multiplier; zero starts with zero logical capacity.
+    /// @param denominator Nonzero capacity divisor.
+    function openContext(
+        Execution memory exec,
+        uint descriptor,
+        uint budget,
+        bytes calldata context,
+        uint numerator,
+        uint denominator
+    ) internal pure {
+        (uint input, uint state) = contextSource(exec, budget, context);
+        (exec.buffer, exec.output) = Encoder.init(
+            scaledCapacity(outputCapacity(input, state, descriptor), numerator, denominator)
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -180,499 +261,271 @@ library Executions {
     /// @param exec Execution to inspect.
     /// @return Whether either decoder source has unread bytes.
     function more(Execution memory exec) internal pure returns (bool) {
-        uint decoders = exec.decoders;
-        return uint32(decoders) < uint32(decoders >> 32) || uint32(decoders >> 64) < uint32(decoders >> 96);
+        uint input = exec.input;
+        uint state = exec.state;
+        return Cursors.more(input) || Cursors.more(state);
     }
 
-    /// @notice Return the input decoder's current absolute calldata position.
-    function absolute(Execution memory exec) internal pure returns (uint) {
-        return uint32(exec.decoders);
+    // Whole-source selection: validate the stream, then consume its execution lane.
+    // Source cursors must come from opening helpers or another validated calldata range.
+
+    /// @dev Mark a range already validated by an exact selector fully consumed.
+    function exhaustInput(Execution memory exec) private pure {
+        exec.input = Cursors.exhaust(exec.input);
     }
 
-    // Raw source access
+    // Block selection: enter, take, unpack. Selection consumes the parent in input.
 
-    /// @notice Return the unread bounded command state without consuming it.
-    function rawState(Execution memory exec) internal pure returns (bytes calldata data) {
-        uint decoders = exec.decoders;
-        if ((decoders & (1 << 128)) == 0) return msg.data[0:0];
-        uint current = uint32(decoders >> 64);
-        uint end = uint32(decoders >> 96);
-        if (end > msg.data.length || current > end) revert Blocks.MalformedBlocks();
-        // The explicit checks above already prove this slice is in calldata.
-        assembly ("memory-safe") {
-            data.offset := current
-            data.length := sub(end, current)
-        }
+    /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
+    /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @return abs Original payload address; amount bytes are safe to read.
+    /// @return payloadCur Clean cursor over the payload after the prefix.
+    function enter(Execution memory exec, uint spec, uint amount) internal pure returns (uint abs, uint payloadCur) {
+        (abs, payloadCur, exec.input) = exec.input.enter(spec, amount);
     }
 
-    /// @notice Return the unread state source and mark it fully consumed.
-    /// @dev Intended for commands that forward their remaining state without decoding it.
-    /// A state source declared EMPTY is returned empty and remains unconsumed so close
-    /// still rejects any state supplied against the descriptor.
-    function takeRawState(Execution memory exec) internal pure returns (bytes calldata data) {
-        data = rawState(exec);
-        if ((exec.decoders & (1 << 128)) == 0) return data;
-        // rawState already validated current <= end <= calldatasize.
-        uint decoders = exec.decoders;
-        exec.decoders = (decoders & ~(uint(type(uint32).max) << 64)) | (uint(uint32(decoders >> 96)) << 64);
+    /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
+    /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @return abs Original payload address; amount bytes are safe to read.
+    /// @return payloadCur Clean cursor over the payload after the prefix.
+    function enter(Execution memory exec, bytes4 key, uint amount) internal pure returns (uint abs, uint payloadCur) {
+        (abs, payloadCur, exec.input) = exec.input.enter(key, amount);
     }
 
-    /// @notice Validate and consume the unread state as zero or more BALANCE blocks.
-    /// @dev Checks every block's key and fixed payload size without re-encoding it.
-    /// Like rawState, an EMPTY source remains unconsumed for close to reject.
-    /// @return data Original calldata containing the validated BALANCE stream.
-    function takeRawBalances(Execution memory exec) internal pure returns (bytes calldata data) {
-        data = rawState(exec);
-        // Empty and undeclared lanes require neither scanning nor cursor mutation.
-        if (data.length == 0) return data;
-        uint abs;
-        uint end;
-        assembly ("memory-safe") {
-            abs := data.offset
-            end := add(abs, data.length)
-        }
-        uint64 expected = Headers.Balance;
-        while (abs < end) {
-            // Check each remaining block before its header, matching unpackBalance's
-            // error order even when an earlier bad key precedes a truncated tail.
-            unchecked {
-                if (end - abs < Sizes.Balance) revert OutOfBounds();
-            }
-            uint64 head;
-            assembly ("memory-safe") {
-                head := shr(192, calldataload(abs))
-            }
-            if (head != expected) revert Blocks.InvalidBlock();
-            unchecked {
-                abs += Sizes.Balance;
-            }
-        }
-        uint decoders = exec.decoders;
-        exec.decoders = (decoders & ~(uint(type(uint32).max) << 64)) | (end << 64);
-    }
-
-    /// @notice Return the unread bounded endpoint input without consuming it.
-    function rawInput(Execution memory exec) internal pure returns (bytes calldata data) {
-        uint decoders = exec.decoders;
-        if ((decoders & (1 << 129)) == 0) return msg.data[0:0];
-        uint current = uint32(decoders);
-        uint end = uint32(decoders >> 32);
-        if (end > msg.data.length || current > end) revert Blocks.MalformedBlocks();
-        // The explicit checks above already prove this slice is in calldata.
-        assembly ("memory-safe") {
-            data.offset := current
-            data.length := sub(end, current)
-        }
-    }
-
-    /// @notice Return the unread input source and mark it fully consumed.
-    /// @dev Intended for endpoints that forward their remaining input without decoding it.
-    /// An input source declared EMPTY is returned empty and remains unconsumed so close
-    /// still rejects any input supplied against the descriptor.
-    function takeRawInput(Execution memory exec) internal pure returns (bytes calldata data) {
-        data = rawInput(exec);
-        if ((exec.decoders & (1 << 129)) == 0) return data;
-        // rawInput already validated current <= end <= calldatasize.
-        uint decoders = exec.decoders;
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | uint32(decoders >> 32);
-    }
-
-    // Block traversal
-
-    /// @notice Return whether the next input block has `key` and an empty payload.
-    /// @param exec Execution whose input cursor is inspected without advancing.
-    /// @param key Expected block key.
-    /// @return Whether a complete matching empty block header occurs next.
-    function isEmpty(Execution memory exec, bytes4 key) internal pure returns (bool) {
-        uint decoders = exec.decoders;
-        return Blocks.isEmpty(uint32(decoders), uint32(decoders >> 32), key);
-    }
-
-    /// @notice Consume a matching empty input block when present.
-    /// @param exec Execution whose input cursor advances only for a matching empty block.
-    /// @param key Expected block key.
-    /// @return Whether an empty block was consumed.
-    function tryConsumeEmpty(Execution memory exec, bytes4 key) internal pure returns (bool) {
-        uint decoders = exec.decoders;
-        uint abs = uint32(decoders);
-        uint limit = uint32(decoders >> 32);
-        (bytes4 current, uint len) = Blocks.peek(abs, limit);
-        if (current != key || len != 0) return false;
-        uint next = abs + Sizes.Header;
-        seekInput(exec, next);
-        return true;
-    }
-
-    /// @notice Validate and consume the next block from execution input.
-    /// @param exec Execution whose input cursor is advanced over the complete block.
-    /// @param spec Expected block specification.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function consume(Execution memory exec, uint spec) internal pure returns (uint body, uint end) {
-        uint current = uint32(exec.decoders);
-        (body, end) = Blocks.enter(current, spec);
-        seekInput(exec, end);
-    }
-
-    /// @notice Validate a known key and consume the next block from execution input.
-    /// @dev Validates no payload-size constraint beyond proving the complete block
-    /// lies within the input source's logical region.
-    /// @param exec Execution whose input cursor is advanced over the complete block.
-    /// @param key Expected block key.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function consume(Execution memory exec, bytes4 key) internal pure returns (uint body, uint end) {
-        uint current = uint32(exec.decoders);
-        (body, end) = Blocks.enter(current, key);
-        seekInput(exec, end);
-    }
-
-    /// @notice Validate and consume one input block, returning its complete encoding.
-    /// @param exec Execution whose input cursor is advanced past the block.
-    /// @param key Expected block key.
-    /// @return data Calldata view of the complete block, including its header.
-    function takeBlock(Execution memory exec, bytes4 key) internal pure returns (bytes calldata data) {
-        (uint abs, uint end) = consume(exec, key);
-        data = msg.data[abs - Sizes.Header:end];
-    }
-
-    // Parent block entry
-
-    /// @notice Validate and enter the payload of the next execution input block.
-    /// @dev The input cursor remains in its existing frame so callers can decode
-    /// child blocks in place. Callers should prove complete payload consumption
-    /// with `exec.expect(end)` after decoding the children from input.
-    /// Entry advances a uint32 cursor by a header and optional uint32-bounded
-    /// payload prefix, so it cannot move backward or overflow uint256. The upper
-    /// input-bound check also ensures the new position still fits uint32.
-    /// @param exec Execution whose input cursor advances over the block header.
-    /// @param spec Expected parent block specification.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(Execution memory exec, uint spec) internal pure returns (uint body, uint end) {
-        uint decoders = exec.decoders;
-        (body, end) = Blocks.enter(uint32(decoders), spec);
-        if (body > uint32(decoders >> 32)) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
-    }
-
-    /// @notice Validate and enter an input parent and its first child.
-    /// @dev The parent must begin with a child block. Retains the outer input
-    /// bounds and checks only the resulting cursor position, after validating
-    /// both headers. Callers must verify child and parent consumption with
-    /// `expect(end)` and `expect(outer)`; containment is not checked here.
-    /// @param exec Execution whose input cursor advances to the child payload.
-    /// @param parent Expected packed parent block specification.
-    /// @param child Expected packed child block specification.
-    /// @return body Absolute position of the first child payload byte.
-    /// @return end Absolute position immediately after the child payload.
-    /// @return outer Absolute position immediately after the parent payload.
-    function descend(
+    /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
+    /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @return abs Original payload address; amount bytes are safe to read.
+    /// @return payloadCur Clean cursor over the payload after the prefix.
+    function enterFixed(
         Execution memory exec,
-        uint parent,
-        uint child
-    ) internal pure returns (uint body, uint end, uint outer) {
-        uint decoders = exec.decoders;
-        (body, end, outer) = Blocks.descend(uint32(decoders), parent, child);
-        if (body > uint32(decoders >> 32)) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
+        uint header,
+        uint amount
+    ) internal pure returns (uint abs, uint payloadCur) {
+        (abs, payloadCur, exec.input) = exec.input.enterFixed(header, amount);
     }
 
-    /// @notice Validate and enter the payload of the next keyed execution input block.
-    /// @dev Validates no payload-size constraint. Callers should prove complete
-    /// payload consumption with `exec.expect(end)` after decoding.
-    /// @param exec Execution whose input cursor advances over the block header.
-    /// @param key Expected parent block key.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(Execution memory exec, bytes4 key) internal pure returns (uint body, uint end) {
-        uint decoders = exec.decoders;
-        (body, end) = Blocks.enter(uint32(decoders), key);
-        if (body > uint32(decoders >> 32)) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | body;
+    /// @notice Consume the entire input as one matching block and select its fixed prefix and tail.
+    /// @dev Reuses Blocks exact validation; no separate source-bound check is needed.
+    function enterExact(
+        Execution memory exec,
+        uint spec,
+        uint amount
+    ) internal pure returns (uint abs, uint payloadCur) {
+        (abs, payloadCur) = exec.input.enterExact(spec, amount);
+        exhaustInput(exec);
     }
 
-    /// @notice Validate a parent block and advance over a fixed payload prefix.
-    /// @dev `amount` is relative to the payload start and cannot exceed the
-    /// current parent payload. The returned `abs` remains the payload start.
-    /// @param exec Execution whose input cursor advances over the header and fixed prefix.
-    /// @param spec Expected parent block specification.
-    /// @param amount Number of initial payload bytes to advance over.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(Execution memory exec, uint spec, uint amount) internal pure returns (uint body, uint end) {
-        uint decoders = exec.decoders;
-        uint next;
-        (body, next, end) = Blocks.enter(uint32(decoders), spec, amount);
-        if (next > uint32(decoders >> 32)) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | next;
+    /// @notice Consume one input block and return its complete encoding as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function take(Execution memory exec) internal pure returns (uint blockCur) {
+        (blockCur, exec.input) = exec.input.take();
     }
 
-    /// @notice Validate a keyed parent block and advance over a fixed payload prefix.
-    /// @dev Validates no payload-size constraint beyond the requested prefix.
-    /// The returned `body` remains the payload start.
-    /// @param exec Execution whose input cursor advances over the header and fixed prefix.
-    /// @param key Expected parent block key.
-    /// @param amount Number of initial payload bytes to advance over.
-    /// @return body Absolute position of the first payload byte.
-    /// @return end Absolute position immediately after the payload.
-    function enter(Execution memory exec, bytes4 key, uint amount) internal pure returns (uint body, uint end) {
-        uint decoders = exec.decoders;
-        uint next;
-        (body, next, end) = Blocks.enter(uint32(decoders), key, amount);
-        if (next > uint32(decoders >> 32)) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | next;
+    /// @notice Consume one input block and return its complete encoding as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function take(Execution memory exec, uint spec) internal pure returns (uint blockCur) {
+        (blockCur, exec.input) = exec.input.take(spec);
     }
 
-    /// @notice Enter a parent input block and return the same execution for chaining.
-    /// @dev Retains the outer input bounds; does not enforce complete parent
-    /// payload consumption. Use `enter` and `expect(end)` for that check.
-    /// @param exec Execution whose input cursor advances over the block header.
-    /// @param spec Expected parent block specification.
-    /// @return The same execution with its input cursor advanced.
-    function into(Execution memory exec, uint spec) internal pure returns (Execution memory) {
-        enter(exec, spec);
-        return exec;
+    /// @notice Consume one input block and return its complete encoding as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function take(Execution memory exec, bytes4 key) internal pure returns (uint blockCur) {
+        (blockCur, exec.input) = exec.input.take(key);
     }
 
-    /// @notice Enter a keyed parent input block and return the same execution for chaining.
-    /// @dev Validates no payload-size constraint. Retains the outer input bounds;
-    /// does not enforce complete parent payload consumption. Use `enter` and
-    /// `expect(end)` for that check.
-    /// @param exec Execution whose input cursor advances over the block header.
-    /// @param key Expected parent block key.
-    /// @return The same execution with its input cursor advanced.
-    function into(Execution memory exec, bytes4 key) internal pure returns (Execution memory) {
-        enter(exec, key);
-        return exec;
+    /// @notice Consume one input block and return its complete encoding as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function takeFixed(Execution memory exec, uint header) internal pure returns (uint blockCur) {
+        (blockCur, exec.input) = exec.input.takeFixed(header);
     }
 
-    // Raw input navigation
-
-    /// @notice Advance execution input by a raw byte count.
-    /// @dev No block header or schema is validated.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @param amount Number of bytes to advance.
-    function advance(Execution memory exec, uint amount) internal pure {
-        take(exec, amount);
+    /// @notice Consume the entire input as one matching block and return its complete encoding as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function takeExact(Execution memory exec, uint spec) internal pure returns (uint blockCur) {
+        blockCur = exec.input.takeExact(spec);
+        exhaustInput(exec);
     }
 
-    /// @notice Take a raw byte range from execution input.
-    /// @dev No block header or schema is validated.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @param amount Number of bytes to take.
-    /// @return abs Absolute position of the first taken byte.
-    function take(Execution memory exec, uint amount) internal pure returns (uint abs) {
-        uint decoders = exec.decoders;
-        abs = uint32(decoders);
-        uint end = uint32(decoders >> 32);
-        if (amount > end - abs) revert OutOfBounds();
-        unchecked {
-            exec.decoders = decoders + amount;
-        }
+    /// @notice Validate and consume all remaining input blocks with key.
+    /// @dev Empty streams pass. Validates the requested key regardless of descriptor
+    /// declarations; close still rejects any source bytes left unread.
+    function takeInput(Execution memory exec, bytes4 key) internal pure returns (uint inputCur) {
+        inputCur = exec.input;
+        inputCur.expectRun(key);
+        exec.input = Cursors.exhaust(inputCur);
     }
 
-    // Scoped input traversal
-
-    /// @notice Consume a LIST block and return a cursor scoped to its payload.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return items Cursor over the nested list items.
-    function list(Execution memory exec) internal pure returns (Cur memory items) {
-        return list(exec, Specs.List);
+    /// @notice Validate and consume all remaining input blocks with an exact header.
+    /// @dev Shares takeInput's empty-stream behavior; descriptor declarations do not affect validation.
+    function takeInputFixed(Execution memory exec, uint header) internal pure returns (uint inputCur) {
+        inputCur = exec.input;
+        inputCur.expectRunFixed(header);
+        exec.input = Cursors.exhaust(inputCur);
     }
 
-    /// @notice Consume a list block described by `spec` and return a cursor scoped to its payload.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @param spec Custom list block specification.
-    /// @return items Cursor over the nested list items.
-    function list(Execution memory exec, uint spec) internal pure returns (Cur memory items) {
-        (uint abs, uint end) = consume(exec, spec);
-        items.state = Cursors.create(abs, end, 0);
+    /// @notice Validate and consume all remaining state blocks with key.
+    /// @dev Empty streams pass. Validates the requested key regardless of descriptor
+    /// declarations; close still rejects any source bytes left unread.
+    function takeState(Execution memory exec, bytes4 key) internal pure returns (uint stateCur) {
+        stateCur = exec.state;
+        stateCur.expectRun(key);
+        exec.state = Cursors.exhaust(stateCur);
     }
 
-    // Specialized cursor mutation
-
-    /// @dev Advance the specialized state cursor and return its previous absolute position.
-    function takeState(Execution memory exec, uint amount) private pure returns (uint abs) {
-        uint decoders = exec.decoders;
-        abs = uint32(decoders >> 64);
-        uint end = uint32(decoders >> 96);
-        if (amount > end - abs) revert OutOfBounds();
-        unchecked {
-            exec.decoders = decoders + (amount << 64);
-        }
+    /// @notice Validate and consume all remaining state blocks with an exact header.
+    /// @dev Shares takeState's empty-stream behavior; descriptor declarations do not affect validation.
+    function takeStateFixed(Execution memory exec, uint header) internal pure returns (uint stateCur) {
+        stateCur = exec.state;
+        stateCur.expectRunFixed(header);
+        exec.state = Cursors.exhaust(stateCur);
     }
 
-    /// @dev Move the specialized input cursor to a validated absolute position.
-    function seekInput(Execution memory exec, uint next) private pure {
-        // Every caller derives next from a uint32 position plus a header
-        // and bounded payload. It cannot move backward or overflow uint256.
-        uint decoders = exec.decoders;
-        uint end = uint32(decoders >> 32);
-        if (next > end) revert OutOfBounds();
-        exec.decoders = (decoders & ~uint(type(uint32).max)) | next;
+    /// @notice Validate and consume the remaining state as BALANCE blocks.
+    /// @dev Returns a clean stream cursor; shares takeStateFixed's lane behavior.
+    function takeBalances(Execution memory exec) internal pure returns (uint stateCur) {
+        return takeStateFixed(exec, Headers.Balance);
+    }
+
+    /// @notice Consume one input block and return its payload as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function unpack(Execution memory exec, uint spec) internal pure returns (uint payloadCur) {
+        (payloadCur, exec.input) = exec.input.unpack(spec);
+    }
+
+    /// @notice Consume one input block and return its payload as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function unpack(Execution memory exec, bytes4 key) internal pure returns (uint payloadCur) {
+        (payloadCur, exec.input) = exec.input.unpack(key);
+    }
+
+    /// @notice Consume one input block and return its payload as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function unpackFixed(Execution memory exec, uint header) internal pure returns (uint payloadCur) {
+        (payloadCur, exec.input) = exec.input.unpackFixed(header);
+    }
+
+    /// @notice Consume the entire input as one matching block and return its payload as a cursor.
+    /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    function unpackExact(Execution memory exec, uint spec) internal pure returns (uint payloadCur) {
+        payloadCur = exec.input.unpackExact(spec);
+        exhaustInput(exec);
+    }
+
+    /// @notice Consume a LIST and return its clean payload cursor.
+    function unpackList(Execution memory exec) internal pure returns (uint itemsCur) {
+        (itemsCur, exec.input) = exec.input.unpackList();
+    }
+
+    /// @notice Consume a custom list and return its clean payload cursor.
+    function unpackList(Execution memory exec, uint spec) internal pure returns (uint itemsCur) {
+        return unpack(exec, spec);
+    }
+
+    // Raw input navigation.
+
+    /// @notice Advance input by a raw byte count and return its previous absolute position.
+    /// @dev Validates containment once; no block header or schema is inspected.
+    function advance(Execution memory exec, uint amount) internal pure returns (uint abs) {
+        (abs, exec.input) = Cursors.enter(exec.input, amount);
     }
 
     // -------------------------------------------------------------------------
     // Expectations
     // -------------------------------------------------------------------------
 
-    /// @notice Require the active execution decoder to be at absolute position `abs`.
-    /// @param exec Execution whose input position is validated.
-    /// @param abs Expected absolute position.
-    function expect(Execution memory exec, uint abs) internal pure {
-        if (uint32(exec.decoders) != abs) revert UnexpectedPosition();
-    }
-
     /// @notice Consume one LIMITS input and check final quantities directly against calldata.
     /// @param exec Execution whose input cursor is bounded and advanced by one block.
     /// @param amount Final asset amount, checked against the inclusive minimum.
     /// @param debt Final debt, checked against the literal inclusive maximum.
     function expectLimits(Execution memory exec, uint amount, uint debt) internal pure {
-        uint abs = take(exec, Sizes.Limits);
-        Blocks.expectLimits(abs, amount, debt);
+        exec.input = exec.input.expectLimits(amount, debt);
     }
 
-    /// @notice Consume one ASSET_LIMITS input and check an asset and amount directly against calldata.
-    /// @dev Bounds the complete block before checking its header, asset, and inclusive full-width bounds.
-    function expectAssetLimits(Execution memory exec, bytes32 asset, uint amount) internal pure {
-        uint abs = take(exec, Sizes.AssetLimits);
-        Blocks.expectAssetLimits(abs, asset, amount);
+    /// @notice Consume one BALANCE_CONSTRAINTS input and check an asset and amount directly against calldata.
+    /// @dev Validates the header and containment once before asset and quantity checks.
+    function expectBalanceConstraints(Execution memory exec, bytes32 asset, uint amount) internal pure {
+        exec.input = exec.input.expectBalanceConstraints(asset, amount);
     }
 
-    /// @notice Consume one POSITION_LIMITS input and check it directly against a position.
-    /// @dev Bounds the complete block before validating its header, identifiers,
+    /// @notice Consume one POSITION_CONSTRAINTS input and check it directly against a position.
+    /// @dev Validates the header and containment once before identifiers,
     /// and inclusive limits. Does not validate the position's counterparty.
-    /// @param exec Execution whose input cursor is advanced by one POSITION_LIMITS block.
+    /// @param exec Execution whose input cursor is advanced by one POSITION_CONSTRAINTS block.
     /// @param position Position whose identifiers and full-width quantities are checked.
-    function expectPositionLimits(Execution memory exec, Position memory position) internal pure {
-        uint abs = take(exec, Sizes.PositionLimits);
-        Blocks.expectPositionLimits(abs, position);
+    function expectPositionConstraints(Execution memory exec, Position memory position) internal pure {
+        exec.input = exec.input.expectPositionConstraints(position);
     }
 
     // -------------------------------------------------------------------------
     // Fixed-width block decoding
     // -------------------------------------------------------------------------
 
-    /// @dev Return the next raw calldata word from input and advance by `size` bytes.
-    function nextN(Execution memory exec, uint size) private pure returns (bytes32 value) {
-        value = Blocks.read32(take(exec, size));
-    }
-
-    /// @notice Return the next raw input byte and advance by one byte.
-    function next1(Execution memory exec) internal pure returns (bytes1 value) {
-        value = bytes1(nextN(exec, 1));
-    }
-
-    /// @notice Return the next two raw input bytes and advance by two bytes.
-    function next2(Execution memory exec) internal pure returns (bytes2 value) {
-        value = bytes2(nextN(exec, 2));
-    }
-
-    /// @notice Return the next four raw input bytes and advance by four bytes.
-    function next4(Execution memory exec) internal pure returns (bytes4 value) {
-        value = bytes4(nextN(exec, 4));
-    }
-
-    /// @notice Return the next eight raw input bytes and advance by eight bytes.
-    function next8(Execution memory exec) internal pure returns (bytes8 value) {
-        value = bytes8(nextN(exec, 8));
-    }
-
-    /// @notice Return the next sixteen raw input bytes and advance by sixteen bytes.
-    function next16(Execution memory exec) internal pure returns (bytes16 value) {
-        value = bytes16(nextN(exec, 16));
-    }
-
-    /// @notice Return the next raw calldata word from input and advance it.
-    /// @param exec Execution whose input cursor advances by one word.
-    /// @return value Raw word at the input cursor's previous position.
-    function next32(Execution memory exec) internal pure returns (bytes32 value) {
-        value = nextN(exec, Sizes.Word);
-    }
-
     /// @notice Decode one fixed 32-byte payload from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @param spec Expected fixed block specification.
     /// @return value Decoded payload word.
     function unpack32(Execution memory exec, uint spec) internal pure returns (bytes32 value) {
-        uint abs = take(exec, Sizes.B32);
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-        }
-        if (head != ((uint64(uint32(Specs.key(spec))) << 32) | 32)) revert Blocks.InvalidBlock();
-        assembly ("memory-safe") {
-            value := calldataload(add(abs, 0x08))
-        }
+        (value, exec.input) = exec.input.unpack32(Specs.key(spec));
     }
 
     /// @notice Decode and consume one ACCOUNT block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return account Decoded account identifier.
     function unpackAccount(Execution memory exec) internal pure returns (bytes32 account) {
-        uint abs = take(exec, Sizes.B32);
-        account = Blocks.unpackAccount(abs);
-    }
-
-    /// @notice Decode and consume one NODE block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return node Decoded node identifier.
-    function unpackNode(Execution memory exec) internal pure returns (uint node) {
-        uint abs = take(exec, Sizes.B32);
-        node = Blocks.unpackNode(abs);
-    }
-
-    /// @notice Decode and consume one BOOTSTRAP block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded balance amount.
-    /// @return budget Decoded native-value budget contribution.
-    function unpackBootstrap(Execution memory exec) internal pure returns (bytes32 asset, uint amount, uint budget) {
-        uint abs = take(exec, Sizes.Bootstrap);
-        return Blocks.unpackBootstrap(abs);
+        (account, exec.input) = exec.input.unpackAccount();
     }
 
     /// @notice Decode and consume one ASSET block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return asset Decoded asset identifier.
     function unpackAsset(Execution memory exec) internal pure returns (bytes32 asset) {
-        uint abs = take(exec, Sizes.B32);
-        asset = Blocks.unpackAsset(abs);
+        (asset, exec.input) = exec.input.unpackAsset();
     }
 
-    /// @notice Decode and consume one ASSET_LIMITS input without enforcing its bounds.
-    function unpackAssetLimits(Execution memory exec) internal pure returns (bytes32 asset, uint min, uint max) {
-        uint abs = take(exec, Sizes.AssetLimits);
-        return Blocks.unpackAssetLimits(abs);
+    /// @notice Decode and consume one NODE block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return node Decoded node identifier.
+    function unpackNode(Execution memory exec) internal pure returns (uint node) {
+        (node, exec.input) = exec.input.unpackNode();
     }
 
     /// @notice Decode and consume one LIMITS block.
     /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(Execution memory exec) internal pure returns (uint limits) {
-        uint abs = take(exec, Sizes.Limits);
-        limits = Blocks.unpackLimits(abs);
+        (limits, exec.input) = exec.input.unpackLimits();
     }
 
-    /// @notice Decode POSITION_LIMITS with exact denominations and inclusive full-width bounds.
-    function unpackPositionLimits(
-        Execution memory exec
-    ) internal pure returns (bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt) {
-        uint abs = take(exec, Sizes.PositionLimits);
-        (asset, minAmount, liability, maxDebt) = Blocks.unpackPositionLimits(abs);
+    /// @notice Decode and consume one AMOUNT block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded amount.
+    function unpackAmount(Execution memory exec) internal pure returns (bytes32 asset, uint amount) {
+        (asset, amount, exec.input) = exec.input.unpackAmount();
     }
 
-    /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
-    function unpackQuote(
-        Execution memory exec
-    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
-        uint abs = take(exec, Sizes.Quote);
-        (asset, amount, liability, debt) = Blocks.unpackQuote(abs);
+    /// @notice Decode one AMOUNT block into its structured value.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return value Decoded asset and amount.
+    function unpackAmountValue(Execution memory exec) internal pure returns (AssetAmount memory value) {
+        (value.asset, value.amount) = unpackAmount(exec);
     }
 
-    /// @notice Decode one QUOTE into its structured value.
-    function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
-        (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
+    // Dedicated state block decoding
+
+    /// @notice Decode and consume one BALANCE block from state.
+    /// @dev Blocks validates the exact header before containment and advances once.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded balance amount.
+    function unpackBalance(Execution memory exec) internal pure returns (bytes32 asset, uint amount) {
+        (asset, amount, exec.state) = exec.state.unpackBalance();
+    }
+
+    /// @notice Decode and consume one BALANCE block from state into its structured value.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return value Decoded asset and balance amount.
+    function unpackBalanceValue(Execution memory exec) internal pure returns (AssetAmount memory value) {
+        (value.asset, value.amount) = unpackBalance(exec);
     }
 
     /// @notice Decode and consume one ASSET_LIABILITY block from input.
@@ -680,8 +533,7 @@ library Executions {
     /// @return asset Decoded asset identifier.
     /// @return liability Decoded liability identifier.
     function unpackAssetLiability(Execution memory exec) internal pure returns (bytes32 asset, bytes32 liability) {
-        uint abs = take(exec, Sizes.B64);
-        (asset, liability) = Blocks.unpackAssetLiability(abs);
+        (asset, liability, exec.input) = exec.input.unpackAssetLiability();
     }
 
     /// @notice Decode one ASSET_LIABILITY block into its structured value.
@@ -696,8 +548,7 @@ library Executions {
     /// @return account Decoded account identifier.
     /// @return asset Decoded asset identifier.
     function unpackAccountAsset(Execution memory exec) internal pure returns (bytes32 account, bytes32 asset) {
-        uint abs = take(exec, Sizes.B64);
-        (account, asset) = Blocks.unpackAccountAsset(abs);
+        (account, asset, exec.input) = exec.input.unpackAccountAsset();
     }
 
     /// @notice Decode one ACCOUNT_ASSET block into its structured value.
@@ -712,8 +563,7 @@ library Executions {
     /// @return host Decoded host identifier.
     /// @return asset Decoded asset identifier.
     function unpackHostAsset(Execution memory exec) internal pure returns (uint host, bytes32 asset) {
-        uint abs = take(exec, Sizes.HostAsset);
-        (host, asset) = Blocks.unpackHostAsset(abs);
+        (host, asset, exec.input) = exec.input.unpackHostAsset();
     }
 
     /// @notice Decode one HOST_ASSET block into its structured value.
@@ -723,97 +573,13 @@ library Executions {
         (value.host, value.asset) = unpackHostAsset(exec);
     }
 
-    /// @notice Decode and consume one AMOUNT block from input.
+    /// @notice Decode and consume one BOOTSTRAP block from input.
     /// @param exec Execution whose input cursor is advanced.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackAmount(Execution memory exec) internal pure returns (bytes32 asset, uint amount) {
-        uint abs = take(exec, Sizes.Amount);
-        (asset, amount) = Blocks.unpackAmount(abs);
-    }
-
-    /// @notice Decode one AMOUNT block into its structured value.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return value Decoded asset and amount.
-    function unpackAmountValue(Execution memory exec) internal pure returns (AssetAmount memory value) {
-        (value.asset, value.amount) = unpackAmount(exec);
-    }
-
-    // Dedicated state block decoding
-
-    /// @notice Decode and consume one BALANCE block from state.
-    /// @param exec Execution whose state cursor is advanced.
     /// @return asset Decoded asset identifier.
     /// @return amount Decoded balance amount.
-    function unpackBalance(Execution memory exec) internal pure returns (bytes32 asset, uint amount) {
-        uint abs = takeState(exec, Sizes.Balance);
-        (asset, amount) = Blocks.unpackBalance(abs);
-    }
-
-    /// @notice Decode and consume one BALANCE block from state into its structured value.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @return value Decoded asset and balance amount.
-    function unpackBalanceValue(Execution memory exec) internal pure returns (AssetAmount memory value) {
-        (value.asset, value.amount) = unpackBalance(exec);
-    }
-
-    /// @notice Decode and consume one CUSTODY block from state.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @return host Decoded host identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded custody amount.
-    function unpackCustody(Execution memory exec) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint abs = takeState(exec, Sizes.Custody);
-        (host, asset, amount) = Blocks.unpackCustody(abs);
-    }
-
-    /// @notice Decode and consume one CUSTODY block from state into its structured value.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @return value Decoded host, asset, and custody amount.
-    function unpackCustodyValue(Execution memory exec) internal pure returns (HostAmount memory value) {
-        (value.host, value.asset, value.amount) = unpackCustody(exec);
-    }
-
-    /// @notice Decode and consume one POSITION block from state.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded asset amount.
-    /// @return liability Decoded liability identifier.
-    /// @return debt Decoded debt amount.
-    /// @return counterparty Decoded settlement counterparty.
-    function unpackPosition(
-        Execution memory exec
-    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        uint abs = takeState(exec, Sizes.Position);
-        (asset, amount, liability, debt, counterparty) = Blocks.unpackPosition(abs);
-    }
-
-    /// @notice Decode and consume one POSITION block from state into its structured value.
-    /// @param exec Execution whose state cursor is advanced.
-    /// @return value Decoded asset and liability position.
-    function unpackPositionValue(Execution memory exec) internal pure returns (Position memory value) {
-        (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(exec);
-    }
-
-    // Remaining fixed-width input decoding
-
-    /// @notice Decode and consume one ACCOUNT_AMOUNT block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return account Decoded account identifier.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded amount.
-    function unpackAccountAmount(
-        Execution memory exec
-    ) internal pure returns (bytes32 account, bytes32 asset, uint amount) {
-        uint abs = take(exec, Sizes.B96);
-        (account, asset, amount) = Blocks.unpackAccountAmount(abs);
-    }
-
-    /// @notice Decode one ACCOUNT_AMOUNT block into its structured value.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return value Decoded account, asset, and amount.
-    function unpackAccountAmountValue(Execution memory exec) internal pure returns (AccountAmount memory value) {
-        (value.account, value.asset, value.amount) = unpackAccountAmount(exec);
+    /// @return budget Decoded native-value budget contribution.
+    function unpackBootstrap(Execution memory exec) internal pure returns (bytes32 asset, uint amount, uint budget) {
+        (asset, amount, budget, exec.input) = exec.input.unpackBootstrap();
     }
 
     /// @notice Decode and consume one ALLOCATION block from input.
@@ -822,8 +588,7 @@ library Executions {
     /// @return asset Decoded asset identifier.
     /// @return amount Decoded amount.
     function unpackAllocation(Execution memory exec) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint abs = take(exec, Sizes.B96);
-        (host, asset, amount) = Blocks.unpackAllocation(abs);
+        (host, asset, amount, exec.input) = exec.input.unpackAllocation();
     }
 
     /// @notice Decode one ALLOCATION block into its structured value.
@@ -839,8 +604,7 @@ library Executions {
     /// @return asset Decoded asset identifier.
     /// @return amount Decoded allowance amount.
     function unpackAllowance(Execution memory exec) internal pure returns (uint host, bytes32 asset, uint amount) {
-        uint abs = take(exec, Sizes.B96);
-        (host, asset, amount) = Blocks.unpackAllowance(abs);
+        (host, asset, amount, exec.input) = exec.input.unpackAllowance();
     }
 
     /// @notice Decode one ALLOWANCE block into its structured value.
@@ -848,6 +612,40 @@ library Executions {
     /// @return value Decoded host, asset, and allowance amount.
     function unpackAllowanceValue(Execution memory exec) internal pure returns (HostAmount memory value) {
         (value.host, value.asset, value.amount) = unpackAllowance(exec);
+    }
+
+    /// @notice Decode and consume one CUSTODY block from state.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return host Decoded host identifier.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded custody amount.
+    function unpackCustody(Execution memory exec) internal pure returns (uint host, bytes32 asset, uint amount) {
+        (host, asset, amount, exec.state) = exec.state.unpackCustody();
+    }
+
+    /// @notice Decode and consume one CUSTODY block from state into its structured value.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return value Decoded host, asset, and custody amount.
+    function unpackCustodyValue(Execution memory exec) internal pure returns (HostAmount memory value) {
+        (value.host, value.asset, value.amount) = unpackCustody(exec);
+    }
+
+    /// @notice Decode and consume one ACCOUNT_AMOUNT block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return account Decoded account identifier.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded amount.
+    function unpackAccountAmount(
+        Execution memory exec
+    ) internal pure returns (bytes32 account, bytes32 asset, uint amount) {
+        (account, asset, amount, exec.input) = exec.input.unpackAccountAmount();
+    }
+
+    /// @notice Decode one ACCOUNT_AMOUNT block into its structured value.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return value Decoded account, asset, and amount.
+    function unpackAccountAmountValue(Execution memory exec) internal pure returns (AccountAmount memory value) {
+        (value.account, value.asset, value.amount) = unpackAccountAmount(exec);
     }
 
     /// @notice Decode and consume one HOST_ACCOUNT_ASSET block from input.
@@ -858,8 +656,7 @@ library Executions {
     function unpackHostAccountAsset(
         Execution memory exec
     ) internal pure returns (uint host, bytes32 account, bytes32 asset) {
-        uint abs = take(exec, Sizes.B96);
-        (host, account, asset) = Blocks.unpackHostAccountAsset(abs);
+        (host, account, asset, exec.input) = exec.input.unpackHostAccountAsset();
     }
 
     /// @notice Decode one HOST_ACCOUNT_ASSET block into its structured value.
@@ -867,6 +664,23 @@ library Executions {
     /// @return value Decoded host, account, and asset.
     function unpackHostAccountAssetValue(Execution memory exec) internal pure returns (HostAccountAsset memory value) {
         (value.host, value.account, value.asset) = unpackHostAccountAsset(exec);
+    }
+
+    /// @notice Decode and consume one BALANCE_CONSTRAINTS input without enforcing its bounds.
+    function unpackBalanceConstraints(Execution memory exec) internal pure returns (BalanceConstraints memory value) {
+        (value, exec.input) = exec.input.unpackBalanceConstraints();
+    }
+
+    /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
+    function unpackQuote(
+        Execution memory exec
+    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
+        (asset, amount, liability, debt, exec.input) = exec.input.unpackQuote();
+    }
+
+    /// @notice Decode one QUOTE into its structured value.
+    function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
+        (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
     }
 
     /// @notice Decode and consume one TRANSACTION block from input.
@@ -878,8 +692,7 @@ library Executions {
     function unpackTransaction(
         Execution memory exec
     ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        uint abs = take(exec, Sizes.Transaction);
-        (from, to, asset, amount) = Blocks.unpackTransaction(abs);
+        (from, to, asset, amount, exec.input) = exec.input.unpackTransaction();
     }
 
     /// @notice Decode one TRANSACTION block into its structured value.
@@ -889,229 +702,161 @@ library Executions {
         (value.from, value.to, value.asset, value.amount) = unpackTransaction(exec);
     }
 
+    /// @notice Decode POSITION_CONSTRAINTS with exact denominations and inclusive full-width bounds.
+    function unpackPositionConstraints(Execution memory exec) internal pure returns (PositionConstraints memory value) {
+        (value, exec.input) = exec.input.unpackPositionConstraints();
+    }
+
+    /// @notice Decode and consume one POSITION block from state.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded asset amount.
+    /// @return liability Decoded liability identifier.
+    /// @return debt Decoded debt amount.
+    /// @return counterparty Decoded settlement counterparty.
+    function unpackPosition(
+        Execution memory exec
+    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
+        (asset, amount, liability, debt, counterparty, exec.state) = exec.state.unpackPosition();
+    }
+
+    /// @notice Decode and consume one POSITION block from state into its structured value.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return value Decoded asset and liability position.
+    function unpackPositionValue(Execution memory exec) internal pure returns (Position memory value) {
+        (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(exec);
+    }
+
+    // Remaining fixed-width input decoding
+
     // -------------------------------------------------------------------------
     // Dynamic block decoding
     // -------------------------------------------------------------------------
 
-    /// @notice Decode and consume an input block described by `spec`.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @param spec Expected block specification.
-    /// @return data Calldata view of the decoded payload.
-    function unpackRaw(Execution memory exec, uint spec) internal pure returns (bytes calldata data) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (data, end) = Blocks.unpackRaw(abs, spec);
-        seekInput(exec, end);
+    /// @notice Decode BYTES and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackBytes(Execution memory exec) internal pure returns (uint payloadCur) {
+        (payloadCur, exec.input) = exec.input.unpackBytes();
     }
 
-    /// @notice Decode and consume one BYTES block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return data Decoded byte payload.
-    function unpackBytes(Execution memory exec) internal pure returns (bytes calldata data) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (data, end) = Blocks.unpackBytes(abs);
-        seekInput(exec, end);
+    /// @notice Decode STRING and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackString(Execution memory exec) internal pure returns (uint textCur) {
+        (textCur, exec.input) = exec.input.unpackString();
     }
 
-    /// @notice Decode and consume one STRING block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return data Decoded string payload.
-    function unpackString(Execution memory exec) internal pure returns (string memory data) {
-        uint abs = uint32(exec.decoders);
-        (bytes calldata value, uint end) = Blocks.unpackString(abs);
-        seekInput(exec, end);
-        data = string(value);
+    /// @notice Decode RELAY and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackRelay(Execution memory exec) internal pure returns (uint inputCur, uint stepsCur) {
+        (inputCur, stepsCur, exec.input) = exec.input.unpackRelay();
     }
 
-    /// @notice Decode and consume one STEP block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return cmd Decoded command identifier.
-    /// @return value Decoded native value.
-    /// @return input Decoded nested input.
-    function unpackStep(Execution memory exec) internal pure returns (uint cmd, uint value, bytes calldata input) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (cmd, value, input, end) = Blocks.unpackStep(abs);
-        seekInput(exec, end);
+    /// @notice Decode ANNOTATION and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackAnnotation(Execution memory exec) internal pure returns (uint entity, uint dataCur) {
+        (entity, dataCur, exec.input) = exec.input.unpackAnnotation();
     }
 
-    /// @notice Decode and consume one CALL block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return target Decoded call target.
-    /// @return resources Decoded packed resources.
-    /// @return data Decoded call payload.
-    function unpackCall(
-        Execution memory exec
-    ) internal pure returns (uint target, uint resources, bytes calldata data) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (target, resources, data, end) = Blocks.unpackCall(abs);
-        seekInput(exec, end);
+    /// @notice Decode LABEL and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackLabel(Execution memory exec) internal pure returns (bytes32 namespace, uint nameCur) {
+        (namespace, nameCur, exec.input) = exec.input.unpackLabel();
     }
 
-    /// @notice Decode and consume one ANNOTATION block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return entity Decoded entity identifier.
-    /// @return data Decoded annotation block stream.
-    function unpackAnnotation(Execution memory exec) internal pure returns (uint entity, bytes calldata data) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (entity, data, end) = Blocks.unpackAnnotation(abs);
-        seekInput(exec, end);
+    /// @notice Decode SCHEMA and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackSchema(Execution memory exec) internal pure returns (uint spec, uint bodyCur) {
+        (spec, bodyCur, exec.input) = exec.input.unpackSchema();
     }
 
-    /// @notice Decode and consume one CONTEXT block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return account Decoded account identifier.
-    /// @return state Decoded nested state.
-    /// @return input Decoded nested input.
+    /// @notice Decode CONTEXT and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
     function unpackContext(
         Execution memory exec
-    ) internal pure returns (bytes32 account, bytes calldata state, bytes calldata input) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (account, state, input, end) = Blocks.unpackContext(abs);
-        seekInput(exec, end);
+    ) internal pure returns (bytes32 account, uint stateCur, uint inputCur) {
+        (account, stateCur, inputCur, exec.input) = exec.input.unpackContext();
     }
 
-    /// @notice Decode and consume one RELAY block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return input Decoded nested input.
-    /// @return steps Decoded remaining pipeline steps.
-    function unpackRelay(Execution memory exec) internal pure returns (bytes calldata input, bytes calldata steps) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (input, steps, end) = Blocks.unpackRelay(abs);
-        seekInput(exec, end);
+    /// @notice Decode STEP and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackStep(Execution memory exec) internal pure returns (uint cmd, uint value, uint inputCur) {
+        (cmd, value, inputCur, exec.input) = exec.input.unpackStep();
     }
 
-    /// @notice Decode and consume one DISPATCH block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return portal Decoded destination portal.
-    /// @return resources Decoded packed resources.
-    /// @return payload Decoded dispatch payload.
+    /// @notice Decode CALL and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    function unpackCall(Execution memory exec) internal pure returns (uint target, uint resources, uint payloadCur) {
+        (target, resources, payloadCur, exec.input) = exec.input.unpackCall();
+    }
+
+    /// @notice Decode DISPATCH and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
     function unpackDispatch(
         Execution memory exec
-    ) internal pure returns (uint portal, uint resources, bytes calldata payload) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (portal, resources, payload, end) = Blocks.unpackDispatch(abs);
-        seekInput(exec, end);
+    ) internal pure returns (uint portal, uint resources, uint payloadCur) {
+        (portal, resources, payloadCur, exec.input) = exec.input.unpackDispatch();
     }
 
-    /// @notice Decode and consume one LABEL block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return namespace Decoded label namespace.
-    /// @return name Decoded label text.
-    function unpackLabel(Execution memory exec) internal pure returns (bytes32 namespace, string memory name) {
-        uint abs = uint32(exec.decoders);
-        bytes calldata value;
-        uint end;
-        (namespace, value, end) = Blocks.unpackLabel(abs);
-        seekInput(exec, end);
-        name = string(value);
-    }
-
-    /// @notice Decode and consume one SCHEMA block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return spec Decoded block specification.
-    /// @return body Decoded schema DSL string, including any `name:` prefix.
-    function unpackSchema(Execution memory exec) internal pure returns (uint spec, string memory body) {
-        uint abs = uint32(exec.decoders);
-        bytes calldata value;
-        uint end;
-        (spec, value, end) = Blocks.unpackSchema(abs);
-        seekInput(exec, end);
-        body = string(value);
-    }
-
-    /// @notice Decode and consume one RECOVER block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return handler Decoded recovery handler.
-    /// @return resources Decoded packed resources.
-    /// @return key Decoded recovery key.
-    /// @return witness Decoded recovery witness.
+    /// @notice Decode RECOVER and retain dynamic payloads as calldata cursors.
+    /// @dev Blocks validates and advances input once; returned payload cursors
+    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
     function unpackRecover(
         Execution memory exec
-    ) internal pure returns (uint handler, uint resources, bytes32 key, bytes calldata witness) {
-        uint abs = uint32(exec.decoders);
-        uint end;
-        (handler, resources, key, witness, end) = Blocks.unpackRecover(abs);
-        seekInput(exec, end);
+    ) internal pure returns (uint handler, uint resources, bytes32 key, uint witnessCur) {
+        (handler, resources, key, witnessCur, exec.input) = exec.input.unpackRecover();
     }
 
     // -------------------------------------------------------------------------
     // Output writing
     // -------------------------------------------------------------------------
 
-    /// @notice Scale the initial output capacity hint before allocating the backing buffer.
-    /// @dev Rounds down. Does not allocate or change decoding; later writes can still grow.
-    /// Reverts if output was reserved, the denominator is zero, the product exceeds uint256,
-    /// or the resulting capacity exceeds uint32. A zero numerator clears the hint.
-    /// @param exec Execution whose output capacity is adjusted.
-    /// @param numerator Multiplier applied to the current capacity.
-    /// @param denominator Divisor applied after multiplication; must be nonzero.
-    function scaleOutput(Execution memory exec, uint numerator, uint denominator) internal pure {
-        if (exec.output.length != 0) revert UnexpectedPosition();
-        exec.writer = Buffers.scale(exec.writer, numerator, denominator);
-    }
-
-    /// @dev Reserve output capacity and advance its writer cursor.
-    /// @param exec Execution whose output writer is advanced.
-    /// @param amount Logical number of bytes written.
-    /// @param touch Number of bytes that must be addressable by the write.
-    /// @return i Relative output offset reserved for the write.
-    function reserve(Execution memory exec, uint amount, uint touch) internal pure returns (uint i) {
-        (exec.writer, exec.output, i) = Buffers.reserve(exec.writer, exec.output, amount, touch);
-    }
-
-    /// @dev Reserve an exact number of output bytes.
-    /// @param exec Execution whose output writer is advanced.
-    /// @param size Number of bytes to reserve and touch.
-    /// @return i Relative output offset reserved for the write.
-    function reserve(Execution memory exec, uint size) private pure returns (uint i) {
-        (exec.writer, exec.output, i) = Buffers.reserve(exec.writer, exec.output, size, size);
-    }
-
-    /// @notice Append an empty block to execution output.
-    /// @param exec Execution receiving the block.
-    /// @param key Block key.
-    function outputEmpty(Execution memory exec, bytes4 key) internal pure {
-        uint i = reserve(exec, Sizes.Header);
-        Blocks.writeEmpty(exec.output, i, key);
+    /// @notice Reserve output bytes and return their absolute memory address.
+    /// @dev Requires an opened execution. Fill all reserved bytes before another
+    /// reservation or finalization. The encoder retains one scratch word beyond
+    /// capacity for writes that extend beyond the logical reservation.
+    /// @param exec Execution whose output writer and buffer are updated.
+    /// @param size Logical number of bytes appended.
+    /// @return abs Absolute address of the reserved output range.
+    function reserve(Execution memory exec, uint size) internal pure returns (uint abs) {
+        (exec.buffer, abs, exec.output) = exec.output.reserve(exec.buffer, size);
     }
 
     /// @notice Append an ACCOUNT block to execution output.
     /// @param exec Execution receiving the block.
     /// @param account Account identifier to encode.
     function outputAccount(Execution memory exec, bytes32 account) internal pure {
-        uint i = reserve(exec, Sizes.B32);
-        Blocks.writeAccount(exec.output, i, account);
+        (exec.buffer, exec.output) = exec.output.writeAccount(exec.buffer, account);
     }
 
     /// @notice Append an ASSET block to execution output.
     /// @param exec Execution receiving the block.
     /// @param asset Asset identifier to encode.
     function outputAsset(Execution memory exec, bytes32 asset) internal pure {
-        uint i = reserve(exec, Sizes.B32);
-        Blocks.writeAsset(exec.output, i, asset);
+        (exec.buffer, exec.output) = exec.output.writeAsset(exec.buffer, asset);
     }
 
     /// @notice Append a NODE block to execution output.
     /// @param exec Execution receiving the block.
     /// @param node Node identifier to encode.
     function outputNode(Execution memory exec, uint node) internal pure {
-        uint i = reserve(exec, Sizes.B32);
-        Blocks.writeNode(exec.output, i, node);
+        (exec.buffer, exec.output) = exec.output.writeNode(exec.buffer, node);
     }
 
     /// @notice Append a STATUS block to execution output.
     /// @param exec Execution receiving the block.
     /// @param code Status code to encode.
     function outputStatus(Execution memory exec, uint code) internal pure {
-        uint i = reserve(exec, Sizes.B32);
-        Blocks.writeStatus(exec.output, i, code);
+        (exec.buffer, exec.output) = exec.output.writeStatus(exec.buffer, code);
     }
 
     /// @notice Append an AMOUNT block to execution output.
@@ -1119,8 +864,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Asset amount to encode.
     function outputAmount(Execution memory exec, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B64);
-        Blocks.writeAmount(exec.output, i, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeAmount(exec.buffer, asset, amount);
     }
 
     /// @notice Append a structured AMOUNT value to execution output.
@@ -1135,8 +879,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Balance amount to encode.
     function outputBalance(Execution memory exec, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B64);
-        Blocks.writeBalance(exec.output, i, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeBalance(exec.buffer, asset, amount);
     }
 
     /// @notice Append a structured BALANCE value to execution output.
@@ -1149,8 +892,7 @@ library Executions {
     /// @notice Append a LIMITS block with a packed inclusive minimum and maximum.
     /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function outputLimits(Execution memory exec, uint limits) internal pure {
-        uint i = reserve(exec, Sizes.Limits);
-        Blocks.writeLimits(exec.output, i, limits);
+        (exec.buffer, exec.output) = exec.output.writeLimits(exec.buffer, limits);
     }
 
     /// @notice Append a QUOTE with full-width asset and liability quantities.
@@ -1161,8 +903,7 @@ library Executions {
         bytes32 liability,
         uint debt
     ) internal pure {
-        uint i = reserve(exec, Sizes.Quote);
-        Blocks.writeQuote(exec.output, i, asset, amount, liability, debt);
+        (exec.buffer, exec.output) = exec.output.writeQuote(exec.buffer, asset, amount, liability, debt);
     }
 
     /// @notice Append a structured QUOTE.
@@ -1179,8 +920,14 @@ library Executions {
         uint debt,
         bytes32 counterparty
     ) internal pure {
-        uint i = reserve(exec, Sizes.Position);
-        Blocks.writePosition(exec.output, i, asset, amount, liability, debt, counterparty);
+        (exec.buffer, exec.output) = exec.output.writePosition(
+            exec.buffer,
+            asset,
+            amount,
+            liability,
+            debt,
+            counterparty
+        );
     }
 
     /// @notice Append a structured POSITION value to execution output.
@@ -1193,8 +940,7 @@ library Executions {
     /// @param account Account identifier to encode.
     /// @param asset Asset identifier to encode.
     function outputAccountAsset(Execution memory exec, bytes32 account, bytes32 asset) internal pure {
-        uint i = reserve(exec, Sizes.B64);
-        Blocks.writeAccountAsset(exec.output, i, account, asset);
+        (exec.buffer, exec.output) = exec.output.writeAccountAsset(exec.buffer, account, asset);
     }
 
     /// @notice Append an ASSET_LIABILITY block to execution output.
@@ -1202,8 +948,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param liability Liability identifier to encode.
     function outputAssetLiability(Execution memory exec, bytes32 asset, bytes32 liability) internal pure {
-        uint i = reserve(exec, Sizes.B64);
-        Blocks.writeAssetLiability(exec.output, i, asset, liability);
+        (exec.buffer, exec.output) = exec.output.writeAssetLiability(exec.buffer, asset, liability);
     }
 
     /// @notice Append a structured ASSET_LIABILITY value to execution output.
@@ -1216,8 +961,7 @@ library Executions {
     /// @param host Host identifier to encode.
     /// @param asset Asset identifier to encode.
     function outputHostAsset(Execution memory exec, uint host, bytes32 asset) internal pure {
-        uint i = reserve(exec, Sizes.HostAsset);
-        Blocks.writeHostAsset(exec.output, i, host, asset);
+        (exec.buffer, exec.output) = exec.output.writeHostAsset(exec.buffer, host, asset);
     }
 
     /// @notice Append an ALLOCATION block to execution output.
@@ -1226,8 +970,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Allocation amount to encode.
     function outputAllocation(Execution memory exec, uint host, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B96);
-        Blocks.writeAllocation(exec.output, i, host, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeAllocation(exec.buffer, host, asset, amount);
     }
 
     /// @notice Append an ALLOWANCE block to execution output.
@@ -1236,8 +979,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Allowance amount to encode.
     function outputAllowance(Execution memory exec, uint host, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B96);
-        Blocks.writeAllowance(exec.output, i, host, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeAllowance(exec.buffer, host, asset, amount);
     }
 
     /// @notice Append a CUSTODY block to execution output.
@@ -1246,8 +988,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Custody amount to encode.
     function outputCustody(Execution memory exec, uint host, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.Custody);
-        Blocks.writeCustody(exec.output, i, host, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeCustody(exec.buffer, host, asset, amount);
     }
 
     /// @notice Append a CUSTODY block for `host` and a structured amount.
@@ -1271,8 +1012,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Account amount to encode.
     function outputAccountAmount(Execution memory exec, bytes32 account, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B96);
-        Blocks.writeAccountAmount(exec.output, i, account, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeAccountAmount(exec.buffer, account, asset, amount);
     }
 
     /// @notice Append a structured ACCOUNT_AMOUNT value to execution output.
@@ -1288,8 +1028,7 @@ library Executions {
     /// @param asset Asset identifier to encode.
     /// @param amount Host amount to encode.
     function outputHostAmount(Execution memory exec, uint host, bytes32 asset, uint amount) internal pure {
-        uint i = reserve(exec, Sizes.B96);
-        Blocks.writeHostAmount(exec.output, i, host, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeHostAmount(exec.buffer, host, asset, amount);
     }
 
     /// @notice Append a HOST_ACCOUNT_ASSET block to execution output.
@@ -1298,8 +1037,7 @@ library Executions {
     /// @param account Account identifier to encode.
     /// @param asset Asset identifier to encode.
     function outputHostAccountAsset(Execution memory exec, uint host, bytes32 account, bytes32 asset) internal pure {
-        uint i = reserve(exec, Sizes.B96);
-        Blocks.writeHostAccountAsset(exec.output, i, host, account, asset);
+        (exec.buffer, exec.output) = exec.output.writeHostAccountAsset(exec.buffer, host, account, asset);
     }
 
     /// @notice Append a TRANSACTION block to regular execution output.
@@ -1315,8 +1053,7 @@ library Executions {
         bytes32 asset,
         uint amount
     ) internal pure {
-        uint i = reserve(exec, Sizes.B128);
-        Blocks.writeTransaction(exec.output, i, from, to, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeTransaction(exec.buffer, from, to, asset, amount);
     }
 
     /// @notice Append a structured TRANSACTION value to regular execution output.
@@ -1339,35 +1076,28 @@ library Executions {
         bytes32 asset,
         uint amount
     ) internal pure {
-        uint i = reserve(exec, Sizes.B128);
-        Blocks.writeHostAccountAmount(exec.output, i, host, account, asset, amount);
+        (exec.buffer, exec.output) = exec.output.writeHostAccountAmount(exec.buffer, host, account, asset, amount);
     }
 
     /// @notice Append a LIST block to execution output.
     /// @param exec Execution receiving the block.
     /// @param value Encoded list payload.
     function outputList(Execution memory exec, bytes memory value) internal pure {
-        uint size = Sizes.Header + value.length;
-        uint i = reserve(exec, size);
-        Blocks.writeList(exec.output, i, value);
+        (exec.buffer, exec.output) = exec.output.writeList(exec.buffer, value);
     }
 
     /// @notice Append a BYTES block to execution output.
     /// @param exec Execution receiving the block.
     /// @param value Byte payload to encode.
     function outputBytes(Execution memory exec, bytes memory value) internal pure {
-        uint size = Sizes.Header + value.length;
-        uint i = reserve(exec, size);
-        Blocks.writeBytes(exec.output, i, value);
+        (exec.buffer, exec.output) = exec.output.writeBytes(exec.buffer, value);
     }
 
     /// @notice Append a STRING block to execution output.
     /// @param exec Execution receiving the block.
     /// @param value String payload to encode.
     function outputString(Execution memory exec, string memory value) internal pure {
-        uint size = Sizes.Header + bytes(value).length;
-        uint i = reserve(exec, size);
-        Blocks.writeString(exec.output, i, value);
+        (exec.buffer, exec.output) = exec.output.writeString(exec.buffer, bytes(value));
     }
 
     /// @notice Append a STEP block to execution output.
@@ -1376,9 +1106,7 @@ library Executions {
     /// @param value Native value to encode.
     /// @param input Command input to encode.
     function outputStep(Execution memory exec, uint cmd, uint value, bytes memory input) internal pure {
-        uint size = Sizes.Step + input.length;
-        uint i = reserve(exec, size);
-        Blocks.writeCompositeSized(exec.output, i, bytes4(uint32(Specs.Step >> 224)), cmd, value, input, size);
+        (exec.buffer, exec.output) = exec.output.writeStepWrap(exec.buffer, cmd, value, input);
     }
 
     /// @notice Append a CALL block to execution output.
@@ -1387,9 +1115,7 @@ library Executions {
     /// @param resources Packed resources to encode.
     /// @param payload Call payload to encode.
     function outputCall(Execution memory exec, uint target, uint resources, bytes memory payload) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + payload.length;
-        uint i = reserve(exec, size);
-        Blocks.writeCompositeSized(exec.output, i, bytes4(uint32(Specs.Call >> 224)), target, resources, payload, size);
+        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, resources, payload);
     }
 
     /// @notice Append a RELAY block to execution output.
@@ -1397,9 +1123,7 @@ library Executions {
     /// @param input Relay input to encode.
     /// @param steps Remaining pipeline steps to encode.
     function outputRelay(Execution memory exec, bytes memory input, bytes memory steps) internal pure {
-        uint size = 3 * Sizes.Header + input.length + steps.length;
-        uint i = reserve(exec, size);
-        Blocks.writeRelaySized(exec.output, i, input, steps, size);
+        (exec.buffer, exec.output) = exec.output.writeRelayWrap(exec.buffer, input, steps);
     }
 
     /// @notice Append a DISPATCH block to execution output.
@@ -1408,17 +1132,7 @@ library Executions {
     /// @param resources Packed resources to encode.
     /// @param payload Dispatch payload to encode.
     function outputDispatch(Execution memory exec, uint portal, uint resources, bytes memory payload) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + payload.length;
-        uint i = reserve(exec, size);
-        Blocks.writeCompositeSized(
-            exec.output,
-            i,
-            bytes4(uint32(Specs.Dispatch >> 224)),
-            portal,
-            resources,
-            payload,
-            size
-        );
+        (exec.buffer, exec.output) = exec.output.writeDispatchWrap(exec.buffer, portal, resources, payload);
     }
 
     /// @notice Append a CONTEXT block to execution output.
@@ -1432,9 +1146,7 @@ library Executions {
         bytes memory state,
         bytes memory input
     ) internal pure {
-        uint size = Sizes.B32 + 2 * Sizes.Header + state.length + input.length;
-        uint i = reserve(exec, size);
-        Blocks.writeContextSized(exec.output, i, account, state, input, size);
+        (exec.buffer, exec.output) = exec.output.writeContextWrap(exec.buffer, account, state, input);
     }
 
     /// @notice Append a RECOVER block to execution output.
@@ -1450,9 +1162,13 @@ library Executions {
         bytes32 recoverykey,
         bytes memory witness
     ) internal pure {
-        uint size = Sizes.B96 + Sizes.Header + witness.length;
-        uint i = reserve(exec, size);
-        Blocks.writeRecoverSized(exec.output, i, handler, resources, recoverykey, witness, size);
+        (exec.buffer, exec.output) = exec.output.writeRecoverWrap(
+            exec.buffer,
+            handler,
+            resources,
+            recoverykey,
+            witness
+        );
     }
 
     /// @notice Append a LABEL block to execution output.
@@ -1460,9 +1176,7 @@ library Executions {
     /// @param namespace Label namespace to encode.
     /// @param name Label text to encode.
     function outputLabel(Execution memory exec, bytes32 namespace, string memory name) internal pure {
-        uint size = Sizes.B32 + Sizes.Header + bytes(name).length;
-        uint i = reserve(exec, size);
-        Blocks.writeLabelSized(exec.output, i, namespace, name, size);
+        (exec.buffer, exec.output) = exec.output.writeLabelWrap(exec.buffer, namespace, bytes(name));
     }
 
     /// @notice Append a SCHEMA block to execution output.
@@ -1470,108 +1184,174 @@ library Executions {
     /// @param spec Block specification to encode.
     /// @param body Schema DSL string, optionally prefixed with `name:`.
     function outputSchema(Execution memory exec, uint spec, string memory body) internal pure {
-        uint size = Sizes.B32 + Sizes.Header + bytes(body).length;
-        uint i = reserve(exec, size);
-        Blocks.writeSchemaSized(exec.output, i, spec, body, size);
+        (exec.buffer, exec.output) = exec.output.writeSchemaWrap(exec.buffer, spec, bytes(body));
     }
 
     // -------------------------------------------------------------------------
-    // Calldata output copy helpers
+    // Calldata cursor output helpers: complete blocks, then payload wrapping
     // -------------------------------------------------------------------------
 
-    /// @notice Append a custom block to execution output by copying its payload from calldata.
-    function outputCopyBlock(Execution memory exec, uint spec, bytes calldata data) internal pure {
-        Specs.validate(spec, data.length);
-        uint size = Sizes.Header + data.length;
-        uint i = reserve(exec, size);
-        Blocks.copySized(exec.output, i, Specs.key(spec), data, data.length);
+    /// @notice Append BLOCK output using a complete validated block.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputBlock(Execution memory exec, uint dataCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, dataCur);
     }
 
-    /// @notice Append a LIST block to execution output by copying its payload from calldata.
-    function outputCopyList(Execution memory exec, bytes calldata value) internal pure {
-        uint size = Sizes.Header + value.length;
-        uint i = reserve(exec, size);
-        Blocks.copySized(exec.output, i, bytes4(uint32(Specs.List >> 224)), value, value.length);
+    /// @notice Append LIST output using a complete validated block.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputList(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
-    /// @notice Append a BYTES block to execution output by copying its payload from calldata.
-    function outputCopyBytes(Execution memory exec, bytes calldata value) internal pure {
-        uint size = Sizes.Header + value.length;
-        uint i = reserve(exec, size);
-        Blocks.copySized(exec.output, i, bytes4(uint32(Specs.Bytes >> 224)), value, value.length);
+    /// @notice Append BYTES output using a complete validated block.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputBytes(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
-    /// @notice Append a STRING block to execution output by copying its payload from calldata.
-    function outputCopyString(Execution memory exec, string calldata value) internal pure {
-        uint size = Sizes.Header + bytes(value).length;
-        uint i = reserve(exec, size);
-        Blocks.copySized(exec.output, i, bytes4(uint32(Specs.String >> 224)), bytes(value), bytes(value).length);
+    /// @notice Append STRING output using a complete validated block.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputString(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
-    /// @notice Append a STEP block to execution output by copying its nested input from calldata.
-    function outputCopyStep(Execution memory exec, uint cmd, uint value, bytes calldata input) internal pure {
-        uint size = Sizes.Step + input.length;
-        uint i = reserve(exec, size);
-        Blocks.copyCompositeSized(exec.output, i, bytes4(uint32(Specs.Step >> 224)), cmd, value, input, size);
+    /// @notice Append STEP output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputStep(Execution memory exec, uint cmd, uint value, uint inputCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeStep(exec.buffer, cmd, value, inputCur);
     }
 
-    /// @notice Append a CALL block to execution output by copying its nested payload from calldata.
-    function outputCopyCall(Execution memory exec, uint target, uint resources, bytes calldata payload) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + payload.length;
-        uint i = reserve(exec, size);
-        Blocks.copyCompositeSized(exec.output, i, bytes4(uint32(Specs.Call >> 224)), target, resources, payload, size);
+    /// @notice Append CALL output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputCall(Execution memory exec, uint target, uint resources, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCall(exec.buffer, target, resources, payloadCur);
     }
 
-    /// @notice Append a RELAY block to execution output by copying its nested streams from calldata.
-    function outputCopyRelay(Execution memory exec, bytes calldata input, bytes calldata steps) internal pure {
-        uint size = 3 * Sizes.Header + input.length + steps.length;
-        uint i = reserve(exec, size);
-        Blocks.copyRelaySized(exec.output, i, input, steps, size);
+    /// @notice Append DISPATCH output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputDispatch(Execution memory exec, uint portal, uint resources, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeDispatch(exec.buffer, portal, resources, payloadCur);
     }
 
-    /// @notice Append a DISPATCH block to execution output by copying its nested payload from calldata.
-    function outputCopyDispatch(
-        Execution memory exec,
-        uint portal,
-        uint resources,
-        bytes calldata payload
-    ) internal pure {
-        uint size = Sizes.B64 + Sizes.Header + payload.length;
-        uint i = reserve(exec, size);
-        Blocks.copyCompositeSized(
-            exec.output,
-            i,
-            bytes4(uint32(Specs.Dispatch >> 224)),
-            portal,
-            resources,
-            payload,
-            size
-        );
+    /// @notice Append RELAY output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputRelay(Execution memory exec, uint inputCur, uint stepsCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeRelay(exec.buffer, inputCur, stepsCur);
     }
 
-    /// @notice Append a CONTEXT block to execution output by copying its nested streams from calldata.
-    function outputCopyContext(
-        Execution memory exec,
-        bytes32 account,
-        bytes calldata state,
-        bytes calldata input
-    ) internal pure {
-        uint size = Sizes.B32 + 2 * Sizes.Header + state.length + input.length;
-        uint i = reserve(exec, size);
-        Blocks.copyContextSized(exec.output, i, account, state, input, size);
+    /// @notice Append CONTEXT output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputContext(Execution memory exec, bytes32 account, uint stateCur, uint inputCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeContext(exec.buffer, account, stateCur, inputCur);
     }
 
-    /// @notice Append a RECOVER block to execution output by copying its nested witness from calldata.
-    function outputCopyRecover(
+    /// @notice Append RECOVER output using complete validated BYTES child blocks.
+    /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    function outputRecover(
         Execution memory exec,
         uint handler,
         uint resources,
         bytes32 recoverykey,
-        bytes calldata witness
+        uint witnessCur
     ) internal pure {
-        uint size = Sizes.B96 + Sizes.Header + witness.length;
-        uint i = reserve(exec, size);
-        Blocks.copyRecoverSized(exec.output, i, handler, resources, recoverykey, witness, size);
+        (exec.buffer, exec.output) = exec.output.writeRecover(exec.buffer, handler, resources, recoverykey, witnessCur);
+    }
+
+    /// @notice Append LABEL from a complete validated STRING block cursor.
+    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    function outputLabel(Execution memory exec, bytes32 namespace, uint nameCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeLabel(exec.buffer, namespace, nameCur);
+    }
+
+    /// @notice Append SCHEMA from a complete validated STRING block cursor.
+    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    function outputSchema(Execution memory exec, uint spec, uint bodyCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeSchema(exec.buffer, spec, bodyCur);
+    }
+
+    /// @notice Append a custom block to execution output by wrapping a validated calldata payload cursor.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputBlockWrap(Execution memory exec, uint spec, uint dataCur) internal pure {
+        Specs.validate(spec, Encoder.length(dataCur));
+        (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, Specs.key(spec), dataCur);
+    }
+
+    /// @notice Append a LIST block to execution output by wrapping a validated calldata payload cursor.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputListWrap(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeList(exec.buffer, valueCur);
+    }
+
+    /// @notice Append a BYTES block to execution output by wrapping a validated calldata payload cursor.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputBytesWrap(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBytes(exec.buffer, valueCur);
+    }
+
+    /// @notice Append a STRING block to execution output by wrapping a validated calldata payload cursor.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputStringWrap(Execution memory exec, uint valueCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeString(exec.buffer, valueCur);
+    }
+
+    /// @notice Append a STEP block to execution output by wrapping a validated input payload cursor in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputStepWrap(Execution memory exec, uint cmd, uint value, uint inputCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeStepWrap(exec.buffer, cmd, value, inputCur);
+    }
+
+    /// @notice Append a CALL block to execution output by wrapping a validated payload cursor in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputCallWrap(Execution memory exec, uint target, uint resources, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, resources, payloadCur);
+    }
+
+    /// @notice Append a DISPATCH block to execution output by wrapping a validated payload cursor in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputDispatchWrap(Execution memory exec, uint portal, uint resources, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeDispatchWrap(exec.buffer, portal, resources, payloadCur);
+    }
+
+    /// @notice Append a RELAY block to execution output by wrapping validated payload cursors in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputRelayWrap(Execution memory exec, uint inputCur, uint stepsCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeRelayWrap(exec.buffer, inputCur, stepsCur);
+    }
+
+    /// @notice Append a CONTEXT block to execution output by wrapping validated payload cursors in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputContextWrap(Execution memory exec, bytes32 account, uint stateCur, uint inputCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeContextWrap(exec.buffer, account, stateCur, inputCur);
+    }
+
+    /// @notice Append a RECOVER block to execution output by wrapping a validated witness payload cursor in BYTES.
+    /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    function outputRecoverWrap(
+        Execution memory exec,
+        uint handler,
+        uint resources,
+        bytes32 recoverykey,
+        uint witnessCur
+    ) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeRecoverWrap(
+            exec.buffer,
+            handler,
+            resources,
+            recoverykey,
+            witnessCur
+        );
+    }
+
+    /// @notice Append LABEL from a payload cursor; adds the STRING header.
+    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    function outputLabelWrap(Execution memory exec, bytes32 namespace, uint nameCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeLabelWrap(exec.buffer, namespace, nameCur);
+    }
+
+    /// @notice Append SCHEMA from a payload cursor; adds the STRING header.
+    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    function outputSchemaWrap(Execution memory exec, uint spec, uint bodyCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeSchemaWrap(exec.buffer, spec, bodyCur);
     }
 
     // -------------------------------------------------------------------------
@@ -1630,7 +1410,7 @@ library Executions {
     // Calls
     // -------------------------------------------------------------------------
 
-    /// @notice Call a port with memory input and update the execution budget.
+    /// @notice Call a port with memory data and update the execution budget.
     /// @dev Debits value before calling and adds the returned trusted credit.
     /// The caller must authorize the selector/target and ensure credit is backed;
     /// this helper does not transfer ETH back.
@@ -1638,7 +1418,7 @@ library Executions {
     /// @param selector Selector of a `bytes -> (bytes, uint)` port.
     /// @param target Target contract address.
     /// @param value Native value to forward in wei.
-    /// @param input Raw contents of the port's `bytes` argument.
+    /// @param data Raw contents of the port's `bytes` argument.
     /// @param expectEmpty Whether the decoded output must be empty.
     /// @return out Decoded output bytes returned by the target.
     function rawCall(
@@ -1646,7 +1426,7 @@ library Executions {
         bytes4 selector,
         address target,
         uint value,
-        bytes memory input,
+        bytes memory data,
         bool expectEmpty
     ) internal returns (bytes memory out) {
         if (value > exec.budget) revert InsufficientValue();
@@ -1655,27 +1435,28 @@ library Executions {
         }
 
         uint credit;
-        (out, credit) = Calls.raw(selector, target, value, input, expectEmpty);
+        (out, credit) = Calls.raw(selector, target, value, data, expectEmpty);
         exec.budget += credit;
     }
 
-    /// @notice Call a port with calldata input and update the execution budget.
-    /// @dev Copies input directly from calldata. Debits value before calling and
+    /// @notice Call a port with a calldata cursor and update the execution budget.
+    /// @dev Copies data directly from calldata. Debits value before calling and
     /// adds the returned trusted credit. The caller must authorize the selector/target
     /// and ensure credit is backed; this helper does not transfer ETH back.
+    /// Requires current <= end <= calldatasize; ignores metadata and does not advance the cursor.
     /// @param exec Mutable execution whose budget funds the call and receives credit.
     /// @param selector Selector of a `bytes -> (bytes, uint)` port.
     /// @param target Target contract address.
     /// @param value Native value to forward in wei.
-    /// @param input Raw contents of the port's `bytes` argument.
+    /// @param dataCur Validated calldata cursor over the raw contents of the port's `bytes` argument.
     /// @param expectEmpty Whether the decoded output must be empty.
     /// @return out Decoded output bytes returned by the target.
-    function rawCallCopy(
+    function rawCall(
         Execution memory exec,
         bytes4 selector,
         address target,
         uint value,
-        bytes calldata input,
+        uint dataCur,
         bool expectEmpty
     ) internal returns (bytes memory out) {
         if (value > exec.budget) revert InsufficientValue();
@@ -1684,7 +1465,7 @@ library Executions {
         }
 
         uint credit;
-        (out, credit) = Calls.rawCopy(selector, target, value, input, expectEmpty);
+        (out, credit) = Calls.raw(selector, target, value, dataCur, expectEmpty);
         exec.budget += credit;
     }
 
@@ -1697,9 +1478,9 @@ library Executions {
     /// @return out Trimmed output bytes.
     function finish(Execution memory exec) internal pure returns (bytes memory out) {
         if (more(exec)) revert UnconsumedData();
-        if (exec.output.length == 0) return new bytes(0);
+        if (exec.buffer.length == 0) return new bytes(0);
 
-        out = Buffers.finish(exec.writer, exec.output);
+        out = exec.output.finish(exec.buffer);
     }
 
     /// @notice Close an execution and return its output and remaining budget.

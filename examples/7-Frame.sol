@@ -8,24 +8,24 @@ pragma solidity ^0.8.33;
 //
 // For:
 //
-//   { bytes32 asset, uint amount, maybe #status }
+//   { bytes32 asset, uint amount, #status }
 //
 // the encoded input item is:
 //
 //   PAYMENT(asset | amount | STATUS(status))
 //
-// or, when the command should use its default status:
-//
-//   PAYMENT(asset | amount | STATUS())
+// A zero status is encoded as a regular STATUS(0) value.
 
 import {Host} from "../contracts/Core.sol";
-import {Blocks, CommandBase, Execution, Executions, Sizes, Specs} from "../contracts/Commands.sol";
-import {Keys} from "../contracts/Codec.sol";
+import {CommandBase, Execution, Executions, Sizes, Specs} from "../contracts/Commands.sol";
+
+import {Blocks} from "../contracts/codec/Blocks.sol";
 
 using Executions for Execution;
+using Blocks for uint;
 
 abstract contract MyCommand is CommandBase {
-    string private constant INPUT = "{ bytes32 asset, uint amount, maybe #status }";
+    string private constant INPUT = "{ bytes32 asset, uint amount, #status }";
 
     uint private immutable inputSpec;
     uint private immutable descriptor;
@@ -33,23 +33,20 @@ abstract contract MyCommand is CommandBase {
     event PaymentSeen(bytes32 asset, uint amount, uint status);
 
     constructor() {
-        inputSpec = schema(INPUT, 1, uint32(64 + Sizes.Header), uint32(64 + Sizes.Status), uint32(64 + Sizes.Status));
+        inputSpec = schema(INPUT, 1, uint32(64 + Sizes.Status), uint32(64 + Sizes.Status), uint32(64 + Sizes.Status));
         (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
     }
 
     function unpackPayment(
         Execution memory exec
     ) private view returns (bytes32 asset, uint amount, uint status) {
-        (uint abs, uint end) = exec.enter(inputSpec, 64);
+        (uint abs, uint payloadCur) = exec.enter(inputSpec, 64);
 
         asset = Blocks.read32(abs);
         amount = uint(Blocks.read32(abs + 32));
 
-        if (!exec.tryConsumeEmpty(Keys.Status)) {
-            status = uint(exec.unpack32(Specs.Status));
-        }
-
-        exec.expect(end);
+        uint statusCur = payloadCur.unpackExact(Specs.Status);
+        status = uint(Blocks.read32(uint32(statusCur)));
     }
 
     function myCommand(

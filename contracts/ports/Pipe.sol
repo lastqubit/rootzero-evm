@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Blocks} from "../codec/Blocks.sol";
 import {PortBase} from "./Base.sol";
 import {Flags} from "../utils/Flags.sol";
 import {PipeHook} from "../core/Pipeline.sol";
@@ -9,6 +10,7 @@ import {Specs} from "../Codec.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
+using Blocks for uint;
 
 // Canonical selector of the payable pipeline port.
 bytes4 constant PortPipePayableSelector = bytes4(keccak256("portPipePayable(bytes)"));
@@ -37,10 +39,10 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
 
         bytes32 account;
         while (exec.more()) {
-            bytes calldata state;
-            bytes calldata input;
-            (account, state, input) = exec.unpackContext();
-            exec.budget = pipe(account, state, input, exec.budget);
+            uint stateCur;
+            uint inputCur;
+            (account, stateCur, inputCur) = exec.unpackContext();
+            exec.budget = pipe(account, stateCur.toBytes(), inputCur, exec.budget);
         }
 
         if (exec.budget != 0) cashin(account, exec.drainBudget());

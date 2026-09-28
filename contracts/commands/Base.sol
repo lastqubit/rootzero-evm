@@ -3,8 +3,7 @@ pragma solidity ^0.8.33;
 
 import {CallerAccess} from "../core/Access.sol";
 import {EndpointBase} from "../core/Endpoint.sol";
-import {Buffers} from "../codec/Buffers.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
 import {HostAmount, Position} from "../core/Types.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
@@ -97,7 +96,7 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         }
 
         // Normal loop exit already proves that neither source has unread bytes.
-        output = exec.output.length == 0 ? new bytes(0) : Buffers.finish(exec.writer, exec.output);
+        output = Encoder.finish(exec.output, exec.buffer);
         credit = exec.budget;
         exec.budget = 0;
     }

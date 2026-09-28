@@ -1,33 +1,36 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {Blocks} from "../codec/Blocks.sol";
+import {Cursors} from "../utils/Cursors.sol";
 
 import {Accounts} from "../utils/Accounts.sol";
 
-import { Host } from "../core/Host.sol";
-import { Allocate } from "../commands/Allocate.sol";
-import { ExecuteBootstrap } from "../commands/Bootstrap.sol";
-import { ExecuteCashout } from "../commands/Cashout.sol";
-import { Deposit, DepositPayable } from "../commands/Deposit.sol";
-import { Withdraw } from "../commands/Withdraw.sol";
-import { ExecuteCreditAccount } from "../commands/Credit.sol";
-import { ExecuteDebitAccount } from "../commands/Debit.sol";
-import { Payout } from "../commands/Payout.sol";
-import { Provision, ProvisionPayable } from "../commands/Provision.sol";
-import { RelayPayable, RelayBalancePayable } from "../commands/Relay.sol";
-import { RecoverPayable } from "../commands/Recover.sol";
-import { Realize } from "../commands/Realize.sol";
-import { ExecuteSettle, SettlePayable } from "../commands/Settle.sol";
-import { Pipeline } from "../core/Pipeline.sol";
-import { Settlement, SettleHook } from "../core/Settlement.sol";
-import { BookPort } from "../ports/Book.sol";
+import {Host} from "../core/Host.sol";
+import {Allocate} from "../commands/Allocate.sol";
+import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
+import {ExecuteCashout} from "../commands/Cashout.sol";
+import {Deposit, DepositPayable} from "../commands/Deposit.sol";
+import {Withdraw} from "../commands/Withdraw.sol";
+import {ExecuteCreditAccount} from "../commands/Credit.sol";
+import {ExecuteDebitAccount} from "../commands/Debit.sol";
+import {Payout} from "../commands/Payout.sol";
+import {Provision, ProvisionPayable} from "../commands/Provision.sol";
+import {RelayPayable, RelayBalancePayable} from "../commands/Relay.sol";
+import {RecoverPayable} from "../commands/Recover.sol";
+import {Realize} from "../commands/Realize.sol";
+import {ExecuteSettle, SettlePayable} from "../commands/Settle.sol";
+import {Pipeline} from "../core/Pipeline.sol";
+import {Settlement, SettleHook} from "../core/Settlement.sol";
+import {BookPort} from "../ports/Book.sol";
 import {AllowAsset, DenyAsset} from "../commands/admin/Asset.sol";
-import { Allowance } from "../commands/admin/Allowance.sol";
-import { RevokeAllowance, RevokeAsset } from "../guards/Revoke.sol";
-import { HostAmount, Position } from "../core/Types.sol";
-import { Execution, Executions } from "../execution/Execution.sol";
-import { Blocks } from "../codec/Blocks.sol";
-import { Specs } from "../codec/Specs.sol";
-import { UnexpectedValue } from "../utils/Errors.sol";
+import {Allowance} from "../commands/admin/Allowance.sol";
+import {RevokeAllowance, RevokeAsset} from "../guards/Revoke.sol";
+import {HostAmount, Position} from "../core/Types.sol";
+import {Execution, Executions} from "../execution/Execution.sol";
+
+import {Specs} from "../codec/Specs.sol";
+import {UnexpectedValue} from "../utils/Errors.sol";
 
 using Executions for Execution;
 
@@ -197,11 +200,11 @@ contract TestHost is
 
     function relay(
         bytes32 account,
-        bytes calldata input,
+        uint inputCur,
         bytes memory context,
         Execution memory
     ) internal override {
-        uint abs = Blocks.exact(input, Specs.create(3, 64));
+        (uint abs,) = Blocks.enterExact(inputCur, Specs.create(3, 64), 64);
         uint portal = uint(Blocks.read32(abs));
         uint resources = uint(Blocks.read32(abs + 32));
         emit RelayCalled(portal, resources, account, context);
@@ -211,10 +214,10 @@ contract TestHost is
         uint handler,
         uint resources,
         bytes32 key,
-        bytes calldata witness,
+        uint witnessCur,
         Execution memory funds
     ) internal override {
-        emit RecoverCalled(handler, resources, key, witness, funds.useResourceValue(resources));
+        emit RecoverCalled(handler, resources, key, Blocks.toBytes(witnessCur), funds.useResourceValue(resources));
     }
 
     function allowAsset(bytes32 asset) internal override {
@@ -233,28 +236,28 @@ contract TestHost is
         uint cid,
         bytes32 account,
         bytes memory state,
-        bytes calldata input,
+        uint inputCur,
         uint value
     ) internal override returns (bool handled, bytes memory nextState, uint credit) {
         if (cid == bootstrapId()) {
             enforceCommand(cid);
-            return executeBootstrap(account, state, input, value);
+            return executeBootstrap(account, state, inputCur, value);
         }
         if (cid == cashoutId()) {
             enforceCommand(cid);
-            return executeCashout(account, state, input, value);
+            return executeCashout(account, state, inputCur, value);
         }
         if (cid == debitAccountId()) {
             enforceCommand(cid);
-            return executeDebitAccount(account, state, input, value);
+            return executeDebitAccount(account, state, inputCur, value);
         }
         if (cid == creditAccountId()) {
             enforceCommand(cid);
-            return executeCreditAccount(account, state, input, value);
+            return executeCreditAccount(account, state, inputCur, value);
         }
         if (cid == settleId()) {
             enforceCommand(cid);
-            return executeSettle(account, state, input, value);
+            return executeSettle(account, state, inputCur, value);
         }
         return (false, state, 0);
     }
@@ -263,7 +266,7 @@ contract TestHost is
         Execution memory exec = Executions.open();
         exec.account = account;
         uint budget = exec.drainBudget();
-        exec.budget = pipe(account, state, steps, budget);
+        exec.budget = pipe(account, state, Cursors.wrap(steps), budget);
         uint credit;
         (, credit) = exec.close();
         book(bytes32(0), account, chainAsset, credit, bytes32(0), 0);
@@ -313,7 +316,5 @@ contract TestHost is
         return isGuardian(addr);
     }
 
-
 }
-
 
