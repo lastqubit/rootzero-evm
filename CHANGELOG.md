@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.47.0
+
 - Add `runAdminCommand` and use per-item callbacks across admin commands,
   preserving authorization for empty batches and remaining native budget credit.
 
