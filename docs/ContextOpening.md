@@ -5,6 +5,13 @@
 followed by `Cursors.expectEnd(nextCur)`. Both use the same output-capacity
 calculation and eager Encoder initialization. The candidate remains test-only.
 
+CONTEXT decoding validates block structure, not account format. The active account
+is trusted from its internal caller or trusted peer. Any entrypoint accepting it
+from untrusted user input must validate it before constructing or using the context.
+Untrusted accounts in nested input still require validation by the consuming command;
+authorizing that command does not validate its inputs. See the
+[account validation convention](../README.md#account-validation-convention).
+
 With solc 0.8.35, viaIR, optimizer 200, Cancun, the shared version costs 88 more gas
 in all 30 valid cases: 0/1/2/4/16 blocks, state-only/input-only/paired sources,
 and output allocation enabled/disabled. Returned account, budget, cursors,

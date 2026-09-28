@@ -535,7 +535,7 @@ for asset-only state.
 `counterparty` is a 32-byte identifier. Generic position writers and unpackers
 preserve it. Zero names Rootzero and uses the booking path.
 `unpackPosition` returns all five fields without a counterparty check;
-settlement and realization hooks validate the counterparty.
+account format follows the [boundary-validation convention](../README.md#account-validation-convention).
 The payload is 160 bytes (168 bytes including its header). The old 128-byte
 POSITION payload and standalone DEBT schema are no longer accepted.
 
@@ -560,17 +560,23 @@ not fulfillment.
 **Current stage:** codecs support any counterparty. `settle`, `settlePayable`,
 and `ExecuteSettle` pass the complete `Position` struct to the hook. Calldata
 commands use `Executions.unpackPositionValue`; the memory adapter uses
-`Memory.unpackPositionValue` to decode the same struct. The hooks are `settle(account, position)` and
-`settle(account, position, funds)` for funded settlement. Commands leave counterparty validation and authorization to the hook.
+`Execute.unpackPositionMemory` after `Execute.bounds` to decode the same struct. The hooks are `settle(account, position)` and
+`settle(account, position, funds)` for funded settlement. Hooks retain applicable
+authorization and fulfillment requirements; account format is trusted after
+validation at the untrusted-input boundary.
 `Settlement` implements the unfunded hook. Producers enforce limits before
 emitting positions; settlement books zero-counterparty positions on the active
 account.
 Nonzero counterparties are passed unchanged to the account hooks when transferring
 the exact debt followed by the exact asset amount. Authorization remains with
-trusted position producers and host account hooks. Account format checks belong
-to `debitAccount` and `creditAccount`; a custom `BookHook` that bypasses those
-hooks must apply its own account policy. Empty exchanges skip the account hooks
-and do not validate the counterparty. Funded settlement still uses
+trusted position producers and host account hooks. `debitAccount`, `creditAccount`,
+and custom `BookHook` implementations may assume account arguments satisfy the
+caller's account policy; they need not repeat account-format checks. Commands
+accepting user-supplied accounts must validate them before using them, emitting
+positions, or forwarding them. Trusted peers own the validity of supplied accounts;
+a receiving host does not guarantee rejection of malformed accounts from a faulty
+trusted integration. Empty exchanges skip the account hooks and do not validate
+the counterparty. Funded settlement still uses
 the host's separate hook with the same exact-quantity requirements.
 
 `settle` consumes POSITION state with empty input and output. `ExecuteSettle`
@@ -595,13 +601,16 @@ or revert, skip zero-amount legs, and preserve debit-first funding requirements
 even when accounts or assets match. It does not net legs or interpret a zero
 account as an absent side. Callers encode zero debt or amount to omit a leg.
 `portBook` decodes both input legs
-before calling the hook, so malformed credit data is rejected before debiting.
+before calling the hook, so a malformed credit block structure is rejected before
+debiting. This structural check does not validate the encoded account's format.
 
-`realize` passes the complete position to its hook, which validates its host account
-counterparty and fulfills the obligation before returning counterparty zero.
+`realize` passes the complete position to its hook, which matches the intended host
+account counterparty and fulfills the obligation before returning counterparty zero.
+This operation-specific match remains required even when account format is trusted.
 The command takes empty input and returns the fulfilled positions. Callers may
 append `checkPosition` with POSITION_CONSTRAINTS to validate the final outcome.
-Identifier and counterparty correctness remain the hook's responsibility.
+The hook remains responsible for preserving asset/liability identifiers and
+fulfilling the intended counterparty obligation; it need not recheck account format.
 
 ### Position Transformations
 
@@ -632,12 +641,14 @@ function realize(bytes32 account, Position memory position) internal virtual ret
 ```
 
 The hook fulfills both sides in their existing asset and liability denominations.
-It validates the counterparty, chooses its internal operation order, and returns
+It enforces counterparty authorization and operation-specific matching, trusts
+account format under the boundary convention, chooses its internal order, and returns
 the complete realized position with counterparty zero. It must fulfill the entire
 obligation or revert: no source remainder is emitted, and fees or rounding must
 not silently discard debt. The command accepts empty input and returns the
-hook's results without applying caller constraints. Identifier and counterparty
-correctness remain the hook's responsibility.
+hook's results without applying caller constraints. The hook remains responsible
+for preserving asset/liability identifiers and fulfilling the intended counterparty
+obligation; it need not recheck account format.
 
 The standalone `#limits { uint limits }` schema carries a general packed
 minimum and maximum: the high 128 bits are the inclusive minimum, and the low
@@ -667,9 +678,9 @@ bounds are inclusive and literal; zero and `type(uint256).max` are not sentinels
 An inverted range cannot be satisfied. Codecs preserve inverted ranges without
 enforcing them. `Specs.BalanceConstraints`, `Sizes.BalanceConstraints`, `Headers.BalanceConstraints`,
 and `Schemas.BalanceConstraints` describe this shape. Offchain callers encode these
-constraints. Struct-returning `unpackBalanceConstraints` readers support calldata, cursor, and
-execution paths, returning `BalanceConstraints { asset, min, max }`;
-`Memory.unpackBalanceConstraints` decodes bounded memory blocks.
+constraints. `Blocks.unpackBalanceConstraints` consumes a bounded calldata cursor,
+and `Executions.unpackBalanceConstraints` consumes the execution input lane;
+both return `BalanceConstraints { asset, min, max }`.
 There are no onchain BALANCE_CONSTRAINTS writers, factories, or output helpers.
 
 `Blocks.expectBalanceConstraints(abs, asset, amount)` checks the header, exact asset,
@@ -730,7 +741,8 @@ complete exact debt or revert and must not mutate its position argument; the
 command clears debt only after the hook succeeds. `Settlement.repay` routes
 payment through `BookHook`: zero counterparty debits the active account only,
 while an account counterparty receives the same liability quantity. Zero debt
-skips booking and account validation. The asset leg remains unsettled.
+skips booking and invokes no account hooks or account-format checks. The asset
+leg remains unsettled.
 A subsequent `settle` processes the remaining asset leg.
 
 Host implementations choose a position-fulfillment model: hosts that maintain
@@ -1106,6 +1118,7 @@ node                 uint node
 account              bytes32 account
 asset                bytes32 asset
 status               uint code
+codes                uint codes
 amount               bytes32 asset, uint amount
 balance              bytes32 asset, uint amount
 debt                 bytes32 liability, uint debt
@@ -1139,6 +1152,13 @@ groups               #string as description
 label                bytes32 namespace, #string as name
 schema               uint spec, #string as body
 ```
+
+`#codes` carries one packed word using the event-code convention: up to eight
+nonzero uint32 IDs, lowest slot first, followed by zero padding. Zero represents
+an empty list. Categories are Actions (0), Effects (4), and States (5). The codec
+checks the block shape, not code semantics. Consumers define which codes apply;
+`assetCodes` requires one Active or Inactive state and describes current conditions,
+not historical actions or effects. See [Indexing](Indexing.md#codes-and-correlation).
 
 ### Host Accounts
 

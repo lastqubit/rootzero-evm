@@ -20,7 +20,14 @@ import {ensureAddr, isFamily, toLocalBase, toUnspecifiedBase} from "./Utils.sol"
 /// account identity must be supplied by
 /// lookup or witness data when native account metadata is needed.
 ///
-/// The helpers in this library validate and deconstruct structured account IDs.
+/// Helpers construct, inspect, validate, and deconstruct account IDs as documented below.
+/// @dev Account IDs remain bytes32 and are trusted internally. Validate untrusted
+/// user input at entry under the caller's account policy, then pass accounts through
+/// execution without repeated format checks. Canonical construction from trusted
+/// inputs needs no redundant validation; encoding untrusted inputs is not validation.
+/// Trusted peers own supplied account validity. Format checks do not authorize an
+/// account or replace balance checks or operation-specific address requirements.
+/// Existing validation helpers retain the checks documented on each function.
 library Accounts {
     /// @dev 16-bit family tag shared by all EVM-backed account types.
     uint16 constant Family = (uint16(Layout.Evm) << 8) | uint16(Layout.Account);
@@ -161,7 +168,8 @@ library Accounts {
     }
 
     /// @notice Encode an EVM address as a chain-local admin account ID.
-    /// @dev Encoding only; use `admin` to validate the embedded address.
+    /// @dev Encoding only. Validate untrusted addresses at entry (e.g. with `admin`);
+    /// trusted canonical construction needs no redundant account-format check.
     /// @param accountAddr EVM address to embed.
     /// @return Admin account ID bound to the current chain.
     function toAdmin(address accountAddr) internal view returns (bytes32) {
@@ -169,7 +177,8 @@ library Accounts {
     }
 
     /// @notice Encode an EVM address as a chain-local host account ID.
-    /// @dev Encoding only; use `host` to validate the embedded address.
+    /// @dev Encoding only. Validate untrusted addresses at entry (e.g. with `host`);
+    /// trusted canonical construction needs no redundant account-format check.
     /// @param hostAddr EVM address to embed.
     /// @return Host account ID bound to the current chain.
     function toHost(address hostAddr) internal view returns (bytes32) {
@@ -186,7 +195,8 @@ library Accounts {
     }
 
     /// @notice Encode an EVM address as a chain-agnostic user account ID.
-    /// @dev Encoding only; use `user` to validate the embedded address.
+    /// @dev Encoding only. Validate untrusted addresses at entry (e.g. with `user`);
+    /// trusted canonical construction needs no redundant account-format check.
     /// @param accountAddr EVM address to embed.
     /// @return User account ID without a chain binding.
     function toUser(address accountAddr) internal pure returns (bytes32) {

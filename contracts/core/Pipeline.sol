@@ -11,7 +11,8 @@ import {Flags} from "../utils/Flags.sol";
 abstract contract PipeHook {
     /// @notice Execute a bounded calldata STEP cursor and return its remaining native-value budget.
     /// @dev stepsCur uses absolute start/end lanes in bits 0-31/32-63. Callers
-    /// establish calldata provenance. State remains an owned memory buffer.
+    /// establish calldata provenance and supply an account satisfying their policy.
+    /// Account format is trusted internally. State remains an owned memory buffer.
     function pipe(
         bytes32 account,
         bytes memory state,
@@ -28,7 +29,9 @@ abstract contract ExecuteHook {
     /// the trusted normal external entrypoint. Handoff commands must be delegated
     /// because this hook receives an ordinary input payload cursor without the continuation that
     /// Pipeline adds to the RELAY envelope. Implementations may revert instead.
-    /// Input is a validated calldata payload cursor; state and output remain memory buffers.
+    /// Input is a structurally validated calldata payload cursor; state and output
+    /// remain memory buffers. Account format is trusted from the caller, but command
+    /// authorization does not validate account IDs in untrusted command input.
     function execute(
         uint cmd,
         bytes32 account,

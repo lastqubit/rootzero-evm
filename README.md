@@ -266,6 +266,37 @@ chains. `Accounts.isHost` classifies the prefix; `Accounts.host` additionally
 requires a nonzero address. Neither grants authority or requires deployed code.
 A host account can be used with `settle`; the same host account can also identify a position handled by `realize`.
 
+### Account validation convention
+
+Account identifiers remain `bytes32` and are trusted internally. Validate accounts
+where untrusted user input enters the system, according to the caller's account
+policy, then pass them through internal execution without repeating account-format
+checks. Accounts constructed by canonical internal helpers from trusted inputs
+need no redundant validation. Encoding an untrusted address does not establish
+that it satisfies policy; validate such inputs at the boundary.
+
+Commands accepting user-supplied account identifiers must validate them before
+using them, returning them in positions, or forwarding them to another host.
+A trusted command must still validate untrusted input: authorizing the command
+does not validate its inputs. Trusted peers are responsible for the validity of
+accounts they supply; receiving ports need not repeat account-format validation.
+A faulty trusted integration can supply malformed accounts, and the receiving
+host does not guarantee rejection under this convention.
+
+Internal accounting hooks, including `debitAccount`, `creditAccount`, and `book`,
+may assume their account arguments satisfy the caller's account policy. Account
+format is separate from authorization, balance checks, and operation-specific
+requirements, such as a valid native payout address. Those requirements still
+apply. Zero amounts, zero counterparties, and absent sides retain their documented
+semantics; this convention adds no checks to skipped legs.
+
+This is the intended integration convention, not a claim that all existing
+implementation checks have been removed or that every input boundary already
+enforces it. Validation helpers retain their documented checks; for example,
+`Accounts.addr` and `sendChainAsset` still check the EVM family and nonzero address,
+and `sendChainAsset` does so even for a zero amount. Existing host-specific checks
+also remain. No `Account` or `ValidatedAccount` wrapper type is required.
+
 ## Hosts
 
 A host is one contract assembled from mixins. The base `Host` brings access
@@ -339,7 +370,8 @@ position `{ asset, amount, liability, debt, counterparty }`. The counterparty
 field identifies the settlement counterparty. Zero identifies Rootzero and
 is handled by exact booking through `Settlement.settle`. Generic codecs preserve the field;
 `settle` passes all five fields as a `Position memory` struct to its hook for
-counterparty validation and authorization. Settlement hooks take
+fulfillment under the host's authorization policy. Account format follows the
+[boundary-validation convention](#account-validation-convention). Settlement hooks take
 `(account, position)`, plus `Execution memory funds` for funded settlement.
 Settlement accepts empty input and consumes any number of POSITION blocks.
 Producers enforce minimum asset amounts and maximum debts before emitting their
@@ -348,9 +380,9 @@ before supplying the position: `amount` is the final net receipt and `debt` is t
 `Settlement` receives the final position, books zero-counterparty positions on the active
 account, and passes nonzero counterparties to the account hooks when exchanging the
 exact debt and asset quantities. It adds no fees and makes no separate host
-fee credits. Account validation and authorization belong to the host's debit/credit
-hooks, or its custom `BookHook` if it bypasses them. Empty exchanges skip the
-account hooks, so they do not validate the counterparty.
+fee credits. Account hooks and custom `BookHook` implementations may trust account
+format while preserving applicable authorization and balance checks. Empty
+exchanges skip the account hooks and do not validate the counterparty.
 
 `Repay` settles only the debt: `POSITION → POSITION` with empty input. Its
 `RepayHook.repay(account, position)` must satisfy the entire debt or revert,
@@ -450,9 +482,11 @@ abstract contract MyCommand is CommandBase {
 }
 ```
 
-Callback runners in `CommandBase`, `PortBase`, and `QueryBase` can replace the standard lifecycle:
+Callback runners in `CommandBase`, `AdminBase`, `PortBase`, and `QueryBase` can replace the standard lifecycle:
 `runCommand(context, descriptor, callback)` processes command batches,
 `runCommandOnce(context, descriptor, callback)` invokes its callback exactly once,
+`runAdminCommand(context, descriptor, callback)` authorizes the admin context before
+processing a batch, including when its sources are empty,
 `runPort(input, descriptor, callback)` processes port batches and returns output plus
 remaining value credit, and `runQuery(input, descriptor, callback)` processes queries
 through an `internal view` callback and returns only response bytes. Each callback
@@ -465,8 +499,8 @@ Use `<endpoint>One` for per-item private callbacks, such as `depositOne` and
 `runCommandOnce`, such as `relayPayableOnce`. Endpoint-specific names allow composing
 endpoint mixins: Solidity rejects
 conflicting private callback signatures in multiple base contracts. Keep explicit
-opening and closing for custom lifecycle work, such as admin authorization before
-processing or pipe settlement after the entire batch.
+opening and closing for custom lifecycle work, such as pipe settlement after the
+entire batch.
 
 Deposit hooks return the actual amount that becomes live `#balance` state.
 Implementations can therefore deduct external ingress fees or report an
@@ -601,9 +635,10 @@ settles that final value once.
 
 `portPipePayable` shares one native-value budget across all supplied CONTEXT
 blocks. After all contexts execute, it calls `cashin` once for any nonzero
-remainder, crediting the last context's account, and returns zero native credit.
-Context ordering determines the recipient. Empty input with value passes the
-zero account to `cashin`; account validation belongs to the host's `CashinHook`.
+remainder when the last context's account is nonzero, and returns zero native credit.
+Context ordering determines the recipient. Empty input or a zero final account
+skips `cashin` and returns the remainder as budget credit, without transferring
+native value back. The trusted peer is responsible for supplied account validity.
 An exhausted or zero budget skips the hook.
 
 The EVM pipeline is deliberately coupled to the canonical wire layout for gas
@@ -740,7 +775,8 @@ the output bytes only. Callers authorize the target and must ensure returned
 credit is backed before adding it to their budget; the helpers do not transfer
 ETH back. All ports return this tuple. Nonpayable ports return zero credit;
 `portDispatchPayable` returns its unspent budget. `portPipePayable` settles its
-remainder through `cashin` and returns zero credit.
+remainder through `cashin` and returns zero credit when the final account is
+nonzero; otherwise it returns the unspent budget.
 `Calls.rawQuery` decodes bytes-only query results. `Calls.tryRaw` has the same
 memory/cursor overloads and reports success without decoding returndata, with
 optional explicit gas limits. Cursor overloads trust validated bounds, ignore
@@ -807,8 +843,9 @@ own destination and resource input and forward an already constructed command
 context, while `portDispatchPayable` dispatches an explicit portal payload. A
 `Portal` forwards ordinary incoming CONTEXT streams directly to its commander
 host's `portPipePayable` endpoint. The pipeline port settles any remainder to
-the last context's account and returns zero credit. The portal ignores successful
-return data and does not decode the message or perform account settlement.
+the last context's account when nonzero and returns zero credit. Empty input or
+a zero final account returns the unspent budget instead. The portal ignores all
+successful return data and does not decode the message or perform account settlement.
 Failed messages are retained by digest and may be replayed through a separately
 selected trusted recovery-handler port. A
 bridge adapter moves the **raw

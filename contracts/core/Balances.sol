@@ -8,6 +8,10 @@ error InsufficientFunds();
 
 /// @title Balances
 /// @notice On-chain ledger for per-account, per-asset balances.
+/// @dev Account identifiers are trusted internally under the caller's policy.
+/// Callers validate untrusted account input at entry; this ledger does not repeat
+/// account-format checks. Authorization remains the caller's responsibility;
+/// debitFrom still enforces sufficient balance.
 abstract contract Balances is BalanceEvent {
     /// @dev account -> asset -> balance.
     mapping(bytes32 account => mapping(bytes32 asset => uint amount)) internal balances;

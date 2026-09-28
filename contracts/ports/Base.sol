@@ -17,6 +17,9 @@ import { Execution, Executions } from "../execution/Execution.sol";
 /// authenticates the caller once at entry; batch operations do not add separate
 /// peer-specific authorization by port, asset, or direction. Operation validity
 /// and accounting invariants still apply. Do not admit partially trusted peers.
+/// Trusted peers are responsible for supplied account validity; receiving ports
+/// need not repeat account-format validation. A faulty trusted integration can
+/// supply malformed accounts, and the receiving host does not guarantee rejection.
 abstract contract PortBase is PeerAccess, InputEndpointBase {
 
     /// @dev Restrict execution to trusted callers, excluding the commander.

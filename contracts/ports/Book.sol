@@ -24,7 +24,8 @@ abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
 
     /// @notice Debit then credit each consecutive ACCOUNT_AMOUNT pair.
     /// @dev Both blocks are decoded before calling book. Zero amounts skip their
-    /// respective legs; account validation belongs to the host. Empty batches are accepted.
+    /// respective legs; supplied account validity belongs to the trusted peer.
+    /// The receiving port need not repeat format checks. Empty batches are accepted.
     /// @param data Flat pairs: debit account/liability/debt then credit account/asset/amount.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.

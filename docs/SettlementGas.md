@@ -3,8 +3,10 @@
 Measured on 2026-09-17 with Solidity 0.8.35 without viaIR, optimizer enabled with 200 runs,
 Cancun EVM target, and Hardhat's local simulated network. The benchmark caller checks
 packed limits before settlement applies final position quantities without host fees.
-Account validation is delegated to the account hooks. This benchmark's ledger
-accepts opaque account IDs and performs no account-format check.
+Account format is trusted internally under the
+[boundary-validation convention](../README.md#account-validation-convention).
+This benchmark's ledger accepts opaque account IDs and performs no account-format
+check; low-level account hooks are not required to repeat boundary validation.
 
 Run:
 

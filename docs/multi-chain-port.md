@@ -381,7 +381,8 @@ fn peer_pipe(input: &[u8], attached_value: NativeValue) -> Result<(Vec<u8>, Nati
 
 Ports return output bytes and trusted native budget credit. The EVM dispatch
 port returns its unspent budget; the pipeline port settles its remainder through
-`cashin` and returns zero credit. Returning credit is accounting,
+`cashin` and returns zero credit when the final account is nonzero. Empty input
+or a zero final account returns the unspent budget instead. Returning credit is accounting,
 not an automatic native transfer back to the caller.
 
 The bridge adapter is the only component that cares about remote chain identity. The host only sees a trusted local caller and a byte payload.
@@ -639,12 +640,17 @@ authorized as trusted local nodes before using the local chain's call mechanism.
 `ports/Pipe.sol` is the cross-chain execution pattern to preserve. The port pipe entrypoint consumes raw CONTEXT blocks from a trusted local caller, then forwards the nested STEP stream into `pipe()`.
 
 All contexts share one native-value budget. After the loop, `portPipePayable`
-credits any nonzero remainder to the last context's account through `cashin`
-and returns zero native credit. Context ordering determines the recipient.
-Empty input with value passes the zero account to the host's `CashinHook`,
-which owns account validation. A zero remainder skips the hook.
-`Portal.forward` ignores successful return data; settlement belongs to the
-pipeline port, so the portal does not decode the message to infer an account.
+credits any nonzero remainder through `cashin` when the last context's account
+is nonzero, then returns zero native credit. Context ordering determines the recipient.
+Empty input or a zero final account skips `cashin` and returns the remainder as
+budget credit without transferring native value back. The trusted peer owns the
+validity of supplied accounts; the receiving port need not repeat account-format
+validation and does not guarantee rejection of malformed accounts from a faulty
+trusted integration. A zero remainder skips the hook. See the
+[account validation convention](../README.md#account-validation-convention).
+`Portal.forward` ignores successful return data, including any remaining budget
+credit. Cash-in belongs to the pipeline port, so the portal does not decode the
+message to infer an account.
 
 This means the bridge does not need a special "execute remote command" API. It only needs to deliver bytes to the destination host's port pipe. From that point onward, execution is identical to local pipeline execution.
 

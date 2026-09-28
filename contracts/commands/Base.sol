@@ -15,6 +15,10 @@ using Executions for Execution;
 /// @title CommandBase
 /// @notice Abstract base for all rootzero command contracts.
 /// Provides access control modifiers and command endpoint metadata helpers.
+/// @dev Commands accepting account IDs from untrusted user input must validate them
+/// under the caller's policy before use, returning them in positions, or forwarding
+/// them to another host. Command authorization does not validate inputs. Accounts
+/// supplied by internal execution or trusted peers need no repeated format checks.
 abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @dev Thrown when `onlyActive` finds that `deadline` has already passed.
     error Expired();
@@ -64,6 +68,8 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
 
     /// @notice Decode one command context and open bounded state and input sources.
     /// @dev Rejects empty input, trailing bytes, and additional context blocks.
+    /// Context structure checks do not validate account format. The active account
+    /// is trusted from the caller; nested user input still needs boundary validation.
     /// The command's decode and loop implementation defines source semantics.
     /// Closing requires both sources to have been consumed completely.
     /// @param context Exactly one CONTEXT block carrying the account, state, and input.

@@ -11,7 +11,8 @@ abstract contract DebitAccountHook {
     /// @dev Returning successfully asserts that the complete amount was debited. The
     /// hook must revert if it cannot debit the exact amount. Internal bookkeeping fees
     /// must not reduce the amount made available to the consuming operation.
-    /// Implementations validate and authorize the source account.
+    /// May assume account format satisfies the caller's policy without repeated
+    /// format validation. Applicable authorization and balance checks remain.
     /// @param account Source account identifier.
     /// @param asset Asset identifier.
     /// @param amount Exact amount to debit.
@@ -24,7 +25,8 @@ abstract contract CreditAccountHook {
     /// @notice Override to credit externally managed funds to `account`.
     /// @dev Returning successfully asserts that the complete amount was credited.
     /// The hook must revert if it cannot credit the complete amount.
-    /// Implementations validate the destination account under host policy.
+    /// May assume account format satisfies the caller's policy without repeated
+    /// format validation. Applicable authorization and accounting requirements remain.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
     /// @param amount Exact amount to credit.
@@ -37,8 +39,8 @@ abstract contract BookHook {
     /// @notice Debit `debt` from `from`, then credit `amount` to `to`.
     /// @dev Apply both exact legs or revert. Zero amounts skip their legs; a zero
     /// account alone does not skip a nonzero leg. Callers define account policy,
-    /// enforce limits and fees. Implementations validate accounts, directly or
-    /// through the debit/credit hooks. Preserve debit-first
+    /// enforce limits and fees, and validate untrusted accounts at entry. Internal
+    /// hooks may assume accounts satisfy that policy. Preserve debit-first
     /// funding requirements even when accounts or assets match; do not net the legs.
     /// @param from Account debited for the liability.
     /// @param to Account credited with the asset.
@@ -60,7 +62,7 @@ abstract contract RepayHook {
     /// emitting positions. Apply the debt exactly, without extra fees, and leave
     /// the asset leg untouched. Do not mutate the position; the caller clears debt.
     /// @param account Account whose position debt is repaid.
-    /// @param position Full position; the hook validates the counterparty and authorizes the repayment.
+    /// @param position Full position with trusted account format; the hook applies repayment authorization.
     function repay(bytes32 account, Position memory position) internal virtual;
 }
 
@@ -74,7 +76,7 @@ abstract contract SettleHook {
     /// `amount` is the final net receipt and `debt` the final total payment.
     /// Producers enforce limits before emitting positions. Apply both quantities exactly, without extra fees.
     /// @param account Account whose position is settled.
-    /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
+    /// @param position Full position with trusted account format; the hook applies exchange authorization.
     function settle(bytes32 account, Position memory position) internal virtual;
 }
 
@@ -102,7 +104,7 @@ abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook
 
     /// @notice Settle only the debt through BookHook, leaving the position unchanged.
     /// @dev Zero counterparty only debits the active account; an account counterparty
-    /// receives the exact payment. Zero debt skips booking and account validation.
+    /// receives the exact payment. Zero debt skips booking and all account hooks.
     function repay(bytes32 account, Position memory position) internal virtual override {
         if (position.debt == 0) return;
         uint amount = position.counterparty == bytes32(0) ? 0 : position.debt;
@@ -113,8 +115,9 @@ abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook
     /// @dev Zero counterparty books on the active account. Account counterparties
     /// exchange the full debt first, then the full asset amount. Producers handle
     /// fees before settlement; this function neither adds nor deducts fees.
-    /// Account validation belongs to book and its debit/credit hooks. Empty
-    /// exchanges skip those hooks and therefore do not validate the counterparty.
+    /// Account format is trusted from callers; book and debit/credit hooks need not
+    /// repeat boundary validation. Empty exchanges skip those hooks. Malformed
+    /// accounts from faulty trusted integrations are not guaranteed to be rejected.
     function settle(bytes32 account, Position memory position) internal virtual override {
         if (position.counterparty == bytes32(0)) {
             book(account, account, position.asset, position.amount, position.liability, position.debt);

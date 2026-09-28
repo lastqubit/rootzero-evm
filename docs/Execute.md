@@ -40,7 +40,12 @@ These are trusted low-level primitives, not general cursor decoders.
 
 Partial tails are rejected before any hook runs. Exact headers are checked per
 block without scanning the stream twice. Existing InvalidBlock selectors,
-validation order, account checks and budget semantics are preserved.
+validation order, existing account checks and budget semantics are preserved.
+Under the [account validation convention](../README.md#account-validation-convention),
+internal adapters and accounting hooks may trust accounts supplied by their callers.
+These structural decoding checks do not validate account format, and command
+authorization does not validate untrusted input. Commands must validate any
+user-supplied accounts before use, returning positions, or forwarding them.
 
 POSITION decoding uses MCOPY into the struct Solidity allocates for the return
 value. It copies all five words without aliasing the input, including counterparty.

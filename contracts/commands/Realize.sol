@@ -13,7 +13,8 @@ using Executions for Execution;
 /// use SettleHook instead; production hosts choose one position-fulfillment model.
 abstract contract RealizeHook {
     /// @notice Fulfill a position in its existing asset and liability denominations.
-    /// @dev Validate and authorize the source counterparty and fulfill the entire
+    /// @dev Account format is trusted from the producer. Enforce operation-specific
+    /// counterparty matching and authorization, and fulfill the entire
     /// obligation before returning counterparty zero. The host chooses its internal
     /// operation order and must preserve the asset and liability identifiers.
     /// Callers may validate the result with checkPosition in the same pipeline;

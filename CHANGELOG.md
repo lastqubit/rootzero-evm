@@ -8,6 +8,34 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- Add `runAdminCommand` and use per-item callbacks across admin commands,
+  preserving authorization for empty batches and remaining native budget credit.
+
+- **Breaking:** Replace AssetStatus/assetStatus with AssetCodes/assetCodes and
+  its hook, returning one #codes { uint codes } block per requested asset.
+  Require exactly one Active/Inactive code by hook convention; no historical
+  action/effect codes. Add Codes keys, specs, schema, headers, and codec helpers.
+
+- Skip `portPipePayable` cash-in when the final account is zero, including empty
+  input; return the unspent budget as credit without transferring native value back.
+
+- Validate payout destination inputs with `Accounts.account` before invoking the
+  payout hook, rejecting zero and non-account categories even for zero amounts.
+
+- Document account-format validation at untrusted input boundaries, trusted peer
+  responsibility, and internally trusted bytes32 accounts. Clarify accounting,
+  settlement, and context contracts without changing runtime checks or APIs.
+
+- Add States in code category 5, with nonzero Active and Inactive identifiers.
+  Export States and the Codes combinations through Events.sol and Utils.sol.
+- Add paired Codes combinations for Add/Remove, Enable/Disable,
+  Authorize/Revoke, Appoint/Dismiss, and Allow/Deny. Names use ThenActive or
+  ThenInactive to distinguish the action from its resulting state.
+- **Breaking:** Remove numeric status from Asset, Node, Guardian, and Route.
+  Each event now requires exactly one Active or Inactive code by convention.
+  Host uses combined codes for node authorization and guardian role changes.
+  Event topics and published ABI strings change.
+
 ## 1.46.0
 
 ### Breaking

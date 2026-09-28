@@ -22,7 +22,7 @@ abstract contract SettlePayableHook {
     /// `amount` is the final net receipt and `debt` the final total payment.
     /// Producers enforce limits before emitting positions. Apply both quantities exactly, without extra fees.
     /// @param account Account whose position is being settled.
-    /// @param position Full position; the hook validates the counterparty and authorizes the exchange.
+    /// @param position Full position with trusted account format; the hook applies exchange authorization.
     /// @param funds Mutable execution used only for its remaining native-value budget.
     function settle(bytes32 account, Position memory position, Execution memory funds) internal virtual;
 }
@@ -44,7 +44,7 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
     }
 
     /// @notice Settle each POSITION block from the command state.
-    /// @dev The hook validates the counterparty and authorizes the exchange.
+    /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -70,7 +70,7 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
     }
 
     /// @notice Settle each POSITION block with access to a shared native-value budget.
-    /// @dev The hook validates the counterparty and authorizes the exchange.
+    /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
@@ -90,7 +90,7 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
 /// inherited from `Settle` while accepting the state location used by `Pipeline`.
 abstract contract ExecuteSettle is Settle {
     /// @notice Execute the inherited settle command from an internal pipeline.
-    /// @dev The hook validates the counterparty and authorizes the exchange.
+    /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
     /// @param account Account for which each position is settled.
     /// @param state POSITION block stream held in pipeline memory.
     /// @param inputCur Cursor over empty command input.

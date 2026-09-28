@@ -26,7 +26,10 @@ abstract contract CashinHook {
     /// @notice Credit an exact chain-asset amount already held by the host to `account`.
     /// @dev Returning successfully asserts that the complete amount was credited.
     /// Implementations must revert when the requested amount cannot be credited.
-    /// Implementations are responsible for account validation, including zero-account policy.
+    /// May assume supplied accounts satisfy the caller's account policy without
+    /// repeated format checks. Implementations define zero-account handling where
+    /// applicable; portPipePayable skips cashin for a zero final account.
+    /// Operation requirements still apply.
     /// Callers must consume the amount from their budget so it cannot be reused.
     /// @param account Account whose chain asset is credited.
     /// @param amount Native-asset amount to credit.
@@ -38,7 +41,8 @@ abstract contract CashoutHook {
     /// @notice Pay an exact chain-asset amount to `account`.
     /// Called once per chain-asset BALANCE block in state by the cashout command.
     /// @dev Implementations must revert if the complete amount cannot be paid.
-    /// Hosts define account validation, accounting, event emission, and reentrancy protection.
+    /// Account format may be trusted under the caller's policy. Hosts still enforce
+    /// payout destination requirements, accounting, event emission, and reentrancy protection.
     /// EVM-backed payouts may use sendChainAsset.
     /// @param account Account receiving the chain asset.
     /// @param amount Chain-asset amount to pay.

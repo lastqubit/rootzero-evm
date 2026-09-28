@@ -99,15 +99,14 @@ and flow events do not carry this reference. Hosts choose where to emit activiti
 and must document any ordering used to associate effects when no explicit reference
 is available. Emitters must pass `id` explicitly, including when it is zero.
 
-`codes` packs up to eight total `uint32` action or effect identifiers, starting in
+`codes` packs up to eight total `uint32` action, effect, or state identifiers, starting in
 the least significant 32 bits. Entries must be contiguous and nonzero, followed
 by zero padding in the unused high slots. A zero word represents an empty list.
 The event mixin does not validate packing; emitters are responsible for this
 convention. Order and duplicates are preserved; adjacency does not imply
-action-to-effect pairing. This is an ID list, not a bitmask. Existing events with
-a singular `action` field still carry one action ID.
+action-to-effect pairing. This is an ID list, not a bitmask. All codes fields share this format.
 
-Use `Actions` and `Effects`, both exported by `Events.sol` and `Utils.sol`.
+Use `Actions`, `Effects`, and `States`, all exported by `Events.sol` and `Utils.sol`.
 The top three bits of each `uint32` code reserve space for eight categories;
 the remaining 29 bits allow 536,870,912 values per category.
 
@@ -118,7 +117,7 @@ the remaining 29 bits allow 536,870,912 values per category.
 | 2 | Reserved | `0x40000000`–`0x5fffffff` |
 | 3 | Reserved | `0x60000000`–`0x7fffffff` |
 | 4 | Effects | `0x80000000`–`0x9fffffff` |
-| 5 | Reserved | `0xa0000000`–`0xbfffffff` |
+| 5 | States | `0xa0000000`–`0xbfffffff` |
 | 6 | Reserved | `0xc0000000`–`0xdfffffff` |
 | 7 | Reserved | `0xe0000000`–`0xffffffff` |
 
@@ -131,7 +130,28 @@ Effects describe asset outcomes for the
 account; actions describe the operations responsible. Asset IDs and quantities
 remain in detail events rather than the activity summary.
 
-Each constant already includes its category bits, so a single action or effect
+States define `Inactive = 0xa0000000` and `Active = 0xa0000001`. Both are
+nonzero: omitted state information is distinct from explicitly inactive. States
+describe resulting conditions; each consumer defines which states apply. Asset, Node, Guardian, and Route
+require exactly one Active or Inactive code; other events define their own requirements.
+
+`Codes`, exported by `Events.sol` and `Utils.sol`, provides packed uint
+combinations in action-catalog order, with each active/inactive pair together:
+
+| Purpose | Active combination | Inactive combination |
+|---|---|---|
+| Membership | AddThenActive | RemoveThenInactive |
+| Availability | EnableThenActive | DisableThenInactive |
+| Authorization | AuthorizeThenActive | RevokeThenInactive |
+| Roles | AppointThenActive | DismissThenInactive |
+| Asset support | AllowThenActive | DenyThenInactive |
+
+Each combination places the action first and resulting state second. They are
+compile-time combinations of standard IDs, not a separate category. Pass them
+directly as codes; hosts can define other combinations locally. Create and
+Update do not imply a particular state, so callers compose those explicitly.
+
+Each constant already includes its category bits, so a single action, effect, or state
 can be passed directly without shifting. Category capacity is independent of
 packing capacity: an activity still holds at most eight codes in total.
 
@@ -147,10 +167,10 @@ Cast each ID to `uint` before shifting so shifts beyond the first slot retain
 their bits. To decode a word, read `uint32(word)` then shift `word >>= 32`, up to
 eight times; zero terminates the list and all remaining slots must also be zero.
 For each nonzero code, decode its category with `code >> 29` and its local
-identifier with `code & 0x1fffffff`. Category 0 identifies actions and category 4
-identifies effects; the other categories are reserved for future catalogs.
+identifier with `code & 0x1fffffff`. Category 0 identifies actions, category 4 identifies effects, and category 5
+identifies states; the other categories are reserved for future catalogs.
 Unknown categories and unassigned identifiers have no defined meaning; indexers
-should preserve the full code without interpreting it as a known action or effect.
+should preserve the full code without interpreting it as a known action, effect, or state.
 
 Names arrive as annotations. Each standard mixin emits a canonical label block
 at construction, and the admin `annotate` command publishes mutable annotations
@@ -216,8 +236,8 @@ Host topology and access state are fully evented by the library:
 
 ```txt
 event Introduction(uint indexed host, uint peer, bytes32 origin, uint blocknum)
-event Node(uint indexed host, uint node, uint codes, uint status)
-event Guardian(uint indexed host, bytes32 account, uint codes, uint status)
+event Node(uint indexed host, uint node, uint codes)
+event Guardian(uint indexed host, bytes32 account, uint codes)
 ```
 
 `Introduction` fires on the receiving host when a peer host introduces itself
@@ -227,16 +247,13 @@ node-trust change routes through `authorizeNode` or `revokeNode` and every
 guardian change through `appointGuardian` or `dismissGuardian`, so `Node` and `Guardian` are exhaustive:
 replaying them yields the exact current access sets.
 
-For both events, `codes` describes the operations or outcomes and `status` is the authoritative
-state after that operation. Zero means inactive; one means active. Other nonzero
-values mean active with host-defined meaning. `Host` emits `Actions.Authorize`
-with `1` and `Actions.Revoke` with `0` for nodes, including guardian-triggered
-revocations. For guardians it emits `Actions.Appoint` with `1` and
-`Actions.Dismiss` with `0`. Repeating an operation still emits its action and
-resulting status. Emitters must keep these fields consistent. Indexers derive
-membership from `status != 0`, even when they do not recognize an action code,
-and retain the complete status value. These changes replace both event signatures;
-use the published ABI for each deployment.
+For both events, `codes` includes exactly one `States.Active` or
+`States.Inactive` describing the resulting membership. Host emits
+`Codes.AuthorizeThenActive` and `Codes.RevokeThenInactive` for nodes, including
+guardian-triggered revocations, and `Codes.AppointThenActive` and
+`Codes.DismissThenInactive` for guardians. Repeated operations still emit.
+Indexers derive membership from the explicit state code independently of action
+recognition. The numeric status field is removed; use the ABI for each deployment.
 
 All account, asset, and node IDs are 32-byte values with one top-byte rule:
 `0x00` is null/unset, `0x01` is Rootzero-native, `0x02` is opaque
@@ -288,7 +305,9 @@ host's ledger policy - in particular the asset binding and the resulting
 balance. Command-returned native credit replenishes the pipeline budget. The
 enclosing entrypoint settles the final budget through its host hooks, so the
 ledger emits one receiving event. `portPipePayable` calls `cashin` for the last
-context's account; funded empty input passes the zero account to that hook.
+context's account only when both that account and the remaining budget are nonzero.
+Empty input or a zero final account skips `cashin` and returns the remaining budget
+as credit; this path emits no receiving event through `cashin`.
 The `create-rootzero` template
 (`rootzero-evm-commander`) is the reference implementation of the remaining
 host conventions.
@@ -301,9 +320,9 @@ event Received(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
 event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
 event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
 event Unlocked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
-event Asset(uint indexed host, bytes32 asset, uint codes, uint status)
+event Asset(uint indexed host, bytes32 asset, uint codes)
 event AssetPreimage(bytes32 indexed asset, bytes preimage)
-event Route(uint indexed host, uint portal, uint codes, uint status)
+event Route(uint indexed host, uint portal, uint codes)
 event Rooted(bytes32 indexed account, uint deadline, uint value)
 ```
 
@@ -315,31 +334,30 @@ the log address; consumers validate that the preimage derives the declared ID.
 This event declares a preimage and does not imply support on a host.
 
 `Asset` records an asset lifecycle or administrative action and its resulting
-`status` on a host. `Actions.Create` means the asset was created;
-`Actions.Delete` means it was deleted. `Actions.Allow` and `Actions.Deny` describe
-support decisions. Hosts supply the emissions and must keep actions and resulting
-states consistent. Indexers use `status != 0` to reconstruct the host's active asset
-set, including repeated operations or unrecognized action codes. The action must
-also be retained to distinguish creation, deletion, and support changes.
-Status zero means inactive, one means active, and other nonzero values mean active
-with host-defined meaning. The `AssetStatus` query continues to return its
-existing numeric status.
+active/inactive state on a host. `Actions.Create` means creation and
+`Actions.Delete` means deletion. Support decisions use `Codes.AllowThenActive`
+and `Codes.DenyThenInactive`. Hosts supply emissions and must include exactly
+one `States.Active` or `States.Inactive`, consistent with the resulting state.
+Create and Update can result in either state; callers select it explicitly.
+Indexers retain action codes to distinguish operations and derive membership
+from the state code even when an action is unrecognized. The event no longer
+carries arbitrary numeric status. The `assetCodes` query returns one `#codes`
+block per requested `#asset`, preserving order. Its hook returns exactly one
+Active or Inactive code describing the current condition, rather than historical
+actions/effects. Zero does not mean inactive. This replaces `assetStatus` and
+its `#status` response; empty input still returns empty output.
 
-These signatures replace the former `Asset(host, asset, preimage)` and
-`AssetStatus(host, asset, status)` events. Preimage emitters must inherit
-`AssetPreimageEvent`; asset action emitters use `AssetEvent`. Both are exported by
-`Events.sol`. Indexers must use the ABI published by each deployment.
+Preimage emitters inherit `AssetPreimageEvent`; asset action emitters use
+`AssetEvent`. Both are exported by `Events.sol`. Historical Asset and
+AssetStatus event signatures must be decoded with their deployment's ABI.
 
-`Route` records the action performed on a host's route to `portal` and its
-resulting `status`. `addRoute` uses `Actions.Add` with `1`; `removeRoute` uses
-`Actions.Remove` with `0`. These operations change route membership rather than
-create or delete the destination portal. `Enable` with `1` and `Disable` with `0`
-toggle a route that remains configured. Hosts define
-the route policy and supply consistent emissions, including repeated operations.
-The event carries `uint codes, uint status`; status zero means inactive,
-one means active, and other nonzero values mean active with host-defined meaning.
-Indexers must update the event signature and reconstruct route activity from
-`status != 0` while retaining the full status and the action's canonical meaning.
+`Route` records the operation on a host's route to a portal and its resulting
+active/inactive state. Use `Codes.AddThenActive` and `Codes.RemoveThenInactive`
+for route membership changes, and `Codes.EnableThenActive` and
+`Codes.DisableThenInactive` for a route that remains configured. These describe
+the route, not creation or deletion of the destination portal. Hosts supply
+consistent emissions, including repeated operations. Exactly one Active or
+Inactive code is required; no numeric status field remains.
 
 A host that wants to be indexable from logs alone must follow these rules. A
 host that omits them still works on-chain, but its ledger is invisible to
@@ -420,8 +438,8 @@ remains atomic: if settlement or a later pipeline step reverts, its event is
 reverted as well.
 
 **Asset gating.** Hosts that gate assets emit `Asset` from their
-`allowAsset`/`denyAsset` hooks, with `Actions.Allow`/`Actions.Deny` and the
-resulting `status` (`0` means unsupported, nonzero means supported).
+`allowAsset`/`denyAsset` hooks, with `Codes.AllowThenActive` or
+`Codes.DenyThenInactive` describing the resulting support state.
 
 **Opaque assets.** Hosts that create or register opaque asset IDs emit `AssetPreimage`
 with the canonical preimage used to resolve the asset. Indexers should treat
@@ -438,12 +456,19 @@ logs of the transaction to attribute effects to the invocation.
 ### Codes and Correlation
 
 All events carrying codes use the same uint packing as Activity: up to eight
-nonzero uint32 action/effect IDs, lowest slot first, with zero-filled unused high
+nonzero uint32 action/effect/state IDs, lowest slot first, with zero-filled unused high
 slots. Zero means no codes. Order and duplicates are preserved; adjacency does
 not pair actions with effects. Each ID includes its category bits: category 0
-is Actions, category 4 is Effects, and other categories remain reserved.
-A single Actions or Effects constant can be passed directly. When composing
+is Actions, category 4 is Effects, category 5 is States, and other categories remain reserved.
+A single Actions, Effects, or States constant can be passed directly. When composing
 multiple codes in Solidity, widen to uint before shifting by 32 bits or more.
+
+Asset, Node, Guardian, and Route require exactly one occurrence of either
+States.Active or States.Inactive. Missing, duplicate, or conflicting membership
+state codes violate their convention; indexers must not infer a valid membership
+update from such logs. Event declarations perform no runtime validation, so
+emitters are responsible for satisfying the convention. Other code categories
+may coexist and retain their ordinary ordering and duplicate rules.
 
 Codes describe this event's operations or outcomes. Typed event fields remain
 authoritative; Received already denotes receipt, so Effects.Receive is optional.
@@ -460,8 +485,8 @@ which operation occurred. Its canonical meaning is the same across event types:
 `Actions.Create` means creation, `Actions.Delete` means deletion,
 `Actions.Add`/`Actions.Remove` mean membership changes, and
 `Actions.Refund` means a refund. The event identifies the affected entity or
-effect and supplies context. Any accompanying state fields describe the result;
-they do not redefine the action. For example, `Asset(..., Actions.Create, 0)`
+effect and supplies context. Resulting state codes do not redefine the action. For example,
+`Asset(host, asset, uint(Actions.Create) | (uint(States.Inactive) << 32))`
 records an asset that was created but is inactive on that host, not a denial.
 Consumers should retain the action even when different operations produce the
 same state. Hosts choose applicable actions and must emit them truthfully.
