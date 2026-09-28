@@ -8,7 +8,7 @@ contract TestAssetEvents is AssetEvent, AssetPreimageEvent {
         emit AssetPreimage(asset, preimage);
     }
 
-    function emitAsset(uint host, bytes32 asset, uint32 action, uint status) external {
-        emit Asset(host, asset, action, status);
+    function emitAsset(uint host, bytes32 asset, uint codes, uint status) external {
+        emit Asset(host, asset, codes, status);
     }
 }

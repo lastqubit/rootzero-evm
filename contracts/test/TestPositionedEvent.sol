@@ -11,8 +11,8 @@ contract TestPositionedEvent is PositionedEvent {
         bytes32 liability,
         uint debt,
         bytes32 counterparty,
-        uint32 action
+        uint codes
     ) external {
-        emit Positioned(account, asset, amount, liability, debt, counterparty, action);
+        emit Positioned(account, asset, amount, liability, debt, counterparty, codes);
     }
 }

@@ -2,12 +2,17 @@
 pragma solidity ^0.8.33;
 
 /// @notice Canonical action identifiers used by protocol events.
-/// @dev In every event with an action field, the action identifies the operation
+/// @dev In every event with a codes field, each action identifies an operation
 /// that occurred. Its canonical meaning is shared across event types; any
 /// accompanying state fields describe the result, not a replacement meaning.
 /// Codes are grouped in blocks of 16; unassigned values are reserved.
 /// These ranges organize the catalog, not permission checks or runtime dispatch.
 /// The grouped catalog replaces the numeric assignments used through v1.41.0.
+/// Actions occupy category 0 (0x00000000-0x1fffffff) of eight possible categories.
+/// The top three bits select the category; the remaining 29 bits identify the code.
+/// Every codes field packs up to eight action or effect IDs, lowest uint32 slot first.
+/// Entries are contiguous and nonzero, with zero padding in unused high slots.
+/// None denotes an empty list; identifiers are not bit flags.
 library Actions {
     // Lifecycle and membership: 0-15. Values 8-15 are reserved.
     uint32 constant None = 0;
@@ -56,5 +61,5 @@ library Actions {
     uint32 constant Repay = 82;
     uint32 constant Liquidate = 83;
 
-    // Values 96 and above are reserved for future action groups.
+    // Values 96-0x1fffffff are reserved for future action groups.
 }

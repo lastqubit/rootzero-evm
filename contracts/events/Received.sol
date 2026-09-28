@@ -5,14 +5,15 @@ import { EventEmitter } from "./Emitter.sol";
 
 /// @notice Emitted when an account receives an asset in a protocol operation.
 abstract contract ReceivedEvent is EventEmitter {
-    string private constant ABI = "event Received(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)";
+    string private constant ABI = "event Received(bytes32 indexed account, bytes32 asset, uint amount, uint codes)";
 
     /// @param account Account identifier that received the asset.
     /// @param asset Asset identifier.
     /// @param amount Amount received.
-    /// @param action Primary operation hint from `Actions`.
-    /// @param context Reserved context value for future use.
-    event Received(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context);
+    /// @param codes Packed action/effect IDs describing this event, using Activity's codes convention.
+    /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
+    /// Zero is empty. Order and duplicates are preserved; adjacent IDs are not paired.
+    event Received(bytes32 indexed account, bytes32 asset, uint amount, uint codes);
 
     constructor() {
         emit EventAbi(ABI);

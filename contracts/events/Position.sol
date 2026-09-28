@@ -6,7 +6,7 @@ import {EventEmitter} from "./Emitter.sol";
 /// @notice Emitted when an action produces an account position.
 abstract contract PositionedEvent is EventEmitter {
     string private constant ABI =
-        "event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint32 action)";
+        "event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint codes)";
 
     /// @param account Account associated with the position.
     /// @param asset Identifier for the asset side.
@@ -14,7 +14,9 @@ abstract contract PositionedEvent is EventEmitter {
     /// @param liability Identifier for the liability side.
     /// @param debt Quantity owed on the liability side.
     /// @param counterparty Counterparty identifier from the resulting position.
-    /// @param action Primary operation hint from `Actions` that produced the position.
+    /// @param codes Packed action/effect IDs describing this event, using Activity's codes convention.
+    /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
+    /// Zero is empty. Order and duplicates are preserved; adjacent IDs are not paired.
     event Positioned(
         bytes32 indexed account,
         bytes32 asset,
@@ -22,7 +24,7 @@ abstract contract PositionedEvent is EventEmitter {
         bytes32 liability,
         uint debt,
         bytes32 counterparty,
-        uint32 action
+        uint codes
     );
 
     constructor() {
