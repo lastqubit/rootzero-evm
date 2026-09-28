@@ -4,6 +4,7 @@ pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
+import {Accounts} from "../utils/Accounts.sol";
 
 using Executions for Execution;
 
@@ -31,6 +32,8 @@ abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
     }
 
     /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.
+    /// @dev Validates the destination account category before calling the hook, even
+    /// for zero amounts. Authorization and payout-specific requirements remain with the host.
     /// @param context Command context carrying BALANCE state and matching ACCOUNT input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -40,7 +43,7 @@ abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
 
     function payoutOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
-        bytes32 to = exec.unpackAccount();
+        bytes32 to = Accounts.account(exec.unpackAccount());
         payout(exec.account, to, asset, amount);
     }
 }

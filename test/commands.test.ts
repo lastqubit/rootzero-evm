@@ -662,6 +662,38 @@ describe("Commands", () => {
         .withArgs(userAccount, to, asset, 250n);
     });
 
+    it("rejects non-account destinations even for zero amounts", async () => {
+      const destinations = [
+        ethers.ZeroHash,
+        ethers.zeroPadValue("0x01", 32),
+        ethers.toBeHex(0x03030100n << 224n, 32), // Asset category.
+        ethers.toBeHex(await host.host(), 32), // Host node, not a host account.
+      ];
+      for (const to of destinations) {
+        for (const amount of [0n, 1n]) {
+          await expect(callAs(0, "payout", ctx({
+            state: encodeBalanceBlock(asset, amount),
+            input: encodeAccountBlock(to),
+          }))).to.be.revertedWithCustomError(host, "InvalidAccount");
+        }
+      }
+    });
+
+    it("accepts host and opaque account destinations without narrowing account policy", async () => {
+      const destinations = [
+        encodeHostAccount(await host.host()),
+        ethers.toBeHex((0x02017fn << 232n) | 123n, 32),
+      ];
+      for (const to of destinations) {
+        for (const amount of [0n, 1n]) {
+          await expect(callAs(0, "payout", ctx({
+            state: encodeBalanceBlock(asset, amount),
+            input: encodeAccountBlock(to),
+          }))).to.emit(host, "PayoutCalled").withArgs(userAccount, to, asset, amount);
+        }
+      }
+    });
+
     it("pairs each BALANCE block with the matching ACCOUNT block", async () => {
       const asset1 = ethers.zeroPadValue("0x29", 32);
       const asset2 = ethers.zeroPadValue("0x2a", 32);
