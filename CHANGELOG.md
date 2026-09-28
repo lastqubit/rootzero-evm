@@ -6,6 +6,99 @@ breaking API changes. Breaking changes are called out explicitly.
 Add all changes made after a release to `Unreleased`. Published version
 sections are immutable and must continue to describe the tagged release.
 
+## Unreleased
+
+## 1.46.0
+
+### Breaking
+
+- Replace the absolute-position Blocks/Memory APIs with cursor-based Blocks,
+  Encoder, and the specialized Execute library. Remove Decoders, Writers,
+  Buffers, Writer, and Cur from production exports. Headers moves from Specs.sol
+  to codec/Headers.sol and uses uint constants.
+- Replace Execution.decoders with independent uint input/state cursors. Rename
+  writer to output and the output byte array to buffer. Source cursors contain
+  only absolute position/end lanes; declared-lane flags and Cursors flag helpers
+  are removed. Descriptor lane declarations remain discovery metadata.
+- Standardize consuming Blocks helpers on values followed by nextCur. take
+  returns a complete block, unpack returns its payload cursor, and prefix enter
+  returns abs, the remaining payload cursor, and nextCur. Exact variants require
+  one complete block to fill the range and omit nextCur. Execution wrappers
+  consume their lane internally; dynamic unpackers return cursors.
+- Replace in-place traversal, nextN readers, and raw calldata source accessors
+  with explicit child cursors, raw read helpers, and validated whole-stream
+  selectors. Remove into, descend, consume, takeBlock, unpackRaw, absolute,
+  expect(exec, abs), list, and outputCopy variants; use unpackList and the new
+  selector/output APIs.
+- Pass calldata cursors through Relay, Recover, Pipe, Execute, Forward, Dispatch,
+  Calls.raw/tryRaw, and execution rawCall helpers. Memory-backed state/output
+  remain bytes. External command/port bytes entrypoints are unchanged.
+- Rename AssetLimits and PositionLimits to BalanceConstraints and
+  PositionConstraints, including keys, specs, schemas, and structs. Existing
+  constraint blocks require re-encoding. Position constraints use amount for
+  the minimum receipt and debt for the maximum payment.
+- Remove dedicated empty-block helpers and the schema maybe modifier. Bytes,
+  strings, lists, and absent streams may remain empty; fixed/composite blocks
+  must satisfy their layouts. The frame example now requires a complete STATUS.
+- Make InvalidBlock a global error. Remove the unused MalformedBlocks and
+  EmptyRun public errors; historical errors remain only in test fixtures.
+  Fixed block header validation precedes containment, so invalid or missing
+  headers report InvalidBlock; valid headers with truncated payloads report
+  OutOfBounds.
+- Rename ActionEvent/Action to ActivityEvent/Activity(account, codes, id).
+  Replace action fields with uint codes in Asset, Guardian, Node, Route,
+  Positioned, Received, Spent, Locked, and Unlocked. Remove unused context fields
+  from the four flow events. All codes pack up to eight nonzero uint32 IDs,
+  lowest slot first; zero means no codes. Actions occupy category 0 and Effects
+  category 4 in each ID's top three bits; remaining categories are reserved.
+- Remove Balance's signed change field. Balance now reports account, asset, and
+  resulting balance. Event topics and published ABI strings change; indexers
+  must select the ABI for the emitting deployment.
+
+### Added
+
+- Add shared Cursors range construction, inspection, navigation, consumption,
+  and calldata conversions, including done, expectEnd, enter, exhaust, and
+  toBytesChecked. Zero cursors convert to empty views. Trusted helpers require
+  validated source provenance; checked conversion validates calldata bounds.
+- Add Blocks generic/fixed/exact selectors, named fixed and composite unpackers,
+  raw read1/2/4/8/16/32 and expectation/comparison helpers, run-count hints,
+  complete-stream validators, cursor hashing, and deferred value-only balance
+  and position constraint checks.
+- Add Encoder creators and growable cursor writers with memory/calldata-cursor
+  overloads. Writers return buffer first and nextCur last; reserve also returns
+  the absolute write position. Creators construct blocks from values/payloads;
+  composite writers copy complete children by default and wrap payloads with
+  their Wrap variants.
+- Add scaled openInput/openContext overloads that adjust capacity hints before
+  allocation. Zero capacity is valid and later writes can grow. Remove the old
+  deferred scaleOutput API.
+- Add Effects identifiers for Spend, Receive, Lock, and Unlock, exported through
+  Events.sol and Utils.sol.
+
+### Changed
+
+- Migrate ordinary Execution decoding and output helpers, annotations, and
+  examples to the new codecs. Reuse validated cursors instead of repeating
+  checks or materializing calldata/memory values before consumers need them.
+- Allocate encoder buffers eagerly and calculate write sizes once. Preserve
+  relative output position/capacity lanes, sequential low-level write/copy
+  primitives, growth, scratch space, and finalization.
+- Give Pipeline separate input and STEP cursors. Keep relay state/continuations
+  as cursors through encoding and validate complete forwarded BALANCE streams.
+- Specialize Execute adapters around fixed-stride bounds and absolute reads.
+  Keep paired constraint checks in fused loops, copy positions into independent
+  structs, and allocate Bootstrap/Debit balance outputs exactly once.
+- Preserve specialized CONTEXT opening after benchmarking the shared unpacker.
+  Document gas tradeoffs, including the measured fixed 15-gas overhead for
+  CreditAccount/Cashout and empty Settle versus frozen adapter baselines.
+- Enable viaIR by default with Solidity 0.8.35, optimizer 200, and Cancun.
+  Add focused correctness suites, differential command coverage, and explicit
+  benchmark suites with historical implementations isolated under contracts/test
+  and excluded from the package.
+- Update schema, indexing, codec, hook, and migration documentation for the final
+  APIs, and distinguish historical experiments from current usage.
+
 ## 1.45.0
 
 ### Fixed
