@@ -7,36 +7,37 @@ import {QueryBase} from "./Base.sol";
 
 using Executions for Execution;
 
-/// @notice Hook implemented by hosts that expose asset status queries.
-abstract contract AssetStatusHook {
-    /// @notice Resolve support status for one asset.
-    /// Concrete implementations define the support policy and optional context codes.
+/// @notice Hook implemented by hosts that expose current asset conditions.
+abstract contract AssetCodesHook {
+    /// @notice Resolve current state codes for one asset.
+    /// @dev Must return exactly one States.Active or States.Inactive code.
+    /// Zero is not inactive. Additional applicable condition codes may accompany it;
+    /// do not return historical actions or effects. Implementations own the policy
+    /// and packing validation; the query encodes the returned word unchanged.
     /// @param asset Requested asset identifier.
-    /// @return status Asset support status. Zero means unsupported; nonzero means supported.
-    function assetStatus(bytes32 asset) internal view virtual returns (uint status);
+    /// @return codes Packed identifiers describing the asset's current condition.
+    function assetCodes(bytes32 asset) internal view virtual returns (uint codes);
 }
 
-/// @title AssetStatus
-/// @notice Rootzero query that checks support status for one or more assets.
-/// The input is a run of `ASSET` blocks.
-/// The response returns one `STATUS` form block per query entry, preserving input order.
-abstract contract AssetStatus is QueryBase, AssetStatusHook {
+/// @title AssetCodes
+/// @notice Query current asset conditions for one or more assets.
+/// Input is a run of ASSET blocks; output is one CODES block per asset in input order.
+abstract contract AssetCodes is QueryBase, AssetCodesHook {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = query("assetStatus", Specs.Asset, Specs.Status);
+        (, descriptor) = query("assetCodes", Specs.Asset, Specs.Codes);
     }
 
-    /// @notice Resolve asset support status for a run of requested assets.
-    /// @param input Block-stream input consisting of `asset { bytes32 asset }` blocks.
-    /// @return Block-stream response containing one `status { uint code }` form block per asset block.
-    function assetStatus(bytes calldata input) external view returns (bytes memory) {
-        return runQuery(input, descriptor, assetStatusOne);
+    /// @notice Resolve current conditions for a run of requested assets.
+    /// @param input Block stream of asset { bytes32 asset } entries.
+    /// @return One codes { uint codes } block for each input entry, in the same order.
+    function assetCodes(bytes calldata input) external view returns (bytes memory) {
+        return runQuery(input, descriptor, assetCodesOne);
     }
 
-    function assetStatusOne(Execution memory exec) private view {
+    function assetCodesOne(Execution memory exec) private view {
         bytes32 asset = exec.unpackAsset();
-        uint status = assetStatus(asset);
-        exec.outputStatus(status);
+        exec.outputCodes(assetCodes(asset));
     }
 }

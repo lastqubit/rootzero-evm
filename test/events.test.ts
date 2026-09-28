@@ -14,20 +14,21 @@ describe("Access state events", () => {
       const subject = kind === "Node" ? await hostId(target) : encodeUserAccount(target);
       const input = kind === "Node" ? encodeNodeBlock(subject as bigint) : encodeAccountBlock(subject as string);
       const signature = kind === "Node"
-        ? "event Node(uint indexed host, uint node, uint codes, uint status)"
-        : "event Guardian(uint indexed host, bytes32 account, uint codes, uint status)";
+        ? "event Node(uint indexed host, uint node, uint codes)"
+        : "event Guardian(uint indexed host, bytes32 account, uint codes)";
       await expect(host.deploymentTransaction()).to.emit(host, "EventAbi").withArgs(signature);
       const decoder = new ethers.Interface([signature]);
       const id = await host.host();
       for (const active of [true, true, false, false]) {
         const method = kind === "Node" ? (active ? "authorize" : "unauthorize") : (active ? "appoint" : "dismiss");
         const action = kind === "Node" ? (active ? 16n : 17n) : (active ? 18n : 19n);
+        const codes = action | ((active ? 0xa0000001n : 0xa0000000n) << 32n);
         const receipt = await (await host[method](encodeContextBlock(account, "0x", input))).wait();
         const logs = receipt.logs.filter((log: any) => log.topics[0] === decoder.getEvent(kind)!.topicHash);
         expect(logs).to.have.length(1);
         expect(logs[0].topics).to.deep.equal([decoder.getEvent(kind)!.topicHash, ethers.toBeHex(id, 32)]);
-        expect(ethers.dataLength(logs[0].data)).to.equal(96);
-        expect(Array.from(decoder.parseLog(logs[0])!.args)).to.deep.equal([id, subject, action, active ? 1n : 0n]);
+        expect(ethers.dataLength(logs[0].data)).to.equal(64);
+        expect(Array.from(decoder.parseLog(logs[0])!.args)).to.deep.equal([id, subject, codes]);
         expect(kind === "Node" ? await host.isAuthorized(subject) : await host.isGuardianAddress(target)).to.equal(active);
       }
     });
@@ -36,7 +37,7 @@ describe("Access state events", () => {
 
 describe("Asset events", () => {
   const preimageSignature = "event AssetPreimage(bytes32 indexed asset, bytes preimage)";
-  const assetSignature = "event Asset(uint indexed host, bytes32 asset, uint codes, uint status)";
+  const assetSignature = "event Asset(uint indexed host, bytes32 asset, uint codes)";
 
   it("publishes both renamed event ABIs through the public event exports", async () => {
     const emitter = await deploy("TestAssetEvents");
@@ -60,39 +61,43 @@ describe("Asset events", () => {
     }
   });
 
-  it("records actions and full-width status while indexing the host", async () => {
+  it("records action and state codes while indexing the host", async () => {
     const emitter = await deploy("TestAssetEvents");
     const asset = ethers.toBeHex(123n, 32);
     const host = 456n;
     const decoder = new ethers.Interface([assetSignature]);
-    for (const [action, status] of [[20n, 1n], [21n, 0n], [2n, 2n], [80n | (0x80000001n << 32n) | (1n << 224n), ethers.MaxUint256]] as const) {
-      const receipt = await (await emitter.emitAsset(host, asset, action, status)).wait();
+    for (const codes of [20n | (0xa0000001n << 32n), 21n | (0xa0000000n << 32n),
+      1n | (0xa0000000n << 32n), 2n | (0xa0000001n << 32n),
+      0x1fffffffn | (0xa0000001n << 32n) | Array.from({ length: 6 }, (_, i) => 1n << BigInt((i + 2) * 32)).reduce((a, b) => a | b, 0n)] as const) {
+      const receipt = await (await emitter.emitAsset(host, asset, codes)).wait();
       expect(receipt.logs).to.have.length(1);
       const log = receipt.logs[0];
       expect(log.topics).to.deep.equal([decoder.getEvent("Asset")!.topicHash, ethers.toBeHex(host, 32)]);
-      expect(ethers.dataLength(log.data)).to.equal(96);
-      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([host, asset, action, status]);
+      expect(ethers.dataLength(log.data)).to.equal(64);
+      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([host, asset, codes]);
     }
   });
 });
 
 describe("Route event", () => {
-  it("publishes its ABI and preserves each action and resulting status", async () => {
+  it("publishes its ABI and preserves each action and resulting state code", async () => {
     const emitter = await deploy("TestRouteEvent");
-    const signature = "event Route(uint indexed host, uint portal, uint codes, uint status)";
+    const signature = "event Route(uint indexed host, uint portal, uint codes)";
     await expect(emitter.deploymentTransaction()).to.emit(emitter, "EventAbi").withArgs(signature);
     const decoder = new ethers.Interface([signature]);
     const host = 123n;
     const portal = 456n;
-    for (const [action, status] of [
-      [4n, 1n], [4n, 1n], [7n, 0n], [6n, 1n], [5n, 0n], [2n, 2n], [80n | (0x80000001n << 32n) | (1n << 224n), ethers.MaxUint256],
+    for (const [action, state] of [
+      [4n, 0xa0000001n], [4n, 0xa0000001n], [7n, 0xa0000000n],
+      [6n, 0xa0000001n], [5n, 0xa0000000n], [0x1fffffffn, 0xa0000001n],
     ] as const) {
-      const receipt = await (await emitter.emitRoute(host, portal, action, status)).wait();
+      const codes = action | (state << 32n);
+      const receipt = await (await emitter.emitRoute(host, portal, codes)).wait();
       expect(receipt.logs).to.have.length(1);
       const log = receipt.logs[0];
       expect(log.topics).to.deep.equal([decoder.getEvent("Route")!.topicHash, ethers.toBeHex(host, 32)]);
-      expect(ethers.dataLength(log.data)).to.equal(96);
-      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([host, portal, action, status]);
+      expect(ethers.dataLength(log.data)).to.equal(64);
+      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([host, portal, codes]);
     }
   });
 });
@@ -134,8 +139,21 @@ describe("Activity event", () => {
       [account, 0n, 0n],
       [account, 34n, 0n],
       [account, 0x80000002n, 0n],
+      [account, 0xa0000001n, 0n],
+      [account, 0xa0000000n, 0n],
+      [account, 4n | (0xa0000001n << 32n), 0n],
+      [account, 5n | (0xa0000000n << 32n), 0n],
+      [account, 6n | (0xa0000001n << 32n), 0n],
+      [account, 7n | (0xa0000000n << 32n), 0n],
+      [account, 16n | (0xa0000001n << 32n), 0n],
+      [account, 17n | (0xa0000000n << 32n), 0n],
+      [account, 18n | (0xa0000001n << 32n), 0n],
+      [account, 19n | (0xa0000000n << 32n), 0n],
+      [account, 20n | (0xa0000001n << 32n), 0n],
+      [account, 21n | (0xa0000000n << 32n), 0n],
       [account, 80n | (81n << 32n) | (0x80000000n << 64n) | (0x80000001n << 96n) |
-        (0x80000002n << 128n) | (0x80000003n << 160n), 1n],
+        (0x80000002n << 128n) | (0x80000003n << 160n) |
+        (0xa0000001n << 192n) | (0xa0000000n << 224n), 1n],
     ]);
   });
 });
@@ -221,21 +239,24 @@ describe("Shared event codes", () => {
     it(`${name} publishes its codes ABI and preserves all slots without a context field`, async () => {
       const emitter = await deploy("TestEventCodes");
       const signature = name === "Node"
-        ? "event Node(uint indexed host, uint node, uint codes, uint status)"
+        ? "event Node(uint indexed host, uint node, uint codes)"
         : name === "Guardian"
-          ? "event Guardian(uint indexed host, bytes32 account, uint codes, uint status)"
+          ? "event Guardian(uint indexed host, bytes32 account, uint codes)"
           : `event ${name}(bytes32 indexed account, bytes32 asset, uint amount, uint codes)`;
       await expect(emitter.deploymentTransaction()).to.emit(emitter, "EventAbi").withArgs(signature);
       const decoder = new ethers.Interface([signature]);
-      for (const codes of cases) {
-        const args = name === "Node" ? [1n, 2n, codes, ethers.MaxUint256]
-          : name === "Guardian" ? [1n, account, codes, ethers.MaxUint256]
+      const stateEvent = name === "Node" || name === "Guardian";
+      const eventCases = stateEvent ? [0xa0000000n, 16n | (0xa0000001n << 32n),
+        (cases[4] & ((1n << 224n) - 1n)) | (0xa0000000n << 224n)] : cases;
+      for (const codes of eventCases) {
+        const args = name === "Node" ? [1n, 2n, codes]
+          : name === "Guardian" ? [1n, account, codes]
           : [account, asset, ethers.MaxUint256, codes];
         const receipt = await (await emitter["emit" + name](...args)).wait();
         expect(receipt.logs).to.have.length(1);
         const log = receipt.logs[0];
         expect(log.topics).to.deep.equal([decoder.getEvent(name)!.topicHash, account]);
-        expect(ethers.dataLength(log.data)).to.equal(96);
+        expect(ethers.dataLength(log.data)).to.equal(stateEvent ? 64 : 96);
         const decoded = decoder.parseLog(log)!.args;
         expect(Array.from(decoded)).to.deep.equal(args);
         expect(decoded.codes).to.equal(codes);

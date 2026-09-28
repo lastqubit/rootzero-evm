@@ -984,6 +984,17 @@ library Blocks {
         code = uint(a);
     }
 
+    /// @notice Consume one CODES block containing packed identifiers.
+    /// @dev Validates the exact header and containment through unpack32, not code semantics.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return codes Full-width packed identifiers.
+    /// @return nextCur Advanced source cursor preserving its end.
+    function unpackCodes(uint cur) internal pure returns (uint codes, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Codes);
+        codes = uint(a);
+    }
+
     /// @notice Decode LIMITS and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.

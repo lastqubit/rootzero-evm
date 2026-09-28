@@ -5,17 +5,18 @@ import { EventEmitter } from "./Emitter.sol";
 
 /// @notice Records an asset lifecycle or administrative action and its resulting state on a host.
 abstract contract AssetEvent is EventEmitter {
-    string private constant ABI = "event Asset(uint indexed host, bytes32 asset, uint codes, uint status)";
+    string private constant ABI = "event Asset(uint indexed host, bytes32 asset, uint codes)";
 
     /// @param host Host node ID where the asset action occurred.
     /// @param asset Asset identifier.
-    /// @param codes Packed action/effect IDs describing this event, using Activity's codes convention.
+    /// @param codes Packed action/effect/state IDs describing this event, using Activity's codes convention.
     /// Create means the asset was created, independently of its resulting active state.
-    /// @param status Resulting state: zero is inactive, one is active; other nonzero values are active with host-defined meaning.
-    /// Emitters must keep the codes and resulting state consistent.
     /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
-    /// Zero is empty. Order and duplicates are preserved; adjacent IDs are not paired.
-    event Asset(uint indexed host, bytes32 asset, uint codes, uint status);
+    /// Requires exactly one States.Active or States.Inactive code describing the resulting state.
+    /// Missing, repeated, or conflicting active/inactive codes violate this event convention.
+    /// Emitters enforce the convention; the event declaration does not validate codes.
+    /// Other code order and duplicates are preserved; adjacent IDs are not paired.
+    event Asset(uint indexed host, bytes32 asset, uint codes);
 
     constructor() {
         emit EventAbi(ABI);

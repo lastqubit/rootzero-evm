@@ -14,6 +14,7 @@ library Headers {
     uint constant Asset = Specs.Asset >> 192;
     uint constant Node = Specs.Node >> 192;
     uint constant Status = Specs.Status >> 192;
+    uint constant Codes = Specs.Codes >> 192;
     uint constant Amount = Specs.Amount >> 192;
     uint constant Balance = Specs.Balance >> 192;
     uint constant AssetLiability = Specs.AssetLiability >> 192;

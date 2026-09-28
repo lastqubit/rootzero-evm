@@ -250,6 +250,20 @@ library Encoder {
         write32(abs, bytes32(code));
     }
 
+    /// @notice Append one CODES block containing packed identifiers.
+    /// @dev Inherits reserve's initialized-writer requirements. Preserves all bits;
+    /// performs no code-packing or semantic validation.
+    function writeCodes(
+        uint cur,
+        bytes memory dst,
+        uint codes
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 40);
+        abs = writeHeader(abs, Keys.Codes, 32);
+        write32(abs, bytes32(codes));
+    }
+
     /// @notice Append LIMITS, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeLimits(
@@ -1195,6 +1209,14 @@ library Encoder {
         value = allocate(40);
         uint abs = writeHeader(pos(value, 0), Keys.Status, 32);
         write32(abs, bytes32(code));
+    }
+
+    /// @notice Create a CODES block containing packed identifiers.
+    /// @dev Preserves all bits with zero allocation padding; performs no semantic validation.
+    function createCodes(uint codes) internal pure returns (bytes memory value) {
+        value = allocate(40);
+        uint abs = writeHeader(pos(value, 0), Keys.Codes, 32);
+        write32(abs, bytes32(codes));
     }
 
     /// @notice Create a complete LIMITS block with zero allocation padding.

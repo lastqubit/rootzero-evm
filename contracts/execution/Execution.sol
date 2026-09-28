@@ -36,6 +36,8 @@ import {
 /// @dev `input` and `state` are independent packed calldata cursors: current
 /// position in bits 0-31 and exclusive end in bits 32-63. Higher bits are unused.
 struct Execution {
+    /// @dev Trusted active account; context decoding checks structure, not account format.
+    /// Untrusted account input must be validated at entry before internal execution.
     bytes32 account;
     uint budget;
     uint input;
@@ -489,6 +491,12 @@ library Executions {
         (node, exec.input) = exec.input.unpackNode();
     }
 
+    /// @notice Consume one CODES input block and return its packed identifiers.
+    /// @dev Validates block shape and containment, not code semantics.
+    function unpackCodes(Execution memory exec) internal pure returns (uint codes) {
+        (codes, exec.input) = exec.input.unpackCodes();
+    }
+
     /// @notice Decode and consume one LIMITS block.
     /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(Execution memory exec) internal pure returns (uint limits) {
@@ -857,6 +865,12 @@ library Executions {
     /// @param code Status code to encode.
     function outputStatus(Execution memory exec, uint code) internal pure {
         (exec.buffer, exec.output) = exec.output.writeStatus(exec.buffer, code);
+    }
+
+    /// @notice Append one CODES block containing packed identifiers.
+    /// @dev Delegates allocation and writing to Encoder; callers define code semantics.
+    function outputCodes(Execution memory exec, uint codes) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCodes(exec.buffer, codes);
     }
 
     /// @notice Append an AMOUNT block to execution output.

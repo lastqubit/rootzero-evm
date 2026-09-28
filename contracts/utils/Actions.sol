@@ -10,7 +10,7 @@ pragma solidity ^0.8.33;
 /// The grouped catalog replaces the numeric assignments used through v1.41.0.
 /// Actions occupy category 0 (0x00000000-0x1fffffff) of eight possible categories.
 /// The top three bits select the category; the remaining 29 bits identify the code.
-/// Every codes field packs up to eight action or effect IDs, lowest uint32 slot first.
+/// Every codes field packs up to eight action, effect, or state IDs, lowest uint32 slot first.
 /// Entries are contiguous and nonzero, with zero padding in unused high slots.
 /// None denotes an empty list; identifiers are not bit flags.
 library Actions {

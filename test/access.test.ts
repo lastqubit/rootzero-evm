@@ -83,7 +83,7 @@ describe("Access Control", () => {
 
     await expect(host.connect(signers[0]).authorize(...ctx))
       .to.emit(host, "Node")
-      .withArgs(await host.host(), dummyNode, 16n, 1n);
+      .withArgs(await host.host(), dummyNode, 16n | (0xa0000001n << 32n));
   });
 
   it("node is authorized after authorize call", async () => {
@@ -105,7 +105,7 @@ describe("Access Control", () => {
     // Then unauthorize
     await expect(
       host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)))
-    ).to.emit(host, "Node").withArgs(await host.host(), dummyNode, 17n, 0n);
+    ).to.emit(host, "Node").withArgs(await host.host(), dummyNode, 17n | (0xa0000000n << 32n));
   });
 
   it("node is not authorized after unauthorize call", async () => {

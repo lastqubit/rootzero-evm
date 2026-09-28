@@ -4,32 +4,32 @@ import "./helpers/matchers.js";
 import {
   concat,
   encodeAssetBlock,
-  encodeStatusBlock,
+  encodeCodesBlock,
   pad32,
 } from "./helpers/blocks.js";
 
-describe("AssetStatus", () => {
+describe("AssetCodes", () => {
   it("returns empty output for empty input and rejects a truncated trailing item", async () => {
-    const query = await deploy("TestAssetStatusQuery");
-    expect(await query["assetStatus(bytes)"].staticCall("0x")).to.equal("0x");
+    const query = await deploy("TestAssetCodesQuery");
+    expect(await query["assetCodes(bytes)"].staticCall("0x")).to.equal("0x");
     const input = concat(encodeAssetBlock(await query.allowedAssetId()), "0x01");
-    await expect(query["assetStatus(bytes)"].staticCall(input))
+    await expect(query["assetCodes(bytes)"].staticCall(input))
       .to.be.revertedWithCustomError(query, "InvalidBlock");
   });
 
-  it("returns one status block for one asset query", async () => {
-    const query = await deploy("TestAssetStatusQuery");
+  it("returns one codes block for one asset query", async () => {
+    const query = await deploy("TestAssetCodesQuery");
     const asset = await query.allowedAssetId();
 
-    const result: string = await query["assetStatus(bytes)"].staticCall(
+    const result: string = await query["assetCodes(bytes)"].staticCall(
       encodeAssetBlock(asset),
     );
 
-    expect(result).to.equal(encodeStatusBlock(1n));
+    expect(result).to.equal(encodeCodesBlock(0xa0000001n));
   });
 
-  it("maps multiple asset blocks into matching status codes in order", async () => {
-    const query = await deploy("TestAssetStatusQuery");
+  it("maps multiple asset blocks into matching state codes in order", async () => {
+    const query = await deploy("TestAssetCodesQuery");
     const asset = await query.allowedAssetId();
     const otherAsset = pad32(0xDEADn);
 
@@ -38,11 +38,11 @@ describe("AssetStatus", () => {
       encodeAssetBlock(otherAsset),
     );
 
-    const result: string = await query["assetStatus(bytes)"].staticCall(input);
+    const result: string = await query["assetCodes(bytes)"].staticCall(input);
 
     expect(result).to.equal(concat(
-      encodeStatusBlock(1n),
-      encodeStatusBlock(0n),
+      encodeCodesBlock(0xa0000001n),
+      encodeCodesBlock(0xa0000000n),
     ));
   });
 });

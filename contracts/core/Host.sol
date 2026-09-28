@@ -13,7 +13,7 @@ import {IntroductionEvent} from "../events/Introduction.sol";
 import {GuardianEvent} from "../events/Guardian.sol";
 import {NodeEvent} from "../events/Node.sol";
 import {Accounts} from "../utils/Accounts.sol";
-import {Actions} from "../utils/Actions.sol";
+import {Codes} from "../utils/Codes.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
 /// @title IHostIntroduction
@@ -117,25 +117,25 @@ abstract contract Host is
     function authorizeNode(uint node) internal virtual override {
         node = Nodes.local(node);
         nodes[node] = true;
-        emit Node(host, node, Actions.Authorize, 1);
+        emit Node(host, node, Codes.AuthorizeThenActive);
     }
 
     function revokeNode(uint node) internal virtual override {
         node = Nodes.local(node);
         nodes[node] = false;
-        emit Node(host, node, Actions.Revoke, 0);
+        emit Node(host, node, Codes.RevokeThenInactive);
     }
 
     function appointGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = true;
-        emit Guardian(host, account, Actions.Appoint, 1);
+        emit Guardian(host, account, Codes.AppointThenActive);
     }
 
     function dismissGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = false;
-        emit Guardian(host, account, Actions.Dismiss, 0);
+        emit Guardian(host, account, Codes.DismissThenInactive);
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.

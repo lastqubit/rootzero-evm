@@ -14,7 +14,7 @@ abstract contract PositionedEvent is EventEmitter {
     /// @param liability Identifier for the liability side.
     /// @param debt Quantity owed on the liability side.
     /// @param counterparty Counterparty identifier from the resulting position.
-    /// @param codes Packed action/effect IDs describing this event, using Activity's codes convention.
+    /// @param codes Packed action/effect/state IDs describing this event, using Activity's codes convention.
     /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
     /// Zero is empty. Order and duplicates are preserved; adjacent IDs are not paired.
     event Positioned(

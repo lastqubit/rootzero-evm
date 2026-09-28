@@ -81,6 +81,7 @@ export const Keys = {
   Counterparty: blockKey("#counterparty"),
   Schema: blockKey("#schema"),
   Status: blockKey("#status"),
+  Codes: blockKey("#codes"),
   AssetLiability: blockKey("#assetLiability"),
   AccountAsset: blockKey("#accountAsset"),
   HostAsset: blockKey("#hostAsset"),
@@ -282,6 +283,10 @@ export function encodeCounterpartyBlock(account: string): string {
 
 export function encodeSchemaBlock(spec: bigint, body: string): string {
   return encodeBlock(Keys.Schema, ethers.concat([pad32(spec), encodeStringBlock(body)]));
+}
+
+export function encodeCodesBlock(codes: bigint): string {
+  return encodeBlock(Keys.Codes, pad32(codes));
 }
 
 export function encodeStatusBlock(code: bigint): string {

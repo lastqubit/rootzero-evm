@@ -37,6 +37,8 @@ library Sizes {
     uint constant Step = 2 * Header + 2 * Word;
     /// @dev STATUS block: 8 header + 32 status code = 40 bytes
     uint constant Status = B32;
+    /// @dev CODES block: 8 header + 32 packed identifiers = 40 bytes.
+    uint constant Codes = B32;
 
     // Live pipeline state
 
@@ -143,6 +145,7 @@ library Specs {
     uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
+    uint constant Codes = uint(bytes32(Keys.Codes)) | Exact32;
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;
     uint constant AccountAsset = uint(bytes32(Keys.AccountAsset)) | Exact64;
     uint constant HostAsset = uint(bytes32(Keys.HostAsset)) | Exact64;

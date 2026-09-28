@@ -120,6 +120,7 @@ library Schemas {
     string constant Account = "bytes32 account";
     string constant Asset = "bytes32 asset";
     string constant Status = "uint code";
+    string constant Codes = "uint codes";
 
     /// @dev High 128 bits: inclusive minimum; low 128 bits: inclusive maximum; context defines meaning.
     string constant Limits = "uint limits";

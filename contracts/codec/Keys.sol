@@ -98,6 +98,8 @@ library Keys {
 
     /// @dev Structural status form - (uint code)
     bytes4 constant Status = bytes4(keccak256("#status"));
+    /// @dev Packed categorized identifiers - (uint codes)
+    bytes4 constant Codes = bytes4(keccak256("#codes"));
     /// @dev Structural asset-liability pair - (bytes32 asset, bytes32 liability)
     bytes4 constant AssetLiability = bytes4(keccak256("#assetLiability"));
     /// @dev Structural account asset form - (bytes32 account, bytes32 asset)

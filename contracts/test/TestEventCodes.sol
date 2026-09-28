@@ -21,10 +21,10 @@ contract TestEventCodes is ReceivedEvent, SpentEvent, LockedEvent, UnlockedEvent
     function emitUnlocked(bytes32 account, bytes32 asset, uint amount, uint codes) external {
         emit Unlocked(account, asset, amount, codes);
     }
-    function emitNode(uint host, uint node, uint codes, uint status) external {
-        emit Node(host, node, codes, status);
+    function emitNode(uint host, uint node, uint codes) external {
+        emit Node(host, node, codes);
     }
-    function emitGuardian(uint host, bytes32 account, uint codes, uint status) external {
-        emit Guardian(host, account, codes, status);
+    function emitGuardian(uint host, bytes32 account, uint codes) external {
+        emit Guardian(host, account, codes);
     }
 }

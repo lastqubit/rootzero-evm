@@ -58,7 +58,7 @@ describe("Admin Commands", () => {
       const input = encodeNodeBlock(nodeId);
       await expect(callAs(0, "authorize", adminCtx(input)))
         .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, 16n, 1n);
+        .withArgs(await host.host(), nodeId, 16n | (0xa0000001n << 32n));
       expect(await host.isAuthorized(nodeId)).to.be.true;
     });
 
@@ -120,7 +120,7 @@ describe("Admin Commands", () => {
       // then unauthorize
       await expect(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))))
         .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, 17n, 0n);
+        .withArgs(await host.host(), nodeId, 17n | (0xa0000000n << 32n));
       expect(await host.isAuthorized(nodeId)).to.be.false;
     });
 
@@ -144,7 +144,7 @@ describe("Admin Commands", () => {
 
       await expect(callAs(0, "appoint", adminCtx(input)))
         .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, 18n, 1n);
+        .withArgs(await host.host(), guardianAccount, 18n | (0xa0000001n << 32n));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
     });
@@ -186,7 +186,7 @@ describe("Admin Commands", () => {
 
       await expect(callAs(0, "dismiss", adminCtx(input)))
         .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, 19n, 0n);
+        .withArgs(await host.host(), guardianAccount, 19n | (0xa0000000n << 32n));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.false;
     });
