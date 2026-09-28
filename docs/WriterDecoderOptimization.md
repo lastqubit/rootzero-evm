@@ -1,5 +1,12 @@
 # Writers, Decoders, and Budgets
 
+Historical measurements. The Decoders and Writers libraries and their dedicated
+comparison fixtures have been removed. Use CursorBlocks and Encoder for new code.
+
+Historical benchmark record: dedicated empty-block helpers mentioned below have
+since been removed. Their measurements describe the earlier API; current
+benchmarks omit those operations. Empty dynamic payloads remain supported.
+
 These changes extend the execution optimizations to the standalone libraries.
 Measurements use Solidity 0.8.35, optimizer runs 200, Cancun, without viaIR.
 They compare frozen previous implementations in the same fixtures. Gas includes
@@ -20,7 +27,7 @@ exact and fit uint32, and the caller must reserve the header, payload, and
 trailing scratch space. Original standalone writer bodies and allocation
 policies are unchanged.
 
-Run `npx hardhat test test/writer-optimization.bench.test.ts`.
+The associated legacy benchmark has been retired.
 
 | Layout | Memory append saved per block | Calldata copy saved per block |
 | --- | ---: | ---: |
@@ -54,7 +61,7 @@ General-purpose `Cursors.seek` still checks both directions.
 fixed-size range before validating the header and uses only the spec's key,
 preserving its previous behavior and error precedence.
 
-Run `npx hardhat test test/decoder-optimization.bench.test.ts`.
+The associated legacy benchmark has been retired.
 Dynamic decoders, both consume overloads, and `tryConsumeEmpty` save 24 gas per
 call. `unpack32` saves 67 gas per call. Both one-call and eight-call batches are
 measured. Tests compare returned values, full cursor words, exact errors,

@@ -62,8 +62,8 @@ The bridge knows how to deliver bytes to the destination chain, but Rootzero cor
 | Component | Files | Porting note |
 |-----------|-------|--------------|
 | Block wire format | `codec/Schema.sol`, `codec/Keys.sol` | Pure binary TLV. Re-implement exactly per language. |
-| Cursor parsing | `codec/Decoders.sol` | Zero-copy byte stream reader. Re-implement per language. |
-| Writer helpers | `codec/Writers.sol` | Block stream builder. Re-implement per language. |
+| Cursor parsing | `codec/Blocks.sol` | Zero-copy byte stream reader. Re-implement per language. |
+| Writer helpers | `codec/Encoder.sol` | Block stream builder. Re-implement per language. |
 | Block key constants | `codec/Keys.sol` | `bytes4(keccak256("#name"))`; portable to any keccak library. |
 | Pipeline state model | `core/Pipeline.sol` | STEP stream and threaded `bytes` state. Local execution, dispatch, and posting are chain-specific. |
 | TRANSACTION schema | `core/Types.sol` | Abstract `(from, to, asset, amount)` ledger model. |
@@ -491,7 +491,7 @@ These layers are an implementation strategy, not a redesign of the protocol. Kee
 
 ### Layer 1 - Wire Format Library
 
-A language-native implementation of `Decoders.sol` and `Writers.sol`. This is the most important deliverable because it makes every chain speak the same byte protocol.
+A language-native implementation of `Blocks.sol` and `Encoder.sol`. This is the most important deliverable because it makes every chain speak the same byte protocol.
 
 ```text
 rootzero-protocol/ or sdk/rust/: cursor.rs, writer.rs, keys.rs
@@ -902,7 +902,7 @@ Backed by Solana account data, CosmWasm storage, NEAR collections, or EVM mappin
 
 ## Implementation Sequence
 
-1. **Rust wire format library**: port `Decoders.sol`, `Writers.sol`, and `Keys.sol`; validate with Solidity/TypeScript round trips.
+1. **Rust wire format library**: port `Blocks.sol`, `Encoder.sol`, and `Keys.sol`; validate with Solidity/TypeScript round trips.
 2. **Shared Rust protocol crate**: package cursor, writer, keys, schema, shared ID taxonomy, protocol types, and storage/dispatch traits as `rootzero-protocol`.
 3. **Identity strategy**: decide which node, account, and asset identities fit inline and which require local lookup.
 4. **Local ID and resolver traits**: define `LocalIds` and `IdentityResolver` without any global chain registry.

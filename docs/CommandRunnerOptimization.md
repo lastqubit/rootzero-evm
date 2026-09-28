@@ -10,8 +10,10 @@ The upstream build retains its Cancun target; the isolated commander integration
 build retains its Osaka target. Each baseline/candidate pair uses the same target,
 compiler settings, deployment sequence, and test order.
 
-`hardhat.runner.config.ts` selects the requested measurement settings without
-changing the default Solidity 0.8.35/non-viaIR configuration.
+`hardhat.runner.config.ts` explicitly selects Solidity 0.8.33 with viaIR.
+At measurement time the default was Solidity
+0.8.35 without viaIR; it now uses 0.8.35 with viaIR. This document retains the
+original 0.8.33 measurements.
 
 The baseline is the current worktree before either shared runner change, including
 the existing Position, Balance, Bootstrap, and Pipeline optimizations. This is not

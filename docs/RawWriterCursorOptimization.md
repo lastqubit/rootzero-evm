@@ -1,5 +1,8 @@
 # Raw writers and cursor navigation
 
+Historical measurements. The Decoders and Writers libraries and their dedicated
+comparison fixtures have been removed. Use CursorBlocks and Encoder for new code.
+
 Measurements compare frozen previous helper implementations in the same fixture,
 using Solidity 0.8.35, optimizer runs 200, Cancun, without viaIR. Gas includes
 fixture branching and excludes transaction intrinsic/calldata gas. Savings may
@@ -37,7 +40,7 @@ initialization are unchanged.
 
 ## Verification
 
-Run `npx hardhat test test/raw-writer-cursor-optimization.bench.test.ts`.
+The associated legacy benchmark has been retired.
 
 The writer matrix covers all five helpers, capacities 0/64/4096, one/eight
 writes, nonzero starting offsets, and lengths/keep values 0/1/31/32/33/256.

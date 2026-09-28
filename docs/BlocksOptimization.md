@@ -1,5 +1,13 @@
 # Blocks allocation and scanning
 
+Historical benchmark record: dedicated empty-block helpers mentioned below have
+since been removed. Their measurements describe the earlier API; current
+benchmarks omit those operations. Empty dynamic payloads remain supported.
+
+The recorded gas tables use the historical non-viaIR compiler pipeline.
+The repository now defaults to viaIR; rerunning the benchmarks uses that new
+baseline and need not reproduce the historical savings.
+
 Block factories now reserve the same physical memory as before but initialize
 only the 32 bytes after the logical output. Each private allocator caller writes
 the complete logical result. This avoids zeroing the output immediately before

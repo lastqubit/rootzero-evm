@@ -1,5 +1,11 @@
 # Calls returndata and specification sizes
 
+The measurements below are historical. Current Calls.raw and Calls.tryRaw use
+uint cursor overloads instead of the former calldata Copy variants, and the
+default compiler configuration enables viaIR. See [HookCursors.md](HookCursors.md)
+for the current cursor APIs. The frozen comparison still includes its original
+bytes-only return ABI; it does not isolate the cost of the cursor migration.
+
 Benchmarks use Solidity 0.8.35, optimizer runs 200, Cancun, without viaIR.
 They compare frozen previous implementations in a shared fixture. Gas includes
 fixture branching and target execution, excluding transaction intrinsic gas.

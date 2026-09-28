@@ -13,7 +13,8 @@ npm run bench -- test/burn-run.bench.test.ts
 
 ## Setup
 
-Solidity 0.8.35, optimizer enabled with 200 runs, Cancun EVM target, and the
+Historical measurements used Solidity 0.8.35 without viaIR, optimizer enabled
+with 200 runs, Cancun EVM target, and the
 repository's Hardhat simulated network. Both hosts use the same `burn(bytes)`
 selector, calldata, authorization setup, and hook emitting one `BurnCalled` event
 per balance. Each measurement is a separate transaction receipt, so the numbers

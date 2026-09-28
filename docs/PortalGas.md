@@ -41,7 +41,7 @@ The reserve benchmark covers 32 cases: message sizes 0, 1, 31, 32, 33, 256, 4,09
 and 65,536; zero/nonzero value; and zero/65,536 bytes of prior memory allocation.
 Each case uses a fresh cold storage slot and checks the digest and event.
 
-Measured with solc 0.8.35, optimizer 200 runs, Cancun compiler target, and the
+Measured with solc 0.8.35 without viaIR, optimizer 200 runs, Cancun compiler target, and the
 repository's default Hardhat simulated L1 execution hardfork:
 
 | Message bytes | Required reserve, zero value | Reserved, zero value | Reserved, nonzero value |

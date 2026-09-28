@@ -51,7 +51,7 @@ event Endpoint(uint indexed host, uint id, uint descriptor)
   block count by division; otherwise it counts the leading matching block run.
   Output capacity is source block count times output block size. With no declared
   source, capacity defaults to one output block. An empty declared source estimates
-  zero blocks. Allocation is lazy; commands may adjust the hint with `scaleOutput`.
+  zero blocks. Execution opening allocates eagerly; capacity scaling is deferred.
   These estimates do not validate consumption; decoding validates the stream and
   the output buffer can grow. Schema annotations retain the full spec metadata.
   Indexers must decode descriptors according to the emitting deployment's format.
@@ -88,11 +88,69 @@ Annotation helpers are `ActionAnnot`, `CounterpartyAnnot`, `ExecutionCost`,
 Their functions are `annotateAction`, `annotateCounterparty`, `executionCost`,
 `annotateGroups`, `label`, and `schema`, respectively.
 
-`ActionEvent` (exported by `Events.sol`) provides
-`Action(bytes32 indexed account, uint32 action)` for hosts to identify an account
-action while recording its effects through balance or other events. Hosts choose
-where to emit it and must document any ordering used to associate those effects;
-the event itself carries no correlation identifier or position details.
+`ActivityEvent` (exported by `Events.sol`) provides
+`Activity(bytes32 indexed account, uint codes, uint id)` for hosts to identify
+an account activity while recording its effects through other events. The trailing
+`id` is a correlation identifier: zero means no identifier is assigned, and must
+not be used to join unrelated activities. Hosts should assign nonzero IDs uniquely
+within the emitting contract; indexers scope them by chain and emitter address.
+Child events can reference this ID when their schema supports it. Existing balance
+and flow events do not carry this reference. Hosts choose where to emit activities
+and must document any ordering used to associate effects when no explicit reference
+is available. Emitters must pass `id` explicitly, including when it is zero.
+
+`codes` packs up to eight total `uint32` action or effect identifiers, starting in
+the least significant 32 bits. Entries must be contiguous and nonzero, followed
+by zero padding in the unused high slots. A zero word represents an empty list.
+The event mixin does not validate packing; emitters are responsible for this
+convention. Order and duplicates are preserved; adjacency does not imply
+action-to-effect pairing. This is an ID list, not a bitmask. Existing events with
+a singular `action` field still carry one action ID.
+
+Use `Actions` and `Effects`, both exported by `Events.sol` and `Utils.sol`.
+The top three bits of each `uint32` code reserve space for eight categories;
+the remaining 29 bits allow 536,870,912 values per category.
+
+| Category | Meaning | Inclusive range |
+|---|---|---|
+| 0 | Actions | `0x00000000`–`0x1fffffff` |
+| 1 | Reserved | `0x20000000`–`0x3fffffff` |
+| 2 | Reserved | `0x40000000`–`0x5fffffff` |
+| 3 | Reserved | `0x60000000`–`0x7fffffff` |
+| 4 | Effects | `0x80000000`–`0x9fffffff` |
+| 5 | Reserved | `0xa0000000`–`0xbfffffff` |
+| 6 | Reserved | `0xc0000000`–`0xdfffffff` |
+| 7 | Reserved | `0xe0000000`–`0xffffffff` |
+
+`Actions.None = 0` is reserved for the empty list or padding, leaving category 0
+with one fewer usable identifier. Existing action and effect IDs are unchanged.
+Effects define `Spend = 0x80000000`,
+`Receive = 0x80000001`, `Lock = 0x80000002`, and `Unlock = 0x80000003`;
+other effect IDs are reserved. There is no `Effects.None`: use zero for no codes.
+Effects describe asset outcomes for the
+account; actions describe the operations responsible. Asset IDs and quantities
+remain in detail events rather than the activity summary.
+
+Each constant already includes its category bits, so a single action or effect
+can be passed directly without shifting. Category capacity is independent of
+packing capacity: an activity still holds at most eight codes in total.
+
+```solidity
+emit Activity(account, Actions.Deposit, 0);
+emit Activity(account, Effects.Lock, 0);
+uint codes = uint(Actions.Swap) | (uint(Effects.Spend) << 32)
+    | (uint(Effects.Receive) << 64);
+emit Activity(account, codes, 0);
+```
+
+Cast each ID to `uint` before shifting so shifts beyond the first slot retain
+their bits. To decode a word, read `uint32(word)` then shift `word >>= 32`, up to
+eight times; zero terminates the list and all remaining slots must also be zero.
+For each nonzero code, decode its category with `code >> 29` and its local
+identifier with `code & 0x1fffffff`. Category 0 identifies actions and category 4
+identifies effects; the other categories are reserved for future catalogs.
+Unknown categories and unassigned identifiers have no defined meaning; indexers
+should preserve the full code without interpreting it as a known action or effect.
 
 Names arrive as annotations. Each standard mixin emits a canonical label block
 at construction, and the admin `annotate` command publishes mutable annotations
@@ -158,8 +216,8 @@ Host topology and access state are fully evented by the library:
 
 ```txt
 event Introduction(uint indexed host, uint peer, bytes32 origin, uint blocknum)
-event Node(uint indexed host, uint node, uint32 action, uint status)
-event Guardian(uint indexed host, bytes32 account, uint32 action, uint status)
+event Node(uint indexed host, uint node, uint codes, uint status)
+event Guardian(uint indexed host, bytes32 account, uint codes, uint status)
 ```
 
 `Introduction` fires on the receiving host when a peer host introduces itself
@@ -169,7 +227,7 @@ node-trust change routes through `authorizeNode` or `revokeNode` and every
 guardian change through `appointGuardian` or `dismissGuardian`, so `Node` and `Guardian` are exhaustive:
 replaying them yields the exact current access sets.
 
-For both events, `action` describes the operation and `status` is the authoritative
+For both events, `codes` describes the operations or outcomes and `status` is the authoritative
 state after that operation. Zero means inactive; one means active. Other nonzero
 values mean active with host-defined meaning. `Host` emits `Actions.Authorize`
 with `1` and `Actions.Revoke` with `0` for nodes, including guardian-triggered
@@ -236,16 +294,16 @@ The `create-rootzero` template
 host conventions.
 
 ```txt
-event Balance(bytes32 indexed account, bytes32 asset, uint balance, int change)
-event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint32 action)
+event Balance(bytes32 indexed account, bytes32 asset, uint balance)
+event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint codes)
 event Settled(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
-event Received(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
-event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
-event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
-event Unlocked(bytes32 indexed account, bytes32 asset, uint amount, uint32 action, uint context)
-event Asset(uint indexed host, bytes32 asset, uint32 action, uint status)
+event Received(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
+event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
+event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
+event Unlocked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
+event Asset(uint indexed host, bytes32 asset, uint codes, uint status)
 event AssetPreimage(bytes32 indexed asset, bytes preimage)
-event Route(uint indexed host, uint portal, uint32 action, uint status)
+event Route(uint indexed host, uint portal, uint codes, uint status)
 event Rooted(bytes32 indexed account, uint deadline, uint value)
 ```
 
@@ -278,7 +336,7 @@ resulting `status`. `addRoute` uses `Actions.Add` with `1`; `removeRoute` uses
 create or delete the destination portal. `Enable` with `1` and `Disable` with `0`
 toggle a route that remains configured. Hosts define
 the route policy and supply consistent emissions, including repeated operations.
-The event carries `uint32 action, uint status`; status zero means inactive,
+The event carries `uint codes, uint status`; status zero means inactive,
 one means active, and other nonzero values mean active with host-defined meaning.
 Indexers must update the event signature and reconstruct route activity from
 `status != 0` while retaining the full status and the action's canonical meaning.
@@ -295,10 +353,23 @@ its chain context. A root host labels itself with an
 `Introduction` on their commander.
 
 **Balances.** The `Balance` event identifies a `bytes32` account, asset,
-resulting total, and signed change. The built-in `Balances` ledger keys every
+and resulting total. The built-in `Balances` ledger keys every
 balance by `(account, asset)`, including host holdings under `Accounts.toHost(host)`.
 Its mutation helpers leave event emission to the host. There is no separate
 host balance event or ledger.
+
+Each event replaces the indexed balance for `(emitting host, account, asset)`.
+Process events in block, transaction, and log order. Hosts that expose their
+ledger through logs must emit a resulting balance for every change at their
+chosen settlement boundary. Indexers may derive `change = balance - previousBalance`
+using arbitrary-precision signed arithmetic; an unknown previous balance is not
+implicitly zero. A stream indexed from initialization, or a consistent starting
+snapshot, is required to reconstruct deltas. The event itself supports the full
+uint256 balance range.
+
+The three-field signature changes topic zero from the former four-field event.
+Indexers spanning both versions must decode each signature separately, using
+the published `EventAbi` metadata.
 
 **Positions.** An action that exposes a resulting live position may emit
 `Positioned` with both the asset and liability sides, the counterparty, and the primary `Actions`
@@ -316,7 +387,7 @@ Hosts opt into emission through `SettledEvent`.
 **Flows.** Operations that move value emit one flow event per affected amount,
 with the matching `Actions` code:
 
-| Operation                  | Event      | `action`           |
+| Operation                  | Event      | `codes`            |
 | -------------------------- | ---------- | ------------------ |
 | deposit / depositPayable   | `Received` | `Actions.Deposit`  |
 | withdraw                   | `Spent`    | `Actions.Withdraw` |
@@ -333,7 +404,7 @@ with the matching `Actions` code:
 `CashoutHook` is abstract and has no event-emitter inheritance. Hosts implementing
 cashout are responsible for their own flow events and event ABI publication.
 The free `sendChainAsset` transfer helper emits no events; hosts may emit
-`Spent(account, chainAsset, amount, Actions.Cashout, context)` after a successful
+`Spent(account, chainAsset, amount, Actions.Cashout)` after a successful
 payout according to their event policy.
 
 `Balance` and flow events are complementary, not redundant: flow events record
@@ -364,14 +435,27 @@ invocation with the acting account, deadline, and attached value. Detailed
 effects are not duplicated into the invocation event; an indexer groups all
 logs of the transaction to attribute effects to the invocation.
 
-### Correlation Fields
+### Codes and Correlation
 
-`context` on flow events carries the node ID of the
-causing endpoint — the innermost command, port, or guard whose semantic
-performed the change — or zero when no endpoint context exists. `action` is a
-code from `utils/Actions.sol`:
+All events carrying codes use the same uint packing as Activity: up to eight
+nonzero uint32 action/effect IDs, lowest slot first, with zero-filled unused high
+slots. Zero means no codes. Order and duplicates are preserved; adjacency does
+not pair actions with effects. Each ID includes its category bits: category 0
+is Actions, category 4 is Effects, and other categories remain reserved.
+A single Actions or Effects constant can be passed directly. When composing
+multiple codes in Solidity, widen to uint before shifting by 32 bits or more.
 
-**Shared action semantics.** In every event carrying `action`, the action states
+Codes describe this event's operations or outcomes. Typed event fields remain
+authoritative; Received already denotes receipt, so Effects.Receive is optional.
+The unused context fields have been removed from Received, Spent, Locked, and
+Unlocked. These events make no endpoint-correlation claim. Activity.id retains
+its separate correlation convention.
+
+Replacing uint32 action with uint codes changes event signature topics. Removing
+context also changes flow-event arity. Decode historical logs using the ABI for
+their emitting deployment; do not apply the new signatures retrospectively.
+
+**Shared action semantics.** In every event carrying `codes`, each action ID states
 which operation occurred. Its canonical meaning is the same across event types:
 `Actions.Create` means creation, `Actions.Delete` means deletion,
 `Actions.Add`/`Actions.Remove` mean membership changes, and
@@ -394,7 +478,7 @@ same state. Hosts choose applicable actions and must emit them truthfully.
 Values 96 and above are reserved for future groups. Unassigned values must not
 be used as custom actions. Ranges organize the catalog and imply no permissions
 or runtime dispatch. An event's contract defines which actions apply and what
-its context and state fields describe, while preserving canonical action meanings.
+its typed fields describe, while preserving canonical action meanings.
 
 **Numeric compatibility:** the grouped catalog replaces the assignments used
 through v1.41.0. Event signatures and `#action` block keys do not identify the
@@ -408,8 +492,7 @@ Mint 7, Burn 8, Swap 9, Borrow 10, Repay 11, Liquidate 12, Refund 13, Post 14,
 Cashout 15, Cashin 16, Realize 17, Book 18
 ```
 
-Joins available to an indexer: `context` -> the endpoint repository
-from discovery; transaction grouping -> the `Rooted` invocation and sibling
+Joins available to an indexer: transaction grouping -> the `Rooted` invocation and sibling
 events; `(account, asset)` -> account balance and flow history, including host
 accounts. Balance events have no endpoint correlation field.
 
@@ -422,16 +505,8 @@ non-breaking per the changelog conventions.
 ### Proposed: Emitting Ledger Helpers
 
 Add opt-in helpers to `Balances` that combine ledger mutation with emission
-of `Balance(account, asset, balance, change)`. Keep the existing raw helpers for
-hosts that emit at their settlement boundary. Any helper must handle the unsigned
-amount to signed delta conversion without wrapping.
-
-### Proposed: Make Correlation Semantics Normative
-
-The flow event `context` parameters are currently documented as "reserved for
-future use", which is too loose
-to index against. Adopt the definition in [Correlation Fields](#correlation-fields)
-as normative and update the event NatSpec accordingly.
+of `Balance(account, asset, balance)`. Keep the existing raw helpers for
+hosts that emit at their settlement boundary.
 
 ## Considered And Rejected
 

@@ -1,5 +1,8 @@
 # Shared versus direct enter validation
 
+Historical measurements. The Decoders and Writers libraries and their dedicated
+comparison fixtures have been removed. Use CursorBlocks and Encoder for new code.
+
 Historical report: `Executions.enterNext` has since been removed in favor of
 separate `more` and `enter` calls. Combined-entry implementations remain only in
 benchmark fixtures. The measurements below predate that removal; rerunning the

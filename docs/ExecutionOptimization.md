@@ -1,5 +1,16 @@
 # Execution and buffer optimizations
 
+Raw accessors have since been removed from Executions. Their measurements below
+are historical; current whole-stream selectors validate blocks and return cursors.
+
+The later cursor migration replaced takeRawBalances with takeBalances, returning
+a cursor. The takeRawBalances figures below describe the historical API; see
+BlocksMigration.md for the current viaIR relay comparison.
+
+Historical benchmark record: dedicated empty-block helpers mentioned below have
+since been removed. Their measurements describe the earlier API; current
+benchmarks omit those operations. Empty dynamic payloads remain supported.
+
 This pass covers execution traversal and decoding, raw source access, BALANCE
 stream validation, output encoding, budget subtraction, and buffer reservation.
 It keeps the existing allocation hint and growth policies and zero-initialization

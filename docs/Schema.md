@@ -110,22 +110,17 @@ A block body can reference another block alias as a child item with `#`:
 The empty schema string `""` means the block has no structured payload. This is
 used for raw dynamic blocks such as `#bytes`.
 
-Every block key also has an empty wire form consisting of its header with a
-zero payload length. Empty blocks are structurally present but contain no body
-to decode. Existing semantic decoders remain strict: for example,
-`unpackBalance` rejects an empty `#balance` unless its caller detects and
-consumes the empty form first.
-
-When a parent block is non-empty, every child block declared by its schema is
-represented by a header in declaration order. A child without a value uses its
-empty form rather than being omitted. An empty parent is terminal, so its body
-and nested child headers are not present.
+Payload validity is defined by each block's schema. `#bytes`, `#string`, and
+lists accept zero-length payloads. Fixed-size blocks still require their full
+payload, even when every value is zero. Composite blocks must contain their
+declared fields and child headers in declaration order. There is no universal
+empty-block marker or implicit omission of a child.
 
 A structured schema body is a comma-separated list of items. Order is
 significant.
 
 ```txt
-{ #amount, maybe #account as recipient }
+{ #amount, #account as recipient }
 ```
 
 ### Repeated-reference shorthand
@@ -154,7 +149,7 @@ such as `uint`. The alias list must contain at least two ordinary alias paths,
 separated by commas; dotted paths follow the existing field-path rules.
 Empty or single-alias lists, empty entries, trailing commas, nested parentheses,
 and duplicate or colliding alias paths are invalid. Use `#schema as alias` for
-one alias. Use the expanded form for `maybe`, `many`, or per-item `at` modifiers.
+one alias. Use the expanded form for `many` or per-item `at` modifiers.
 
 For example, this is valid alongside ordinary sibling items:
 
@@ -299,23 +294,20 @@ falling back to another schema.
 
 ## Modifiers
 
-Empty-value acceptance and repeated items are expressed with prefix keywords:
+Repeated items are expressed with the `many` prefix:
 
 ```txt
 #balance
-maybe #balance
 many #balance
 ```
 
-- no prefix: one required item whose ordinary value rules determine whether its
-  payload may be empty
-- `maybe`: one required header whose payload may be empty
+- no prefix: one required item, validated according to its block schema
 - `many`: one required list header containing zero or more repeated items
 
-These modifiers are offchain hints describing the forms accepted by the
-onchain consumer; they do not change runtime validation. `#bytes`, `#string`,
-and lists accept empty payloads as ordinary values, so applying `maybe` to them
-has no additional meaning and tooling may normalize it away.
+These are offchain descriptions of the forms accepted by the onchain consumer;
+they do not change runtime validation. Empty bytes, strings, and lists are
+ordinary values. Optional-value encoding must be explicitly defined by the
+application's schema and consumer; there is no optional-item modifier.
 
 A `many` item alongside any sibling items wraps its repeated values in one
 generic `#list` block; it does not repeat the item in place. The list header
@@ -395,8 +387,8 @@ or extra block header is added, and no global schema aliases are introduced.
 Only grouped lanes are listed; omitted lanes have no grouping hint. Descriptor
 schemas take precedence: entries for empty lanes are ignored and cannot create
 blocks. Group counts are implied by the alias lists, not stored in descriptors.
-Annotations affect neither decoding, allocation, nor runtime enforcement;
-commands may separately call `scaleOutput` to adjust their allocation hints.
+Annotations affect neither decoding, allocation, nor runtime enforcement.
+Execution output allocation uses descriptor hints and grows when needed.
 Indexers can use the description to interpret repeated loop groups; incompatible
 streams should be reported as inconsistent hints, not reinterpreted as new encoding.
 
@@ -421,14 +413,18 @@ an explicit budget but no command account. Passing the budget explicitly keeps
 both opening helpers pure and supports callers that forward an existing budget.
 Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
 
-Standalone `Cur` values use a separate compact generic cursor containing only
-an absolute current position (bits 0-31), absolute exclusive end (bits 32-63),
-and flags (bits 64-71). They do not retain a source offset or expose a relative `decode` view. Low-level
-`seek`, `expect`, `slice`, `raw`, `peek`, `hasAt`, and `find` positions are
-absolute calldata positions; `past` and `find` also return absolute positions.
-The cursor is forward-only, so explicit ranges must remain within its unread
-`[position, end)` region. Buffer writers reuse the layout with origin zero,
-making their current position a write offset and their end a logical capacity.
+`Cursors` supplies shared range primitives: `create(abs, endAbs)` validates bounds,
+while `pack(abs, endAbs)` packs already validated positions without repeating checks.
+Cursors contain only an absolute current position (bits 0-31) and exclusive end
+(bits 32-63); upper bits are unused. There is no cursor flag API.
+`length`, `more`, `done`, `expectEnd`, and `exhaust` handle inspection and consumption.
+`done` checks exact equality, so a reversed range is not considered consumed.
+Use it when a caller needs its own error; `expectEnd` reverts UnconsumedData.
+`enter(cur, amount)` validates a raw byte range and returns `(abs, nextCur)`;
+it does not inspect block headers.
+`toBytes`, `toBytesChecked`, and `toString` expose calldata views; Blocks keeps thin
+wrappers for these conversions. Positions used by `seek`, `expect`, and `slice`
+are absolute. Encoder continues to use its separate relative offset/capacity model.
 
 Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
 the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
@@ -452,9 +448,9 @@ The lane key is the prime item. Prime items may repeat at the top level for
 batching. Later top-level items are globals for the whole batch and are not
 counted as per-operation prime blocks.
 
-An endpoint may accept the empty form of its prime block as a per-operation
-marker. The header remains present, so empty prime blocks still participate in
-run counting and batching.
+Each prime block must satisfy its payload schema. An empty stream represents
+zero operations; a zero-length block is valid only when its schema permits it,
+as with bytes, strings, or lists.
 
 Execution cursor opening wraps the supplied state and input calldata without
 validating their descriptor keys. Those fields remain discovery
@@ -471,11 +467,11 @@ For commands, complete-source validation is also a state-safety rule. State is a
 linear value owned by the current pipeline step, not optional context that a
 command may disregard. Every command must account for the complete supplied
 state by consuming it, transforming and returning it, forwarding it intact with
-`takeRawState`, or reverting. Descriptor metadata alone does not reject a source;
+`takeState` or `takeStateFixed`, or reverting. Descriptor metadata alone does not reject a source;
 a command that leaves supplied state unread rejects it when closing. Ordinary
 typed consumption validates blocks against the type requested by the command.
-Raw forwarding deliberately trusts the command and does not validate the
-forwarded source against descriptor metadata.
+Whole-stream forwarding validates the keys or fixed headers requested by the
+command; descriptor metadata alone does not perform that validation.
 
 ## Live Pipeline State
 
@@ -501,13 +497,22 @@ blocks. Custom schemas and dynamic composite blocks are command input, not new
 state types. This distinction is enforced by the execution API: generic
 navigation and custom-schema helpers consume input, while `unpackBalance`,
 `unpackCustody` and `unpackPosition` consume state directly.
-Callers do not select or switch an active decoder source.
+Callers do not select or switch an active decoder source. `Execution.input`
+and `Execution.state` are separate `uint` calldata cursors, each storing the
+absolute current position in bits 0-31 and end in bits 32-63. Higher bits
+are unused. Updating one cursor leaves the other source unchanged. The former combined `Execution.decoders` field has been removed.
 
-Standalone `Cur` decoders remain source-agnostic because they represent one
-explicit byte region. `takeRawState` is the deliberate execution exception: it
-may forward unread state without interpreting or validating its block types,
-but marks that complete region consumed. `takeRawBalances` validates every
-remaining block as BALANCE before returning the original calldata stream;
+Whole-stream validation belongs to Blocks: `expectRun(cur, key)` checks every
+block's key and containment, while `expectRunFixed(cur, header)` also checks exact
+payload sizes. Both accept empty streams and require established calldata bounds.
+Executions provides thin `takeInput`/`takeState` and `takeInputFixed`/`takeStateFixed`
+wrappers that trust the calldata bounds established during opening, delegate
+stream validation, and consume only
+the selected lane. They return cursors over complete blocks, regardless of descriptor declarations.
+The requested key or header determines validation. Close rejects any bytes left
+unread in either source; declaring a source EMPTY does not hide supplied data.
+Use `toBytesChecked()` when a calldata view is needed; cursors can otherwise be
+forwarded directly. `takeBalances` delegates to `takeStateFixed` with the BALANCE header;
 `relayBalancePayable` uses it to reject other state types and malformed blocks.
 An empty stream is accepted. Adding another typed pipeline-state
 shape therefore requires a standard protocol block and a dedicated execution
@@ -580,7 +585,7 @@ The former `book` command is removed. `settle` accepts account counterparties an
 applies final quantities without checking limits; producers must enforce their
 quantity constraints. Callers that require an already-realized
 position must explicitly check `position.counterparty == bytes32(0)` separately
-from `checkPosition` or `Blocks.expectPositionLimits`. A trusted
+from `checkPosition` or `Blocks.expectPositionConstraints`. A trusted
 realization hook must return counterparty zero before handing the result onward.
 
 The same `BookHook` is used directly by `portBook` and settlement for its
@@ -595,7 +600,7 @@ before calling the hook, so malformed credit data is rejected before debiting.
 `realize` passes the complete position to its hook, which validates its host account
 counterparty and fulfills the obligation before returning counterparty zero.
 The command takes empty input and returns the fulfilled positions. Callers may
-append `checkPosition` with POSITION_LIMITS to validate the final outcome.
+append `checkPosition` with POSITION_CONSTRAINTS to validate the final outcome.
 Identifier and counterparty correctness remain the hook's responsibility.
 
 ### Position Transformations
@@ -652,29 +657,30 @@ It identifies no asset, liability, or counterparty.
 
 Pack with `(minimum << 128) | maximum` after ensuring both inputs fit uint128.
 `unpackLimits` returns the packed uint from calldata, cursor, execution, or memory
-sources. Writers and execution outputs accept that same word. Codec helpers
+sources. Encoder and execution outputs accept that same word. Codec helpers
 validate the block header and preserve the value without enforcing quantities.
 
-The separate `#assetLimits { bytes32 asset, uint min, uint max }` schema adds an
+The separate `#balanceConstraints { bytes32 asset, uint min, uint max }` schema adds an
 exact asset identifier and uses full-width uint256 bounds. Its payload is 96
 bytes (104 including the header), ordered as asset, minimum, maximum. Both
 bounds are inclusive and literal; zero and `type(uint256).max` are not sentinels.
 An inverted range cannot be satisfied. Codecs preserve inverted ranges without
-enforcing them. `Specs.AssetLimits`, `Sizes.AssetLimits`, `Headers.AssetLimits`,
-and `Schemas.AssetLimits` describe this shape. Offchain callers encode these
-constraints. Scalar `unpackAssetLimits` readers support calldata, cursor, and
-execution paths; `Memory.unpackAssetLimits` decodes bounded memory blocks.
-There are no onchain ASSET_LIMITS writers, factories, or output helpers.
+enforcing them. `Specs.BalanceConstraints`, `Sizes.BalanceConstraints`, `Headers.BalanceConstraints`,
+and `Schemas.BalanceConstraints` describe this shape. Offchain callers encode these
+constraints. Struct-returning `unpackBalanceConstraints` readers support calldata, cursor, and
+execution paths, returning `BalanceConstraints { asset, min, max }`;
+`Memory.unpackBalanceConstraints` decodes bounded memory blocks.
+There are no onchain BALANCE_CONSTRAINTS writers, factories, or output helpers.
 
-`Blocks.expectAssetLimits(abs, asset, amount)` checks the header, exact asset,
+`Blocks.expectBalanceConstraints(abs, asset, amount)` checks the header, exact asset,
 and inclusive amount bounds directly in calldata without unpacking. The caller
-must bound the complete block. `Executions.expectAssetLimits(exec, asset, amount)`
-bounds and consumes one ASSET_LIMITS input before delegating to it. A bad header
+must bound the complete block. `Executions.expectBalanceConstraints(exec, asset, amount)`
+bounds and consumes one BALANCE_CONSTRAINTS input before delegating to it. A bad header
 reverts with `InvalidBlock`, an asset mismatch with `UnexpectedValue`, and a
 violated bound with `OutOfRange`, in that order. `CheckBalance` uses this helper.
 
 `checkBalance` (`CheckBalance` in `commands/Balance.sol`) accepts BALANCE state
-and one ASSET_LIMITS input per balance. It checks exact asset identity, then
+and one BALANCE_CONSTRAINTS input per balance. It checks exact asset identity, then
 `min <= amount <= max`, and returns each balance unchanged. A mismatched asset
 reverts with `UnexpectedValue`; a violated bound reverts with `OutOfRange`.
 It does not check authorization or backing. Empty state with empty input is
@@ -683,7 +689,7 @@ Packed LIMITS input is not accepted by this command. The generic packed LIMITS
 schema remains available for contexts that already establish asset identity.
 
 `ExecuteCheckBalance` adds internal execution for the same command ID. It checks
-memory BALANCE blocks directly against calldata ASSET_LIMITS in assembly without
+memory BALANCE blocks directly against calldata BALANCE_CONSTRAINTS in assembly without
 unpacking or copying, returning the original state buffer and unused native
 budget. Hosts route `checkBalanceId()` to
 `executeCheckBalance(account, state, input, value)` in their local dispatcher.
@@ -764,44 +770,45 @@ Cursor and execution helpers decode quotes with `unpackQuoteValue()` or return
 `(asset, amount, liability, debt)` from `unpackQuote()`. Scalar quote writers and
 factories use the same order; structured writers accept a `Quote`. QUOTE remains
 a separate schema whose interpretation is defined by its consumer; it is not
-accepted by `checkPosition` or the position-limits expectation helpers.
+accepted by `checkPosition` or the position-constraints expectation helpers.
 
 The former three-word `asset, liability, limits` QUOTE format is invalid.
 
 Position acceptance constraints use a separate schema:
 
 ```txt
-#positionLimits { bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt }
+#positionConstraints { bytes32 asset, uint amount, bytes32 liability, uint debt }
 ```
 
-POSITION_LIMITS has a 128-byte payload (136 including the header), with the same
+POSITION_CONSTRAINTS has a 128-byte payload (136 including the header), with the same
 word order as QUOTE but a distinct key. Offchain callers encode these constraints.
-Scalar `unpackPositionLimits` readers return `(asset, minAmount, liability, maxDebt)`
-from calldata, cursors, or execution input. There is no `PositionLimits` struct
-or onchain writer, factory, or execution-output helper.
+`unpackPositionConstraints` readers return a `PositionConstraints` struct with
+`(asset, amount, liability, debt)` from calldata, cursors, memory, or execution
+input. There is no onchain writer, factory, or execution-output helper.
 
-`checkPosition` and the `expectPositionLimits` helpers require exact asset and
-liability identifiers, then check `position.amount >= limits.minAmount` and
-`position.debt <= limits.maxDebt`. Both bounds are inclusive full-width uint256
-values with no sentinels. They constrain separate quantities, so minAmount may
-exceed maxDebt. Counterparty is not part of these constraints; authorization
+`checkPosition` and the `expectPositionConstraints` helpers require exact asset and
+liability identifiers, then check `position.amount >= constraints.amount` and
+`position.debt <= constraints.debt`. The constraint `amount` is the minimum asset
+receipt; `debt` is the maximum liability payment. Both bounds are inclusive
+full-width uint256 values with no sentinels. They constrain separate quantities,
+so `amount` may exceed `debt`. Counterparty is not part of these constraints; authorization
 and backing remain separate responsibilities. Codecs preserve values without
 applying the comparisons.
 
-`Blocks.expectPositionLimits(abs, position)` performs the same checks directly
+`Blocks.expectPositionConstraints(abs, position)` performs the same checks directly
 against calldata without unpacking its payload. The caller
-must bound the complete block. It validates the POSITION_LIMITS header first
+must bound the complete block. It validates the POSITION_CONSTRAINTS header first
 (`InvalidBlock`), then identifiers (`UnexpectedValue`), then quantity bounds
 (`OutOfRange`). It does not advance a cursor or check the counterparty.
-`Executions.expectPositionLimits(exec, position)` bounds and consumes one
-POSITION_LIMITS input before delegating to it.
+`Executions.expectPositionConstraints(exec, position)` bounds and consumes one
+POSITION_CONSTRAINTS input before delegating to it.
 
 Realize consumes empty input. Code checking a Rootzero-backed result
 must separately require zero on the resulting position's counterparty. Failed
 comparisons revert the enclosing call and its earlier changes.
 
 `checkPosition` (`CheckPosition` in `commands/Position.sol`) accepts POSITION state and
-one POSITION_LIMITS input per position, checks exact asset and liability identifiers and
+one POSITION_CONSTRAINTS input per position, checks exact asset and liability identifiers and
 inclusive minimum amount / maximum debt, and returns each position unchanged.
 Empty state with empty input is valid; missing, extra, malformed, or failing
 constraints revert the call. It does not check counterparty authorization or backing.
@@ -809,7 +816,7 @@ Place it after the transformations whose output should satisfy the limits, for
 example `transform → checkPosition → settle`, within the same atomic pipeline.
 
 `ExecuteCheckPosition` adds internal memory-state execution for the same command
-ID. It validates POSITION blocks in memory directly against POSITION_LIMITS blocks in
+ID. It validates POSITION blocks in memory directly against POSITION_CONSTRAINTS blocks in
 calldata using assembly, without unpacking structs or copying output. It returns
 the original state buffer and any assigned native budget unchanged. Hosts route
 `checkPositionId()` to `executeCheckPosition(account, state, input, value)` in their
@@ -840,7 +847,7 @@ be published in `#schema` annotations. Field aliases are presentation metadata
 for tooling. They do not change payload layout or runtime keys.
 
 ```txt
-maybe #account as recipient
+#account as recipient
 { uint target, uint resources, #bytes as payload }
 ```
 
@@ -904,7 +911,7 @@ The same rule applies to field aliases:
 
 ```txt
 { uint target, uint resources, #bytes as calldata.payload }
-maybe #account as recipient.account
+#account as recipient.account
 ```
 
 ## Presentation Order
@@ -954,7 +961,7 @@ independently; a `many` declaration occupies one position in its enclosing body.
 ```txt
 uint amount at 0
 #bytes as hookData at 2
-maybe #account as recipient at 1
+#account as recipient at 1
 many #swapHop at 3
 ```
 
@@ -1051,7 +1058,7 @@ asset.
 .asset
 ```
 
-Reserved words include `maybe`, `many`, `as`, `at`, all field type names, and the
+Reserved words include `many`, `as`, `at`, all field type names, and the
 reserved block aliases `bytes` and `list`. For dotted paths, reserved words are
 invalid in any path segment.
 
@@ -1091,46 +1098,46 @@ the corresponding keys and packed specifications live in `Keys.sol` and
 as a prefix in `#schema.body`:
 
 ```txt
-bytes              ""
-string             ""
-list               ""
-evm                ""
-node               uint node
-account            bytes32 account
-asset              bytes32 asset
-status             uint code
-amount             bytes32 asset, uint amount
-balance            bytes32 asset, uint amount
-debt               bytes32 liability, uint debt
-accountAsset       bytes32 account, bytes32 asset
-assetLiability     bytes32 asset, bytes32 liability
-hostAsset          uint host, bytes32 asset
-bootstrap          bytes32 asset, uint amount, uint budget
-allocation         uint host, bytes32 asset, uint amount
-allowance          uint host, bytes32 asset, uint amount
-custody            uint host, bytes32 asset, uint amount
-accountAmount      bytes32 account, bytes32 asset, uint amount
-hostAmount         uint host, bytes32 asset, uint amount
-hostAccountAsset   uint host, bytes32 account, bytes32 asset
-limits             uint limits
-assetLimits        bytes32 asset, uint min, uint max
-quote              bytes32 asset, uint amount, bytes32 liability, uint debt
-positionLimits     bytes32 asset, uint minAmount, bytes32 liability, uint maxDebt
-position           bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
-transaction        bytes32 from, bytes32 to, bytes32 asset, uint amount
-hostAccountAmount  uint host, bytes32 account, bytes32 asset, uint amount
-step               uint cmd, uint value, #bytes as input
-call               uint target, uint resources, #bytes as payload
-relay              #bytes as input, #bytes as steps
-dispatch           uint portal, uint resources, #bytes as payload
-context            bytes32 account, #bytes as state, #bytes as input
-recover            uint handler, uint resources, bytes32 key, #bytes as witness
-annotation         uint entity, #bytes as data
-action             uint action
-counterparty      bytes32 account
-groups             #string as description
-label              bytes32 namespace, #string as name
-schema             uint spec, #string as body
+bytes                ""
+string               ""
+list                 ""
+evm                  ""
+node                 uint node
+account              bytes32 account
+asset                bytes32 asset
+status               uint code
+amount               bytes32 asset, uint amount
+balance              bytes32 asset, uint amount
+debt                 bytes32 liability, uint debt
+accountAsset         bytes32 account, bytes32 asset
+assetLiability       bytes32 asset, bytes32 liability
+hostAsset            uint host, bytes32 asset
+bootstrap            bytes32 asset, uint amount, uint budget
+allocation           uint host, bytes32 asset, uint amount
+allowance            uint host, bytes32 asset, uint amount
+custody              uint host, bytes32 asset, uint amount
+accountAmount        bytes32 account, bytes32 asset, uint amount
+hostAmount           uint host, bytes32 asset, uint amount
+hostAccountAsset     uint host, bytes32 account, bytes32 asset
+limits               uint limits
+balanceConstraints   bytes32 asset, uint min, uint max
+positionConstraints  bytes32 asset, uint amount, bytes32 liability, uint debt
+quote                bytes32 asset, uint amount, bytes32 liability, uint debt
+position             bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
+transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
+hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
+step                 uint cmd, uint value, #bytes as input
+call                 uint target, uint resources, #bytes as payload
+relay                #bytes as input, #bytes as steps
+dispatch             uint portal, uint resources, #bytes as payload
+context              bytes32 account, #bytes as state, #bytes as input
+recover              uint handler, uint resources, bytes32 key, #bytes as witness
+annotation           uint entity, #bytes as data
+action               uint action
+counterparty         bytes32 account
+groups               #string as description
+label                bytes32 namespace, #string as name
+schema               uint spec, #string as body
 ```
 
 ### Host Accounts

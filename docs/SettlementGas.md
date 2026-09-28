@@ -1,6 +1,6 @@
 # Settlement gas baseline
 
-Measured on 2026-09-17 with Solidity 0.8.35, optimizer enabled with 200 runs,
+Measured on 2026-09-17 with Solidity 0.8.35 without viaIR, optimizer enabled with 200 runs,
 Cancun EVM target, and Hardhat's local simulated network. The benchmark caller checks
 packed limits before settlement applies final position quantities without host fees.
 Account validation is delegated to the account hooks. This benchmark's ledger

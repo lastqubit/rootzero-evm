@@ -42,7 +42,7 @@ contract ExampleHost is CommandHost, Balances, Deposit {
 
     function deposit(bytes32 account, bytes32 asset, uint amount) internal override returns (uint) {
         uint balance = creditTo(account, asset, amount);
-        emit Balance(account, asset, balance, int(amount));
+        emit Balance(account, asset, balance);
         return amount;
     }
 }
@@ -118,11 +118,10 @@ identifiers inside, never how the bytes are laid out.
 
 Schemas can express more than flat fields: a block may contain any number of
 nested child blocks (`#bytes as payload` names raw dynamic bytes), items can be
-marked `maybe` when their empty form is accepted or `many` when they form a
-list, and aliases and dotted field paths give off-chain tooling presentation
-names without changing a single byte on the wire. Declared child headers are
-always present; a zero payload length represents an empty block. An `at N` hint
-can reposition one field in off-chain presentation without changing its wire
+marked `many` when they form a repeated list. Each declared child header is
+present, and its payload must satisfy that block's schema. Bytes, strings, and
+lists may have zero-length payloads; there is no universal empty-block marker.
+An `at N` hint can reposition one field in off-chain presentation without changing its wire
 position. Qualified schema names such as `relay.input` describe encoded block
 streams inside aliased `#bytes` fields, preserving ordinary block headers and
 decoder helpers; schemas emitted locally by the active host take precedence
@@ -325,9 +324,9 @@ and return it, forward it intact, or revert. A command must never succeed while
 silently ignoring or dropping supplied state. Descriptor schemas remain
 discovery metadata; the command's decoding and loop implementation defines its
 runtime source semantics. A command that does not consume supplied state rejects
-it when closing, while `takeRawState` explicitly consumes an intact forwarded
-state source. `takeRawBalances` additionally validates every forwarded block as
-BALANCE and is used by `relayBalancePayable`; empty state remains accepted.
+it when closing, while `takeState` and `takeStateFixed` validate and consume a complete
+state stream before forwarding it. `takeBalances` validates every forwarded block as BALANCE and
+returns a cursor for `relayBalancePayable` to encode directly; empty state remains accepted.
 This is especially important for `#position`, because dropping it could
 silently discard an outstanding debt requirement.
 
@@ -504,13 +503,11 @@ limits or guaranteed bounds. Unknown batch counts or missing annotations mean
 unknown cost. The latest trusted annotation replaces the previous estimate;
 zero values are valid estimates and do not clear metadata.
 
-Commands can adjust their output allocation hint before the first output reservation
-with `exec.scaleOutput(numerator, denominator)`: use `(3, 1)` for three times the
-capacity or `(1, 2)` for half. This changes only the capacity hint and allocates
-no backing buffer. Division rounds down; zero numerator clears the hint and later
-writes still grow normally. Zero denominators, overflowing products or capacities,
-and calls after output reservation revert. It does not change descriptor metadata,
-input grouping, or the number of blocks the command may emit.
+Execution opening now allocates its growable output buffer from the descriptor
+hint. `openInput` and `openContext` accept optional numerator/denominator
+arguments to scale that hint before allocation; `Executions.scaleOutput` remains removed.
+Output helpers contain no deferred initialization or scaling checks; buffers
+still grow when needed.
 
 The final argument is a packed flags byte. Pass `0` for an ordinary endpoint,
 or compose values such as `Flags.Funded`, `Flags.Admin`, and
@@ -544,13 +541,13 @@ an initial balance and native-value budget), `cashout` (withdraw native
 state to other accounts), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
 returns counterparty zero; input is empty, and an optional following
-`checkPosition` validates the result against POSITION_LIMITS),
+`checkPosition` validates the result against POSITION_CONSTRAINTS),
 `allocate` (turn balance state
 into custody),
 `provision` (provision custody from an external allocation),
-`checkBalance` (validate each balance's asset and amount against paired ASSET_LIMITS
+`checkBalance` (validate each balance's asset and amount against paired BALANCE_CONSTRAINTS
 and return it unchanged; `ExecuteCheckBalance` validates memory state directly),
-`checkPosition` (validate each position against paired POSITION_LIMITS and return it unchanged;
+`checkPosition` (validate each position against paired POSITION_CONSTRAINTS and return it unchanged;
 `ExecuteCheckPosition` validates memory state directly), `settle` (consume
 asset-liability position state with empty input, including
 Rootzero-backed and liability-only positions),
@@ -663,6 +660,12 @@ chain-specific `resources` fields for adapters that also need gas or runtime
 parameters. A `resources` word is never itself native value; EVM adapters use
 `useResourceValue` to extract its low 128-bit value lane before spending it.
 
+Local execute adapters use `Execute` for fixed-stride decoding: validate
+stream size once, then decode at absolute positions. Memory unpackers have a
+`Memory` suffix; calldata input stays a cursor until bounds are extracted.
+The paired balance/position checks validate streams in place, and settlement
+copies each position into an independent struct. See [Execute](docs/Execute.md).
+
 Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
 `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
 `ExecuteSettle` to register canonical command metadata while executing
@@ -729,21 +732,22 @@ amounts. Matching accounts or assets are not netted. Hosts may implement the
 hook directly while preserving those exact-leg and funding requirements.
 Settlement also calls it for both exact exchange transfers, liability first.
 
-`Calls.raw` and `Calls.rawCopy` (from `Core.sol`) call ports returning
-`(bytes output, uint credit)`, using memory and calldata input respectively.
-They take `(selector, target, value, input, expectEmpty)`, strictly decode the
+`Calls.raw` (from `Core.sol`) calls ports returning `(bytes output, uint credit)`,
+with overloads for `bytes memory data` and validated calldata `uint dataCur`.
+They take `(selector, target, value, data, expectEmpty)`, strictly decode the
 tuple, and preserve target failures in `FailedCall`. `expectEmpty` constrains
 the output bytes only. Callers authorize the target and must ensure returned
 credit is backed before adding it to their budget; the helpers do not transfer
 ETH back. All ports return this tuple. Nonpayable ports return zero credit;
 `portDispatchPayable` returns its unspent budget. `portPipePayable` settles its
 remainder through `cashin` and returns zero credit.
-`Calls.rawQuery` decodes bytes-only query results. `Calls.tryRaw` and
-`Calls.tryRawCopy` report call success without decoding returndata, with optional
-explicit gas limits. All `Calls` functions are internal library helpers.
+`Calls.rawQuery` decodes bytes-only query results. `Calls.tryRaw` has the same
+memory/cursor overloads and reports success without decoding returndata, with
+optional explicit gas limits. Cursor overloads trust validated bounds, ignore
+metadata, and do not advance the cursor. All `Calls` functions are internal helpers.
 
-`exec.rawCall(selector, target, value, input, expectEmpty)` and
-`exec.rawCallCopy(...)` provide the same calls with execution budget accounting.
+`exec.rawCall(selector, target, value, data, expectEmpty)` provides the same
+memory/cursor overloads with execution budget accounting.
 They debit the full-width native `uint value` before calling, add the returned
 trusted credit to `exec.budget`, and return only the output bytes. Callers with
 packed resources pass `uint128(resources)` to extract the EVM value lane.
@@ -838,6 +842,13 @@ names, access sets, balances — from logs alone, with no artifact files.
 
 ## Development
 
+The default build uses Solidity 0.8.35 with `viaIR: true`, optimizer enabled
+at 200 runs, and the Cancun EVM target. Tests and benchmarks use those same
+settings. Evaluate gas optimizations under this configuration; older benchmark
+documents explicitly measured without viaIR are historical comparisons.
+Applications importing these internal libraries should use matching compiler
+settings when reproducing the measurements.
+
 For repository development, `npm test` runs regular tests without the
 `*.bench.test.ts` suites. Run a focused test with
 `npm test -- test/peer.test.ts`, or filter the regular suite with
@@ -860,8 +871,8 @@ Import from the package entry points rather than deep paths:
   annotation and codec helpers, and shared value types for authoring custom commands
 - `@rootzero/contracts/Endpoints.sol` — command, admin, port, guard, and query
   mixins, their hooks (including `ExecuteHook` and `PipeHook`), and `Flags`
-- `@rootzero/contracts/Codec.sol` — `Blocks`, calldata `Cur`/`Cursors`, memory
-  `Memory`, `Writers`, `Schemas`, `Execution`/`Executions`, `Flags`, `Keys`, and
+- `@rootzero/contracts/Codec.sol` — `Blocks`, `Encoder`,
+  `Execute`, `Cursors`, `Schemas`, `Execution`/`Executions`, `Flags`, `Keys`, and
   `Specs`
 - `@rootzero/contracts/Utils.sol` — `Ids`, `Nodes`, `Assets`, `Accounts`,
   cursor, layout, and value helpers
