@@ -28,13 +28,11 @@ abstract contract Unauthorize is AdminBase {
     function unauthorize(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, unauthorizeOne);
+    }
 
-        while (exec.more()) {
-            uint node = exec.unpackNode();
-            revokeNode(node);
-        }
-
-        return exec.close();
+    function unauthorizeOne(Execution memory exec) private {
+        uint node = exec.unpackNode();
+        revokeNode(node);
     }
 }

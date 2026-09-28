@@ -37,14 +37,12 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
     function allowAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, allowAssetOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            allowAsset(asset);
-        }
-
-        return exec.close();
+    function allowAssetOne(Execution memory exec) private {
+        bytes32 asset = exec.unpackAsset();
+        allowAsset(asset);
     }
 }
 
@@ -65,13 +63,11 @@ abstract contract DenyAsset is AdminBase, DenyAssetHook {
     function denyAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, denyAssetOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            denyAsset(asset);
-        }
-
-        return exec.close();
+    function denyAssetOne(Execution memory exec) private {
+        bytes32 asset = exec.unpackAsset();
+        denyAsset(asset);
     }
 }

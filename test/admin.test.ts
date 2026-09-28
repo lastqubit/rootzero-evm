@@ -46,6 +46,42 @@ describe("Admin Commands", () => {
     return commandId(host.interface.getFunction(method)!.selector, host, flags);
   }
 
+  describe("admin runner", () => {
+    for (const method of [
+      "authorize", "unauthorize", "appoint", "dismiss", "allowAsset",
+      "denyAsset", "allowance", "annotate", "executePayable",
+    ]) {
+      it(`${method} authorizes even an empty batch`, async () => {
+        await expect(callAs(1, method, adminCtx("0x")))
+          .to.be.revertedWithCustomError(host, "AccessDenied");
+        await expect(callAs(0, method, userCtx(ethers.ZeroHash, "0x")))
+          .to.be.revertedWithCustomError(host, "AccessDenied");
+        expect(await host[method].staticCall(...adminCtx("0x")))
+          .to.deep.equal(["0x", 0n]);
+      });
+    }
+
+    it("returns the full native budget for an empty payable batch", async () => {
+      expect(await host.executePayable.staticCall(...adminCtx("0x"), { value: 7n }))
+        .to.deep.equal(["0x", 7n]);
+    });
+
+    it("shares the native budget across callbacks and returns only the remainder", async () => {
+      const target = await deploy("TestExecuteTarget");
+      const targetId = await hostId(await target.getAddress());
+      const data = target.interface.encodeFunctionData("ping", [1n, "0xab"]);
+      const input = concat(
+        encodeCallBlock(targetId, 3n, data),
+        encodeCallBlock(targetId, 5n, data),
+      );
+
+      expect(await host.executePayable.staticCall(...adminCtx(input), { value: 10n }))
+        .to.deep.equal(["0x", 2n]);
+      await expect(callAs(0, "executePayable", adminCtx(input), { value: 7n }))
+        .to.be.revertedWithCustomError(host, "InsufficientValue");
+    });
+  });
+
   // â”€â”€ Authorize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe("authorize", () => {

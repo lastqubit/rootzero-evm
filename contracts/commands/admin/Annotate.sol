@@ -24,13 +24,11 @@ abstract contract Annotate is AdminBase {
     function annotate(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, annotateOne);
+    }
 
-        while (exec.more()) {
-            (uint entity, uint dataCur) = exec.unpackAnnotation();
-            emit Annotation(entity, dataCur.toBytes());
-        }
-
-        return exec.close();
+    function annotateOne(Execution memory exec) private {
+        (uint entity, uint dataCur) = exec.unpackAnnotation();
+        emit Annotation(entity, dataCur.toBytes());
     }
 }

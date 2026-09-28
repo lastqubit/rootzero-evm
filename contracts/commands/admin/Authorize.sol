@@ -31,14 +31,12 @@ abstract contract Authorize is AdminBase {
     function authorize(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, authorizeOne);
+    }
 
-        while (exec.more()) {
-            uint node = exec.unpackNode();
-            authorizeNode(node);
-        }
-
-        return exec.close();
+    function authorizeOne(Execution memory exec) private {
+        uint node = exec.unpackNode();
+        authorizeNode(node);
     }
 }
 

@@ -23,14 +23,12 @@ abstract contract Appoint is AdminBase, GuardianAccess {
     function appoint(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, appointOne);
+    }
 
-        while (exec.more()) {
-            bytes32 guardian = exec.unpackAccount();
-            appointGuardian(guardian);
-        }
-
-        return exec.close();
+    function appointOne(Execution memory exec) private {
+        bytes32 guardian = exec.unpackAccount();
+        appointGuardian(guardian);
     }
 }
 
@@ -52,13 +50,11 @@ abstract contract Dismiss is AdminBase, GuardianAccess {
     function dismiss(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, dismissOne);
+    }
 
-        while (exec.more()) {
-            bytes32 guardian = exec.unpackAccount();
-            dismissGuardian(guardian);
-        }
-
-        return exec.close();
+    function dismissOne(Execution memory exec) private {
+        bytes32 guardian = exec.unpackAccount();
+        dismissGuardian(guardian);
     }
 }

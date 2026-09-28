@@ -33,13 +33,11 @@ abstract contract Allowance is AdminBase, AllowanceHook {
     function allowance(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        Execution memory exec = openAdminCommand(context, descriptor);
+        return runAdminCommand(context, descriptor, allowanceOne);
+    }
 
-        while (exec.more()) {
-            (uint peer, bytes32 asset, uint amount) = exec.unpackAllowance();
-            allowance(peer, asset, amount);
-        }
-
-        return exec.close();
+    function allowanceOne(Execution memory exec) private {
+        (uint peer, bytes32 asset, uint amount) = exec.unpackAllowance();
+        allowance(peer, asset, amount);
     }
 }
