@@ -8,7 +8,7 @@ import {QueryBase} from "./Base.sol";
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that expose current asset conditions.
-abstract contract AssetCodesHook {
+abstract contract GetAssetCodesHook {
     /// @notice Resolve current state codes for one asset.
     /// @dev Must return exactly one States.Active or States.Inactive code.
     /// Zero is not inactive. Additional applicable condition codes may accompany it;
@@ -19,10 +19,10 @@ abstract contract AssetCodesHook {
     function assetCodes(bytes32 asset) internal view virtual returns (uint codes);
 }
 
-/// @title AssetCodes
+/// @title GetAssetCodes
 /// @notice Query current asset conditions for one or more assets.
 /// Input is a run of ASSET blocks; output is one CODES block per asset in input order.
-abstract contract AssetCodes is QueryBase, AssetCodesHook {
+abstract contract GetAssetCodes is QueryBase, GetAssetCodesHook {
     uint private immutable descriptor;
 
     constructor() {

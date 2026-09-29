@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {EntityCodes, EntityCodesHook, AssetCodes} from "../Endpoints.sol";
+import {GetEntityCodes, GetEntityCodesHook, GetAssetCodes} from "../Endpoints.sol";
 import {States} from "../utils/States.sol";
 import {Runtime} from "../core/Runtime.sol";
 
-contract TestEntityCodesQuery is EntityCodes, AssetCodes {
+contract TestEntityCodesQuery is GetEntityCodes, GetAssetCodes {
     constructor() Runtime(0) {}
 
     function entityCodes(uint entity) internal pure override returns (uint codes) {

@@ -8,7 +8,7 @@ import {
   pad32,
 } from "./helpers/blocks.js";
 
-describe("AssetCodes", () => {
+describe("GetAssetCodes", () => {
   it("returns empty output for empty input and rejects a truncated trailing item", async () => {
     const query = await deploy("TestAssetCodesQuery");
     expect(await query["assetCodes(bytes)"].staticCall("0x")).to.equal("0x");

@@ -8,7 +8,7 @@ import {QueryBase} from "./Base.sol";
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that expose current entity conditions.
-abstract contract EntityCodesHook {
+abstract contract GetEntityCodesHook {
     /// @notice Resolve current condition codes for one entity.
     /// @dev Zero means unknown or no condition reported, not explicitly inactive.
     /// Implementations define entity kinds, applicable conditions, and valid code
@@ -20,10 +20,10 @@ abstract contract EntityCodesHook {
     function entityCodes(uint entity) internal view virtual returns (uint codes);
 }
 
-/// @title EntityCodes
+/// @title GetEntityCodes
 /// @notice Query current conditions for one or more entities.
 /// Input is an ENTITY stream; output is one CODES block per entity in input order.
-abstract contract EntityCodes is QueryBase, EntityCodesHook {
+abstract contract GetEntityCodes is QueryBase, GetEntityCodesHook {
     uint private immutable descriptor;
 
     constructor() {

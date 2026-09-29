@@ -7,7 +7,7 @@ import {
   encodeLabelBlock, encodeNodeBlock, endpointDescriptor, exactSpec, Keys,
 } from "./helpers/blocks.js";
 
-describe("EntityCodes", () => {
+describe("GetEntityCodes", () => {
   let query: Awaited<ReturnType<typeof deploy>>;
 
   before(async () => { query = await deploy("TestEntityCodesQuery"); });

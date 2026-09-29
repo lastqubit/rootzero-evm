@@ -759,7 +759,8 @@ response: accountAmount { bytes32 account, bytes32 asset, uint amount }
 Like commands, every query announces a descriptor at deployment; tooling resolves
 the descriptor's lanes through the published block schemas.
 
-`entityCodes` in `queries/Entity.sol` accepts `#entity { uint entity }` blocks
+`GetEntityCodes` in `queries/Entity.sol` exposes `entityCodes`, which accepts
+`#entity { uint entity }` blocks
 and returns one `#codes { uint codes }` block per entity, preserving input order
 and duplicates. Empty input returns empty output. Entity identifiers use the
 same full-width representation as annotations; the hook defines supported kinds.
@@ -767,8 +768,9 @@ Codes describe current conditions, not historical actions or effects. Zero codes
 means unknown or no condition reported; `States.Inactive` means explicitly inactive.
 Active/Inactive is optional for entities where it does not apply. The hook owns
 condition semantics and code packing; the query preserves its returned word.
-`assetCodes` remains the asset-specific query and requires exactly one Active or
-Inactive state from its hook.
+`GetAssetCodes` exposes the asset-specific `assetCodes` query. Its hook must return
+exactly one Active or Inactive state. Both query mixins and their matching
+`GetAssetCodesHook` and `GetEntityCodesHook` contracts are exported by `Endpoints.sol`.
 
 ## Ports
 
