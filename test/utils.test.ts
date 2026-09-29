@@ -215,14 +215,36 @@ describe("Utils", () => {
       expect(result.toLowerCase()).to.equal(addr.toLowerCase());
     });
 
-    it("ensureContract returns an address containing deployed bytecode", async () => {
+    it("ensureContract resolves a deployed contract from its local host ID", async () => {
       const target = await utils.getAddress();
-      expect(await utils.testEnsureContract(target)).to.equal(target);
+      expect(await utils.testEnsureContract(await utils.testToHostId(target))).to.equal(target);
     });
 
-    it("ensureContract rejects EOAs and the zero address", async () => {
-      await expectCustomError(utils.testEnsureContract(signerAddress), "InvalidContract");
-      await expectCustomError(utils.testEnsureContract(ethers.ZeroAddress), "InvalidContract");
+    it("ensureContract rejects code-free targets while hostAddr still permits EOA hosts", async () => {
+      const host = await utils.testToHostId(signerAddress);
+      expect(await utils.testLocalHostAddr(host)).to.equal(signerAddress);
+      for (const address of [signerAddress, ethers.getAddress("0x" + "ab".repeat(20)), ethers.getAddress("0x" + "00".repeat(19) + "01")]) {
+        await expectCustomError(utils.testEnsureContract(await utils.testToHostId(address)), "InvalidContract");
+      }
+    });
+
+    it("ensureContract rejects a zero host address with ZeroAddress", async () => {
+      await expectCustomError(utils.testEnsureContract(await utils.testToHostId(ethers.ZeroAddress)), "ZeroAddress");
+    });
+
+    it("ensureContract validates the host type, chain, selector, and flags before checking code", async () => {
+      const target = await utils.getAddress();
+      const host = BigInt(await utils.testToHostId(target));
+      for (const invalid of [
+        0n, BigInt(target),
+        host ^ (1n << 192n), // Foreign chain.
+        host | (1n << 160n), // Nonzero selector.
+        host | (1n << 224n), // Flags are not valid on a host.
+        host ^ (1n << 232n), // Different node subtype.
+        (host & ((1n << 248n) - 1n)) | (2n << 248n), // Opaque representation.
+      ]) {
+        await expectCustomError(utils.testEnsureContract(invalid), "InvalidId");
+      }
     });
 
     it("toAdminAccount encodes admin prefix, chainId and address", async () => {

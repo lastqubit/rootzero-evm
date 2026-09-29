@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Layout} from "./Layout.sol";
-import {InvalidId} from "./Errors.sol";
+import {InvalidId, InvalidContract} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
 import {ensureAddr, isFamily, matchesBase, toLocalBase} from "./Utils.sol";
 
@@ -294,5 +294,18 @@ library Nodes {
     function hostAddr(uint node) internal view returns (address) {
         if (!matchesBase(bytes32(node), toLocalBase(Host))) revert InvalidId();
         return ensureAddr(address(uint160(node)));
+    }
+
+    /// @notice Validate a local host ID with deployed bytecode and return its address.
+    /// @dev Uses hostAddr's host-type, chain, and nonzero-address checks, then
+    /// requires a zero selector lane for a canonical host ID.
+    /// Rejects EOAs, future deployment addresses, contracts under construction, and
+    /// precompiles without bytecode with InvalidContract. Does not validate an interface.
+    /// @param node Local host ID whose contract must already be deployed.
+    /// @return target Validated host contract address.
+    function ensureContract(uint node) internal view returns (address target) {
+        target = hostAddr(node);
+        if (uint32(node >> 160) != 0) revert InvalidId();
+        if (target.code.length == 0) revert InvalidContract();
     }
 }

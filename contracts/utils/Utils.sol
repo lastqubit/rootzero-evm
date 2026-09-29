@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {InvalidContract, NotDivisible, ValueOverflow, ZeroAddress} from "./Errors.sol";
+import {NotDivisible, ValueOverflow, ZeroAddress} from "./Errors.sol";
 
 // Basis-points denominator: 10_000 BPS == 100.00%.
 uint16 constant MAX_BPS = 10_000;
@@ -139,14 +139,6 @@ function addrOr(address addr, address or) pure returns (address) {
 function ensureAddr(address addr) pure returns (address) {
     if (addr == address(0)) revert ZeroAddress();
     return addr;
-}
-
-/// @notice Assert that `target` contains deployed bytecode and return it unchanged.
-/// @dev Rejects EOAs, zero and future deployment addresses, contracts currently
-/// under construction, and precompiles whose code length is zero.
-function ensureContract(address target) view returns (address) {
-    if (target.code.length == 0) revert InvalidContract();
-    return target;
 }
 
 /// @notice Convert a signed integer to its 32-byte two's-complement representation.
