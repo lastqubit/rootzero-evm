@@ -8,6 +8,39 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.48.0
+
+- Add `Cursors.take` for raw byte consumption, move raw hashing into `Cursors`
+  with `Blocks.hash` forwarding, and clarify metadata preservation and clean child ranges.
+
+- **Breaking:** Generalize Activity to `(account, subject, value, codes)`,
+  replacing the Spent, Received, Locked, and Unlocked event helpers and exports.
+  Direct asset flows use effect codes with an asset and amount; documented
+  reference schemas use value as a correlation ID for companion details.
+
+- Add `toStringChecked` to Cursors and Blocks for calldata string views with
+  bounds validation, without copying or UTF-8 validation.
+
+- Move command handoff selection and continuation-cursor updates into
+  `invokeCommand`, retaining the local execution fast path.
+
+- Replace pipeline budget-addition assembly with checked Solidity arithmetic,
+  preserving overflow panic and rollback behavior. Refresh explicit gas ceilings
+  against the frozen packed-cursor pipeline for the accepted implementation cost.
+
+- Add the `#entity { uint entity }` block and codec helpers, plus `EntityCodes`
+  and its hook in `queries/Entity.sol`. The query returns current condition codes
+  in input order; zero codes means unknown or no condition reported, distinct
+  from explicitly inactive. Applicable conditions and code packing belong to the hook.
+
+- **Breaking:** Rename the internal admin runner from `runAdminCommand` to `runAdmin`.
+
+- **Breaking:** CALL and RECOVER now carry full-width native `uint value`
+  instead of packed `resources`. Update codecs, schemas, and recovery hooks;
+  calls and recovery funding no longer truncate to the low 128 bits. Block keys
+  and layouts are unchanged, so existing packed-resource inputs must be migrated.
+  DISPATCH retains its destination-specific packed resources.
+
 ## 1.47.0
 
 - Add `runAdminCommand` and use per-item callbacks across admin commands,
