@@ -39,14 +39,14 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
 
     function recover(
         uint handler,
-        uint resources,
+        uint value,
         bytes32 key,
         uint witnessCur,
         Execution memory funds
     ) internal override {
         uint resolvedCur = resolve(key, witnessCur);
         (bytes4 selector, address target) = enforcePort(handler);
-        funds.rawCall(selector, target, uint128(resources), resolvedCur, true);
+        funds.rawCall(selector, target, value, resolvedCur, true);
         emit Resolved(host, key);
     }
 }

@@ -1580,18 +1580,18 @@ describe("Cursors", () => {
       expect(i).to.equal(BigInt(ethers.getBytes(context).length));
     });
 
-    it("unpackRecover consumes handler, resources, key, and witness bytes", async () => {
+    it("unpackRecover consumes handler, value, key, and witness bytes", async () => {
       const handler = 42n;
       const key = ethers.zeroPadValue("0x1234", 32);
       const account = encodeUserAccount("0x12");
       const state = encodeBalanceBlock(asset, amount);
       const input = encodeAmountBlock(asset, 7n);
       const witness = encodeContextBlock(account, state, input);
-      const resources = 55n;
-      const recovery = encodeRecoverBlock(handler, resources, key, witness);
-      const [outHandler, outResources, outKey, outWitness, i] = await helper.testUnpackRecover(recovery);
+      const value = (1n << 200n) | 55n;
+      const recovery = encodeRecoverBlock(handler, value, key, witness);
+      const [outHandler, outValue, outKey, outWitness, i] = await helper.testUnpackRecover(recovery);
       expect(outHandler).to.equal(handler);
-      expect(outResources).to.equal(resources);
+      expect(outValue).to.equal(value);
       expect(outKey).to.equal(key);
       expect(outWitness).to.equal(witness);
       expect(i).to.equal(BigInt(ethers.getBytes(recovery).length));

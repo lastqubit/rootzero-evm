@@ -9,9 +9,8 @@ using Executions for Execution;
 
 /// @title ExecutePayable
 /// @notice Admin command that forwards raw calldata to one or more target nodes.
-/// Each CALL block specifies a target node ID, opaque packed resources, and raw
-/// calldata payload. Packed resources are converted to plain native value only
-/// through `useResourceValue`.
+/// Each CALL block specifies a target node ID, full-width native value, and raw
+/// calldata payload. The shared execution budget funds each call.
 /// Only callable by the admin account.
 /// Unspent top-level `msg.value` is returned as native budget credit.
 abstract contract ExecutePayable is AdminBase {
@@ -66,7 +65,7 @@ abstract contract ExecutePayable is AdminBase {
     }
 
     function executePayableOne(Execution memory exec) private {
-        (uint target, uint resources, uint dataCur) = exec.unpackCall();
-        callTarget(target, exec.useResourceValue(resources), dataCur);
+        (uint target, uint value, uint dataCur) = exec.unpackCall();
+        callTarget(target, exec.useValue(value), dataCur);
     }
 }

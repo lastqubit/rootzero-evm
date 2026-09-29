@@ -719,18 +719,18 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint target,
-        uint resources,
+        uint value,
         uint payloadCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint payloadSize = length(payloadCur);
         uint size = 72 + payloadSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Call, size - 8);
         }
         abs = write32(abs, bytes32(target));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         copy(abs, uint32(payloadCur), payloadSize);
     }
 
@@ -741,18 +741,18 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint target,
-        uint resources,
+        uint value,
         bytes memory payload
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint payloadSize = payload.length;
         uint size = 80 + payloadSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Call, size - 8);
         }
         abs = write32(abs, bytes32(target));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         wrap(abs, Keys.Bytes, payload, payloadSize);
     }
 
@@ -763,18 +763,18 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint target,
-        uint resources,
+        uint value,
         uint payloadCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint payloadSize = length(payloadCur);
         uint size = 80 + payloadSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Call, size - 8);
         }
         abs = write32(abs, bytes32(target));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         wrap(abs, Keys.Bytes, uint32(payloadCur), payloadSize);
     }
 
@@ -911,19 +911,19 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         uint witnessCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint witnessSize = length(witnessCur);
         uint size = 104 + witnessSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Recover, size - 8);
         }
         abs = write32(abs, bytes32(handler));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         abs = write32(abs, recoverykey);
         copy(abs, uint32(witnessCur), witnessSize);
     }
@@ -935,19 +935,19 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         bytes memory witness
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint witnessSize = witness.length;
         uint size = 112 + witnessSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Recover, size - 8);
         }
         abs = write32(abs, bytes32(handler));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         abs = write32(abs, recoverykey);
         wrap(abs, Keys.Bytes, witness, witnessSize);
     }
@@ -959,19 +959,19 @@ library Encoder {
         uint cur,
         bytes memory dst,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         uint witnessCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
+    ) internal pure returns (bytes memory output, uint nextCur) {
         uint witnessSize = length(witnessCur);
         uint size = 112 + witnessSize;
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
+        (output, abs, nextCur) = reserve(cur, dst, size);
         unchecked {
             abs = writeHeader(abs, Keys.Recover, size - 8);
         }
         abs = write32(abs, bytes32(handler));
-        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, bytes32(value));
         abs = write32(abs, recoverykey);
         wrap(abs, Keys.Bytes, uint32(witnessCur), witnessSize);
     }

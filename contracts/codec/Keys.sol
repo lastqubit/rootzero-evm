@@ -71,11 +71,11 @@ library Keys {
     bytes4 constant Relay = bytes4(keccak256("#relay"));
     /// @dev Command context transport - (bytes32 account, #bytes as state, #bytes as input)
     bytes4 constant Context = bytes4(keccak256("#context"));
-    /// @dev Recoverable witness - (uint handler, uint resources, bytes32 key, #bytes as witness)
+    /// @dev Recoverable witness - (uint handler, uint value, bytes32 key, #bytes as witness)
     bytes4 constant Recover = bytes4(keccak256("#recover"));
     /// @dev Portal encoded payload dispatch - (uint portal, uint resources, #bytes as payload)
     bytes4 constant Dispatch = bytes4(keccak256("#dispatch"));
-    /// @dev Raw external call - (uint target, uint resources, #bytes as payload)
+    /// @dev Raw external call - (uint target, uint value, #bytes as payload)
     bytes4 constant Call = bytes4(keccak256("#call"));
     /// @dev Asset descriptor without amount - (bytes32 asset)
     bytes4 constant Asset = bytes4(keccak256("#asset"));

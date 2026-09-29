@@ -1363,13 +1363,13 @@ library Blocks {
     /// @notice Decode CALL and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackCall(uint cur) internal pure returns (uint target, uint resources, uint payloadCur, uint nextCur) {
+    function unpackCall(uint cur) internal pure returns (uint target, uint value, uint payloadCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Call));
             abs += 8;
             target = uint(read32(abs));
-            resources = uint(read32(abs + 32));
+            value = uint(read32(abs + 32));
             payloadCur = tail(abs + 64, uint32(nextCur), Keys.Bytes);
         }
     }
@@ -1391,13 +1391,13 @@ library Blocks {
     /// @notice Decode RECOVER and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackRecover(uint cur) internal pure returns (uint handler, uint resources, bytes32 key, uint witnessCur, uint nextCur) {
+    function unpackRecover(uint cur) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Recover));
             abs += 8;
             handler = uint(read32(abs));
-            resources = uint(read32(abs + 32));
+            value = uint(read32(abs + 32));
             key = read32(abs + 64);
             witnessCur = tail(abs + 96, uint32(nextCur), Keys.Bytes);
         }

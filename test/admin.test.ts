@@ -379,6 +379,17 @@ describe("Admin Commands", () => {
   });
 
   describe("executePayable", () => {
+    it("checks full-width CALL value instead of extracting a resource lane", async () => {
+      const target = await deploy("TestExecuteTarget");
+      const targetId = await hostId(await target.getAddress());
+      const data = target.interface.encodeFunctionData("ping", [1n, "0xab"]);
+      for (const value of [1n << 128n, (7n << 128n) | 13n, ethers.MaxUint256]) {
+        const input = encodeCallBlock(targetId, value, data);
+        await expect(callAs(0, "executePayable", adminCtx(input), { value: 13n }))
+          .to.be.revertedWithCustomError(host, "InsufficientValue");
+      }
+    });
+
     it("reverts AccessDenied for non-admin account", async () => {
       const fakeAdmin = ethers.zeroPadValue("0x07", 32);
       const input = encodeCallBlock(0n, 0n, "0x");

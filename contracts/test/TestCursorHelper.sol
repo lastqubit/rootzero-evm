@@ -657,11 +657,11 @@ contract TestCursorHelper {
     function testUnpackRecover(bytes calldata source)
         external
         pure
-        returns (uint handler, uint resources, bytes32 key, bytes calldata witness, uint i)
+        returns (uint handler, uint value, bytes32 key, bytes calldata witness, uint i)
     {
         uint cur = Cursors.wrap(source);
         uint witnessCur;
-        (handler, resources, key, witnessCur, cur) = Blocks.unpackRecover(cur);
+        (handler, value, key, witnessCur, cur) = Blocks.unpackRecover(cur);
         witness = Blocks.toBytes(witnessCur);
         i = relativePosition(cur, source);
     }

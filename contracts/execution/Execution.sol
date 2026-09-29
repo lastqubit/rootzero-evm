@@ -809,8 +809,8 @@ library Executions {
     /// @notice Decode CALL and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
-    function unpackCall(Execution memory exec) internal pure returns (uint target, uint resources, uint payloadCur) {
-        (target, resources, payloadCur, exec.input) = exec.input.unpackCall();
+    function unpackCall(Execution memory exec) internal pure returns (uint target, uint value, uint payloadCur) {
+        (target, value, payloadCur, exec.input) = exec.input.unpackCall();
     }
 
     /// @notice Decode DISPATCH and retain dynamic payloads as calldata cursors.
@@ -827,8 +827,8 @@ library Executions {
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
     function unpackRecover(
         Execution memory exec
-    ) internal pure returns (uint handler, uint resources, bytes32 key, uint witnessCur) {
-        (handler, resources, key, witnessCur, exec.input) = exec.input.unpackRecover();
+    ) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur) {
+        (handler, value, key, witnessCur, exec.input) = exec.input.unpackRecover();
     }
 
     // -------------------------------------------------------------------------
@@ -1140,10 +1140,10 @@ library Executions {
     /// @notice Append a CALL block to execution output.
     /// @param exec Execution receiving the block.
     /// @param target Call target to encode.
-    /// @param resources Packed resources to encode.
+    /// @param value Full-width native value to encode.
     /// @param payload Call payload to encode.
-    function outputCall(Execution memory exec, uint target, uint resources, bytes memory payload) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, resources, payload);
+    function outputCall(Execution memory exec, uint target, uint value, bytes memory payload) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, value, payload);
     }
 
     /// @notice Append a RELAY block to execution output.
@@ -1180,20 +1180,20 @@ library Executions {
     /// @notice Append a RECOVER block to execution output.
     /// @param exec Execution receiving the block.
     /// @param handler Recovery handler to encode.
-    /// @param resources Packed resources to encode.
+    /// @param value Full-width native value to encode.
     /// @param recoverykey Recovery key to encode.
     /// @param witness Recovery witness to encode.
     function outputRecover(
         Execution memory exec,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         bytes memory witness
     ) internal pure {
         (exec.buffer, exec.output) = exec.output.writeRecoverWrap(
             exec.buffer,
             handler,
-            resources,
+            value,
             recoverykey,
             witness
         );
@@ -1251,8 +1251,8 @@ library Executions {
 
     /// @notice Append CALL output using complete validated BYTES child blocks.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
-    function outputCall(Execution memory exec, uint target, uint resources, uint payloadCur) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeCall(exec.buffer, target, resources, payloadCur);
+    function outputCall(Execution memory exec, uint target, uint value, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCall(exec.buffer, target, value, payloadCur);
     }
 
     /// @notice Append DISPATCH output using complete validated BYTES child blocks.
@@ -1278,11 +1278,11 @@ library Executions {
     function outputRecover(
         Execution memory exec,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         uint witnessCur
     ) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeRecover(exec.buffer, handler, resources, recoverykey, witnessCur);
+        (exec.buffer, exec.output) = exec.output.writeRecover(exec.buffer, handler, value, recoverykey, witnessCur);
     }
 
     /// @notice Append LABEL from a complete validated STRING block cursor.
@@ -1330,8 +1330,8 @@ library Executions {
 
     /// @notice Append a CALL block to execution output by wrapping a validated payload cursor in BYTES.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
-    function outputCallWrap(Execution memory exec, uint target, uint resources, uint payloadCur) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, resources, payloadCur);
+    function outputCallWrap(Execution memory exec, uint target, uint value, uint payloadCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, value, payloadCur);
     }
 
     /// @notice Append a DISPATCH block to execution output by wrapping a validated payload cursor in BYTES.
@@ -1357,14 +1357,14 @@ library Executions {
     function outputRecoverWrap(
         Execution memory exec,
         uint handler,
-        uint resources,
+        uint value,
         bytes32 recoverykey,
         uint witnessCur
     ) internal pure {
         (exec.buffer, exec.output) = exec.output.writeRecoverWrap(
             exec.buffer,
             handler,
-            resources,
+            value,
             recoverykey,
             witnessCur
         );

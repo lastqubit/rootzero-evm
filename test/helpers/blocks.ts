@@ -250,8 +250,8 @@ export function encodeRelayInputBlock(portal: bigint, resources: bigint): string
   return encodeBlock(localKey(3), ethers.concat([pad32(portal), pad32(resources)]));
 }
 
-export function encodeRecoverBlock(handler: bigint, resources: bigint, key: string, witness: string): string {
-  return encodeBlock(Keys.Recover, ethers.concat([pad32(handler), pad32(resources), pad32(key), encodeBytesBlock(witness)]));
+export function encodeRecoverBlock(handler: bigint, value: bigint, key: string, witness: string): string {
+  return encodeBlock(Keys.Recover, ethers.concat([pad32(handler), pad32(value), pad32(key), encodeBytesBlock(witness)]));
 }
 
 export function encodeRelayBlock(input: string, steps: string): string {

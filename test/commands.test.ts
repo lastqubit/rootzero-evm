@@ -1418,13 +1418,13 @@ describe("Commands", () => {
         .withArgs(await cmd("recoverPayable"), encodeLabelBlock(ethers.ZeroHash, "recoverPayable"));
     });
 
-    it("passes full recovery resources and the shared value budget to the hook", async () => {
+    it("passes recovery value and the shared budget to the hook", async () => {
       const key = ethers.zeroPadValue("0xbeef", 32);
       const handler = 99n;
-      const resources = (7n << 128n) | 13n;
+      const value = 13n;
       const step = encodeStepBlock(0n, 0n, "0x1234");
       const witness = encodeContextBlock(userAccount, "0x", step);
-      const input = encodeRecoverBlock(handler, resources, key, witness);
+      const input = encodeRecoverBlock(handler, value, key, witness);
 
       const [result, transactions] = await host.recoverPayable.staticCall(...ctx({ input: input }), { value: 13n });
       expect(result).to.equal("0x");
@@ -1432,7 +1432,26 @@ describe("Commands", () => {
 
       const tx = await callAs(0, "recoverPayable", ctx({ input: input }), { value: 13n });
       await expect(tx).to.emit(host, "RecoverCalled")
-        .withArgs(handler, resources, key, witness, 13n);
+        .withArgs(handler, value, key, witness, 13n);
+    });
+
+    it("checks the full recovery value without truncating upper bits", async () => {
+      for (const value of [1n << 128n, (7n << 128n) | 13n, ethers.MaxUint256]) {
+        const input = encodeRecoverBlock(99n, value, ethers.ZeroHash, "0x");
+        await expect(callAs(0, "recoverPayable", ctx({ input }), { value: 13n }))
+          .to.be.revertedWithCustomError(host, "InsufficientValue");
+      }
+    });
+
+    it("shares recovery funding across items and returns only the remainder", async () => {
+      const input = concat(
+        encodeRecoverBlock(99n, 3n, ethers.ZeroHash, "0x"),
+        encodeRecoverBlock(99n, 5n, ethers.ZeroHash, "0x"),
+      );
+      expect(await host.recoverPayable.staticCall(...ctx({ input }), { value: 10n }))
+        .to.deep.equal(["0x", 2n]);
+      await expect(callAs(0, "recoverPayable", ctx({ input }), { value: 7n }))
+        .to.be.revertedWithCustomError(host, "InsufficientValue");
     });
 
     it("returns unspent command value after recovery as credit", async () => {

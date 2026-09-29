@@ -11,14 +11,14 @@ using Blocks for uint;
 abstract contract RecoverPayableHook {
     /// @notice Override to recover a witness through `handler`.
     /// @param handler Port that should attempt recovery.
-    /// @param resources Opaque packed chain-specific resources, not plain native
-    /// value. EVM handlers extract the low 128-bit value lane with `useResourceValue`.
+    /// @param value Full-width native value assigned to the handler call.
+    /// Debit it from funds with useValue or rawCall; do not truncate it to a resource lane.
     /// @param key Recovery lookup key.
     /// @param witnessCur Bounded calldata cursor over the witness payload used for recovery.
     /// @param funds Shared execution containing the source value budget.
     function recover(
         uint handler,
-        uint resources,
+        uint value,
         bytes32 key,
         uint witnessCur,
         Execution memory funds
@@ -46,7 +46,7 @@ abstract contract RecoverPayable is CommandBase, RecoverPayableHook {
     }
 
     function recoverPayableOne(Execution memory exec) private {
-        (uint handler, uint resources, bytes32 key, uint witnessCur) = exec.unpackRecover();
-        recover(handler, resources, key, witnessCur, exec);
+        (uint handler, uint value, bytes32 key, uint witnessCur) = exec.unpackRecover();
+        recover(handler, value, key, witnessCur, exec);
     }
 }

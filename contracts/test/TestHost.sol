@@ -73,7 +73,7 @@ contract TestHost is
     event ProvisionCalled(uint host_, bytes32 account, bytes32 asset, uint amount);
     event ProvisionPayableCalled(uint host_, bytes32 account, bytes32 asset, uint amount, uint remaining);
     event RelayCalled(uint portal, uint resources, bytes32 account, bytes context);
-    event RecoverCalled(uint handler, uint resources, bytes32 key, bytes witness, uint value);
+    event RecoverCalled(uint handler, uint value, bytes32 key, bytes witness, uint spent);
     event RealizeCalled(bytes32 account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty);
     event SettleCalled(
         bytes32 account,
@@ -212,12 +212,12 @@ contract TestHost is
 
     function recover(
         uint handler,
-        uint resources,
+        uint value,
         bytes32 key,
         uint witnessCur,
         Execution memory funds
     ) internal override {
-        emit RecoverCalled(handler, resources, key, Blocks.toBytes(witnessCur), funds.useResourceValue(resources));
+        emit RecoverCalled(handler, value, key, Blocks.toBytes(witnessCur), funds.useValue(value));
     }
 
     function allowAsset(bytes32 asset) internal override {

@@ -39,8 +39,8 @@ pragma solidity ^0.8.33;
 //   values. A portal adapter interprets them for the destination runtime. EVM
 //   resources use the low 128 bits as native value, extracted explicitly with
 //   `useResourceValue` before spending.
-// - STEP encodes native `value` directly as uint; it does not carry a
-//   chain-specific resources word
+// - STEP, CALL, and RECOVER encode full-width native `value` directly as uint.
+//   DISPATCH alone carries a chain-specific resources word in the standard catalog.
 // - dotted field names and aliases, e.g. `dst.portal` or `#bytes as dst.payload`,
 //   are offchain projection metadata only and do not change runtime encoding
 // - a dotted schema annotation name, e.g. `relay.input`, instead binds that
@@ -157,11 +157,11 @@ library Schemas {
     // Composite payloads
 
     string constant Step = "uint cmd, uint value, #bytes as input";
-    string constant Call = "uint target, uint resources, #bytes as payload";
+    string constant Call = "uint target, uint value, #bytes as payload";
     string constant Relay = "#bytes as input, #bytes as steps";
     string constant Dispatch = "uint portal, uint resources, #bytes as payload";
     string constant Context = "bytes32 account, #bytes as state, #bytes as input";
-    string constant Recover = "uint handler, uint resources, bytes32 key, #bytes as witness";
+    string constant Recover = "uint handler, uint value, bytes32 key, #bytes as witness";
     string constant Annotation = "uint entity, #bytes as data";
 
     // Annotation payloads

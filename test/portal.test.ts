@@ -136,6 +136,10 @@ describe("Portal", () => {
     await portal.testForward(key, witness, 0n);
 
     const input = encodeRecoverBlock(recoveryHandler, 5n, key, witness);
+    // A former packed-resource word must fail without consuming the witness.
+    const oversized = encodeRecoverBlock(recoveryHandler, (1n << 128n) | 5n, key, witness);
+    await expect(recoverPortal(commander, portal, oversized, 5n))
+      .to.be.revertedWithCustomError(portal, "InsufficientValue");
     const callData = portal.interface.encodeFunctionData(
       "recoverPayable", await commandCtx(portal, input),
     );
