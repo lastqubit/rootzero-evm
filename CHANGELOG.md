@@ -8,6 +8,36 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.49.0
+
+- Add `SwapExactIn` and `SwapExactOut`, with host hooks, in `commands/Swap.sol`.
+  Both consume the shared `#swap { bytes32 asset, uint amount, many #asset as hops }`
+  schema and return the hook's complete Position. Add SWAP codec and execution
+  helpers. Exact-in hooks take `(liability, debt, hopsCur)` and exact-out hooks
+  take `(asset, amount, hopsCur)`. Exact-in specifies the input and forward hops;
+  exact-out specifies the desired output and reverse hops toward the input.
+  Both own amount validation, route validation, and settlement; position constraints remain separate.
+
+- **Breaking:** Rename query mixins to `GetAssetCodes` and `GetEntityCodes`,
+  with matching `GetAssetCodesHook` and `GetEntityCodesHook` names. External
+  `assetCodes` and `entityCodes` functions and selectors are unchanged.
+
+- Simplify examples to use named asset, amount, and status unpackers and raw
+  cursor entry helpers while retaining exact child validation.
+
+- **Breaking:** Move the standalone `ensureContract(address)` utility to
+  `Nodes.ensureContract(uint host)`. Validate the local host ID and return its
+  deployed contract address; `hostAddr` still permits EOA hosts.
+
+- Use Solidity checks consistently for block advancement, prefix bounds, and
+  exact-range selection, preserving validation order and custom errors.
+
+- Add `Blocks.takeFixedExact` and `unpackFixedExact`, with Execution wrappers,
+  for an exact-header block occupying the entire source range.
+
+- Complete hook NatSpec for pipeline and access capabilities, separate developer
+  notes from notices, and clarify that Burn ignores the hook's returned quantity.
+
 ## 1.48.0
 
 - Add `Cursors.take` for raw byte consumption, move raw hashing into `Cursors`
