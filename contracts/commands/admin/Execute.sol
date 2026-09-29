@@ -62,7 +62,7 @@ abstract contract ExecutePayable is AdminBase {
     function executePayable(
         bytes calldata context
     ) external payable returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, executePayableOne);
+        return runAdmin(context, descriptor, executePayableOne);
     }
 
     function executePayableOne(Execution memory exec) private {

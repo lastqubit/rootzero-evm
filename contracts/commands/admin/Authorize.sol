@@ -31,7 +31,7 @@ abstract contract Authorize is AdminBase {
     function authorize(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, authorizeOne);
+        return runAdmin(context, descriptor, authorizeOne);
     }
 
     function authorizeOne(Execution memory exec) private {

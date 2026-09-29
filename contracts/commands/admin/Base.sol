@@ -27,7 +27,7 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     /// @param process Internal callback that consumes and processes one batch item.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
-    function runAdminCommand(
+    function runAdmin(
         bytes calldata context,
         uint descriptor,
         function(Execution memory) internal process

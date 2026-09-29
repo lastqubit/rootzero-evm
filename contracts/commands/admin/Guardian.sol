@@ -23,7 +23,7 @@ abstract contract Appoint is AdminBase, GuardianAccess {
     function appoint(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, appointOne);
+        return runAdmin(context, descriptor, appointOne);
     }
 
     function appointOne(Execution memory exec) private {
@@ -50,7 +50,7 @@ abstract contract Dismiss is AdminBase, GuardianAccess {
     function dismiss(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, dismissOne);
+        return runAdmin(context, descriptor, dismissOne);
     }
 
     function dismissOne(Execution memory exec) private {

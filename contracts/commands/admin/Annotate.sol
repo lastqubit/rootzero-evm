@@ -24,7 +24,7 @@ abstract contract Annotate is AdminBase {
     function annotate(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, annotateOne);
+        return runAdmin(context, descriptor, annotateOne);
     }
 
     function annotateOne(Execution memory exec) private {

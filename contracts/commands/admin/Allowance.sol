@@ -33,7 +33,7 @@ abstract contract Allowance is AdminBase, AllowanceHook {
     function allowance(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdminCommand(context, descriptor, allowanceOne);
+        return runAdmin(context, descriptor, allowanceOne);
     }
 
     function allowanceOne(Execution memory exec) private {
