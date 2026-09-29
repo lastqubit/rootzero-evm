@@ -1278,6 +1278,20 @@ library Blocks {
 
     // Composite blocks: fixed fields followed by validated child cursors.
 
+    /// @notice Decode SWAP and return its LIST payload as a clean hops cursor.
+    /// @dev Validates parent containment and the exact final LIST child. Does not validate
+    /// hop contents, route semantics, or amount; hook implementations enforce those requirements.
+    function unpackSwap(uint cur) internal pure returns (bytes32 asset, uint amount, uint hopsCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Swap));
+            abs += 8;
+            hopsCur = tail(abs + 64, uint32(nextCur), Keys.List);
+            asset = read32(abs);
+            amount = uint(read32(abs + 32));
+        }
+    }
+
     /// @notice Decode RELAY's input and continuation BYTES children.
     /// @dev Validates the parent once. The final child proves both children fit
     /// and consume the parent exactly; malformed children revert InvalidBlock.

@@ -65,6 +65,8 @@ library Keys {
 
     // Composite and annotation blocks
 
+    /// @dev Swap route - (bytes32 asset, uint amount, many #asset as hops)
+    bytes4 constant Swap = bytes4(keccak256("#swap"));
     /// @dev Sub-command invocation - (uint cmd, uint value, #bytes as input)
     bytes4 constant Step = bytes4(keccak256("#step"));
     /// @dev Pipeline handoff envelope - (#bytes as input, #bytes as steps)

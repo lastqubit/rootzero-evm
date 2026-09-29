@@ -71,6 +71,7 @@ export const Keys = {
   Entity: blockKey("#entity"),
   Asset: blockKey("#asset"),
   Step: blockKey("#step"),
+  Swap: blockKey("#swap"),
   Call: blockKey("#call"),
   Context: blockKey("#context"),
   Recover: blockKey("#recover"),
@@ -296,6 +297,10 @@ export function encodeCodesBlock(codes: bigint): string {
 
 export function encodeStatusBlock(code: bigint): string {
   return encodeBlock(Keys.Status, pad32(code));
+}
+
+export function encodeSwapBlock(asset: string, amount: bigint, ...hops: string[]): string {
+  return encodeBlock(Keys.Swap, concat(pad32(asset), pad32(amount), encodeListBlock(...hops.map(encodeAssetBlock))));
 }
 
 export function encodeListBlock(...members: string[]): string {

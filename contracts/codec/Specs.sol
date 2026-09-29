@@ -35,6 +35,8 @@ library Sizes {
     uint constant B160 = Header + 5 * Word;
     /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested BYTES header.
     uint constant Step = 2 * Header + 2 * Word;
+    /// @dev Minimum SWAP size: header + asset + amount + LIST header, before hops.
+    uint constant Swap = 2 * Header + 2 * Word;
     /// @dev STATUS block: 8 header + 32 status code = 40 bytes
     uint constant Status = B32;
     /// @dev CODES block: 8 header + 32 packed identifiers = 40 bytes.
@@ -130,6 +132,7 @@ library Specs {
 
     // Composite and annotation blocks
 
+    uint constant Swap = uint(bytes32(Keys.Swap)) | UnboundedMin72Hint256;
     uint constant Step = uint(bytes32(Keys.Step)) | UnboundedMin72Hint256;
     uint constant Relay = uint(bytes32(Keys.Relay)) | UnboundedMin16Hint256;
     uint constant Context = uint(bytes32(Keys.Context)) | UnboundedMin48Hint512;

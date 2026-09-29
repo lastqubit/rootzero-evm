@@ -28,6 +28,7 @@ import {Realize, RealizeHook} from "./commands/Realize.sol";
 import {Repay} from "./commands/Repay.sol";
 import {RelayPayable, RelayBalancePayable, RelayPayableHook} from "./commands/Relay.sol";
 import {Settle, SettlePayable, SettlePayableHook, ExecuteSettle} from "./commands/Settle.sol";
+import {SwapExactIn, SwapExactInHook, SwapExactOut, SwapExactOutHook} from "./commands/Swap.sol";
 import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";
 
 // Admin commands

@@ -1153,6 +1153,7 @@ position             bytes32 asset, uint amount, bytes32 liability, uint debt, b
 transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
 step                 uint cmd, uint value, #bytes as input
+swap                 bytes32 asset, uint amount, many #asset as hops
 call                 uint target, uint value, #bytes as payload
 relay                #bytes as input, #bytes as steps
 dispatch             uint portal, uint resources, #bytes as payload
@@ -1165,6 +1166,16 @@ groups               #string as description
 label                bytes32 namespace, #string as name
 schema               uint spec, #string as body
 ```
+
+`#swap` contains an asset and amount followed by a LIST of ASSET blocks.
+`swapExactIn` interprets the fixed fields as the input liability and exact debt,
+with hops in forward order ending at the output asset. `swapExactOut` interprets
+them as the desired output asset and amount, with hops in reverse order ending
+at the input asset. Hops excludes the asset named in the fixed fields: A ? B ? C
+is encoded as A with [B, C] for exact-in, or C with [B, A] for exact-out.
+The codec validates the outer
+container and final LIST framing; hooks validate amounts and route contents.
+Each hook returns a complete Position for subsequent position constraints.
 
 `#codes` carries one packed word using the event-code convention: up to eight
 nonzero uint32 IDs, lowest slot first, followed by zero padding. Zero represents

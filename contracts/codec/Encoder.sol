@@ -713,6 +713,50 @@ library Encoder {
         wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
     }
 
+    /// @notice Append SWAP by copying a complete validated LIST child, including its header.
+    /// @dev Inherits reserve/copy requirements. Does not revalidate hops or route semantics.
+    function writeSwap(uint cur, bytes memory dst, bytes32 asset, uint amount, uint hopsCur)
+        internal pure returns (bytes memory value, uint nextCur)
+    {
+        uint size = 72 + length(hopsCur);
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, size);
+        abs = writeHeader(abs, Keys.Swap, size - 8);
+        abs = write32(abs, asset);
+        abs = write32(abs, bytes32(amount));
+        copy(abs, uint32(hopsCur), length(hopsCur));
+    }
+
+    /// @notice Append SWAP, wrapping memory ASSET blocks in a LIST child.
+    /// @dev Inherits reserve/copy requirements; does not validate hops or route semantics.
+    function writeSwapWrap(uint cur, bytes memory dst, bytes32 asset, uint amount, bytes memory hops)
+        internal pure returns (bytes memory value, uint nextCur)
+    {
+        uint size = 80 + hops.length;
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, size);
+        abs = writeHeader(abs, Keys.Swap, size - 8);
+        abs = write32(abs, asset);
+        abs = write32(abs, bytes32(amount));
+        wrap(abs, Keys.List, hops, hops.length);
+    }
+
+    /// @notice Append SWAP, wrapping a validated ASSET stream cursor in a LIST child.
+    /// @dev Sources exclude the LIST header; inherits reserve/copy requirements.
+    /// Does not advance the source or revalidate hops or route semantics.
+    function writeSwapWrap(uint cur, bytes memory dst, bytes32 asset, uint amount, uint hopsCur)
+        internal pure returns (bytes memory value, uint nextCur)
+    {
+        uint hopsSize = length(hopsCur);
+        uint size = 80 + hopsSize;
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, size);
+        abs = writeHeader(abs, Keys.Swap, size - 8);
+        abs = write32(abs, asset);
+        abs = write32(abs, bytes32(amount));
+        wrap(abs, Keys.List, uint32(hopsCur), hopsSize);
+    }
+
     /// @notice Append CALL by copying complete validated calldata BYTES children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeCall(

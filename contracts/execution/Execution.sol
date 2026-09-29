@@ -820,6 +820,12 @@ library Executions {
         (cmd, value, inputCur, exec.input) = exec.input.unpackStep();
     }
 
+    /// @notice Consume SWAP input and return its fixed fields and LIST payload cursor.
+    /// @dev Validates structural encoding; the caller validates hop blocks and route semantics.
+    function unpackSwap(Execution memory exec) internal pure returns (bytes32 asset, uint amount, uint hopsCur) {
+        (asset, amount, hopsCur, exec.input) = exec.input.unpackSwap();
+    }
+
     /// @notice Decode CALL and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
@@ -1149,6 +1155,21 @@ library Executions {
     /// @param input Command input to encode.
     function outputStep(Execution memory exec, uint cmd, uint value, bytes memory input) internal pure {
         (exec.buffer, exec.output) = exec.output.writeStepWrap(exec.buffer, cmd, value, input);
+    }
+
+    /// @notice Append SWAP output, wrapping memory ASSET blocks in LIST.
+    function outputSwap(Execution memory exec, bytes32 asset, uint amount, bytes memory hops) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeSwapWrap(exec.buffer, asset, amount, hops);
+    }
+
+    /// @notice Append SWAP output from a complete validated LIST child cursor.
+    function outputSwap(Execution memory exec, bytes32 asset, uint amount, uint hopsCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeSwap(exec.buffer, asset, amount, hopsCur);
+    }
+
+    /// @notice Append SWAP output by wrapping a validated ASSET stream cursor in LIST.
+    function outputSwapWrap(Execution memory exec, bytes32 asset, uint amount, uint hopsCur) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeSwapWrap(exec.buffer, asset, amount, hopsCur);
     }
 
     /// @notice Append a CALL block to execution output.

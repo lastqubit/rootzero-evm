@@ -435,6 +435,20 @@ reduce the fulfilled quantity. When fulfillment produces custody, the amount
 that actually reaches custody must equal the debt. Partial fulfillment requires
 preserving the unsatisfied remainder in a position rather than consuming it.
 
+`SwapExactIn` and `SwapExactOut` in `commands/Swap.sol` share the input schema
+`bytes32 asset, uint amount, many #asset as hops` and return one POSITION per
+SWAP input. For `swapExactIn`, `asset` and `amount` identify the input liability
+and exact debt; hops run forward toward the output asset. For `swapExactOut`,
+`asset` and `amount` identify the desired output; hops run in reverse toward
+the input asset. Both routes exclude the asset named in the fixed fields.
+For an A ? B ? C swap, exact-in encodes A with hops [B, C], while exact-out
+encodes C with hops [B, A].
+The exact-in hook takes `(liability, debt, hopsCur)`; the exact-out hook takes
+`(asset, amount, hopsCur)`. Both return the complete Position.
+The implementation validates amounts and routes and defines settlement;
+the wrappers decode the SWAP container and preserve the returned Position.
+Use position-constraint commands to check the resulting amounts separately.
+
 The standard `Deposit` mixin shows the canonical shape: open the execution,
 decode its input, call the hook, and write the output run. Execution helpers
 route known state blocks (`#balance`, `#custody`, and `#position`) to

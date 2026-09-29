@@ -156,6 +156,7 @@ library Schemas {
 
     // Composite payloads
 
+    string constant Swap = "bytes32 asset, uint amount, many #asset as hops";
     string constant Step = "uint cmd, uint value, #bytes as input";
     string constant Call = "uint target, uint value, #bytes as payload";
     string constant Relay = "#bytes as input, #bytes as steps";
