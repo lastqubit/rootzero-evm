@@ -64,7 +64,7 @@ describe("sendChainAsset", () => {
 
   it("requires no chain-asset or event-emitter inheritance", async () => {
     expect(host.interface.getFunction("chainAsset")).to.equal(null);
-    expect(host.interface.getEvent("Spent")).to.equal(null);
+    expect(host.interface.getEvent("Activity")).to.equal(null);
     const receipt = await host.deploymentTransaction().wait();
     expect(receipt.logs).to.have.length(0);
   });

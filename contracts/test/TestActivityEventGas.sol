@@ -3,22 +3,22 @@ pragma solidity ^0.8.33;
 
 import {ActivityEvent} from "../events/Activity.sol";
 
-// Identical inputs; measure emission and any packing, excluding call decoding.
+// Identical inputs; compare the previous packed event with the generic event.
+// The previous ABI has no subject field. Measurements exclude call decoding.
 contract PreviousActivityEventGas {
-    event Activity(bytes32 indexed account, uint actions, uint effects, uint id);
+    event Activity(bytes32 indexed account, uint codes, uint id);
 
-    function measure(bytes32 account, uint32 action, uint32 effect, uint id) external returns (uint used) {
+    function measure(bytes32 account, bytes32 subject, uint codes, uint value) external returns (uint used) {
         uint initial = gasleft();
-        emit Activity(account, action, effect, id);
+        emit Activity(account, codes, value);
         used = initial - gasleft();
     }
 }
 
 contract TestActivityEventGas is ActivityEvent {
-    function measure(bytes32 account, uint32 action, uint32 effect, uint id) external returns (uint used) {
+    function measure(bytes32 account, bytes32 subject, uint codes, uint value) external returns (uint used) {
         uint initial = gasleft();
-        uint codes = action == 0 ? uint(effect) : uint(action) | (uint(effect) << 32);
-        emit Activity(account, codes, id);
+        emit Activity(account, subject, value, codes);
         used = initial - gasleft();
     }
 }

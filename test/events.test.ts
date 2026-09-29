@@ -103,17 +103,32 @@ describe("Route event", () => {
 });
 
 describe("Activity event", () => {
+  it("records spend, receive, lock, and unlock flows through explicit effect codes", async () => {
+    const emitter = await deploy("TestActivityEvent");
+    const account = ethers.toBeHex(1, 32);
+    const asset = ethers.toBeHex(2, 32);
+    for (const effect of [0x80000000n, 0x80000001n, 0x80000002n, 0x80000003n]) {
+      for (const amount of [0n, 100n, ethers.MaxUint256]) {
+        await expect(emitter.emitActivity(account, asset, amount, effect))
+          .to.emit(emitter, "Activity").withArgs(account, asset, amount, effect);
+      }
+    }
+  });
+
   it("publishes its ABI alongside annotations and indexes the account", async () => {
     const emitter = await deploy("TestActivityEvent");
-    const signature = "event Activity(bytes32 indexed account, uint codes, uint id)";
+    const signature = "event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)";
     await expect(emitter.deploymentTransaction())
       .to.emit(emitter, "EventAbi").withArgs(signature);
 
     const account = ethers.zeroPadValue("0x01", 32);
+    const subject = ethers.toBeHex(ethers.MaxUint256, 32);
     const decoder = new ethers.Interface([signature]);
-    expect(emitter.interface.getEvent("Action")).to.equal(null);
+    for (const removed of ["Action", "Spent", "Received", "Locked", "Unlocked"]) {
+      expect(emitter.interface.getEvent(removed)).to.equal(null);
+    }
     const pack = (ids: bigint[]) => ids.reduce((word, id, i) => word | (id << BigInt(32 * i)), 0n);
-    for (const [codes, id] of [
+    for (const [codes, value] of [
       [0n, 0n],
       [34n, 0n],
       [0x80000002n, 0n],
@@ -121,12 +136,12 @@ describe("Activity event", () => {
       [pack([1n, 0x7fffffffn, 0x80000000n, 4n, 0x80000001n, 6n, 7n, 0xffffffffn]), ethers.MaxUint256],
       [ethers.MaxUint256, 0n],
     ]) {
-      const receipt = await (await emitter.emitActivity(account, codes, id)).wait();
+      const receipt = await (await emitter.emitActivity(account, subject, value, codes)).wait();
       expect(receipt.logs).to.have.length(1);
       const log = receipt.logs[0];
       expect(log.topics).to.deep.equal([decoder.getEvent("Activity")!.topicHash, account]);
-      expect(ethers.dataLength(log.data)).to.equal(64);
-      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([account, codes, id]);
+      expect(ethers.dataLength(log.data)).to.equal(96);
+      expect(Array.from(decoder.parseLog(log)!.args)).to.deep.equal([account, subject, value, codes]);
     }
   });
 
@@ -154,7 +169,7 @@ describe("Activity event", () => {
       [account, 80n | (81n << 32n) | (0x80000000n << 64n) | (0x80000001n << 96n) |
         (0x80000002n << 128n) | (0x80000003n << 160n) |
         (0xa0000001n << 192n) | (0xa0000000n << 224n), 1n],
-    ]);
+    ].map(([account, codes, value]) => [account, ethers.ZeroHash, value, codes]));
   });
 });
 
@@ -235,14 +250,14 @@ describe("Shared event codes", () => {
   const cases = [0n, 80n, 80n | (0x80000001n << 32n),
     80n | (80n << 32n), Array.from({ length: 8 }, (_, i) => 1n << BigInt(i * 32))
       .reduce((codes, entry) => codes | entry, 0n)];
-  for (const name of ["Received", "Spent", "Locked", "Unlocked", "Node", "Guardian"]) {
+  for (const name of ["Activity", "Node", "Guardian"]) {
     it(`${name} publishes its codes ABI and preserves all slots without a context field`, async () => {
       const emitter = await deploy("TestEventCodes");
       const signature = name === "Node"
         ? "event Node(uint indexed host, uint node, uint codes)"
         : name === "Guardian"
           ? "event Guardian(uint indexed host, bytes32 account, uint codes)"
-          : `event ${name}(bytes32 indexed account, bytes32 asset, uint amount, uint codes)`;
+          : `event ${name}(bytes32 indexed account, bytes32 subject, uint value, uint codes)`;
       await expect(emitter.deploymentTransaction()).to.emit(emitter, "EventAbi").withArgs(signature);
       const decoder = new ethers.Interface([signature]);
       const stateEvent = name === "Node" || name === "Guardian";
