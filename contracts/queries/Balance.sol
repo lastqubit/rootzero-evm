@@ -10,7 +10,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that expose account balance queries.
 abstract contract GetBalanceHook {
     /// @notice Resolve one account's balance for one supported asset.
-    /// Concrete implementations define how assets are resolved.
+    /// @dev Concrete implementations define how assets are resolved.
     /// @param account Account identifier carried by the query payload.
     /// @param asset Requested asset identifier.
     /// @return amount Current balance in the asset's native units.

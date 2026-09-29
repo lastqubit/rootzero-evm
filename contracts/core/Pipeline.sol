@@ -13,6 +13,11 @@ abstract contract PipeHook {
     /// @dev stepsCur uses absolute start/end lanes in bits 0-31/32-63. Callers
     /// establish calldata provenance and supply an account satisfying their policy.
     /// Account format is trusted internally. State remains an owned memory buffer.
+    /// @param account Account used for each dispatched command.
+    /// @param state Initial state block stream threaded through the steps.
+    /// @param stepsCur Bounded calldata cursor over the STEP block stream.
+    /// @param budget Native value available to execute the steps, in wei.
+    /// @return remaining Unspent native value for the caller to settle, in wei.
     function pipe(
         bytes32 account,
         bytes memory state,
@@ -32,6 +37,14 @@ abstract contract ExecuteHook {
     /// Input is a structurally validated calldata payload cursor; state and output
     /// remain memory buffers. Account format is trusted from the caller, but command
     /// authorization does not validate account IDs in untrusted command input.
+    /// @param cmd Host-local command node ID to authorize and execute.
+    /// @param account Account supplied to the command.
+    /// @param state State block stream supplied to the command.
+    /// @param inputCur Bounded calldata cursor over command input, excluding the BYTES header.
+    /// @param value Native value assigned to this command, in wei.
+    /// @return handled Whether the hook executed the command instead of delegating it.
+    /// @return output Resulting state block stream; ignored when handled is false.
+    /// @return credit Native value returned to the pipeline budget, in wei; ignored when handled is false.
     function execute(
         uint cmd,
         bytes32 account,

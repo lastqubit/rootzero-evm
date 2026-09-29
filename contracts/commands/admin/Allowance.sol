@@ -7,7 +7,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that configure peer asset allowances.
 abstract contract AllowanceHook {
     /// @notice Apply or revoke one host-scoped allowance.
-    /// Called once per ALLOWANCE block in the input. Implementations decide
+    /// @dev Called once per ALLOWANCE block in the input. Implementations decide
     /// how the allowance is represented, e.g. ERC-20 approval, an internal cap,
     /// or another host-specific authorization record.
     /// @param peer Host node receiving the allowed cap.

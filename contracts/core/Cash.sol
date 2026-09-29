@@ -39,8 +39,8 @@ abstract contract CashinHook {
 /// @notice Hook implemented by hosts that pay chain assets to accounts.
 abstract contract CashoutHook {
     /// @notice Pay an exact chain-asset amount to `account`.
-    /// Called once per chain-asset BALANCE block in state by the cashout command.
-    /// @dev Implementations must revert if the complete amount cannot be paid.
+    /// @dev Called once per chain-asset BALANCE block in state by the cashout command.
+    /// Implementations must revert if the complete amount cannot be paid.
     /// Account format may be trusted under the caller's policy. Hosts still enforce
     /// payout destination requirements, accounting, event emission, and reentrancy protection.
     /// EVM-backed payouts may use sendChainAsset.

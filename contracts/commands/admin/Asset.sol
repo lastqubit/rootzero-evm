@@ -6,16 +6,16 @@ using Executions for Execution;
 
 /// @notice Hook implemented by hosts that allow assets.
 abstract contract AllowAssetHook {
-    /// @dev Override to allow a single asset.
-    /// Called once per ASSET block in the input.
+    /// @notice Allow a single asset.
+    /// @dev Called once per ASSET block in the input.
     /// @param asset Asset identifier.
     function allowAsset(bytes32 asset) internal virtual;
 }
 
 /// @notice Hook implemented by hosts that deny assets.
 abstract contract DenyAssetHook {
-    /// @dev Override to deny a single asset.
-    /// Called once per ASSET block in the input.
+    /// @notice Deny a single asset.
+    /// @dev Called once per ASSET block in the input.
     /// @param asset Asset identifier.
     function denyAsset(bytes32 asset) internal virtual;
 }

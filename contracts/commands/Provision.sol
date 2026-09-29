@@ -7,7 +7,7 @@ using Executions for Execution;
 /// @notice Shared provision hook used by `Provision`.
 abstract contract ProvisionHook {
     /// @notice Override to send or provision a custody value.
-    /// Called once per provisioned asset. Implementations should perform only the
+    /// @dev Called once per provisioned asset. Implementations should perform only the
     /// side effect (e.g. transfer or record); output blocks are written by the caller.
     /// @param account Caller's account identifier.
     /// @param allocation Host-scoped amount to provision.
@@ -17,7 +17,7 @@ abstract contract ProvisionHook {
 /// @notice Shared provision hook used by `ProvisionPayable`.
 abstract contract ProvisionPayableHook {
     /// @notice Override to send or provision a custody value.
-    /// Called once per provisioned asset. Implementations should perform only the
+    /// @dev Called once per provisioned asset. Implementations should perform only the
     /// side effect (e.g. transfer or record); output blocks are written by the caller.
     /// @param account Caller's account identifier.
     /// @param allocation Host-scoped amount to provision.

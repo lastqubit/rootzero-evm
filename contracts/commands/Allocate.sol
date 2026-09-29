@@ -8,7 +8,7 @@ using Executions for Execution;
 /// @notice Shared allocation hook used by `Allocate`.
 abstract contract AllocateHook {
     /// @notice Override to allocate a live balance into custody on a host.
-    /// Called once per paired BALANCE state block and NODE input block.
+    /// @dev Called once per paired BALANCE state block and NODE input block.
     /// Implementations should perform only the custody side effect; output
     /// blocks are written by the caller.
     /// @param account Caller's account identifier.

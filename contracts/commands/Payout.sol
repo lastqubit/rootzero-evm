@@ -11,7 +11,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that pay balances to accounts.
 abstract contract PayoutHook {
     /// @notice Override to pay `amount` from `account` to `to`.
-    /// Called once per paired BALANCE state block and ACCOUNT input block.
+    /// @dev Called once per paired BALANCE state block and ACCOUNT input block.
     /// @param account Source account identifier.
     /// @param to Destination account identifier.
     /// @param asset Asset identifier.

@@ -10,7 +10,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that accept account deposits.
 abstract contract DepositHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// Called once per AMOUNT block. A matching BALANCE block is appended to the
+    /// @dev Called once per AMOUNT block. A matching BALANCE block is appended to the
     /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
@@ -22,7 +22,7 @@ abstract contract DepositHook {
 /// @notice Hook implemented by hosts that accept value-funded deposits.
 abstract contract DepositPayableHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// Called once per AMOUNT block. A matching BALANCE block is appended to the
+    /// @dev Called once per AMOUNT block. A matching BALANCE block is appended to the
     /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.

@@ -9,7 +9,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that withdraw account balances.
 abstract contract WithdrawHook {
     /// @notice Override to send funds to `account`.
-    /// Called once per BALANCE block in state.
+    /// @dev Called once per BALANCE block in state.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
     /// @param amount Amount to deliver.
