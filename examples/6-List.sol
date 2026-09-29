@@ -12,7 +12,6 @@ import {Host} from "../contracts/Core.sol";
 import {CommandBase, Execution, Executions, Specs} from "../contracts/Commands.sol";
 
 import {Blocks} from "../contracts/codec/Blocks.sol";
-import {Headers} from "../contracts/codec/Headers.sol";
 import {Cursors} from "../contracts/utils/Cursors.sol";
 
 using Executions for Execution;
@@ -40,9 +39,9 @@ abstract contract MyCommand is CommandBase {
             uint itemsCur = exec.unpackList(inputSpec);
 
             while (itemsCur.more()) {
-                uint abs;
-                (abs,, itemsCur) = itemsCur.enterFixed(Headers.Asset, 32);
-                emit AssetSeen(batch, Blocks.read32(abs));
+                bytes32 asset;
+                (asset, itemsCur) = itemsCur.unpackAsset();
+                emit AssetSeen(batch, asset);
             }
 
             unchecked {

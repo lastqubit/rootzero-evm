@@ -37,9 +37,8 @@ abstract contract MyCommand is CommandBase {
         (uint abs, uint payloadCur) = exec.enter(inputSpec, 32);
 
         peer = uint(Blocks.read32(abs));
-        uint amountCur = payloadCur.unpackExact(Specs.Amount);
-        asset = Blocks.read32(uint32(amountCur));
-        amount = uint(Blocks.read32(uint32(amountCur) + 32));
+        // The fixed-size outer schema leaves exactly one AMOUNT block.
+        (asset, amount,) = payloadCur.unpackAmount();
     }
 
     function myCommand(

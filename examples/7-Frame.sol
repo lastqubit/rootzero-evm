@@ -45,8 +45,8 @@ abstract contract MyCommand is CommandBase {
         asset = Blocks.read32(abs);
         amount = uint(Blocks.read32(abs + 32));
 
-        uint statusCur = payloadCur.unpackExact(Specs.Status);
-        status = uint(Blocks.read32(uint32(statusCur)));
+        // The fixed-size outer schema leaves exactly one STATUS block.
+        (status,) = payloadCur.unpackStatus();
     }
 
     function myCommand(

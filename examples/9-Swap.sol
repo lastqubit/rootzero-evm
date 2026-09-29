@@ -94,8 +94,8 @@ abstract contract SwapInput is SchemaAnnot {
         context.tickSpacing = int32(uint32(Blocks.read4(abs + 4)));
         context.hook = uint(Blocks.read32(abs + 8));
         (context.hookDataCur, payloadCur) = payloadCur.unpackBytes();
-        uint positionAbs = uint32(payloadCur);
-        payloadCur = Blocks.advance(payloadCur, 128);
+        uint positionAbs;
+        (positionAbs, payloadCur) = Cursors.enter(payloadCur, 128);
         position.asset = Blocks.read32(positionAbs);
         position.amount = uint(Blocks.read32(positionAbs + 32));
         position.liability = Blocks.read32(positionAbs + 64);
