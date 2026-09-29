@@ -348,6 +348,13 @@ library Executions {
         exhaustInput(exec);
     }
 
+    /// @notice Consume the entire input as one exact-header block and return its complete encoding.
+    /// @dev Delegates validation to Blocks; returns a clean child and preserves input metadata.
+    function takeFixedExact(Execution memory exec, uint header) internal pure returns (uint blockCur) {
+        blockCur = exec.input.takeFixedExact(header);
+        exhaustInput(exec);
+    }
+
     /// @notice Validate and consume all remaining input blocks with key.
     /// @dev Empty streams pass. Validates the requested key regardless of descriptor
     /// declarations; close still rejects any source bytes left unread.
@@ -410,6 +417,13 @@ library Executions {
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
     function unpackExact(Execution memory exec, uint spec) internal pure returns (uint payloadCur) {
         payloadCur = exec.input.unpackExact(spec);
+        exhaustInput(exec);
+    }
+
+    /// @notice Consume the entire input as one exact-header block and return its payload.
+    /// @dev Delegates validation to Blocks; returns a clean child and preserves input metadata.
+    function unpackFixedExact(Execution memory exec, uint header) internal pure returns (uint payloadCur) {
+        payloadCur = exec.input.unpackFixedExact(header);
         exhaustInput(exec);
     }
 

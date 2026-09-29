@@ -92,6 +92,21 @@ contract TestCursorTakeExact is TestCursorBlocks {
     }
 }
 
+contract TestCursorFixedExact {
+    function inspect(bytes calldata source, uint start, uint end, uint header, uint metadata, bool payload)
+        external pure returns (uint selected, uint original)
+    {
+        require(start <= source.length && end <= source.length);
+        uint base = Cursors.base(source);
+        original = (base + start) | ((base + end) << 32) | (metadata & ~uint(type(uint64).max));
+        selected = select(original, header, payload);
+    }
+
+    function select(uint cur, uint header, bool payload) public pure returns (uint) {
+        return payload ? Blocks.unpackFixedExact(cur, header) : Blocks.takeFixedExact(cur, header);
+    }
+}
+
 contract TestCursorEntryCandidates is TestCursorBlocks {
     function select(uint cur, uint spec, uint amount, uint8 mode, bool packed) internal pure override returns (uint) {
         if (packed) {

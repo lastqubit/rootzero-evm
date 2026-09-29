@@ -5,7 +5,7 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Keys} from "./Keys.sol";
 import {Headers} from "./Headers.sol";
 import {Position, BalanceConstraints, PositionConstraints} from "../core/Types.sol";
-import {INVALID_BLOCK, OUT_OF_BOUNDS, OutOfBounds, UnexpectedValue, OutOfRange} from "../utils/Errors.sol";
+import {INVALID_BLOCK, InvalidBlock, OutOfBounds, UnexpectedValue, OutOfRange} from "../utils/Errors.sol";
 
 /// @title Blocks
 /// @notice Calldata block helpers with bounded cursors and raw reads.
@@ -458,13 +458,10 @@ library Blocks {
     /// @param size Total bytes to advance, including any header required by the caller.
     /// @return nextCur Advanced source cursor with the original end and metadata.
     function advance(uint cur, uint size) internal pure returns (uint nextCur) {
-        assembly ("memory-safe") {
-            if gt(add(and(cur, 0xffffffff), size), and(shr(32, cur), 0xffffffff)) {
-                mstore(0, OUT_OF_BOUNDS)
-                revert(28, 4)
-            }
+        unchecked {
+            if (uint(uint32(cur)) + size > uint32(cur >> 32)) revert OutOfBounds();
             // Containment proves no carry into the end lane.
-            nextCur := add(cur, size)
+            nextCur = cur + size;
         }
     }
 
@@ -482,13 +479,10 @@ library Blocks {
         unchecked {
             nextCur = advance(cur, 8 + len);
         }
-        assembly ("memory-safe") {
-            if gt(amount, len) {
-                mstore(0, INVALID_BLOCK)
-                revert(28, 4)
-            }
-            abs := add(and(cur, 0xffffffff), 8)
-            payloadCur := or(add(abs, amount), shl(32, and(nextCur, 0xffffffff)))
+        if (amount > len) revert InvalidBlock();
+        unchecked {
+            abs = uint(uint32(cur)) + 8;
+            payloadCur = pack(abs + amount, uint32(nextCur));
         }
     }
 
@@ -661,14 +655,9 @@ library Blocks {
     /// @return payloadCur Clean cursor over the remaining payload; no source remainder is returned.
     function enterExact(uint cur, uint spec, uint amount) internal pure returns (uint abs, uint payloadCur) {
         payloadCur = unpackExact(cur, spec);
-        assembly ("memory-safe") {
-            abs := and(payloadCur, 0xffffffff)
-            if gt(amount, sub(shr(32, payloadCur), abs)) {
-                mstore(0, INVALID_BLOCK)
-                revert(28, 4)
-            }
-            payloadCur := add(payloadCur, amount)
-        }
+        abs = uint32(payloadCur);
+        if (amount > length(payloadCur)) revert InvalidBlock();
+        unchecked { payloadCur += amount; }
     }
 
     /// @notice Select the complete next block, including its eight-byte header.
@@ -748,12 +737,26 @@ library Blocks {
             // Both position and declared length fit uint32; keep the sum full-width.
             endAbs = abs + 8 + expectSpec(abs, spec);
         }
-        assembly ("memory-safe") {
-            if iszero(eq(endAbs, and(shr(32, cur), 0xffffffff))) {
-                mstore(0, INVALID_BLOCK)
-                revert(28, 4)
-            }
+        if (endAbs != uint32(cur >> 32)) revert InvalidBlock();
+        blockCur = pack(abs, endAbs);
+    }
+
+    /// @notice Select an exact-header block occupying the entire supplied range.
+    /// @dev Checks the full header, then end equality, without a separate containment check.
+    /// Header mismatch, truncation, and trailing bytes all revert InvalidBlock.
+    /// Calldata provenance remains the caller's responsibility.
+    /// @param cur Source cursor covering exactly one block, including its header.
+    /// @param header Right-aligned key/length header; nonzero upper bits fail validation.
+    /// @return blockCur Clean cursor including the header; no source remainder is returned.
+    function takeFixedExact(uint cur, uint header) internal pure returns (uint blockCur) {
+        uint abs = uint32(cur);
+        expectHeader(abs, header);
+        uint endAbs;
+        unchecked {
+            // Keep the sum full-width so a large length cannot wrap into the end lane.
+            endAbs = abs + 8 + uint(uint32(header));
         }
+        if (endAbs != uint32(cur >> 32)) revert InvalidBlock();
         blockCur = pack(abs, endAbs);
     }
 
@@ -811,6 +814,17 @@ library Blocks {
     /// @return payloadCur Clean payload cursor excluding the header; no remainder is returned.
     function unpackExact(uint cur, uint spec) internal pure returns (uint payloadCur) {
         unchecked { payloadCur = takeExact(cur, spec) + 8; }
+    }
+
+    /// @notice Select the payload of an exact-header block occupying the entire range.
+    /// @dev Reuses takeFixedExact's header and end-equality checks. The validated header
+    /// fits, so skipping it cannot carry into the end lane. Does not inspect payload contents.
+    /// Header mismatch, truncation, and trailing bytes all revert InvalidBlock.
+    /// @param cur Source cursor covering exactly one block, including its header.
+    /// @param header Right-aligned key/length header; nonzero upper bits fail validation.
+    /// @return payloadCur Clean payload cursor excluding the header; no remainder is returned.
+    function unpackFixedExact(uint cur, uint header) internal pure returns (uint payloadCur) {
+        unchecked { payloadCur = takeFixedExact(cur, header) + 8; }
     }
 
     // Named payload wrappers: delegate validation and advancement to unpack.

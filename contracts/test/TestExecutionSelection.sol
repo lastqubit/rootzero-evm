@@ -29,7 +29,9 @@ contract TestExecutionSelection {
         else if (mode == 9) selected = exec.unpack(spec);
         else if (mode == 10) selected = exec.unpack(key);
         else if (mode == 11) selected = exec.unpackFixed(header);
-        else selected = exec.unpackExact(spec);
+        else if (mode == 12) selected = exec.unpackExact(spec);
+        else if (mode == 13) selected = exec.takeFixedExact(header);
+        else selected = exec.unpackFixedExact(header);
         input = exec.input;
         state = exec.state;
     }
