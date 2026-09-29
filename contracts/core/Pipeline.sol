@@ -82,18 +82,25 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         }
     }
 
-    /// @dev Execute a prepared command and strictly decode (bytes, uint).
-    /// inputCur is its payload cursor. stepsCur is zero for ordinary calls or the
-    /// remaining STEP cursor for handoffs (nonzero even when that range is empty).
+    /// @dev Authorize and invoke a command, strictly decoding (bytes, uint).
+    /// Handoffs receive the remaining STEP stream and exhaust the returned cursor;
+    /// ordinary calls receive only inputCur and preserve the remaining cursor.
     function invokeCommand(
-        bytes4 selector,
-        address target,
-        uint value,
+        uint cmd,
         bytes32 account,
         bytes memory state,
+        uint value,
         uint inputCur,
         uint stepsCur
-    ) private returns (bytes memory output, uint credit) {
+    ) private returns (bytes memory output, uint credit, uint nextCur) {
+        (bytes4 selector, address target) = enforceCommand(cmd);
+        if (uint8(cmd >> 224) & Flags.Handoff != 0) {
+            nextCur = Cursors.exhaust(stepsCur);
+        } else {
+            nextCur = stepsCur;
+            stepsCur = 0;
+        }
+
         assembly ("memory-safe") {
             // Encode selector(bytes): ABI prefix, CONTEXT(account, state, input),
             // then zero padding. The allocation remains temporary until the call.
@@ -199,10 +206,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             (handled, output, credit) = execute(cmd, account, state, inputCur, value);
             if (handled) return (output, credit, cur);
         }
-        (bytes4 selector, address target) = enforceCommand(cmd);
-        bool handoff = uint8(cmd >> 224) & Flags.Handoff != 0;
-        (output, credit) = invokeCommand(selector, target, value, account, state, inputCur, handoff ? cur : 0);
-        nextCur = handoff ? Cursors.exhaust(cur) : cur;
+        return invokeCommand(cmd, account, state, value, inputCur, cur);
     }
 
     /// @notice Execute a STEP block stream through the pipeline.
@@ -219,28 +223,17 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         uint stepsCur,
         uint budget
     ) internal virtual override returns (uint remaining) {
-        uint cur = stepsCur;
-
-        while (Cursors.more(cur)) {
+        while (Cursors.more(stepsCur)) {
             uint cmd;
             uint value;
             uint inputCur;
-            (cmd, value, inputCur, cur) = takeStep(cur);
+            (cmd, value, inputCur, stepsCur) = takeStep(stepsCur);
             if (value > budget) revert InsufficientValue();
             unchecked {
                 budget -= value;
             }
-            (state, value, cur) = run(cmd, account, state, value, inputCur, cur);
-            assembly ("memory-safe") {
-                let total := add(budget, value)
-                if lt(total, budget) {
-                    // Preserve Solidity Panic(0x11), including its ABI encoding.
-                    mstore(0, shl(224, 0x4e487b71))
-                    mstore(4, 0x11)
-                    revert(0, 36)
-                }
-                budget := total
-            }
+            (state, value, stepsCur) = run(cmd, account, state, value, inputCur, stepsCur);
+            budget += value;
         }
 
         if (state.length != 0) revert UnexpectedState();
