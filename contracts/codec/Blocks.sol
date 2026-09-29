@@ -504,13 +504,7 @@ library Blocks {
     /// @param cur Validated calldata cursor over exactly the bytes to hash.
     /// @return digest Keccak-256 digest of the selected range.
     function hash(uint cur) internal pure returns (bytes32 digest) {
-        assembly ("memory-safe") {
-            let abs := and(cur, 0xffffffff)
-            let size := sub(and(shr(32, cur), 0xffffffff), abs)
-            let scratch := mload(0x40)
-            calldatacopy(scratch, abs, size)
-            digest := keccak256(scratch, size)
-        }
+        return Cursors.hash(cur);
     }
 
     /// @notice Expose the cursor's remaining range as bytes in calldata.
@@ -539,6 +533,14 @@ library Blocks {
     /// @return data Calldata string view of the remaining range.
     function toString(uint cur) internal pure returns (string calldata data) {
         return Cursors.toString(cur);
+    }
+
+    /// @notice Validate cursor bounds and expose the remaining range as a calldata string.
+    /// @dev Shares toBytesChecked's bounds checks and OutOfBounds error.
+    /// Performs no UTF-8, block, or schema validation. Ignores metadata;
+    /// neither advances the cursor nor copies or allocates memory.
+    function toStringChecked(uint cur) internal pure returns (string calldata data) {
+        return Cursors.toStringChecked(cur);
     }
 
     // -------------------------------------------------------------------------
@@ -973,8 +975,6 @@ library Blocks {
         node = uint(a);
     }
 
-    /// @notice Decode STATUS and return the advanced source cursor.
-    /// @dev Validates the exact header and containment through unpack32.
     /// @notice Decode ENTITY and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
@@ -986,6 +986,8 @@ library Blocks {
         entity = uint(a);
     }
 
+    /// @notice Decode STATUS and return the advanced source cursor.
+    /// @dev Validates the exact header and containment through unpack32.
     /// @param cur Bounded source cursor at the block header.
     /// @return code Full-width status value.
     /// @return nextCur Advanced source preserving its end and metadata.

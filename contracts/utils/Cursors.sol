@@ -8,7 +8,9 @@ import {InvalidBlock, OutOfBounds, UnexpectedPosition, UnconsumedData, ValueOver
 /// @dev Each cursor uses the following layout:
 /// bits  0-31  current source position
 /// bits 32-63  source exclusive end
-/// bits 64-255 unused; callers supply cursors with zero upper bits.
+/// bits 64-255 caller-defined metadata; ignored when interpreting the range.
+/// Constructors and child slices produce zero metadata. Navigation preserves
+/// the source metadata; conversions and hashing ignore it.
 ///
 /// For memory buffers, positions are relative to the buffer's zero origin, so
 /// the same layout stores the current write offset and logical capacity.
@@ -184,6 +186,31 @@ library Cursors {
         nextCur = advance(cur, amount);
     }
 
+    /// @notice Consume amount raw bytes and return their bounded cursor and the next cursor.
+    /// @dev Requires a valid source cursor. Checks containment only, not calldata provenance
+    /// or block structure. The child has zero metadata; the next cursor preserves the
+    /// source end and metadata. Zero amount yields an empty child without advancing.
+    function take(uint cur, uint amount) internal pure returns (uint sliceCur, uint nextCur) {
+        nextCur = advance(cur, amount);
+        sliceCur = pack(uint32(cur), uint32(nextCur));
+    }
+
+    // Calldata hashing. No block headers or schemas are interpreted.
+
+    /// @notice Compute keccak256 over the cursor's remaining calldata range.
+    /// @dev Requires position <= end <= calldatasize; performs no repeated bounds checks.
+    /// Ignores metadata and does not advance the cursor. Copies to temporary free memory
+    /// without allocating a bytes value or advancing the free-memory pointer.
+    function hash(uint cur) internal pure returns (bytes32 digest) {
+        assembly ("memory-safe") {
+            let abs := and(cur, 0xffffffff)
+            let size := sub(and(shr(32, cur), 0xffffffff), abs)
+            let scratch := mload(0x40)
+            calldatacopy(scratch, abs, size)
+            digest := keccak256(scratch, size)
+        }
+    }
+
     // Calldata conversions. No block headers or schemas are interpreted.
 
     /// @notice Expose a validated cursor as calldata without copying or advancing.
@@ -207,6 +234,14 @@ library Cursors {
     /// @notice Expose a validated cursor as a string without UTF-8 validation or copying.
     function toString(uint cur) internal pure returns (string calldata data) {
         return string(toBytes(cur));
+    }
+
+    /// @notice Validate cursor bounds and expose the range as a calldata string.
+    /// @dev Checks position <= end <= calldatasize, not UTF-8 or block structure.
+    /// Reverts OutOfBounds on invalid bounds; zero yields an empty view.
+    /// Neither copies nor allocates memory, and does not advance the cursor.
+    function toStringChecked(uint cur) internal pure returns (string calldata data) {
+        return string(toBytesChecked(cur));
     }
 
 }

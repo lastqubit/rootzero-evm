@@ -3,6 +3,18 @@ pragma solidity ^0.8.33;
 import {Blocks} from "../codec/Blocks.sol";
 
 contract TestCursorConversions {
+    function checkedString(uint cur) external pure returns (bytes calldata data, uint offset, uint allocated, uint afterCur) {
+        uint beforeMemory;
+        assembly ("memory-safe") { beforeMemory := mload(0x40) }
+        string calldata text = Blocks.toStringChecked(cur);
+        data = bytes(text); // Preserve arbitrary bytes without ABI string decoding.
+        assembly ("memory-safe") {
+            offset := text.offset
+            allocated := sub(mload(0x40), beforeMemory)
+        }
+        afterCur = cur;
+    }
+
     function checked(uint cur) external pure returns (bytes calldata data, uint offset, uint allocated, uint afterCur) {
         uint beforeMemory;
         assembly ("memory-safe") { beforeMemory := mload(0x40) }

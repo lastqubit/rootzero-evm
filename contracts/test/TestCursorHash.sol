@@ -38,6 +38,12 @@ contract CursorHashCurrent is CursorHashHarness {
     }
 }
 
+contract CursorHashPrimitive is CursorHashHarness {
+    function hash(uint cur) internal pure override returns (bytes32) {
+        return Cursors.hash(cur);
+    }
+}
+
 contract CursorHashBaseline is CursorHashHarness {
     function hash(uint cur) internal pure override returns (bytes32) {
         return keccak256(Blocks.toBytes(cur));
