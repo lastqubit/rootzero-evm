@@ -89,15 +89,24 @@ Their functions are `annotateAction`, `annotateCounterparty`, `executionCost`,
 `annotateGroups`, `label`, and `schema`, respectively.
 
 `ActivityEvent` (exported by `Events.sol`) provides
-`Activity(bytes32 indexed account, uint codes, uint id)` for hosts to identify
-an account activity while recording its effects through other events. The trailing
-`id` is a correlation identifier: zero means no identifier is assigned, and must
-not be used to join unrelated activities. Hosts should assign nonzero IDs uniquely
-within the emitting contract; indexers scope them by chain and emitter address.
-Child events can reference this ID when their schema supports it. Existing balance
-and flow events do not carry this reference. Hosts choose where to emit activities
-and must document any ordering used to associate effects when no explicit reference
-is available. Emitters must pass `id` explicitly, including when it is zero.
+`Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)`.
+The subject identifies an asset or another entity; zero is available when unused.
+For a direct asset flow, subject is the asset and value is the amount. Include the
+matching `Effects.Spend`, `Effects.Receive`, `Effects.Lock`, or `Effects.Unlock`
+code to describe the movement, alongside any action codes.
+
+For richer activities, value can instead be a correlation ID, with companion
+events describing assets, amounts, and other details. Codes and the documented
+emitter schema must unambiguously distinguish these interpretations; the numeric
+value alone cannot identify its mode. In reference mode, zero means no identifier
+and must not join unrelated activities. Nonzero IDs should be unique within the
+emitting contract; indexers scope them by chain and emitter address. Amounts have
+no uniqueness requirement and zero amounts are valid.
+
+Companion events can reference the ID when their schema supports it. Existing
+Balance, Positioned, and Settled events do not carry this reference. Hosts must
+document any ordering used to associate details without an explicit reference.
+The event declaration does not validate these conventions.
 
 `codes` packs up to eight total `uint32` action, effect, or state identifiers, starting in
 the least significant 32 bits. Entries must be contiguous and nonzero, followed
@@ -156,11 +165,12 @@ can be passed directly without shifting. Category capacity is independent of
 packing capacity: an activity still holds at most eight codes in total.
 
 ```solidity
-emit Activity(account, Actions.Deposit, 0);
-emit Activity(account, Effects.Lock, 0);
+emit Activity(account, asset, amount, uint(Actions.Deposit) | (uint(Effects.Receive) << 32));
+emit Activity(account, asset, amount, Effects.Lock);
 uint codes = uint(Actions.Swap) | (uint(Effects.Spend) << 32)
     | (uint(Effects.Receive) << 64);
-emit Activity(account, codes, 0);
+// The host's swap schema defines value as a reference to companion details.
+emit Activity(account, bytes32(0), correlationId, codes);
 ```
 
 Cast each ID to `uint` before shifting so shifts beyond the first slot retain
@@ -316,10 +326,7 @@ host conventions.
 event Balance(bytes32 indexed account, bytes32 asset, uint balance)
 event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint codes)
 event Settled(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
-event Received(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
-event Spent(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
-event Locked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
-event Unlocked(bytes32 indexed account, bytes32 asset, uint amount, uint codes)
+event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)
 event Asset(uint indexed host, bytes32 asset, uint codes)
 event AssetPreimage(bytes32 indexed asset, bytes preimage)
 event Route(uint indexed host, uint portal, uint codes)
@@ -346,6 +353,13 @@ block per requested `#asset`, preserving order. Its hook returns exactly one
 Active or Inactive code describing the current condition, rather than historical
 actions/effects. Zero does not mean inactive. This replaces `assetStatus` and
 its `#status` response; empty input still returns empty output.
+
+For generic entities, `entityCodes` accepts `#entity { uint entity }` blocks and
+returns one `#codes` per input, preserving order and duplicates. The hook defines
+applicable current conditions; Active/Inactive is optional where it does not
+apply. Zero codes means unknown or no condition reported, not inactive. This
+query does not report historical actions or effects and does not reconstruct
+event history. The query preserves the hook's codes without semantic validation.
 
 Preimage emitters inherit `AssetPreimageEvent`; asset action emitters use
 `AssetEvent`. Both are exported by `Events.sol`. Historical Asset and
@@ -402,28 +416,31 @@ final quantities supplied by the producer; settlement adds no host fee.
 Producers record any separate fee payments in their own flow events.
 Hosts opt into emission through `SettledEvent`.
 
-**Flows.** Operations that move value emit one flow event per affected amount,
-with the matching `Actions` code:
+**Flows.** Operations that move value emit `Activity(account, asset, amount, codes)`
+per affected amount. Include the matching effect code and the action when known.
+In the table below, each listed code occupies a separate uint32 slot; combine them
+by widening to uint and shifting, not by OR-ing IDs into the same slot.
 
-| Operation                  | Event      | `codes`            |
-| -------------------------- | ---------- | ------------------ |
-| deposit / depositPayable   | `Received` | `Actions.Deposit`  |
-| withdraw                   | `Spent`    | `Actions.Withdraw` |
-| cashout (host implementation) | `Spent` | `Actions.Cashout` |
-| burn                       | `Spent`    | `Actions.Burn`     |
-| creditAccount              | `Received` | `Actions.Transfer` |
-| debitAccount               | `Spent`    | `Actions.Transfer` |
-| payout                     | `Spent` / `Received` | `Actions.Payout` |
-| realize                    | host-defined | `Actions.Realize` |
-| final pipeline budget      | `Received` | host posting action |
-| provision (lock custody)   | `Locked`   | per operation      |
-| custody release            | `Unlocked` | per operation      |
+| Operation | Action code | Effect code |
+| --------- | ----------- | ----------- |
+| deposit / depositPayable | `Actions.Deposit` | `Effects.Receive` |
+| withdraw | `Actions.Withdraw` | `Effects.Spend` |
+| cashout (host implementation) | `Actions.Cashout` | `Effects.Spend` |
+| burn | `Actions.Burn` | `Effects.Spend` |
+| creditAccount | `Actions.Transfer` | `Effects.Receive` |
+| debitAccount | `Actions.Transfer` | `Effects.Spend` |
+| payout | `Actions.Payout` | `Effects.Spend` or `Effects.Receive` per account |
+| realize | `Actions.Realize` | host-defined |
+| final pipeline budget | host posting action | `Effects.Receive` |
+| provision (lock custody) | per operation | `Effects.Lock` |
+| custody release | per operation | `Effects.Unlock` |
 
 `CashoutHook` is abstract and has no event-emitter inheritance. Hosts implementing
 cashout are responsible for their own flow events and event ABI publication.
-The free `sendChainAsset` transfer helper emits no events; hosts may emit
-`Spent(account, chainAsset, amount, Actions.Cashout)` after a successful
-payout according to their event policy.
+The free `sendChainAsset` transfer helper emits no events; hosts may inherit
+`ActivityEvent` and emit
+`Activity(account, chainAsset, amount, uint(Actions.Cashout) | (uint(Effects.Spend) << 32))`
+after a successful payout according to their event policy.
 
 `Balance` and flow events are complementary, not redundant: flow events record
 that value moved and why; balance events record the resulting total, which gives
@@ -470,15 +487,16 @@ update from such logs. Event declarations perform no runtime validation, so
 emitters are responsible for satisfying the convention. Other code categories
 may coexist and retain their ordinary ordering and duplicate rules.
 
-Codes describe this event's operations or outcomes. Typed event fields remain
-authoritative; Received already denotes receipt, so Effects.Receive is optional.
-The unused context fields have been removed from Received, Spent, Locked, and
-Unlocked. These events make no endpoint-correlation claim. Activity.id retains
-its separate correlation convention.
+Codes describe this event's operations or outcomes. Direct asset-flow Activity
+events carry explicit effect codes because their name does not specify direction
+or custody changes. Reference-mode Activity events follow their documented schema
+for joining companion details; do not interpret their value as an amount.
 
-Replacing uint32 action with uint codes changes event signature topics. Removing
-context also changes flow-event arity. Decode historical logs using the ABI for
-their emitting deployment; do not apply the new signatures retrospectively.
+Activity replaces the Spent, Received, Locked, and Unlocked helpers and exports.
+Adding subject changes Activity's signature topic; the new value field replaces
+the former correlation-only id. Decode historical Activity and flow logs using
+their deployment's ABI and conventions, including published EventAbi metadata.
+Do not apply the new signature or field meanings retrospectively.
 
 **Shared action semantics.** In every event carrying `codes`, each action ID states
 which operation occurred. Its canonical meaning is the same across event types:

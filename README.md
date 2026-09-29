@@ -485,7 +485,7 @@ abstract contract MyCommand is CommandBase {
 Callback runners in `CommandBase`, `AdminBase`, `PortBase`, and `QueryBase` can replace the standard lifecycle:
 `runCommand(context, descriptor, callback)` processes command batches,
 `runCommandOnce(context, descriptor, callback)` invokes its callback exactly once,
-`runAdminCommand(context, descriptor, callback)` authorizes the admin context before
+`runAdmin(context, descriptor, callback)` authorizes the admin context before
 processing a batch, including when its sources are empty,
 `runPort(input, descriptor, callback)` processes port batches and returns output plus
 remaining value credit, and `runQuery(input, descriptor, callback)` processes queries
@@ -554,7 +554,7 @@ bit 6 remains endpoint-defined, and bits 2 through 5 remain reserved.
 
 `CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
 their payout policy and choose the accounting and events to emit. The hook has
-no `ChainAsset` or `SpentEvent` inheritance.
+no `ChainAsset` or `ActivityEvent` inheritance.
 
 The free `sendChainAsset(account, amount)` helper in `core/Cash.sol`, also exported
 by `Core.sol` and `Endpoints.sol`, transfers the exact amount to
@@ -689,10 +689,11 @@ Handoff has four operational rules:
 A transfer, for instance, is a two-step pipeline: `debitAccount` turns an
 `#amount` input into `#balance` state, and `payout` consumes that state
 toward a recipient. Because a pipeline is just blocks, it is also the unit of
-command batching. A step's plain `uint value` is drawn directly from the shared
-native-value budget. Transport envelopes retain separate opaque, packed
-chain-specific `resources` fields for adapters that also need gas or runtime
-parameters. A `resources` word is never itself native value; EVM adapters use
+command batching. STEP, CALL, and RECOVER carry full-width native `uint value`
+drawn from the shared budget. CALL funds a local call; RECOVER funds its handler
+invocation. DISPATCH carries opaque, packed chain-specific `resources` for adapters
+that also need gas or runtime parameters. A `resources` word is never itself
+native value; EVM adapters use
 `useResourceValue` to extract its low 128-bit value lane before spending it.
 
 Local execute adapters use `Execute` for fixed-stride decoding: validate
@@ -758,6 +759,17 @@ response: accountAmount { bytes32 account, bytes32 asset, uint amount }
 Like commands, every query announces a descriptor at deployment; tooling resolves
 the descriptor's lanes through the published block schemas.
 
+`entityCodes` in `queries/Entity.sol` accepts `#entity { uint entity }` blocks
+and returns one `#codes { uint codes }` block per entity, preserving input order
+and duplicates. Empty input returns empty output. Entity identifiers use the
+same full-width representation as annotations; the hook defines supported kinds.
+Codes describe current conditions, not historical actions or effects. Zero codes
+means unknown or no condition reported; `States.Inactive` means explicitly inactive.
+Active/Inactive is optional for entities where it does not apply. The hook owns
+condition semantics and code packing; the query preserves its returned word.
+`assetCodes` remains the asset-specific query and requires exactly one Active or
+Inactive state from its hook.
+
 ## Ports
 
 Settlement and the book port share `BookHook` from `core/Settlement.sol`:
@@ -785,8 +797,9 @@ metadata, and do not advance the cursor. All `Calls` functions are internal help
 `exec.rawCall(selector, target, value, data, expectEmpty)` provides the same
 memory/cursor overloads with execution budget accounting.
 They debit the full-width native `uint value` before calling, add the returned
-trusted credit to `exec.budget`, and return only the output bytes. Callers with
-packed resources pass `uint128(resources)` to extract the EVM value lane.
+trusted credit to `exec.budget`, and return only the output bytes. Recovery hooks
+pass their `value` directly. Dispatch adapters interpreting packed resources
+extract the EVM value lane before passing it to a local call.
 Target authorization and credit backing remain the caller's responsibility.
 
 Ports are the host-to-host surfaces, callable only by trusted peer hosts.
@@ -872,9 +885,9 @@ Hosts are self-describing. At deployment a host emits the ABI of every event it
 uses (`EventAbi`), block schema events, endpoint descriptors, and labels for
 human-readable names. State changes then follow evented
 conventions: `Balance` for account ledger changes (including host accounts),
-and flow events (`Received`,
-`Spent`, `Locked`, `Unlocked`) for value movement, each tagged with the endpoint that
-caused it. An indexer can reconstruct the entire repository — endpoints,
+and `Activity(account, subject, value, codes)` for activities and value movement.
+Direct flows carry an asset and amount with effect codes; richer activities can
+use a correlation ID for companion details under a documented emitter schema. An indexer can reconstruct the entire repository — endpoints,
 names, access sets, balances — from logs alone, with no artifact files.
 
 ## Development

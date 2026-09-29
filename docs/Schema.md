@@ -205,7 +205,7 @@ declared positions. Because every child block carries its own header and payload
 length, fixed fields may appear before, after, or between child blocks.
 
 ```txt
-{ uint target, uint resources, #bytes as payload }
+{ uint target, uint value, #bytes as payload }
 { bytes32 account, #bytes as state, #bytes as input }
 { uint spec, #string as body }
 { #bytes as left, uint op, #bytes as right }
@@ -401,12 +401,12 @@ older description. Trust remains the consumer's responsibility.
 The allocation source is declared state when present, otherwise input. Its shift
 is 64 for state and zero for input or no source. Block sizes include the header.
 The lanes byte precomputes state presence in bit 0 and input presence in bit 1.
-Opening copies it into decoder bits 128-135; input-only opening copies only bit 1.
+These are descriptor metadata; opening does not copy lane flags into cursors.
 
 Solidity code constructs this metadata with `Executions.describe`. The same
 library initializes an `Execution` through `exec.open` or `exec.openInput`;
-their packed state/input cursors are an internal execution representation and
-are not returned as general-purpose cursors. `exec.open` initializes the
+their independent state/input cursors use the standard Cursors range layout.
+`exec.open` initializes the
 command account and an explicit native-value budget together with both sources
 and the output writer. Input-only endpoints use `exec.openInput`, which accepts
 an explicit budget but no command account. Passing the budget explicitly keeps
@@ -415,24 +415,29 @@ Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
 
 `Cursors` supplies shared range primitives: `create(abs, endAbs)` validates bounds,
 while `pack(abs, endAbs)` packs already validated positions without repeating checks.
-Cursors contain only an absolute current position (bits 0-31) and exclusive end
-(bits 32-63); upper bits are unused. There is no cursor flag API.
+Cursors encode an absolute current position (bits 0-31) and exclusive end
+(bits 32-63). Upper bits may carry caller-defined metadata: navigation preserves
+it, constructors and child slices clear it, and conversions and hashing ignore it.
+There is no cursor flag API.
 `length`, `more`, `done`, `expectEnd`, and `exhaust` handle inspection and consumption.
 `done` checks exact equality, so a reversed range is not considered consumed.
 Use it when a caller needs its own error; `expectEnd` reverts UnconsumedData.
 `enter(cur, amount)` validates a raw byte range and returns `(abs, nextCur)`;
-it does not inspect block headers.
-`toBytes`, `toBytesChecked`, and `toString` expose calldata views; Blocks keeps thin
-wrappers for these conversions. Positions used by `seek`, `expect`, and `slice`
+it does not inspect block headers. `take(cur, amount)` instead returns
+`(sliceCur, nextCur)`, with a clean child cursor over the consumed raw bytes.
+`toBytes`, `toBytesChecked`, `toString`, and `toStringChecked` expose calldata views;
+checked variants validate bounds, not block structure or UTF-8. `hash` hashes the
+remaining calldata range using temporary memory. Blocks keeps thin wrappers for
+these conversions and hashing. Positions used by `seek`, `expect`, and `slice`
 are absolute. Encoder continues to use its separate relative offset/capacity model.
 
 Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
 the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
 behavior, and bits 2 through 5 remain reserved for future protocol flags.
 
-Execution packs input current/end in bits 0-63 and state current/end in bits
-64-127. Bits 128 and 129 record whether state and input are declared, preserving
-EMPTY-lane behavior for raw forwarding. Buffer writers use only bits 0-63.
+Execution stores input and state in independent uint cursors, each using bits
+0-63 for current/end. Declared-lane information belongs to the descriptor, not
+the cursors. Buffer writers use bits 0-63 for their relative offset/capacity.
 
 Specs pack `[key:4][min:4][max:4][hint:3][reserved:17]` from most to least
 significant byte. `Specs.blockSize` adds the header to the payload hint;
@@ -860,7 +865,7 @@ for tooling. They do not change payload layout or runtime keys.
 
 ```txt
 #account as recipient
-{ uint target, uint resources, #bytes as payload }
+{ uint target, uint value, #bytes as payload }
 ```
 
 Field aliases may be used on any block item, including child blocks and prime
@@ -869,7 +874,7 @@ items.
 Child blocks are schema references:
 
 ```txt
-{ uint handler, uint resources, bytes32 key, #bytes as witness }
+{ uint handler, uint value, bytes32 key, #bytes as witness }
 ```
 
 Alias resolution is context-dependent. A consumer resolves `#context` from the
@@ -922,7 +927,7 @@ uint dst, uint dst.portal           // prefix/value collision
 The same rule applies to field aliases:
 
 ```txt
-{ uint target, uint resources, #bytes as calldata.payload }
+{ uint target, uint value, #bytes as calldata.payload }
 #account as recipient.account
 ```
 
@@ -1018,9 +1023,16 @@ use one stable format everywhere. For EVM chains, the low 128 bits are native
 value / endowment in wei; higher bits are reserved for execution resources such
 as gas. EVM code must call `useResourceValue` to extract and spend the value lane.
 
-STEP blocks use a plain `uint value` field containing native value drawn from
-the pipeline budget. This is distinct from `resources`: STEP does not contain
-or require interpretation of a chain-specific packed resource word.
+STEP, CALL, and RECOVER blocks use full-width `uint value` drawn from the shared
+native-value budget. CALL assigns value to a local call, and RECOVER assigns it
+to a recovery-handler invocation. Neither truncates value to 128 bits. Recovery
+hooks debit the value with `useValue` or `rawCall`, preserving returned credit.
+DISPATCH is the only standard block carrying packed `resources`; custom relay
+input may also carry destination resources for a transport adapter.
+
+CALL and RECOVER retain their block keys and byte layouts, but their second word
+now means native value. Migrate older inputs that packed resource metadata into
+the high bits; those bits now contribute to the requested value and budget check.
 
 ## Protocol IDs
 
@@ -1115,6 +1127,7 @@ string               ""
 list                 ""
 evm                  ""
 node                 uint node
+entity               uint entity
 account              bytes32 account
 asset                bytes32 asset
 status               uint code
@@ -1140,11 +1153,11 @@ position             bytes32 asset, uint amount, bytes32 liability, uint debt, b
 transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
 step                 uint cmd, uint value, #bytes as input
-call                 uint target, uint resources, #bytes as payload
+call                 uint target, uint value, #bytes as payload
 relay                #bytes as input, #bytes as steps
 dispatch             uint portal, uint resources, #bytes as payload
 context              bytes32 account, #bytes as state, #bytes as input
-recover              uint handler, uint resources, bytes32 key, #bytes as witness
+recover              uint handler, uint value, bytes32 key, #bytes as witness
 annotation           uint entity, #bytes as data
 action               uint action
 counterparty         bytes32 account
@@ -1159,6 +1172,16 @@ an empty list. Categories are Actions (0), Effects (4), and States (5). The code
 checks the block shape, not code semantics. Consumers define which codes apply;
 `assetCodes` requires one Active or Inactive state and describes current conditions,
 not historical actions or effects. See [Indexing](Indexing.md#codes-and-correlation).
+
+`#entity` carries one full-width identifier, matching the `uint entity` field in
+annotations. It is distinct from `#node` and `#asset`; the codec validates the
+exact 32-byte payload without restricting the identifier's kind or rejecting zero.
+`entityCodes` consumes these blocks and returns one `#codes` per input in order,
+including repeated or unknown entities. Empty input produces empty output. Its
+hook defines applicable current conditions and code packing, without requiring
+Active/Inactive for every entity kind. Zero codes means unknown or no condition
+reported; it is distinct from an explicit `States.Inactive`. Historical actions
+and effects do not belong in this query response.
 
 ### Host Accounts
 
