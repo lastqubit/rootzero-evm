@@ -57,6 +57,7 @@ import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
 // Query endpoints
 import {QueryBase} from "./queries/Base.sol";
 import {AssetCodes, AssetCodesHook} from "./queries/Asset.sol";
+import {EntityCodes, EntityCodesHook} from "./queries/Entity.sol";
 import {GetBalance, GetBalanceHook} from "./queries/Balance.sol";
 
 // Shared protocol errors.

@@ -81,6 +81,8 @@ library Keys {
     bytes4 constant Asset = bytes4(keccak256("#asset"));
     /// @dev Node identifier - (uint id)
     bytes4 constant Node = bytes4(keccak256("#node"));
+    /// @dev Generic entity identifier - (uint entity)
+    bytes4 constant Entity = bytes4(keccak256("#entity"));
     /// @dev Entity label annotation - (bytes32 namespace, #string as name)
     bytes4 constant Label = bytes4(keccak256("#label"));
     /// @dev Entity annotations - (uint entity, #bytes as data)

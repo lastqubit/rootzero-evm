@@ -975,6 +975,17 @@ library Blocks {
 
     /// @notice Decode STATUS and return the advanced source cursor.
     /// @dev Validates the exact header and containment through unpack32.
+    /// @notice Decode ENTITY and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return entity Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackEntity(uint cur) internal pure returns (uint entity, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Entity);
+        entity = uint(a);
+    }
+
     /// @param cur Bounded source cursor at the block header.
     /// @return code Full-width status value.
     /// @return nextCur Advanced source preserving its end and metadata.

@@ -117,6 +117,7 @@ library Schemas {
     // One-word payloads
 
     string constant Node = "uint node";
+    string constant Entity = "uint entity";
     string constant Account = "bytes32 account";
     string constant Asset = "bytes32 asset";
     string constant Status = "uint code";

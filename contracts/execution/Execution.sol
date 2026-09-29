@@ -491,6 +491,13 @@ library Executions {
         (node, exec.input) = exec.input.unpackNode();
     }
 
+    /// @notice Decode and consume one ENTITY block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return entity Decoded entity identifier.
+    function unpackEntity(Execution memory exec) internal pure returns (uint entity) {
+        (entity, exec.input) = exec.input.unpackEntity();
+    }
+
     /// @notice Consume one CODES input block and return its packed identifiers.
     /// @dev Validates block shape and containment, not code semantics.
     function unpackCodes(Execution memory exec) internal pure returns (uint codes) {
@@ -858,6 +865,13 @@ library Executions {
     /// @param node Node identifier to encode.
     function outputNode(Execution memory exec, uint node) internal pure {
         (exec.buffer, exec.output) = exec.output.writeNode(exec.buffer, node);
+    }
+
+    /// @notice Append a ENTITY block to execution output.
+    /// @param exec Execution receiving the block.
+    /// @param entity Entity identifier to encode.
+    function outputEntity(Execution memory exec, uint entity) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeEntity(exec.buffer, entity);
     }
 
     /// @notice Append a STATUS block to execution output.

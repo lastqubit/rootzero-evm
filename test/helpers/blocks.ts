@@ -68,6 +68,7 @@ export const Keys = {
 
   // Composite and annotation blocks
   Node: blockKey("#node"),
+  Entity: blockKey("#entity"),
   Asset: blockKey("#asset"),
   Step: blockKey("#step"),
   Call: blockKey("#call"),
@@ -215,6 +216,10 @@ export function encodeAccountBlock(account: string): string {
 
 export function encodeNodeBlock(id: bigint): string {
   return encodeBlock(Keys.Node, pad32(id));
+}
+
+export function encodeEntityBlock(id: bigint): string {
+  return encodeBlock(Keys.Entity, pad32(id));
 }
 
 export function encodeAssetBlock(asset: string): string {

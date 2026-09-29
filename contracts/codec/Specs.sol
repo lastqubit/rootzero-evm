@@ -39,6 +39,8 @@ library Sizes {
     uint constant Status = B32;
     /// @dev CODES block: 8 header + 32 packed identifiers = 40 bytes.
     uint constant Codes = B32;
+    /// @dev ENTITY block: 8 header + 32 entity identifier = 40 bytes.
+    uint constant Entity = B32;
 
     // Live pipeline state
 
@@ -136,6 +138,7 @@ library Specs {
     uint constant Call = uint(bytes32(Keys.Call)) | UnboundedMin72Hint256;
     uint constant Asset = uint(bytes32(Keys.Asset)) | Exact32;
     uint constant Node = uint(bytes32(Keys.Node)) | Exact32;
+    uint constant Entity = uint(bytes32(Keys.Entity)) | Exact32;
     uint constant Label = uint(bytes32(Keys.Label)) | UnboundedMin40Hint256;
     uint constant Annotation = uint(bytes32(Keys.Annotation)) | UnboundedMin40Hint256;
     uint constant Action = uint(bytes32(Keys.Action)) | Exact32;

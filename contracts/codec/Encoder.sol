@@ -237,6 +237,15 @@ library Encoder {
         write32(abs, bytes32(node));
     }
 
+    /// @notice Append ENTITY, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements.
+    function writeEntity(uint cur, bytes memory dst, uint entity) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 40);
+        abs = writeHeader(abs, Keys.Entity, 32);
+        write32(abs, bytes32(entity));
+    }
+
     /// @notice Append STATUS, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeStatus(
@@ -1201,6 +1210,14 @@ library Encoder {
         value = allocate(40);
         uint abs = writeHeader(pos(value, 0), Keys.Node, 32);
         write32(abs, bytes32(node));
+    }
+
+    /// @notice Create a complete ENTITY block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    function createEntity(uint entity) internal pure returns (bytes memory value) {
+        value = allocate(40);
+        uint abs = writeHeader(pos(value, 0), Keys.Entity, 32);
+        write32(abs, bytes32(entity));
     }
 
     /// @notice Create a complete STATUS block with zero allocation padding.
