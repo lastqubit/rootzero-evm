@@ -39,6 +39,7 @@ import {Annotate} from "./commands/admin/Annotate.sol";
 import {Appoint, Dismiss} from "./commands/admin/Guardian.sol";
 import {Authorize, ExecuteAuthorize} from "./commands/admin/Authorize.sol";
 import {ExecutePayable} from "./commands/admin/Execute.sol";
+import {AddPool, AddPoolHook, RemovePool, RemovePoolHook} from "./commands/admin/Pool.sol";
 import {Unauthorize} from "./commands/admin/Unauthorize.sol";
 
 // Port endpoints
