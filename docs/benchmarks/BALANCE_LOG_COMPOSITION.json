@@ -1,0 +1,411 @@
+{
+  "compiler": "solc 0.8.35, viaIR, optimizer runs 200, Cancun",
+  "scope": "Timed loop includes block creation and logging except Existing, which measures only logging a previously written block. Output includes reservation and writing but initial writer allocation is outside timing. Temporary variants reserve 128 bytes across helper calls and restore the free-memory pointer. All logs contain the same 32-byte codes plus 72-byte Balance block. Excludes ABI decoding, guard construction, writer preparation, output finalization, and return encoding. Helper gas includes loop/timer overhead; transaction gas is not directly comparable because outputs differ.",
+  "rows": [
+    {
+      "variant": "Create",
+      "sample": "zero",
+      "count": 1,
+      "helperGas": 1442,
+      "gasPerLog": 1442,
+      "retainedBytes": 128,
+      "transactionGas": 24787
+    },
+    {
+      "variant": "Create",
+      "sample": "zero",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 512,
+      "transactionGas": 28980
+    },
+    {
+      "variant": "Create",
+      "sample": "zero",
+      "count": 16,
+      "helperGas": 22408,
+      "gasPerLog": 1400.5,
+      "retainedBytes": 2048,
+      "transactionGas": 45757
+    },
+    {
+      "variant": "Create",
+      "sample": "typical",
+      "count": 1,
+      "helperGas": 1442,
+      "gasPerLog": 1442,
+      "retainedBytes": 128,
+      "transactionGas": 24871
+    },
+    {
+      "variant": "Create",
+      "sample": "typical",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 512,
+      "transactionGas": 29064
+    },
+    {
+      "variant": "Create",
+      "sample": "typical",
+      "count": 16,
+      "helperGas": 22408,
+      "gasPerLog": 1400.5,
+      "retainedBytes": 2048,
+      "transactionGas": 45841
+    },
+    {
+      "variant": "Create",
+      "sample": "full-width",
+      "count": 1,
+      "helperGas": 1442,
+      "gasPerLog": 1442,
+      "retainedBytes": 128,
+      "transactionGas": 25555
+    },
+    {
+      "variant": "Create",
+      "sample": "full-width",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 512,
+      "transactionGas": 29748
+    },
+    {
+      "variant": "Create",
+      "sample": "full-width",
+      "count": 16,
+      "helperGas": 22408,
+      "gasPerLog": 1400.5,
+      "retainedBytes": 2048,
+      "transactionGas": 46525
+    },
+    {
+      "variant": "Temporary",
+      "sample": "zero",
+      "count": 1,
+      "helperGas": 1449,
+      "gasPerLog": 1449,
+      "retainedBytes": 0,
+      "transactionGas": 24785
+    },
+    {
+      "variant": "Temporary",
+      "sample": "zero",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 0,
+      "transactionGas": 28970
+    },
+    {
+      "variant": "Temporary",
+      "sample": "zero",
+      "count": 16,
+      "helperGas": 22374,
+      "gasPerLog": 1398.375,
+      "retainedBytes": 0,
+      "transactionGas": 45710
+    },
+    {
+      "variant": "Temporary",
+      "sample": "typical",
+      "count": 1,
+      "helperGas": 1449,
+      "gasPerLog": 1449,
+      "retainedBytes": 0,
+      "transactionGas": 24869
+    },
+    {
+      "variant": "Temporary",
+      "sample": "typical",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 0,
+      "transactionGas": 29054
+    },
+    {
+      "variant": "Temporary",
+      "sample": "typical",
+      "count": 16,
+      "helperGas": 22374,
+      "gasPerLog": 1398.375,
+      "retainedBytes": 0,
+      "transactionGas": 45794
+    },
+    {
+      "variant": "Temporary",
+      "sample": "full-width",
+      "count": 1,
+      "helperGas": 1449,
+      "gasPerLog": 1449,
+      "retainedBytes": 0,
+      "transactionGas": 25553
+    },
+    {
+      "variant": "Temporary",
+      "sample": "full-width",
+      "count": 4,
+      "helperGas": 5634,
+      "gasPerLog": 1408.5,
+      "retainedBytes": 0,
+      "transactionGas": 29738
+    },
+    {
+      "variant": "Temporary",
+      "sample": "full-width",
+      "count": 16,
+      "helperGas": 22374,
+      "gasPerLog": 1398.375,
+      "retainedBytes": 0,
+      "transactionGas": 46478
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "zero",
+      "count": 1,
+      "helperGas": 1429,
+      "gasPerLog": 1429,
+      "retainedBytes": 0,
+      "transactionGas": 24765
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "zero",
+      "count": 4,
+      "helperGas": 5554,
+      "gasPerLog": 1388.5,
+      "retainedBytes": 0,
+      "transactionGas": 28890
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "zero",
+      "count": 16,
+      "helperGas": 22054,
+      "gasPerLog": 1378.375,
+      "retainedBytes": 0,
+      "transactionGas": 45390
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "typical",
+      "count": 1,
+      "helperGas": 1429,
+      "gasPerLog": 1429,
+      "retainedBytes": 0,
+      "transactionGas": 24849
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "typical",
+      "count": 4,
+      "helperGas": 5554,
+      "gasPerLog": 1388.5,
+      "retainedBytes": 0,
+      "transactionGas": 28974
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "typical",
+      "count": 16,
+      "helperGas": 22054,
+      "gasPerLog": 1378.375,
+      "retainedBytes": 0,
+      "transactionGas": 45474
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "full-width",
+      "count": 1,
+      "helperGas": 1429,
+      "gasPerLog": 1429,
+      "retainedBytes": 0,
+      "transactionGas": 25533
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "full-width",
+      "count": 4,
+      "helperGas": 5554,
+      "gasPerLog": 1388.5,
+      "retainedBytes": 0,
+      "transactionGas": 29658
+    },
+    {
+      "variant": "TemporaryDirect",
+      "sample": "full-width",
+      "count": 16,
+      "helperGas": 22054,
+      "gasPerLog": 1378.375,
+      "retainedBytes": 0,
+      "transactionGas": 46158
+    },
+    {
+      "variant": "Output",
+      "sample": "zero",
+      "count": 1,
+      "helperGas": 1506,
+      "gasPerLog": 1506,
+      "retainedBytes": 0,
+      "transactionGas": 25223
+    },
+    {
+      "variant": "Output",
+      "sample": "zero",
+      "count": 4,
+      "helperGas": 5878,
+      "gasPerLog": 1469.5,
+      "retainedBytes": 0,
+      "transactionGas": 29632
+    },
+    {
+      "variant": "Output",
+      "sample": "zero",
+      "count": 16,
+      "helperGas": 23374,
+      "gasPerLog": 1460.875,
+      "retainedBytes": 0,
+      "transactionGas": 47302
+    },
+    {
+      "variant": "Output",
+      "sample": "typical",
+      "count": 1,
+      "helperGas": 1506,
+      "gasPerLog": 1506,
+      "retainedBytes": 0,
+      "transactionGas": 25307
+    },
+    {
+      "variant": "Output",
+      "sample": "typical",
+      "count": 4,
+      "helperGas": 5878,
+      "gasPerLog": 1469.5,
+      "retainedBytes": 0,
+      "transactionGas": 29716
+    },
+    {
+      "variant": "Output",
+      "sample": "typical",
+      "count": 16,
+      "helperGas": 23374,
+      "gasPerLog": 1460.875,
+      "retainedBytes": 0,
+      "transactionGas": 47386
+    },
+    {
+      "variant": "Output",
+      "sample": "full-width",
+      "count": 1,
+      "helperGas": 1506,
+      "gasPerLog": 1506,
+      "retainedBytes": 0,
+      "transactionGas": 25991
+    },
+    {
+      "variant": "Output",
+      "sample": "full-width",
+      "count": 4,
+      "helperGas": 5878,
+      "gasPerLog": 1469.5,
+      "retainedBytes": 0,
+      "transactionGas": 30400
+    },
+    {
+      "variant": "Output",
+      "sample": "full-width",
+      "count": 16,
+      "helperGas": 23374,
+      "gasPerLog": 1460.875,
+      "retainedBytes": 0,
+      "transactionGas": 48070
+    },
+    {
+      "variant": "Existing",
+      "sample": "zero",
+      "count": 1,
+      "helperGas": 1328,
+      "gasPerLog": 1328,
+      "retainedBytes": 0,
+      "transactionGas": 25015
+    },
+    {
+      "variant": "Existing",
+      "sample": "zero",
+      "count": 4,
+      "helperGas": 5180,
+      "gasPerLog": 1295,
+      "retainedBytes": 0,
+      "transactionGas": 28867
+    },
+    {
+      "variant": "Existing",
+      "sample": "zero",
+      "count": 16,
+      "helperGas": 20588,
+      "gasPerLog": 1286.75,
+      "retainedBytes": 0,
+      "transactionGas": 44275
+    },
+    {
+      "variant": "Existing",
+      "sample": "typical",
+      "count": 1,
+      "helperGas": 1328,
+      "gasPerLog": 1328,
+      "retainedBytes": 0,
+      "transactionGas": 25099
+    },
+    {
+      "variant": "Existing",
+      "sample": "typical",
+      "count": 4,
+      "helperGas": 5180,
+      "gasPerLog": 1295,
+      "retainedBytes": 0,
+      "transactionGas": 28951
+    },
+    {
+      "variant": "Existing",
+      "sample": "typical",
+      "count": 16,
+      "helperGas": 20588,
+      "gasPerLog": 1286.75,
+      "retainedBytes": 0,
+      "transactionGas": 44359
+    },
+    {
+      "variant": "Existing",
+      "sample": "full-width",
+      "count": 1,
+      "helperGas": 1328,
+      "gasPerLog": 1328,
+      "retainedBytes": 0,
+      "transactionGas": 25783
+    },
+    {
+      "variant": "Existing",
+      "sample": "full-width",
+      "count": 4,
+      "helperGas": 5180,
+      "gasPerLog": 1295,
+      "retainedBytes": 0,
+      "transactionGas": 29635
+    },
+    {
+      "variant": "Existing",
+      "sample": "full-width",
+      "count": 16,
+      "helperGas": 20588,
+      "gasPerLog": 1286.75,
+      "retainedBytes": 0,
+      "transactionGas": 45043
+    }
+  ]
+}

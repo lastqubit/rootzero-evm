@@ -1,0 +1,286 @@
+{
+  "compiler": "solc 0.8.35, viaIR, optimizer 200, Cancun",
+  "scope": "Internal logging gas only; opening excluded. Separate logs omit headers; previous and combined retain headers. Saved compares previous checked helper with optimized production helper.",
+  "rows": [
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 0,
+      "inputSize": 0,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 1022,
+      "saved": 105,
+      "stateSize": 0,
+      "inputSize": 0,
+      "mask": 1,
+      "separate": 802,
+      "combined": 917,
+      "delta": 115
+    },
+    {
+      "previous": 1022,
+      "saved": 105,
+      "stateSize": 0,
+      "inputSize": 0,
+      "mask": 2,
+      "separate": 802,
+      "combined": 917,
+      "delta": 115
+    },
+    {
+      "previous": 1074,
+      "saved": 93,
+      "stateSize": 0,
+      "inputSize": 0,
+      "mask": 3,
+      "separate": 1553,
+      "combined": 981,
+      "delta": -572
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 0,
+      "inputSize": 7,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 1022,
+      "saved": 105,
+      "stateSize": 0,
+      "inputSize": 7,
+      "mask": 1,
+      "separate": 802,
+      "combined": 917,
+      "delta": 115
+    },
+    {
+      "previous": 1078,
+      "saved": 105,
+      "stateSize": 0,
+      "inputSize": 7,
+      "mask": 2,
+      "separate": 864,
+      "combined": 973,
+      "delta": 109
+    },
+    {
+      "previous": 1130,
+      "saved": 93,
+      "stateSize": 0,
+      "inputSize": 7,
+      "mask": 3,
+      "separate": 1615,
+      "combined": 1037,
+      "delta": -578
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 13,
+      "inputSize": 0,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 1126,
+      "saved": 105,
+      "stateSize": 13,
+      "inputSize": 0,
+      "mask": 1,
+      "separate": 912,
+      "combined": 1021,
+      "delta": 109
+    },
+    {
+      "previous": 1022,
+      "saved": 105,
+      "stateSize": 13,
+      "inputSize": 0,
+      "mask": 2,
+      "separate": 802,
+      "combined": 917,
+      "delta": 115
+    },
+    {
+      "previous": 1178,
+      "saved": 93,
+      "stateSize": 13,
+      "inputSize": 0,
+      "mask": 3,
+      "separate": 1663,
+      "combined": 1085,
+      "delta": -578
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 1,
+      "inputSize": 31,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 1030,
+      "saved": 105,
+      "stateSize": 1,
+      "inputSize": 31,
+      "mask": 1,
+      "separate": 816,
+      "combined": 925,
+      "delta": 109
+    },
+    {
+      "previous": 1276,
+      "saved": 105,
+      "stateSize": 1,
+      "inputSize": 31,
+      "mask": 2,
+      "separate": 1056,
+      "combined": 1171,
+      "delta": 115
+    },
+    {
+      "previous": 1336,
+      "saved": 93,
+      "stateSize": 1,
+      "inputSize": 31,
+      "mask": 3,
+      "separate": 1818,
+      "combined": 1243,
+      "delta": -575
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 72,
+      "inputSize": 144,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 1610,
+      "saved": 105,
+      "stateSize": 72,
+      "inputSize": 144,
+      "mask": 1,
+      "separate": 1396,
+      "combined": 1505,
+      "delta": 109
+    },
+    {
+      "previous": 2198,
+      "saved": 105,
+      "stateSize": 72,
+      "inputSize": 144,
+      "mask": 2,
+      "separate": 1984,
+      "combined": 2093,
+      "delta": 109
+    },
+    {
+      "previous": 2844,
+      "saved": 93,
+      "stateSize": 72,
+      "inputSize": 144,
+      "mask": 3,
+      "separate": 3320,
+      "combined": 2751,
+      "delta": -569
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 288,
+      "inputSize": 288,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 3381,
+      "saved": 105,
+      "stateSize": 288,
+      "inputSize": 288,
+      "mask": 1,
+      "separate": 3160,
+      "combined": 3276,
+      "delta": 116
+    },
+    {
+      "previous": 3381,
+      "saved": 105,
+      "stateSize": 288,
+      "inputSize": 288,
+      "mask": 2,
+      "separate": 3160,
+      "combined": 3276,
+      "delta": 116
+    },
+    {
+      "previous": 5792,
+      "saved": 93,
+      "stateSize": 288,
+      "inputSize": 288,
+      "mask": 3,
+      "separate": 6242,
+      "combined": 5699,
+      "delta": -543
+    },
+    {
+      "previous": 59,
+      "saved": 0,
+      "stateSize": 1152,
+      "inputSize": 2304,
+      "mask": 0,
+      "separate": 45,
+      "combined": 59,
+      "delta": 14
+    },
+    {
+      "previous": 10458,
+      "saved": 105,
+      "stateSize": 1152,
+      "inputSize": 2304,
+      "mask": 1,
+      "separate": 10238,
+      "combined": 10353,
+      "delta": 115
+    },
+    {
+      "previous": 19900,
+      "saved": 105,
+      "stateSize": 1152,
+      "inputSize": 2304,
+      "mask": 2,
+      "separate": 19680,
+      "combined": 19795,
+      "delta": 115
+    },
+    {
+      "previous": 29399,
+      "saved": 93,
+      "stateSize": 1152,
+      "inputSize": 2304,
+      "mask": 3,
+      "separate": 29755,
+      "combined": 29306,
+      "delta": -449
+    }
+  ]
+}

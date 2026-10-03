@@ -1,0 +1,822 @@
+{
+  "compiler": "solc 0.8.35, viaIR, optimizer runs 200, Cancun",
+  "scope": "Immutable descriptor harnesses comparing the frozen previous layout (current columns) with the adopted production layout (candidate columns). Deltas are candidate minus current. Internal timers exclude ABI handling.",
+  "openingAndExecution": [
+    {
+      "mode": "none",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "none",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "none",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "none",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "none",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 654,
+      "openCandidate": 643,
+      "openDelta": -11,
+      "runCurrent": 1183,
+      "runCandidate": 1172,
+      "runDelta": -11
+    },
+    {
+      "mode": "none",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 654,
+      "openCandidate": 643,
+      "openDelta": -11,
+      "runCurrent": 1183,
+      "runCandidate": 1172,
+      "runDelta": -11
+    },
+    {
+      "mode": "none",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 654,
+      "openCandidate": 643,
+      "openDelta": -11,
+      "runCurrent": 1183,
+      "runCandidate": 1172,
+      "runDelta": -11
+    },
+    {
+      "mode": "none",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 654,
+      "openCandidate": 643,
+      "openDelta": -11,
+      "runCurrent": 1183,
+      "runCandidate": 1172,
+      "runDelta": -11
+    },
+    {
+      "mode": "state",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "state",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 2056,
+      "runCandidate": 2064,
+      "runDelta": 8
+    },
+    {
+      "mode": "state",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 4572,
+      "runCandidate": 4580,
+      "runDelta": 8
+    },
+    {
+      "mode": "state",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 12850,
+      "runCandidate": 12858,
+      "runDelta": 8
+    },
+    {
+      "mode": "state",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 1546,
+      "runCandidate": 1517,
+      "runDelta": -29
+    },
+    {
+      "mode": "state",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 2161,
+      "runCandidate": 2132,
+      "runDelta": -29
+    },
+    {
+      "mode": "state",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 3997,
+      "runCandidate": 3968,
+      "runDelta": -29
+    },
+    {
+      "mode": "state",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 11354,
+      "runCandidate": 11325,
+      "runDelta": -29
+    },
+    {
+      "mode": "input",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "input",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 2015,
+      "runCandidate": 2023,
+      "runDelta": 8
+    },
+    {
+      "mode": "input",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 4408,
+      "runCandidate": 4416,
+      "runDelta": 8
+    },
+    {
+      "mode": "input",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 12194,
+      "runCandidate": 12202,
+      "runDelta": 8
+    },
+    {
+      "mode": "input",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 1561,
+      "runCandidate": 1532,
+      "runDelta": -29
+    },
+    {
+      "mode": "input",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 2135,
+      "runCandidate": 2106,
+      "runDelta": -29
+    },
+    {
+      "mode": "input",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 3848,
+      "runCandidate": 3819,
+      "runDelta": -29
+    },
+    {
+      "mode": "input",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 10713,
+      "runCandidate": 10684,
+      "runDelta": -29
+    },
+    {
+      "mode": "both",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "both",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 2732,
+      "runCandidate": 2740,
+      "runDelta": 8
+    },
+    {
+      "mode": "both",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 6375,
+      "runCandidate": 6383,
+      "runDelta": 8
+    },
+    {
+      "mode": "both",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 19184,
+      "runCandidate": 19192,
+      "runDelta": 8
+    },
+    {
+      "mode": "both",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 1546,
+      "runCandidate": 1517,
+      "runDelta": -29
+    },
+    {
+      "mode": "both",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 2833,
+      "runCandidate": 2804,
+      "runDelta": -29
+    },
+    {
+      "mode": "both",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 5755,
+      "runCandidate": 5726,
+      "runDelta": -29
+    },
+    {
+      "mode": "both",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 17481,
+      "runCandidate": 17452,
+      "runDelta": -29
+    },
+    {
+      "mode": "empty-state",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "empty-state",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 2015,
+      "runCandidate": 2023,
+      "runDelta": 8
+    },
+    {
+      "mode": "empty-state",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 4408,
+      "runCandidate": 4416,
+      "runDelta": 8
+    },
+    {
+      "mode": "empty-state",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 12194,
+      "runCandidate": 12202,
+      "runDelta": 8
+    },
+    {
+      "mode": "empty-state",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 1546,
+      "runCandidate": 1517,
+      "runDelta": -29
+    },
+    {
+      "mode": "empty-state",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 2449,
+      "runCandidate": 2420,
+      "runDelta": -29
+    },
+    {
+      "mode": "empty-state",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 4842,
+      "runCandidate": 4813,
+      "runDelta": -29
+    },
+    {
+      "mode": "empty-state",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 1017,
+      "openCandidate": 988,
+      "openDelta": -29,
+      "runCurrent": 12628,
+      "runCandidate": 12599,
+      "runDelta": -29
+    },
+    {
+      "mode": "variable",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "variable",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1956,
+      "runCandidate": 1964,
+      "runDelta": 8
+    },
+    {
+      "mode": "variable",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 3636,
+      "runCandidate": 3644,
+      "runDelta": 8
+    },
+    {
+      "mode": "variable",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 11005,
+      "runCandidate": 11013,
+      "runDelta": 8
+    },
+    {
+      "mode": "variable",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 1561,
+      "runCandidate": 1532,
+      "runDelta": -29
+    },
+    {
+      "mode": "variable",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1164,
+      "openCandidate": 1124,
+      "openDelta": -40,
+      "runCurrent": 2255,
+      "runCandidate": 2215,
+      "runDelta": -40
+    },
+    {
+      "mode": "variable",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1590,
+      "openCandidate": 1568,
+      "openDelta": -22,
+      "runCurrent": 4361,
+      "runCandidate": 4339,
+      "runDelta": -22
+    },
+    {
+      "mode": "variable",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 3294,
+      "openCandidate": 3344,
+      "openDelta": 50,
+      "runCurrent": 12785,
+      "runCandidate": 12835,
+      "runDelta": 50
+    },
+    {
+      "mode": "mixed",
+      "allocate": false,
+      "count": 0,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 1112,
+      "runCandidate": 1120,
+      "runDelta": 8
+    },
+    {
+      "mode": "mixed",
+      "allocate": false,
+      "count": 1,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 2842,
+      "runCandidate": 2850,
+      "runDelta": 8
+    },
+    {
+      "mode": "mixed",
+      "allocate": false,
+      "count": 4,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 4525,
+      "runCandidate": 4533,
+      "runDelta": 8
+    },
+    {
+      "mode": "mixed",
+      "allocate": false,
+      "count": 16,
+      "openCurrent": 583,
+      "openCandidate": 591,
+      "openDelta": 8,
+      "runCurrent": 11577,
+      "runCandidate": 11585,
+      "runDelta": 8
+    },
+    {
+      "mode": "mixed",
+      "allocate": true,
+      "count": 0,
+      "openCurrent": 1032,
+      "openCandidate": 1003,
+      "openDelta": -29,
+      "runCurrent": 1561,
+      "runCandidate": 1532,
+      "runDelta": -29
+    },
+    {
+      "mode": "mixed",
+      "allocate": true,
+      "count": 1,
+      "openCurrent": 1233,
+      "openCandidate": 1196,
+      "openDelta": -37,
+      "runCurrent": 3213,
+      "runCandidate": 3176,
+      "runDelta": -37
+    },
+    {
+      "mode": "mixed",
+      "allocate": true,
+      "count": 4,
+      "openCurrent": 1659,
+      "openCandidate": 1640,
+      "openDelta": -19,
+      "runCurrent": 5001,
+      "runCandidate": 4982,
+      "runDelta": -19
+    },
+    {
+      "mode": "mixed",
+      "allocate": true,
+      "count": 16,
+      "openCurrent": 3363,
+      "openCandidate": 3416,
+      "openDelta": 53,
+      "runCurrent": 13425,
+      "runCandidate": 13478,
+      "runDelta": 53
+    }
+  ],
+  "logging": {
+    "rows": [
+      {
+        "mask": 0,
+        "count": 0,
+        "current": 1546,
+        "candidate": 1517,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 0,
+        "count": 1,
+        "current": 2833,
+        "candidate": 2804,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 0,
+        "count": 4,
+        "current": 5755,
+        "candidate": 5726,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 1,
+        "count": 0,
+        "current": 2300,
+        "candidate": 2271,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 1,
+        "count": 1,
+        "current": 4182,
+        "candidate": 4153,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 1,
+        "count": 4,
+        "current": 8869,
+        "candidate": 8840,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 2,
+        "count": 0,
+        "current": 2300,
+        "candidate": 2271,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 2,
+        "count": 1,
+        "current": 4182,
+        "candidate": 4153,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 2,
+        "count": 4,
+        "current": 8869,
+        "candidate": 8840,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 3,
+        "count": 0,
+        "current": 3051,
+        "candidate": 3022,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 3,
+        "count": 1,
+        "current": 5518,
+        "candidate": 5489,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 3,
+        "count": 4,
+        "current": 11951,
+        "candidate": 11922,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 4,
+        "count": 0,
+        "current": 2223,
+        "candidate": 2194,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 4,
+        "count": 1,
+        "current": 4662,
+        "candidate": 4633,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 4,
+        "count": 4,
+        "current": 11040,
+        "candidate": 11011,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 5,
+        "count": 0,
+        "current": 2977,
+        "candidate": 2948,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 5,
+        "count": 1,
+        "current": 6011,
+        "candidate": 5982,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 5,
+        "count": 4,
+        "current": 14154,
+        "candidate": 14125,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 6,
+        "count": 0,
+        "current": 2977,
+        "candidate": 2948,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 6,
+        "count": 1,
+        "current": 6011,
+        "candidate": 5982,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 6,
+        "count": 4,
+        "current": 14154,
+        "candidate": 14125,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 7,
+        "count": 0,
+        "current": 3728,
+        "candidate": 3699,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 7,
+        "count": 1,
+        "current": 7347,
+        "candidate": 7318,
+        "delta": -29,
+        "txDelta": -29
+      },
+      {
+        "mask": 7,
+        "count": 4,
+        "current": 17236,
+        "candidate": 17207,
+        "delta": -29,
+        "txDelta": -29
+      }
+    ],
+    "sizes": {
+      "current": 1878,
+      "candidate": 1843
+    }
+  }
+}
