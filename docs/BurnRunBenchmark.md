@@ -1,6 +1,6 @@
 # Burn execution runner benchmark
 
-`Burn` uses `CommandBase.runCommand(context, descriptor, burnOne)` to process its state.
+`Burn` uses `CommandBase.runCommand(id, descriptor, context, burnOne)` to process its state.
 The benchmark retains the previous `openCommand` / `more` / `close` implementation
 in `TestBurnLoopHost` and compares it with `TestBurnHost`, which inherits the
 updated production command.

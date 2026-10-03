@@ -13,7 +13,7 @@ The fixture compares the production run-count scan with a zero-capacity hint (la
 
 Gas covers opening, consuming input, writing output, buffer initialization/growth/copying, and finishing. It includes benchmark dispatch and loop overhead; it excludes transaction intrinsic/calldata gas, descriptor construction, and the final output hash. Small differences include strategy dispatch overhead. Memory is the increase in the free memory pointer, including abandoned buffers; it is not the EVM memory high-water mark. Repetitions share one call and accumulate allocations.
 
-The 180 measurements cover 0, 1, 8, 64, and 256 input blocks, with eight repeated executions also measured at 64 blocks. Workloads: equal = AMOUNT to BALANCE; expanding = AMOUNT to POSITION; shrinking = 256-byte BYTES to BALANCE; variable = BYTES payloads cycling through 0, 16, 256, and 2048 bytes to BALANCE; sparse = one BALANCE per eight AMOUNT blocks; unused = consume AMOUNT without emitting output despite a nonempty output descriptor. These are input-only, stride-one synthetic commands, not a complete pipeline benchmark.
+The 180 measurements cover 0, 1, 8, 64, and 256 input blocks, with eight repeated executions also measured at 64 blocks. Workloads: equal = ASSET_AMOUNT to BALANCE; expanding = ASSET_AMOUNT to POSITION; shrinking = 256-byte BYTES to BALANCE; variable = BYTES payloads cycling through 0, 16, 256, and 2048 bytes to BALANCE; sparse = one BALANCE per eight ASSET_AMOUNT blocks; unused = consume ASSET_AMOUNT without emitting output despite a nonempty output descriptor. These are input-only, stride-one synthetic commands, not a complete pipeline benchmark.
 
 ## Findings
 

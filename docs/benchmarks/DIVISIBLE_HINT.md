@@ -11,7 +11,7 @@ Production code is unchanged. This extends the original allocation benchmark wit
 
 The fixture stores an encoded source hint in reserved descriptor bits 8..39 before measurement, standing in for metadata created at deployment. It reads the existing input stride, calculates groupSize = sourceHint * sourceStride, and uses input.length / groupSize when divisible and nonzero. Otherwise it uses runCount / sourceStride. Output capacity is estimated groups * output stride * encoded output hint. This tests the allocation algorithm, not the proposed uniform descriptor layout.
 
-Source hints include the 8-byte header: AMOUNT uses 72 bytes; BYTES uses 136 bytes (its current 128-byte payload hint). All cases use input-only, stride-one descriptors. Grouped/state-driven execution and a zero source hint are not covered here.
+Source hints include the 8-byte header: ASSET_AMOUNT uses 72 bytes; BYTES uses 136 bytes (its current 128-byte payload hint). All cases use input-only, stride-one descriptors. Grouped/state-driven execution and a zero source hint are not covered here.
 
 Gas includes opening, decoding, output writing, buffer allocation/growth/copying, finishing, and benchmark dispatch/loop overhead. Descriptor construction, final output hashing, transaction intrinsic gas and calldata gas are excluded. Memory is free-memory-pointer growth, including abandoned buffers. Eight repetitions share one call. Compare strategies within this run: the expanded workload dispatch changes absolute gas compared with the earlier benchmark.
 

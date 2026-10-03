@@ -22,9 +22,9 @@ only `Executions.openContext` and the capacity multiplication in `writerCursor`.
 
 ## Implementation
 
-`openContext` now reads the CONTEXT header, account, and nested BYTES headers and
+`openContext` now reads the CONTEXT header, account, and nested STATE and INPUT headers and
 packs both cursor lanes in one memory-safe assembly block. Validation remains in
-the same order: CONTEXT key, state BYTES key, input BYTES key/exact length, then
+the same order: CONTEXT key, STATE key, INPUT key/exact length, then
 outer context boundary. Underflow in the tail length is rejected by its uint32
 bound. Offset additions combine a bounded calldata offset with uint32 lengths;
 they cannot overflow uint256. The generic absolute-offset `Blocks.unpackContext`

@@ -26,8 +26,8 @@ bytes4(keccak256("#name"))
 
 The protocol's standard schema catalog defines each built-in key together with
 its canonical alias, specification, and body. Indexers must preload this catalog
-and therefore know, for example, that the key derived from `#amount` is named
-`amount` and has the body `{ bytes32 asset, uint amount }`. This does not depend
+and therefore know, for example, that the key derived from `#assetAmount` is named
+`assetAmount` and has the body `{ bytes32 asset, uint amount }`. This does not depend
 on a host emitting a named schema annotation.
 
 If an emitted `#schema` body has no name prefix and its key is standard,
@@ -92,8 +92,8 @@ One optional pair of outer braces may wrap any non-empty schema body. The
 braces are presentation-only and never change its wire layout:
 
 ```txt
-amount: bytes32 asset, uint amount
-amount: { bytes32 asset, uint amount }
+assetAmount: bytes32 asset, uint amount
+assetAmount: { bytes32 asset, uint amount }
 ```
 
 After extracting any name prefix, consumers must remove one matching pair of
@@ -104,7 +104,7 @@ additional outer brace layers are invalid.
 A block body can reference another block alias as a child item with `#`:
 
 ```txt
-{ bytes32 account, #bytes as state, #bytes as input }
+{ bytes32 account, #state, #input }
 ```
 
 The empty schema string `""` means the block has no structured payload. This is
@@ -120,7 +120,7 @@ A structured schema body is a comma-separated list of items. Order is
 significant.
 
 ```txt
-{ #amount, #account as recipient }
+{ #assetAmount, #account as recipient }
 ```
 
 ### Repeated-reference shorthand
@@ -197,6 +197,35 @@ length of 40 bytes. There is no separate name word. This replaces the previous
 `uint spec, #string as body, bytes32 name` wire format; consumers must migrate
 alongside producers rather than accepting the trailing word as part of the body.
 
+## State and Input containers
+
+`#state` and `#input` are variable-length containers for encoded block streams.
+Each uses the standard eight-byte header and permits an empty payload. Child
+schemas are determined by the endpoint or enclosing protocol. Like `#list`, their
+catalog schema strings are empty because no single child layout is prescribed.
+Their unbounded specs have a zero minimum and a 128-byte allocation hint.
+
+CONTEXT is `bytes32 account, #state, #input`; STEP is
+`uint cmd, uint value, #input`; RELAY is `#input, #bytes as steps`.
+The RELAY steps payload remains an encoded STEP stream inside BYTES.
+These typed wrappers replace the former BYTES wrappers without changing offsets
+or total encoded sizes. Old BYTES children are rejected in the migrated positions;
+producers and consumers must migrate together.
+
+Standalone containers can use `Encoder.createBlock(Keys.State, state)` and
+`Encoder.createBlock(Keys.Input, input)`. Context creators and wrapping writers
+construct these headers automatically. Complete-child writers expect the typed
+headers to be included already.
+
+Encoders copy payloads without recursively validating them. Container decoding
+checks keys, lengths, order, and boundaries, then returns payload cursors that
+exclude the wrapper headers. Commands validate their own payload schemas.
+Runner logs retain STATE/INPUT container headers and wrap output in OUTPUT.
+Returned output streams remain unwrapped.
+
+Within `#groups` metadata, `#state` and `#input` retain their contextual meaning
+as endpoint lane references; this is distinct from their container block keys.
+
 ## Payload Layout
 
 A block payload encodes schema items in declaration order. Fixed fields are
@@ -206,7 +235,7 @@ length, fixed fields may appear before, after, or between child blocks.
 
 ```txt
 { uint target, uint value, #bytes as payload }
-{ bytes32 account, #bytes as state, #bytes as input }
+{ bytes32 account, #state, #input }
 { uint spec, #string as body }
 { #bytes as left, uint op, #bytes as right }
 ```
@@ -232,7 +261,7 @@ helpers, and close the decoder to reject trailing or malformed data.
 For example, the standard relay envelope is:
 
 ```txt
-relay { #bytes as input, #bytes as steps }
+relay { #input, #bytes as steps }
 ```
 
 A relay implementation can publish its transport-specific input shape with the
@@ -349,23 +378,29 @@ wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
 
 The parent schema identifies one complete operation; batching repeats that parent.
 This remains available for custom compositions, but `portBook` uses a flat stream
-instead: its descriptor declares ACCOUNT_AMOUNT input and its `#groups` annotation
+instead: its published spec declares ACCOUNT_AMOUNT input and its `#groups` annotation
 on the port ID is `#input as (debit, credit)`. Each pair occupies 208 bytes with no
 parent header. Two bounded reads enforce complete pairs before calling the hook;
 a missing second block or malformed header reverts the whole batch.
 
 ## Endpoint Lanes
 
-Endpoint descriptors identify each lane with a top-level block key. Each block
+Endpoint events publish `[spec:16][codes:16]` for each state, input, and output lane.
+The upper half retains the spec fields; the lower half holds four uint32 codes.
+`Lanes.create(spec, codes)` rejects overflow and overlap; `Lanes.spec` and
+`Lanes.codes` extract each component. Zero codes disable logging. Plain Specs
+constants are valid silent lanes. Keep Specs constants unchanged for block APIs.
+Each spec identifies its top-level block key and retains bounds and hints. Each block
 represents one operation; fixed compositions use a custom parent block.
-Solidity endpoint helpers accept specs such as `Specs.Amount`, while
+Solidity endpoint helpers accept specs such as `Specs.AssetAmount`, while
 `Specs.Empty` declares an absent lane. There is no stride or group multiplier.
 
-The packed descriptor uses this layout, from most to least significant byte:
+Registration separately derives an internal execution descriptor for opening and
+allocation; it is not published in Endpoint events. Its layout, from most to
+least significant byte, is:
 
 ```txt
-[state key:4][input key:4][output key:4][source key:4]
-[source block size:4][output block size:4][source shift:1][lanes:1][reserved:5][flags:1]
+[source key:4][source block size:4][output block size:4][reserved:19][flags:1]
 ```
 
 Endpoint loop grouping is described separately by a `#groups` annotation on the
@@ -377,15 +412,15 @@ endpoint ID. Its payload schema is `#string as description`. For example:
 
 This is a dedicated annotation language, not a block payload schema. Only
 `#state`, `#input`, and `#output` are lane references; each resolves to the
-corresponding descriptor schema. An entry is a lane reference followed by `as`
+corresponding published endpoint spec. An entry is a lane reference followed by `as`
 and a parenthesized list of at least two aliases. Commas outside parentheses
 separate entries. Each lane may appear once. Aliases use the ordinary schema
 alias-path rules; duplicate or colliding aliases within a lane are invalid.
 Alias order describes consecutive blocks within one loop iteration. No wrapper
 or extra block header is added, and no global schema aliases are introduced.
 
-Only grouped lanes are listed; omitted lanes have no grouping hint. Descriptor
-schemas take precedence: entries for empty lanes are ignored and cannot create
+Only grouped lanes are listed; omitted lanes have no grouping hint. Published endpoint
+specs take precedence: entries for empty lanes are ignored and cannot create
 blocks. Group counts are implied by the alias lists, not stored in descriptors.
 Annotations affect neither decoding, allocation, nor runtime enforcement.
 Execution output allocation uses descriptor hints and grows when needed.
@@ -398,20 +433,31 @@ the previous whole description; an empty string clears the hints. Invalid select
 annotations should be reported by tooling rather than silently falling back to an
 older description. Trust remains the consumer's responsibility.
 
-The allocation source is declared state when present, otherwise input. Its shift
-is 64 for state and zero for input or no source. Block sizes include the header.
-The lanes byte precomputes state presence in bit 0 and input presence in bit 1.
-These are descriptor metadata; opening does not copy lane flags into cursors.
+The allocation source is declared state when present, otherwise input, even when
+supplied state is empty. Block sizes include the header; 32-bit fields preserve
+the full 24-bit payload hint plus that header. Zero output size disables initial
+allocation. With no source key, opening reserves one output block.
+
+Internal flag bits are `StateSource = 1`, `LogState = 2`, `LogInput = 4`, and
+`LogOutput = 8`. `Executions.describe(state, input, output)` derives logging bits
+from nonzero codes in each lane. Public behavior flags remain in endpoint IDs
+and are omitted from descriptors. Reserved bits are zero.
+Descriptors carry allocation and logging instructions, not complete schema metadata.
 
 Solidity code constructs this metadata with `Executions.describe`. The same
-library initializes an `Execution` through `exec.open` or `exec.openInput`;
+library initializes an `Execution` through `exec.openContext` or `exec.openInput`;
 their independent state/input cursors use the standard Cursors range layout.
-`exec.open` initializes the
+`exec.openContext` initializes the
 command account and an explicit native-value budget together with both sources
 and the output writer. Input-only endpoints use `exec.openInput`, which accepts
 an explicit budget but no command account. Passing the budget explicitly keeps
 both opening helpers pure and supports callers that forward an existing budget.
 Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
+`exec.logInput(id, descriptor)` logs raw input from a freshly opened input-only
+execution, before consumption, when that lane has nonzero codes. It creates an
+INPUT header around the stream instead of reading preceding calldata. The ID,
+header, and payload are emitted in one LOG0; no execution fields are changed.
+
 
 `Cursors` supplies shared range primitives: `create(abs, endAbs)` validates bounds,
 while `pack(abs, endAbs)` packs already validated positions without repeating checks.
@@ -433,10 +479,10 @@ are absolute. Encoder continues to use its separate relative offset/capacity mod
 
 Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
 the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
-behavior, and bits 2 through 5 remain reserved for future protocol flags.
+behavior, and bits 2 through 5 are unassigned. Logging is selected by lane codes.
 
 Execution stores input and state in independent uint cursors, each using bits
-0-63 for current/end. Declared-lane information belongs to the descriptor, not
+0-63 for current/end. Source selection belongs to the descriptor, not
 the cursors. Buffer writers use bits 0-63 for their relative offset/capacity.
 
 Specs pack `[key:4][min:4][max:4][hint:3][reserved:17]` from most to least
@@ -458,8 +504,8 @@ zero operations; a zero-length block is valid only when its schema permits it,
 as with bytes, strings, or lists.
 
 Execution cursor opening wraps the supplied state and input calldata without
-validating their descriptor keys. Those fields remain discovery
-metadata. When output is declared, writer pre-sizing may count the consecutive
+validating their published lane specs. The descriptor source key is only an
+allocation hint. When output is declared, writer pre-sizing may count the consecutive
 prime-block run from declared state, or input when state is absent. Divisible
 source lengths use the precomputed block size directly; the fallback scan is an
 allocation hint only. The writer remains resizable. Block schema and boundary
@@ -480,9 +526,9 @@ command; descriptor metadata alone does not perform that validation.
 
 ## Live Pipeline State
 
-STEP command IDs use subtype `0x03` and copy their descriptor flags into the
+STEP command IDs use subtype `0x03` and encode public endpoint flags in the
 last byte of the ID type field. Flag bit 7 and the envelope
-`relay { #bytes as input, #bytes as steps }` identify handoff commands.
+`relay { #input, #bytes as steps }` identify handoff commands.
 `Pipeline.pipe` automatically places the flagged STEP's ordinary input and the
 untouched remaining STEP stream in this envelope, then transfers ownership of
 that continuation to the command.
@@ -1074,7 +1120,7 @@ names use one or more lower camelCase path segments separated by dots:
 Invalid examples:
 
 ```txt
-Amount
+AssetAmount
 asset_meta
 asset-meta
 0account
@@ -1132,7 +1178,8 @@ account              bytes32 account
 asset                bytes32 asset
 status               uint code
 codes                uint codes
-amount               bytes32 asset, uint amount
+amount               uint amount
+assetAmount          bytes32 asset, uint amount
 balance              bytes32 asset, uint amount
 debt                 bytes32 liability, uint debt
 accountAsset         bytes32 account, bytes32 asset
@@ -1152,12 +1199,12 @@ quote                bytes32 asset, uint amount, bytes32 liability, uint debt
 position             bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
 transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
-step                 uint cmd, uint value, #bytes as input
+step                 uint cmd, uint value, #input
 swap                 bytes32 asset, uint amount, many #asset as hops
 call                 uint target, uint value, #bytes as payload
-relay                #bytes as input, #bytes as steps
+relay                #input, #bytes as steps
 dispatch             uint portal, uint resources, #bytes as payload
-context              bytes32 account, #bytes as state, #bytes as input
+context              bytes32 account, #state, #input
 recover              uint handler, uint value, bytes32 key, #bytes as witness
 annotation           uint entity, #bytes as data
 action               uint action
@@ -1166,6 +1213,16 @@ groups               #string as description
 label                bytes32 namespace, #string as name
 schema               uint spec, #string as body
 ```
+
+`#amount` contains a single full-width quantity; its consumer defines the asset
+or unit. `#assetAmount` contains both an asset identifier and its quantity.
+Commands and ports that accept a caller-selected asset use `#assetAmount`.
+These are input/value blocks, distinct from live `#balance` state.
+
+The former two-word `#amount` layout is replaced by `#assetAmount`. Old encoded
+inputs must be re-encoded with the new key; scalar `#amount` accepts exactly
+32 payload bytes and rejects the former 64-byte payload. Decode historical
+deployments using the schemas applicable to those deployments.
 
 `#swap` contains an asset and amount followed by a LIST of ASSET blocks.
 `swapExactIn` interprets the fixed fields as the input liability and exact debt,
@@ -1179,7 +1236,7 @@ Each hook returns a complete Position for subsequent position constraints.
 
 `#codes` carries one packed word using the event-code convention: up to eight
 nonzero uint32 IDs, lowest slot first, followed by zero padding. Zero represents
-an empty list. Categories are Actions (0), Effects (4), and States (5). The codec
+an empty list. Categories are Actions (0), Entities (1), Effects (4), and States (5). The codec
 checks the block shape, not code semantics. Consumers define which codes apply;
 `assetCodes` requires one Active or Inactive state and describes current conditions,
 not historical actions or effects. See [Indexing](Indexing.md#codes-and-correlation).
@@ -1189,7 +1246,7 @@ annotations. It is distinct from `#node` and `#asset`; the codec validates the
 exact 32-byte payload without restricting the identifier's kind or rejecting zero.
 `entityCodes` consumes these blocks and returns one `#codes` per input in order,
 including repeated or unknown entities. Empty input produces empty output. Its
-hook defines applicable current conditions and code packing, without requiring
+hook defines entity kinds, applicable current conditions, and code packing, without requiring
 Active/Inactive for every entity kind. Zero codes means unknown or no condition
 reported; it is distinct from an explicit `States.Inactive`. Historical actions
 and effects do not belong in this query response.
@@ -1212,3 +1269,45 @@ A host account counterparty may be settled through account debit/credit hooks
 on any host where it has sufficient balances, or realized by its own host.
 The subtype does not dictate routing. Deriving a host account does not invoke
 that host or make it a trusted peer.
+
+## Rooted pipeline context
+
+The standard `#rooted` block has the schema:
+
+```text
+bytes32 account, uint deadline, uint value
+```
+
+Its key is `bytes4(keccak256("#rooted"))`. The payload is exactly 96 bytes and
+contains the account, expiry timestamp, and native value in that order, each as a
+full 32-byte word. The complete block is 104 bytes. `deadline` uses Unix seconds;
+`value` uses the emitting chain's native-value unit (wei on EVM).
+
+`Keys.Rooted`, `Schemas.Rooted`, `Specs.Rooted`, `Headers.Rooted`, and `Sizes.Rooted`
+expose the layout. `Encoder.createRooted`/`writeRooted` encode it;
+`Blocks.unpackRooted` validates and decodes it. Executions provides `outputRooted`
+and `unpackRooted` for output writing and input consumption.
+
+These are data codecs: they do not authorize the account, enforce the deadline,
+transfer value, start a pipeline, or automatically change the execution account.
+`Logs.rooted(account, deadline, value, codes)` emits `codes | ROOTED block` through
+LOG0. The caller decides when to emit it and defines pipeline boundaries and
+nested-context handling for indexers. Adding this schema does not change the
+existing Rooted ABI event or automatically emit context from pipeline runners.
+
+### Event output containers and capacity
+
+`Output`, like `State` and `Input`, is an unbounded block-stream container with
+an empty schema body and a 128-byte payload allocation hint. Its key is
+`bytes4(keccak256("#output"))`. Logging wraps the entire finalized output in this
+block; return values remain unwrapped.
+
+Encoder reserves one owned 32-byte word before the bytes length on allocation
+and every growth. It is separate from logical capacity, length, cursor offsets,
+and trailing scratch. Descriptor allocation hints and growth thresholds are
+unchanged: filling an exact initial capacity does not resize the buffer.
+`Logs.memWrap(prefix, key, value)` temporarily uses that word and the bytes length
+to emit a wrapper without copying, then restores both. It requires a finished
+Encoder-owned buffer, not arbitrary Solidity bytes. Resolve addresses after any
+growth. This prefix space wraps the whole buffer; nested streams still need
+explicit header reservations within their logical output.

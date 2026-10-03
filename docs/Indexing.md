@@ -21,7 +21,8 @@ event EventAbi(string abi)
 
 An indexer that replays a host's deployment logs learns the complete event ABI
 of that host without artifact files. Only `EventAbi` itself must be known a
-priori.
+priori for ordinary events. Topic-free runner logs and correlated block-stream logs
+use the fixed conventions below instead of `EventAbi`.
 
 ## Repository Discovery
 
@@ -30,43 +31,33 @@ discovery event from its constructor, so a host's deployment transaction
 contains its full endpoint catalog:
 
 ```txt
-event Endpoint(uint indexed host, uint id, uint descriptor)
+event Endpoint(uint indexed host, uint id, uint state, uint input, uint output)
 ```
 
-- `descriptor` packs `[state key:4][input key:4][output key:4][source key:4]`,
-  `[source block size:4][output block size:4][source shift:1][lanes:1]`,
-  `[reserved:5][flags:1]`.
-  From the least significant bit, the offsets are: flags 0, reserved 8,
-  lanes 48, source shift 56, output block size 64,
-  source block size 96, source key 128, output key 160, input key 192,
-  and state key 224.
-  Flag bits 0 and 1 mean `funded` and `admin`; bit 7 means `handoff`, bit 6 is
-  reserved for endpoint-defined behavior, and bits 2 through 5 remain reserved
-  for future protocol flags.
-  Source shift 64 selects state; 0 selects input or no source. A zero source key
-  identifies no source. Declared state takes precedence over input even when empty.
-  Lane bits 0 and 1 indicate declared state and input, respectively.
-  Block sizes are allocation estimates including the eight-byte header.
-  When source length divides its nonzero block size exactly, execution estimates
-  block count by division; otherwise it counts the leading matching block run.
-  Output capacity is source block count times output block size. With no declared
-  source, capacity defaults to one output block. An empty declared source estimates
-  zero blocks. Execution opening allocates eagerly; capacity scaling is deferred.
-  These estimates do not validate consumption; decoding validates the stream and
-  the output buffer can grow. Schema annotations retain the full spec metadata.
-  Indexers must decode descriptors according to the emitting deployment's format.
-  A top-level list uses a context-local input key whose published schema body
-  consists of one `many #item`, optionally wrapped in braces; nested lists in a
-  body with sibling items continue to use the generic `#list` key.
-- Command, port, query, and guard endpoints all share `Endpoint`; admin commands
-  are marked by the descriptor's admin flag.
+- `state`, `input`, and `output` are packed lanes: `[spec:16][codes:16]`.
+  Mask off the lower 128 bits to recover the spec, whose fields remain
+  `[key:4][min:4][max:4][hint:3][reserved:17]`. The lower 128 bits hold four
+  uint32 code slots. Nonzero codes select logging; a zero spec declares no schema.
+  A maximum of zero is unbounded; bounds and hints describe payload bytes.
+- Command, port, query, and guard endpoints all share `Endpoint`. Endpoint
+  behavior flags come from `id`: `(id >> 224) & 0xff`. Bits 0 and 1 mean
+  `funded` and `admin`; bit 7 means `handoff`. Bits 2-5 are unassigned and bit 6
+  is reserved for endpoint-defined behavior. Lane codes select logging separately.
+- Registration still derives an execution descriptor for runtime opening and
+  allocation. That descriptor is internal metadata and is no longer emitted.
+  Indexers resolve schemas from the three published specs. A top-level list can
+  use a context-local key with a schema body containing one `many #item`;
+  nested lists with siblings continue to use `#list`.
+- This event signature replaces the former descriptor-bearing Endpoint event.
+  Decode historical deployments using their published EventAbi; do not apply the
+  new field layout to old logs. Lane codes require the deployment's encoding version: EventAbi alone cannot distinguish older spec-only semantics.
 - Block schema strings are published as `#schema` blocks in `Annotation` events.
   Hosts may publish additional schema claims later through the admin `annotate`
   command.
 
 An endpoint may publish `#groups { #string as description }` on its endpoint ID:
 `#state as (debit, credit), #output as (receipt, change)`. Only grouped lanes are
-listed. These endpoint-local references resolve through descriptor schemas; empty
+listed. These endpoint-local references resolve through published endpoint specs; empty
 lanes take precedence and their hints are ignored. Alias order and count describe
 blocks per loop iteration. Omitted lanes remain unspecified. This annotation does
 not change the descriptor, block encoding, allocation, or execution. The latest
@@ -104,31 +95,40 @@ emitting contract; indexers scope them by chain and emitter address. Amounts hav
 no uniqueness requirement and zero amounts are valid.
 
 Companion events can reference the ID when their schema supports it. Existing
-Balance, Positioned, and Settled events do not carry this reference. Hosts must
+Balance events and endpoint output logs do not carry this reference. Hosts must
 document any ordering used to associate details without an explicit reference.
 The event declaration does not validate these conventions.
 
-`codes` packs up to eight total `uint32` action, effect, or state identifiers, starting in
+`codes` packs up to eight total `uint32` action, entity-kind, effect, or state identifiers, starting in
 the least significant 32 bits. Entries must be contiguous and nonzero, followed
 by zero padding in the unused high slots. A zero word represents an empty list.
 The event mixin does not validate packing; emitters are responsible for this
 convention. Order and duplicates are preserved; adjacency does not imply
 action-to-effect pairing. This is an ID list, not a bitmask. All codes fields share this format.
 
-Use `Actions`, `Effects`, and `States`, all exported by `Events.sol` and `Utils.sol`.
+Use `Actions`, `Entities`, `Effects`, and `States`, all exported by `Events.sol` and `Utils.sol`.
 The top three bits of each `uint32` code reserve space for eight categories;
 the remaining 29 bits allow 536,870,912 values per category.
 
 | Category | Meaning | Inclusive range |
 |---|---|---|
 | 0 | Actions | `0x00000000`–`0x1fffffff` |
-| 1 | Reserved | `0x20000000`–`0x3fffffff` |
+| 1 | Entities | `0x20000000`–`0x3fffffff` |
 | 2 | Reserved | `0x40000000`–`0x5fffffff` |
 | 3 | Reserved | `0x60000000`–`0x7fffffff` |
 | 4 | Effects | `0x80000000`–`0x9fffffff` |
 | 5 | States | `0xa0000000`–`0xbfffffff` |
 | 6 | Reserved | `0xc0000000`–`0xdfffffff` |
 | 7 | Reserved | `0xe0000000`–`0xffffffff` |
+
+`Entities` classifies the associated subject; it does not replace its full-width
+identity. Kind codes are optional when the event or subject ID already supplies
+that information. The catalog assigns `Asset = 0x20000000`, `Account = 0x20000001`,
+`Host = 0x20000002`, `Command = 0x20000003`, `Query = 0x20000004`,
+`Route = 0x20000005`, `Position = 0x20000006`, `Guardian = 0x20000007`, and
+`Pool = 0x20000008`, `Port = 0x20000009`, and `Balance = 0x2000000a`.
+Other category-1 values are reserved. There is no
+`Entities.None`; zero remains the empty list or padding.
 
 `Actions.None = 0` is reserved for the empty list or padding, leaving category 0
 with one fewer usable identifier. Existing action and effect IDs are unchanged.
@@ -159,16 +159,35 @@ Each combination places the action first and resulting state second. They are
 compile-time combinations of standard IDs, not a separate category. Pass them
 directly as codes; hosts can define other combinations locally. Create and
 Update do not imply a particular state, so callers compose those explicitly.
+`Codes.AddRouteThenActive` explicitly combines `Actions.Add`,
+`Entities.Route`, and `States.Active` in that order:
 
-Each constant already includes its category bits, so a single action, effect, or state
+```solidity
+uint codes = Actions.Add | (Entities.Route << 32)
+    | (States.Active << 64);
+```
+
+The entity kind occupies one of the eight available slots. This named combination
+describes an active added route; arbitrary code adjacency still does not
+establish causal pairing.
+
+`Codes.RemoveRouteThenInactive` is the corresponding removal combination:
+`Actions.Remove`, `Entities.Route`, and `States.Inactive`, in that order.
+
+`Codes.AllowAssetThenActive` combines `Actions.Allow`, `Entities.Asset`, and
+`States.Active`. Its counterpart, `Codes.DenyAssetThenInactive`, combines
+`Actions.Deny`, `Entities.Asset`, and `States.Inactive`. Both use three slots;
+the existing `AllowThenActive` and `DenyThenInactive` omit the entity kind.
+
+Each constant already includes its category bits, so a single action, entity-kind, effect, or state
 can be passed directly without shifting. Category capacity is independent of
 packing capacity: an activity still holds at most eight codes in total.
 
 ```solidity
-emit Activity(account, asset, amount, uint(Actions.Deposit) | (uint(Effects.Receive) << 32));
+emit Activity(account, asset, amount, Actions.Deposit | (Effects.Receive << 32));
 emit Activity(account, asset, amount, Effects.Lock);
-uint codes = uint(Actions.Swap) | (uint(Effects.Spend) << 32)
-    | (uint(Effects.Receive) << 64);
+uint codes = Actions.Swap | (Effects.Spend << 32)
+    | (Effects.Receive << 64);
 // The host's swap schema defines value as a reference to companion details.
 emit Activity(account, bytes32(0), correlationId, codes);
 ```
@@ -177,10 +196,10 @@ Cast each ID to `uint` before shifting so shifts beyond the first slot retain
 their bits. To decode a word, read `uint32(word)` then shift `word >>= 32`, up to
 eight times; zero terminates the list and all remaining slots must also be zero.
 For each nonzero code, decode its category with `code >> 29` and its local
-identifier with `code & 0x1fffffff`. Category 0 identifies actions, category 4 identifies effects, and category 5
+identifier with `code & 0x1fffffff`. Category 0 identifies actions, category 1 identifies entity kinds, category 4 identifies effects, and category 5
 identifies states; the other categories are reserved for future catalogs.
 Unknown categories and unassigned identifiers have no defined meaning; indexers
-should preserve the full code without interpreting it as a known action, effect, or state.
+should preserve the full code without interpreting it as a known action, entity-kind, effect, or state.
 
 Names arrive as annotations. Each standard mixin emits a canonical label block
 at construction, and the admin `annotate` command publishes mutable annotations
@@ -278,8 +297,8 @@ metadata, or node target is needed.
 Command subtype `0x03` identifies every command. Flag bit 7 identifies a
 pipeline handoff command whose STEP input and remaining continuation are wrapped
 automatically in a RELAY block.
-Endpoint IDs and descriptors carry the same flags, so indexers can verify their
-metadata directly.
+Indexers read behavior flags directly from endpoint IDs. Runtime descriptors
+derive internal logging selections from lane codes and are not published.
 Opaque preimages use `[formatHash][category][subtype][payload...]`; `0x01`
 means keccak256. The category and subtype must match the ID. The remaining
 bytes are host/domain-specific for now.
@@ -324,8 +343,6 @@ host conventions.
 
 ```txt
 event Balance(bytes32 indexed account, bytes32 asset, uint balance)
-event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint codes)
-event Settled(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
 event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)
 event Asset(uint indexed host, bytes32 asset, uint codes)
 event AssetPreimage(bytes32 indexed asset, bytes preimage)
@@ -356,7 +373,7 @@ its `#status` response; empty input still returns empty output.
 
 For generic entities, `entityCodes` accepts `#entity { uint entity }` blocks and
 returns one `#codes` per input, preserving order and duplicates. The hook defines
-applicable current conditions; Active/Inactive is optional where it does not
+entity kinds and applicable current conditions; Active/Inactive is optional where it does not
 apply. Zero codes means unknown or no condition reported, not inactive. This
 query does not report historical actions or effects and does not reconstruct
 event history. The query preserves the hook's codes without semantic validation.
@@ -403,18 +420,21 @@ The three-field signature changes topic zero from the former four-field event.
 Indexers spanning both versions must decode each signature separately, using
 the published `EventAbi` metadata.
 
-**Positions.** An action that exposes a resulting live position may emit
-`Positioned` with both the asset and liability sides, the counterparty, and the primary `Actions`
-code that produced them. The event records the emitting host's observation of
-the transient pipeline position; it does not by itself prove that either side
-was persisted or settled.
+**Positions.** The `swapExactIn` and `swapExactOut` commands emit one
+[endpoint-prefixed OUTPUT log](#command-runner-stream-logs) after processing the
+batch. Their Endpoint output lane publishes `Actions.Swap`. All returned POSITION
+blocks appear in input order, with full-width fields. Empty batches emit an empty
+OUTPUT container; a reverted command rolls back its logs. The account is not
+included automatically; account context requires a deployment convention.
 
-After fully settling a position, a host may emit `Settled` with the account,
-counterparty, and settled asset and debt quantities. Only `account` is indexed.
-Emit it once per position after the settlement hook succeeds. These are the
-final quantities supplied by the producer; settlement adds no host fee.
-Producers record any separate fee payments in their own flow events.
-Hosts opt into emission through `SettledEvent`.
+Use `exec.outputPosition(position)` to append a position and select codes in the
+endpoint's output lane to log the final stream. Produced output does not by itself
+prove persistence or settlement. An endpoint reporting successful settlement can
+use `Actions.Settle`; the emitter remains responsible for the reported semantics.
+
+The legacy `PositionedEvent` and `SettledEvent` mixins and tagged state-log helpers
+have been removed. Replay older deployment logs using their original ABI metadata
+or the historical tagged formats documented below.
 
 **Flows.** Operations that move value emit `Activity(account, asset, amount, codes)`
 per affected amount. Include the matching effect code and the action when known.
@@ -439,7 +459,7 @@ by widening to uint and shifting, not by OR-ing IDs into the same slot.
 cashout are responsible for their own flow events and event ABI publication.
 The free `sendChainAsset` transfer helper emits no events; hosts may inherit
 `ActivityEvent` and emit
-`Activity(account, chainAsset, amount, uint(Actions.Cashout) | (uint(Effects.Spend) << 32))`
+`Activity(account, chainAsset, amount, Actions.Cashout | (Effects.Spend << 32))`
 after a successful payout according to their event policy.
 
 `Balance` and flow events are complementary, not redundant: flow events record
@@ -473,11 +493,11 @@ logs of the transaction to attribute effects to the invocation.
 ### Codes and Correlation
 
 All events carrying codes use the same uint packing as Activity: up to eight
-nonzero uint32 action/effect/state IDs, lowest slot first, with zero-filled unused high
+nonzero uint32 action/entity-kind/effect/state IDs, lowest slot first, with zero-filled unused high
 slots. Zero means no codes. Order and duplicates are preserved; adjacency does
 not pair actions with effects. Each ID includes its category bits: category 0
-is Actions, category 4 is Effects, category 5 is States, and other categories remain reserved.
-A single Actions, Effects, or States constant can be passed directly. When composing
+is Actions, category 1 is Entities, category 4 is Effects, category 5 is States, and other categories remain reserved.
+A single Actions, Entities, Effects, or States constant can be passed directly. When composing
 multiple codes in Solidity, widen to uint before shifting by 32 bits or more.
 
 Asset, Node, Guardian, and Route require exactly one occurrence of either
@@ -504,7 +524,7 @@ which operation occurred. Its canonical meaning is the same across event types:
 `Actions.Add`/`Actions.Remove` mean membership changes, and
 `Actions.Refund` means a refund. The event identifies the affected entity or
 effect and supplies context. Resulting state codes do not redefine the action. For example,
-`Asset(host, asset, uint(Actions.Create) | (uint(States.Inactive) << 32))`
+`Asset(host, asset, Actions.Create | (States.Inactive << 32))`
 records an asset that was created but is inactive on that host, not a denial.
 Consumers should retain the action even when different operations produce the
 same state. Hosts choose applicable actions and must emit them truthfully.
@@ -583,3 +603,143 @@ The unified `Balance` event identifies an indexed account (`bytes32`) without
 `access`. Host holdings use the deterministic host account. Indexers must replace
 the former `AccountBalance` and host-indexed `Balance` subscriptions with this
 single event signature.
+
+## Anonymous state logs
+
+This section describes historical logs only. The account-and-codes execution
+output overloads and compact/full-width state helpers have been removed. Current
+swaps use endpoint-prefixed OUTPUT containers instead. Historical logs describe
+produced pipeline values, not proof of persistence or settlement.
+
+These four immutable format tags identify the initial wire format. Future
+incompatible formats must use new tags; do not infer a layout from individual
+bits. Every identifier (`account`, `asset`, `liability`, `counterparty`) is a full
+32 bytes. Integers are unsigned and big-endian. Fields are concatenated with no
+ABI offset, length wrapper, block header, or padding.
+
+| Tag | Exact bytes | Fields, in wire order |
+| --- | ---: | --- |
+| `0x10` | 129 | account, asset, amount:uint256, codes:uint256 |
+| `0x11` | 89 | account, asset, amount:uint96, codes:uint96 |
+| `0x20` | 225 | account, asset, amount:uint256, liability, debt:uint256, counterparty, codes:uint256 |
+| `0x21` | 165 | account, asset, liability, counterparty, amount:uint96, debt:uint96, codes:uint96 |
+
+The tag occupies the first byte and is included in the stated length. Compact
+form is selected only if **every** numeric field fits uint96; otherwise all
+numeric fields use uint256. Nothing is truncated or saturated. Output blocks
+always keep their usual full-width encoding and field order.
+
+Indexers should enable this decoder for known emitting contracts. For a log
+with zero topics, require both a recognized first byte and its exact length,
+then decode the corresponding layout. Preserve unknown or malformed logs as
+raw data. Zero topics alone does not identify a Rootzero state log. Ordinary
+events keep their existing ABI/EventAbi decoding. Fetch by emitter address and
+block range: these state logs have no event signature or indexed account topics
+and cannot be filtered by those fields at the RPC layer. Keep transaction/log
+ordering and the normal reorg rollback behavior.
+
+## Correlated block-stream logs
+
+`Logs.stream(correlationId, abs, size)` emits an existing memory block
+stream using `LOG0`, with no topics. Its wire format is:
+
+```text
+correlationId (32 bytes, highest byte 0x00) | block stream (remaining bytes)
+```
+
+`Logs.Stream` is `0x00`. Callers MUST supply a correlation ID beginning with that
+byte; the helper emits the ID unchanged without validation or packing. The entire
+32-byte word is the correlation ID, with 248 bits available for caller-defined
+identity. The tag is part of the ID, not an additional byte. Arbitrary 256-bit IDs
+cannot be preserved unless they already start with 0x00.
+
+The stream begins at byte 32; an empty stream is a valid 32-byte log. There is no
+ABI wrapper, encoded length, or padding. The caller provides 32 writable bytes
+immediately before the stream. The helper saves that word, writes the ID, logs,
+and restores the word. It does not copy or validate the stream.
+
+For known participating emitters, dispatch zero-topic logs by their first byte:
+`0x10`/`0x11` and `0x20`/`0x21` use the fixed state formats above; `0x00` requires
+at least 32 bytes and a well-formed block stream covering the entire remainder.
+Preserve unknown tags, malformed streams, and unknown block schemas as raw data.
+Ordinary ABI events keep their normal decoding path. No `EventAbi` is announced.
+
+Scope joins by chain, emitter address, and the complete correlation ID, and apply
+normal reorg rollback. Callers decide whether an ID identifies one stream or
+several related streams; keep all occurrences in log order. An all-zero ID is
+allowed but its application meaning must be defined before joining records.
+IDs cannot be filtered as RPC topics; fetch by emitter and decode locally.
+
+## Codes and block-stream logs
+
+`Logs.mem` and `Logs.copy` emit a uniform optional format:
+
+```text
+codes (32-byte big-endian uint256) | block stream (remaining bytes)
+```
+
+There are no topics or additional tags. A 32-byte log is a valid empty stream.
+The full code word is preserved and follows the existing packed-code conventions;
+blocks describe the data, while the emitter defines how the codes apply to it.
+No account, pipeline context, or correlation ID is inserted automatically.
+
+This format coexists with the existing state and correlation stream formats.
+Indexers must select the decoder from an agreed emitter/deployment protocol version
+or another unambiguous enclosing convention. Do not guess from the first byte:
+valid codes can begin with any existing format tag. New-format emitters should
+not mix these undecorated logs with the older tagged formats without an explicit
+way to distinguish them. These helpers alone do not migrate existing events or
+establish rooted account inheritance.
+
+For an emitter using this format, require at least 32 bytes, decode the code word,
+and validate block framing across the entire remainder. Retain unknown codes or
+block keys for forward compatibility. Fetch by emitter, preserve log order, and
+apply the same reorg handling as other logs.
+
+
+## Command runner stream logs
+
+`CommandBase.runCommand(id, descriptor, context, process)` derives logging
+selection from nonzero codes in the three published lanes. It emits:
+
+- Before processing: `[endpoint id:32][STATE block and/or INPUT block]` in one
+  LOG0 record. Selected blocks include their eight-byte headers, even when empty.
+- After processing: `[endpoint id:32][OUTPUT header][output stream]` if output codes
+  are nonzero. Empty selected output emits an empty OUTPUT block. The wrapper
+  exists only in the event; the returned output remains the original stream.
+
+Resolve the endpoint ID against trusted Endpoint metadata, extract each lane's
+codes, and identify STATE/INPUT/OUTPUT by their container headers. Both enabled source
+lanes occur in State, Input order. Codes are published in Endpoint metadata,
+not repeated in these runtime logs. Disabled lanes emit nothing.
+
+Nested context records occur after the outer context record; nested output
+precedes outer output. Callback events occur during processing. Do not assume
+context and output records are adjacent. Matching calls across nesting requires
+the deployment's execution convention; an ID alone is not a unique invocation ID.
+If execution reverts, earlier context logs revert too.
+
+Indexers must use an agreed emitter/deployment convention to recognize runner
+records; callback logs must not impersonate them. Codes-prefixed and older
+anonymous logs are not universally distinguishable by inspecting the prefix
+alone. No universal prefix restriction is enforced by Logs.
+
+These records carry no implicit account or correlation ID. Deployments must
+supply any account-context convention separately. Input and output describe
+command data, not necessarily persisted balances. Preserve log order and
+standard reorg handling.
+
+Swap endpoints select output logging with `Actions.Swap`; other production
+endpoints currently use zero lane codes. `runCommandOnce` and `runAdmin`
+use the same context/output logging; `runPort` logs INPUT then OUTPUT, and
+`runGuard` logs INPUT only. Queries remain view-only and their registration
+rejects nonzero lane codes. Custom adapters must call the primitives explicitly.
+`Executions.logContext` requires untouched cursors from `openContext`; call it
+before consuming either source. It must not be used with `openInput` executions.
+
+Input-only adapters can explicitly call `exec.logInput(id, descriptor)` immediately
+following `openInput`, before consuming input. It obeys only the input lane's
+logging selection and emits `[id:32][INPUT header][input stream]`. The helper
+constructs the missing container header in temporary memory; empty selected input
+still emits that header. It preserves execution fields and the free-memory pointer.
+Port and guard runners call this helper automatically.

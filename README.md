@@ -73,7 +73,7 @@ return the authorized endpoint's selector and address for direct use with the
 free raw-call helpers.
 
 Deploy it with the local host ID encoding your native identity as commander and you can call its commands
-directly. A input is a run of binary blocks — here, a single `#amount` block
+directly. A input is a run of binary blocks — here, a single `#assetAmount` block
 asking to deposit an asset (the encoders are a few lines each; see
 [`test/helpers/setup.ts`](test/helpers/setup.ts) and
 [`test/helpers/blocks.ts`](test/helpers/blocks.ts) for reference
@@ -84,7 +84,7 @@ const commander = await hostId(deployer.address);
 const host = await ethers.deployContract("ExampleHost", [commander]);
 
 const account = encodeUserAccount(user.address); // receiving account
-const input = encodeAmountBlock(asset, 100n); // what to deposit
+const input = encodeAssetAmountBlock(asset, 100n); // what to deposit
 await host.deposit({ account, state: "0x", input: input }); // emits Balance
 ```
 
@@ -103,11 +103,15 @@ payload:
 
 The key is usually `bytes4(keccak256("#name"))`, and the payload layout is
 described by a schema body published under an alias. For example, the standard
-`amount` block that requests a deposit:
+`assetAmount` block that requests a deposit:
 
 ```txt
-amount: { bytes32 asset, uint amount }
+assetAmount: { bytes32 asset, uint amount }
 ```
+
+Use `#assetAmount` when the caller supplies both the asset and quantity.
+The scalar `#amount { uint amount }` block is available when the consumer
+already defines the asset or unit. It has a distinct 32-byte payload.
 
 is 72 bytes on the wire: an 8-byte header followed by two big-endian 32-byte
 fields. There is no ABI encoding and no chain-specific type anywhere in the
@@ -150,10 +154,10 @@ continues to use the generic `#list` key.
 
 ## Batches
 
-An input is not a single struct; it is a run of blocks. One `#amount` block
+An input is not a single struct; it is a run of blocks. One `#assetAmount` block
 asks for one deposit, five blocks ask for five, and the code path is identical
 — every endpoint parses with a cursor and loops until the stream is exhausted.
-The descriptor lane key is the prime item: it is the block type that may repeat
+The published lane key is the prime item: it is the block type that may repeat
 for batching. Each top-level block represents one operation; fixed compositions
 use a custom parent block.
 
@@ -162,11 +166,11 @@ Off-chain, building a batch is concatenation. Using the reference encoders from
 
 ```ts
 import { concat } from "ethers";
-import { encodeAmountBlock } from "./helpers/blocks";
+import { encodeAssetAmountBlock } from "./helpers/blocks";
 
 const input = concat([
-  encodeAmountBlock(usdc, 250_000_000n),
-  encodeAmountBlock(dai, 250n * 10n ** 18n),
+  encodeAssetAmountBlock(usdc, 250_000_000n),
+  encodeAssetAmountBlock(dai, 250n * 10n ** 18n),
 ]);
 // deposit(input) returns two #balance blocks and zero native budget credit
 ```
@@ -352,7 +356,7 @@ Command trust is the authority boundary.
 State is linear, not optional ambient context. A command is responsible for
 the entire state stream it receives: it must validate and consume it, transform
 and return it, forward it intact, or revert. A command must never succeed while
-silently ignoring or dropping supplied state. Descriptor schemas remain
+silently ignoring or dropping supplied state. Published endpoint schemas remain
 discovery metadata; the command's decoding and loop implementation defines its
 runtime source semantics. A command that does not consume supplied state rejects
 it when closing, while `takeState` and `takeStateFixed` validate and consume a complete
@@ -455,58 +459,73 @@ route known state blocks (`#balance`, `#custody`, and `#position`) to
 state automatically; generic and custom-schema decoding consumes input:
 
 ```solidity
-function deposit(
-    bytes calldata context
-) external onlyCommand returns (bytes memory, uint) {
-    Execution memory exec = openCommand(context, descriptor);
+function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+    return runCommand(id, descriptor, context, depositOne);
+}
 
-    while (exec.more()) {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
-        amount = deposit(exec.account, asset, amount); // host policy hook
-        exec.outputBalance(asset, amount);
-    }
-
-    return exec.close();
+function depositOne(Execution memory exec) private {
+    (bytes32 asset, uint amount) = exec.unpackAssetAmount();
+    amount = deposit(exec.account, asset, amount); // host policy hook
+    exec.outputBalance(asset, amount);
 }
 ```
 
 A command announces itself when the host is deployed. Its constructor emits a
-discovery event carrying a packed descriptor with the input, state, and output
-lanes, derived block sizes, and flags, plus a human-readable label:
+discovery event carrying the packed state, input, and output lanes (spec plus codes), plus a
+human-readable label. Flags are carried by the endpoint ID; the helper separately
+returns an execution descriptor for efficient opening:
 
 ```solidity
 abstract contract MyCommand is CommandBase {
+    uint private immutable id;
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("myCommand", Specs.Empty, Specs.Amount, Specs.Balance, 0);
+        (id, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
-    function myCommand(
-        bytes calldata context
-    ) external onlyCommand returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, descriptor);
-        while (exec.more()) {
-            (bytes32 asset, uint amount) = exec.unpackAmount();
-            // Apply command-specific behavior for this block.
-            exec.outputBalance(asset, amount);
-        }
-        return exec.close();
+    function myCommand(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(id, descriptor, context, myCommandOne);
+    }
+
+    function myCommandOne(Execution memory exec) private pure {
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
+        exec.outputBalance(asset, amount);
     }
 }
 ```
 
-Callback runners in `CommandBase`, `AdminBase`, `PortBase`, and `QueryBase` can replace the standard lifecycle:
-`runCommand(context, descriptor, callback)` processes command batches,
-`runCommandOnce(context, descriptor, callback)` invokes its callback exactly once,
-`runAdmin(context, descriptor, callback)` authorizes the admin context before
+Callback runners in `CommandBase`, `AdminBase`, `PortBase`, `GuardBase`, and `QueryBase` provide the standard lifecycle:
+`runCommand(id, descriptor, context, callback)` processes command batches,
+`runCommandOnce(id, descriptor, context, callback)` invokes its callback exactly once,
+`runAdmin(id, descriptor, context, callback)` authorizes the admin context before
 processing a batch, including when its sources are empty,
-`runPort(input, descriptor, callback)` processes port batches and returns output plus
-remaining value credit, and `runQuery(input, descriptor, callback)` processes queries
+`runPort(id, descriptor, input, callback)` processes port batches and returns output plus
+remaining value credit, and `runQuery(descriptor, input, callback)` processes queries
 through an `internal view` callback and returns only response bytes. Each callback
 receives the shared `Execution memory`. Batch callbacks must consume an item on
 every invocation; `runCommandOnce` also invokes its callback for empty sources and rejects
 leftover data afterward. Entry-point access modifiers remain in place.
+
+`runCommand`, `runCommandOnce`, and `runAdmin` use the registered `id` to prefix topic-free logs selected by
+nonzero lane codes (`Lanes.create(spec, codes)`). Before processing,
+`exec.logContext(id, descriptor)` emits selected STATE/INPUT containers together.
+Selected output is emitted as an OUTPUT container after processing; returned bytes
+remain the original stream. See
+[command runner stream logs](docs/Indexing.md#command-runner-stream-logs).
+
+`runPort` logs selected INPUT before processing and OUTPUT afterward.
+`runGuard(id, descriptor, input, callback)` logs selected INPUT and processes a
+guard batch without output or a budget. Queries remain view-only and reject
+nonzero lane codes during registration.
+
+For custom loops, call `logContext` or `logInput` immediately after opening.
+`finish(id, descriptor)` finalizes output and logs it when selected, without
+checking consumption or touching the budget. Use `drainBudget()` to return and
+clear credit. Use `expectEnd()` to require exact consumption, or
+`close(id, descriptor)` to combine that check, finalization, logging, and credit.
+The no-argument `finish()` and `close()` variants remain pure and silent.
+Do not append output after finalization.
 
 Use `<endpoint>One` for per-item private callbacks, such as `depositOne` and
 `portCreditAccountOne`, and `<endpoint>Once` for whole-input callbacks passed to
@@ -530,7 +549,7 @@ Commands can describe grouped lanes with `GroupsAnnot`, available through
 annotateGroups(id, "#state as (debit, credit), #output as (receipt, change)");
 ```
 
-Only grouped lanes are listed. Their schemas come from the descriptor; empty
+Only grouped lanes are listed. Their schemas come from the published endpoint specs; empty
 lanes remain empty. Counts and roles are off-chain hints, with no descriptor
 fields or runtime enforcement. An empty description clears previous hints.
 
@@ -561,10 +580,11 @@ The final argument is a packed flags byte. Pass `0` for an ordinary endpoint,
 or compose values such as `Flags.Funded`, `Flags.Admin`, and
 `Flags.AdminFunded` from the command or endpoint package entry point.
 The same flags byte is copied into the endpoint ID, keeping runtime behavior and
-published descriptor metadata aligned. `Flags.Handoff` marks a command that
+published endpoint metadata aligned. `Flags.Handoff` marks a command that
 takes ownership of the remaining pipeline, while `Flags.HandoffFunded` combines
 handoff behavior with native-value funding;
-bit 6 remains endpoint-defined, and bits 2 through 5 remain reserved.
+bits 2 through 5 are unassigned, and bit 6 remains endpoint-defined.
+Lane codes select logging independently of this flags byte.
 
 `CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
 their payout policy and choose the accounting and events to emit. The hook has
@@ -609,7 +629,7 @@ A single command is rarely the whole story. A pipeline is a run of `#step`
 blocks executed in order within one transaction:
 
 ```txt
-step { uint cmd, uint value, #bytes as input }
+step { uint cmd, uint value, #input }
 ```
 
 Each step names a command, the native value it may spend, and its input.
@@ -657,15 +677,15 @@ An exhausted or zero budget skips the hook.
 
 The EVM pipeline is deliberately coupled to the canonical wire layout for gas
 efficiency. It extracts command selectors, targets, and flags directly from
-command IDs and writes CONTEXT, BYTES, and RELAY blocks directly in assembly.
+command IDs and writes CONTEXT, STATE, INPUT, BYTES, and RELAY blocks directly in assembly.
 Any change to those ID fields or block encodings must update `Pipeline` at the
 same time; the general node and block helpers are not used on this hot path.
 
 A handoff command retains the ordinary command subtype and carries
-`Flags.Handoff` in both its ID and descriptor. The reserved handoff envelope is:
+`Flags.Handoff` in its endpoint ID. The reserved handoff envelope is:
 
 ```txt
-relay { #bytes as input, #bytes as steps }
+relay { #input, #bytes as steps }
 ```
 
 `input` is the handoff STEP's ordinary command input, while `steps` is the
@@ -701,7 +721,7 @@ Handoff has four operational rules:
   state must not be relayed this way.
 
 A transfer, for instance, is a two-step pipeline: `debitAccount` turns an
-`#amount` input into `#balance` state, and `payout` consumes that state
+`#assetAmount` input into `#balance` state, and `payout` consumes that state
 toward a recipient. Because a pipeline is just blocks, it is also the unit of
 command batching. STEP, CALL, and RECOVER carry full-width native `uint value`
 drawn from the shared budget. CALL funds a local call; RECOVER funds its handler
@@ -770,15 +790,15 @@ input:  accountAsset { bytes32 account, bytes32 asset }
 response: accountAmount { bytes32 account, bytes32 asset, uint amount }
 ```
 
-Like commands, every query announces a descriptor at deployment; tooling resolves
-the descriptor's lanes through the published block schemas.
+Like commands, every query announces its input and output specs at deployment;
+tooling resolves their keys through the published block schemas.
 
 `GetEntityCodes` in `queries/Entity.sol` exposes `entityCodes`, which accepts
 `#entity { uint entity }` blocks
 and returns one `#codes { uint codes }` block per entity, preserving input order
 and duplicates. Empty input returns empty output. Entity identifiers use the
 same full-width representation as annotations; the hook defines supported kinds.
-Codes describe current conditions, not historical actions or effects. Zero codes
+Codes describe entity kinds and current conditions, not historical actions or effects. Zero codes
 means unknown or no condition reported; `States.Inactive` means explicitly inactive.
 Active/Inactive is optional for entities where it does not apply. The hook owns
 condition semantics and code packing; the query preserves its returned word.
@@ -842,14 +862,14 @@ with the full port surface must not be admitted as a trusted peer.
 
 The central ports are batches all the way down:
 
-- `portRequestAsset` consumes `amount { bytes32 asset, uint amount }` blocks and
+- `portRequestAsset` consumes `assetAmount { bytes32 asset, uint amount }` blocks and
   passes the authenticated peer, asset, and amount to a host hook. The hook
   validates asset support and applies the host's request and transfer policy.
-- `portRequestAllowance` consumes the same amount blocks and lets the
+- `portRequestAllowance` consumes the same assetAmount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
 - `portBook` consumes a flat stream of paired `accountAmount` blocks: debit
-  account/liability/debt first, then credit account/asset/amount. Its descriptor
+  account/liability/debt first, then credit account/asset/amount. Its published spec
   declares ACCOUNT_AMOUNT input and it publishes `#input as (debit, credit)`
   through `GroupsAnnot` on the port ID, without a custom parent block.
   Both accounts may be the same for booking. It returns empty bytes and zero credit, and any
@@ -891,6 +911,15 @@ Admin commands use the regular command shape but are gated to the host's admin
 account: trust management (`authorize`, `unauthorize`), guardian management
 (`appoint`, `dismiss`), metadata (`annotate`), optional asset gating
 (`allowAsset`, `denyAsset`, `allowance`), and raw calls (`executePayable`).
+`AddPool` and `RemovePool` in `commands/admin/Pool.sol` provide optional pool
+administration. `addPool` consumes consecutive pairs of ASSET_AMOUNT blocks and calls
+its hook with two `AssetAmount` values; `removePool` consumes ASSET pairs and
+passes their identifiers. Both publish `#input as (first, second)` grouping,
+accept empty batches, and return empty output. Incomplete pairs or hook failures
+revert the entire batch. Hosts define pair ordering, asset and amount validation,
+funding, and removal requirements. These commands identify pools by their asset
+pair; hosts with multiple pools per pair need a more specific identifier.
+
 Guards go the other way: direct actions guardians can take
 without any command context — the default is `revoke`, which lets a guardian
 drop a trusted node immediately.
@@ -898,7 +927,7 @@ drop a trusted node immediately.
 ## Events and Discovery
 
 Hosts are self-describing. At deployment a host emits the ABI of every event it
-uses (`EventAbi`), block schema events, endpoint descriptors, and labels for
+uses (`EventAbi`), block schema events, endpoint specs, and labels for
 human-readable names. State changes then follow evented
 conventions: `Balance` for account ledger changes (including host accounts),
 and `Activity(account, subject, value, codes)` for activities and value movement.
@@ -964,3 +993,12 @@ Repo layout:
 Use this library to create a new rootzero host, implement a command, or reuse
 the protocol's block format in tooling. It is the shared protocol foundation,
 not an end-user application.
+
+### Optional output logs
+
+Set output lane codes with `Lanes.create(spec, codes)` to have the endpoint runner
+emit one `[endpoint ID][OUTPUT block]` log after processing the batch. Output helpers
+only append blocks; returned streams remain unchanged. Both swap commands publish
+`Actions.Swap` in their output lane and use this format, including empty batches.
+Logs carry no implicit account. See [runner logs](docs/Indexing.md#command-runner-stream-logs)
+for indexer rules. Ordinary events continue to use `EventAbi`.

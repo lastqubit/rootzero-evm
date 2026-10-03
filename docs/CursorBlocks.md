@@ -213,7 +213,7 @@ decoded child ranges retain field names such as `inputCur` and `stateCur`.
 | `unpackExact(cur, spec)` | Payload | Schema plus block end equal to source end |
 | `unpack64(cur, key)` | Two bytes32 fields and nextCur | Exact key/64-byte length, containment, then trusted loads |
 | `unpackBalance(cur)` | Asset, uint amount, nextCur | Exact BALANCE header, containment, then trusted loads |
-| `unpackStep(cur)` | Command, value, BYTES payload cursor, nextCur | Parent key/containment, exact final child header, then trusted fixed-word loads |
+| `unpackStep(cur)` | Command, value, INPUT payload cursor, nextCur | Parent key/containment, exact final child header, then trusted fixed-word loads |
 | `unpackRelay(cur)` | Input and continuation payload cursors, nextCur | Parent containment, first child key, exact final child proof |
 | `unpackContext(cur)` | Account, state/input payload cursors, nextCur | Parent containment, two-child proof, then trusted account load |
 | `unpack160(cur, key)` | Five bytes32 words and nextCur | Exact key/160-byte header and containment before trusted loads |
@@ -488,8 +488,8 @@ Raw measurements and compiler settings are written to the ignored
 
 ## Sibling children and wider fixed blocks
 
-RELAY contains two BYTES children. CONTEXT adds one account word before those
-children. Their unpackers return separate payload cursors followed by the
+RELAY contains INPUT and BYTES children. CONTEXT contains an account word
+followed by STATE and INPUT children. Their unpackers return separate payload cursors followed by the
 advanced source cursor, consistently with fixed-field and STEP unpackers.
 
 ```solidity

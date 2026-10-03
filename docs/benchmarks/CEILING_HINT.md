@@ -11,11 +11,11 @@ Production code is unchanged. All 468 measurements passed independent expected-o
 
 The new ceiling strategy estimates groups as length / sourceGroupSize, adding one for a nonzero remainder. A zero group size starts with zero capacity and uses normal buffer growth. It never calls runCount. Source group size and output group size are calculated from benchmark descriptor metadata inside the measured interval, so this isolates the allocation algorithm without implementing the proposed descriptor layout or precomputing group sizes.
 
-Source hints include the header: AMOUNT = 72 bytes, BYTES = 136 bytes. Output encoded sizes are 72 bytes for BALANCE and 168 for POSITION. Source metadata is packed before measurement into reserved descriptor bits. All workloads use input-only, stride-one descriptors. State-driven and grouped execution are not covered.
+Source hints include the header: ASSET_AMOUNT = 72 bytes, BYTES = 136 bytes. Output encoded sizes are 72 bytes for BALANCE and 168 for POSITION. Source metadata is packed before measurement into reserved descriptor bits. All workloads use input-only, stride-one descriptors. State-driven and grouped execution are not covered.
 
 Gas includes opening, decoding, output writes, allocations, resizing/copying, finishing, and benchmark dispatch/loop overhead. It excludes descriptor construction, final hashing, transaction intrinsic gas and calldata gas. Memory is free-memory-pointer growth, including abandoned buffers. Repetitions share one call and accumulate memory. Compare current-run strategies; small differences from previous reports reflect fixture dispatch changes.
 
-Workloads: equal AMOUNT to BALANCE; expanding AMOUNT to POSITION; shrinking 256-byte BYTES payloads to BALANCE; variable BYTES payloads cycling through 0/16/256/2048 bytes; sparse one output every eight AMOUNT blocks; unused consumes without output; underestimate empty BYTES payloads; overestimate 264-byte BYTES payloads; zero_hint 128-byte BYTES payloads with source hint explicitly zero.
+Workloads: equal ASSET_AMOUNT to BALANCE; expanding ASSET_AMOUNT to POSITION; shrinking 256-byte BYTES payloads to BALANCE; variable BYTES payloads cycling through 0/16/256/2048 bytes; sparse one output every eight ASSET_AMOUNT blocks; unused consumes without output; underestimate empty BYTES payloads; overestimate 264-byte BYTES payloads; zero_hint 128-byte BYTES payloads with source hint explicitly zero.
 
 Counts: 0, 1, 8, 17, 64, 256. At 64 blocks, all seven strategies also run eight repetitions; scan/divisible/ceiling additionally run 32 repetitions. Output equality is checked on the final result of each call.
 

@@ -8,6 +8,130 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- Declare Actions, Entities, Effects, and States constants as `uint` so packed
+  combinations need no widening casts. Identifier values and 32-bit slots remain
+  unchanged; catalog tests enforce width, category, and uniqueness.
+
+- **Breaking (internal helpers):** Order query runners as
+  `runQuery(descriptor, input, callback)` and remove the unused production
+  `EndpointBase.close` wrapper. Query fixtures now use the shared runner;
+  custom execution loops use `Executions` finalization directly. Unify runner
+  call style, delegate `Logs.stream` to `Logs.mem`, remove stale imports, and
+  align examples and documentation with the current logging lifecycle and swap hooks.
+
+- **Breaking (swap logs and logging helpers):** Swaps publish `Actions.Swap` in
+  their output lane and emit one endpoint-prefixed OUTPUT container per batch,
+  including empty batches. Remove the tagged balance/position/full log helpers
+  and account-and-codes execution output overloads. Output logs no longer embed
+  the account. Retain the codes-plus-BALANCE scalar helper.
+
+- **Breaking (execution lifecycle and internal runners):** Separate exact
+  `Executions.expectEnd` checks from unchecked output `finish`; retain checked
+  `close` with budget draining. Add descriptor-aware `finish(exec, id, descriptor)`
+  and `close(exec, id, descriptor)` to finalize and log output together. Migrate
+  command, one-shot, admin, port, and guard runners to selected lane logging;
+  one-shot/admin/port runners now take ID and descriptor first. Add `runGuard`.
+  Queries stay view-only and reject nonzero logging codes at registration.
+
+- Remove unused `Executions.finish(exec, codes)` and `close(exec, codes)` overloads;
+  use descriptor-aware overloads for endpoint output logging.
+
+- **Breaking (output event format):** Add Output alongside State/Input. Runner
+  output logs emit an OUTPUT wrapper;
+  returned streams are unchanged. Add `Logs.memWrap` and reserve one leading
+  word in Encoder allocations and growth, outside logical capacity. Initial
+  capacity hints, write offsets, and growth thresholds remain unchanged.
+
+- Add `Executions.logInput(exec, id, descriptor)` for freshly opened input-only
+  executions and `Logs.copyWrap` for one-copy calldata wrapper emission. Selected
+  input emits an endpoint ID plus an INPUT block, including empty input, while
+  preserving execution and allocated memory. Port and guard runners use it.
+
+- Optimize `Executions.logContext` range selection using the validated context
+  bounds and direct cursor loads; preserve all emitted bytes and ordering.
+
+- **Breaking (lane metadata and runner logs):** Pack specs and four code slots in
+  endpoint lanes. Nonzero codes replace public logging flags. Add
+  `Executions.logContext` and emit selected STATE/INPUT containers together before
+  command processing, retaining endpoint IDs as log prefixes. Output logs follow
+  processing. `Executions.describe` takes three lanes, without behavior flags.
+
+- **Breaking (internal descriptor layout):** Retain only the allocation source key,
+  source/output block sizes, and internal source/logging flags. Derive logging
+  selections from lane codes during registration.
+
+- **Breaking (event ABI and internal registration API):** Endpoint now publishes
+  `host, id, state, input, output`, preserving all three specs instead of emitting
+  an execution descriptor. Remove descriptor-only endpoint/command/port/query
+  registration overloads. Spec-taking helpers return runtime
+  descriptors; IDs, public flags, and execution behavior are unchanged.
+
+- **Breaking (wire format):** Add `State` and `Input` block-stream container
+  schemas. CONTEXT now contains STATE/INPUT children; STEP and RELAY use INPUT
+  for command input, while RELAY retains BYTES for remaining steps. Update codec,
+  pipeline assembly, reference fixtures, and documentation. Layout sizes and
+  payload cursors are unchanged; old BYTES wrappers in migrated positions are
+  rejected.
+
+- **Breaking (internal API):** `runCommand` now takes `(id, descriptor, context, process)`,
+  with the registered endpoint ID and descriptor before invocation data. It emits
+  selected STATE/INPUT containers together before processing and selected output
+  afterward as endpoint-prefixed LOG0 records, including enabled empty streams.
+  Update command callers and examples; production command flags remain unchanged.
+
+- Add `Logs.copy(codes, cur)` to emit a packed calldata cursor's unread block
+  stream through the existing absolute-range primitive.
+
+- Add the `Rooted` schema (`bytes32 account, uint deadline, uint value`) with
+  standard key, spec, header, size, encoding/decoding and execution helpers.
+  Add `Logs.rooted(account, deadline, value, codes)` for codes-plus-stream emission;
+  existing Rooted ABI events and pipeline runners remain unchanged.
+
+- Add `Logs.balance(bytes32 asset, uint amount, uint codes)` to encode and emit a
+  single full-width BALANCE block through the codes-plus-stream format.
+
+- Add `Logs.mem(codes, abs, size)` and `Logs.copy(codes, abs, size)` for topic-free
+  codes-plus-block-stream logs from existing memory or calldata. Memory logging
+  restores the borrowed prefix word; calldata logging copies once into temporary
+  memory without advancing the allocator.
+
+- Rename `StateLogs` to `codec/Logs.sol`, exported through `Codec.sol`, and add
+  `Logs.stream(correlationId, abs, size)` to emit existing memory block
+  streams using `LOG0`. The ID's highest byte must be `0x00`; the helper borrows
+  and restores the preceding word without copying the stream.
+
+- **Breaking:** Remove `PositionedEvent` and `SettledEvent` and their `Events.sol`
+  exports. Use endpoint output lane codes for output logs; `Actions.Settle`
+  identifies successful settlement outputs. Historical
+  deployment logs retain their original ABI decoding.
+
+- Share reserved-block writing through `Encoder.writeBalanceAt`/`writePositionAt`.
+
+- Swap hooks take asset/quantity and the full route cursor, returning the complete
+  Position including its counterparty. Commands log the resulting output stream.
+
+- Add `Codes.AllowAssetThenActive` and `Codes.DenyAssetThenInactive`, packing
+  the action, asset entity kind, and resulting state in three code slots.
+
+- **Breaking:** Rename the asset-and-quantity `Amount` schema and codec helpers
+  to `AssetAmount` (`#assetAmount`), and migrate existing command and port inputs.
+  Add scalar `Amount` (`#amount { uint amount }`) with encoding, decoding, and
+  execution helpers. The former 64-byte `#amount` payload is no longer accepted;
+  integrations must update their block keys, helpers, and endpoint descriptors.
+
+- Add the category-1 `Entities` code catalog for Asset, Account, Host, Command,
+  Query, Route, Position, Guardian, Pool, Port, and Balance, exported by
+  `Events.sol` and `Utils.sol`. Add `Codes.AddRouteThenActive` and
+  `Codes.RemoveRouteThenInactive`, and document entity-kind codes alongside
+  actions, effects, and states.
+
+- Add the abstract `Counterparty` core contract with an internal immutable
+  counterparty account supplied at construction, exported through `Core.sol`.
+
+- Add `AddPool` and `RemovePool` admin commands and hooks in `commands/admin/Pool.sol`.
+  Consume grouped ASSET_AMOUNT or ASSET pairs, annotate input roles, and leave pool
+  validation and lifecycle policy to host implementations.
+
 ## 1.49.0
 
 - Add `SwapExactIn` and `SwapExactOut`, with host hooks, in `commands/Swap.sol`.

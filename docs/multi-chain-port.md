@@ -399,8 +399,8 @@ The destination payload is:
 ```text
 context {
   bytes32 account,
-  #bytes state,
-  #bytes input     // STEP block stream for pipe execution
+  #state,
+  #input          // STEP block stream for pipe execution
 }
 ```
 
@@ -507,7 +507,7 @@ Each implementation exposes:
 - `peek(buf, i) -> (key, payload_len)`
 - `read_block(buf, i, expected_key) -> payload bytes`
 - `write_block(key, payload) -> bytes`
-- typed pack/unpack helpers for `Amount`, `Balance`, `Transaction`, `Step`, and `Context`
+- typed pack/unpack helpers for `AssetAmount`, `Balance`, `Transaction`, `Step`, and `Context`
 
 Block key constants are `keccak256("#name")[0:4]`.
 
@@ -600,7 +600,7 @@ The `pipe()` loop is pure protocol logic:
    credit to the shared budget before executing the next step.
 5. Require the final state to be empty.
 
-The handoff flag and `relay { #bytes as input, #bytes as steps }` envelope let
+The handoff flag and `relay { #input, #bytes as steps }` envelope let
 the EVM pipeline transfer its untouched continuation to a flagged command.
 Callers encode the command's ordinary input; the pipeline constructs the relay
 envelope and stops executing the transferred steps locally.

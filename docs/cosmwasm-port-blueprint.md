@@ -243,8 +243,8 @@ Rules:
 - `payload_len` is a 4-byte big-endian `uint32`
 - all fixed words are 32 bytes, big-endian for integers
 - nested bytes are encoded as `#bytes` blocks
-- STEP payload is `[cmd:32][value:32][#bytes input]`
-- CONTEXT payload is `[account:32][#bytes state][#bytes input]`
+- STEP payload is `[cmd:32][value:32][#input]`
+- CONTEXT payload is `[account:32][#state][#input]`
 
 Port these first:
 
@@ -534,7 +534,7 @@ Include protocol IDs as hex strings and native addresses only when the event is 
 Port tests from `https://github.com/lastqubit/rootzero-contracts` in this order:
 
 1. `test/blocks.test.ts`
-   Validate keys, headers, cursor movement, grouped runs, nested `#bytes`, STEP, CONTEXT, BALANCE, AMOUNT, and TRANSACTION.
+   Validate keys, headers, cursor movement, grouped runs, nested `#bytes`, STEP, CONTEXT, BALANCE, ASSET_AMOUNT, and TRANSACTION.
 
 2. `test/utils.test.ts`
    Validate shared category checks, CosmWasm representation tags, local ID construction, asset helpers, opaque hash IDs, and resolver behavior.

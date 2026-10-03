@@ -14,7 +14,8 @@ absolute positions without repacking cursors or repeating bounds checks.
 | `bounds(uint cur, uint size)` | Calldata: unpack validated cursor lanes and reject partial blocks |
 | `bounds(bytes memory source, uint size)` | Memory: reject partial blocks and expose absolute bounds |
 | `unpackNode(abs)` | Calldata NODE, exact header plus one word |
-| `unpackAmount(abs)` | Calldata AMOUNT, exact header plus two words |
+| `unpackAmount(abs)` | Calldata AMOUNT, exact header plus one scalar quantity |
+| `unpackAssetAmount(abs)` | Calldata ASSET_AMOUNT, exact header plus two words |
 | `unpackBootstrap(abs)` | Calldata BOOTSTRAP, exact header plus three words |
 | `unpackBalanceMemory(abs)` | Memory BALANCE, exact header plus two words |
 | `unpackPositionMemory(abs)` | Memory POSITION, exact header and an independent struct |
@@ -24,11 +25,11 @@ absolute positions without repacking cursors or repeating bounds checks.
 | `checkPositions(state, inputCur)` | Fused paired POSITION / POSITION_CONSTRAINTS stream validation |
 
 ```solidity
-(uint abs, uint end) = Execute.bounds(inputCur, Sizes.Amount);
+(uint abs, uint end) = Execute.bounds(inputCur, Sizes.AssetAmount);
 while (abs < end) {
-    (bytes32 asset, uint amount) = Execute.unpackAmount(abs);
+    (bytes32 asset, uint amount) = Execute.unpackAssetAmount(abs);
     debitAccount(account, asset, amount);
-    unchecked { abs += Sizes.Amount; }
+    unchecked { abs += Sizes.AssetAmount; }
 }
 ```
 
