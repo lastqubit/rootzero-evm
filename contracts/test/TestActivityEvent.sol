@@ -26,9 +26,9 @@ contract TestActivityEvent is ActionAnnot, ActivityEvent {
         emit Activity(account, bytes32(0), 0, Codes.DismissThenInactive);
         emit Activity(account, bytes32(0), 0, Codes.AllowThenActive);
         emit Activity(account, bytes32(0), 0, Codes.DenyThenInactive);
-        emit Activity(account, bytes32(0), 1, uint(Actions.Swap) | (uint(Actions.Borrow) << 32) |
-            (uint(Effects.Spend) << 64) | (uint(Effects.Receive) << 96) |
-            (uint(Effects.Lock) << 128) | (uint(UtilityEffects.Unlock) << 160) |
-            (uint(States.Active) << 192) | (uint(UtilityStates.Inactive) << 224));
+        emit Activity(account, bytes32(0), 1, Actions.Swap | (Actions.Borrow << 32) |
+            (Effects.Spend << 64) | (Effects.Receive << 96) |
+            (Effects.Lock << 128) | (UtilityEffects.Unlock << 160) |
+            (States.Active << 192) | (UtilityStates.Inactive << 224));
     }
 }

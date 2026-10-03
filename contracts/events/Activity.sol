@@ -7,11 +7,11 @@ import {EventEmitter} from "./Emitter.sol";
 abstract contract ActivityEvent is EventEmitter {
     string private constant ABI = "event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)";
 
-    /// @dev Codes holds up to eight uint32 action, effect, or state IDs, lowest slot first.
+    /// @dev Codes holds up to eight uint32 action, entity-kind, effect, or state IDs, lowest slot first.
     /// Entries are contiguous and nonzero; unused high slots are zero. Zero is an empty list.
     /// Order and duplicates are preserved; adjacency does not imply action-to-effect pairing.
     /// The top three bits of each ID select one of eight categories (id >> 29).
-    /// Category 0 is Actions, 4 is Effects, and 5 is States; the other five are reserved.
+    /// Category 0 is Actions, 1 is Entities, 4 is Effects, and 5 is States; the rest are reserved.
     /// Constants include their category bits, so a single constant can be passed directly.
     /// @param account Account performing the activity.
     /// @param subject Asset or other identifier the activity concerns; zero when unused.
@@ -21,7 +21,7 @@ abstract contract ActivityEvent is EventEmitter {
     /// Effects.Spend, Receive, Lock, or Unlock code. References can link companion events
     /// describing assets, amounts, and other details. Only in reference mode, zero means no
     /// identifier; nonzero IDs should be unique within the emitting contract on a chain.
-    /// @param codes Packed identifiers from `Actions`, `Effects`, and `States`.
+    /// @param codes Packed identifiers from `Actions`, `Entities`, `Effects`, and `States`.
     event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes);
 
     constructor() {

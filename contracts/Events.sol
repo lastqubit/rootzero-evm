@@ -9,6 +9,7 @@ import { AnnotationEvent } from "./events/Annotation.sol";
 import { AssetEvent, AssetPreimageEvent } from "./events/Asset.sol";
 import { Actions } from "./utils/Actions.sol";
 import { Effects } from "./utils/Effects.sol";
+import { Entities } from "./utils/Entities.sol";
 import { States } from "./utils/States.sol";
 import { Codes } from "./utils/Codes.sol";
 import { BalanceEvent } from "./events/Balance.sol";

@@ -8,6 +8,7 @@ pragma solidity ^0.8.33;
 import { Accounts } from "./utils/Accounts.sol";
 import { Actions } from "./utils/Actions.sol";
 import { Effects } from "./utils/Effects.sol";
+import { Entities } from "./utils/Entities.sol";
 import { States } from "./utils/States.sol";
 import { Codes } from "./utils/Codes.sol";
 import { Amounts, Assets } from "./utils/Assets.sol";

@@ -9,7 +9,7 @@ abstract contract AssetEvent is EventEmitter {
 
     /// @param host Host node ID where the asset action occurred.
     /// @param asset Asset identifier.
-    /// @param codes Packed action/effect/state IDs describing this event, using Activity's codes convention.
+    /// @param codes Packed action/entity-kind/effect/state IDs describing this event, using Activity's codes convention.
     /// Create means the asset was created, independently of its resulting active state.
     /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
     /// Requires exactly one States.Active or States.Inactive code describing the resulting state.

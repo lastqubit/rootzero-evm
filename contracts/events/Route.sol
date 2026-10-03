@@ -9,7 +9,7 @@ abstract contract RouteEvent is EventEmitter {
 
     /// @param host Host node ID that owns the route.
     /// @param portal Destination portal implementation's host ID.
-    /// @param codes Packed action/effect/state IDs describing this event, using Activity's codes convention.
+    /// @param codes Packed action/entity-kind/effect/state IDs describing this event, using Activity's codes convention.
     /// Add/Remove describe route membership; Enable/Disable toggle a configured route.
     /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
     /// Requires exactly one States.Active or States.Inactive code describing the resulting state.

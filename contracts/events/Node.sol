@@ -9,7 +9,7 @@ abstract contract NodeEvent is EventEmitter {
 
     /// @param host Host node ID where the action occurred.
     /// @param node Node ID that the action concerns.
-    /// @param codes Packed action/effect/state IDs describing this event, using Activity's codes convention.
+    /// @param codes Packed action/entity-kind/effect/state IDs describing this event, using Activity's codes convention.
     /// The default Host implementation emits Authorize or Revoke.
     /// @dev Up to eight nonzero uint32 IDs, lowest slot first; unused high slots are zero.
     /// Requires exactly one States.Active or States.Inactive code describing the resulting state.

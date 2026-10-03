@@ -9,12 +9,13 @@ pragma solidity ^0.8.33;
 /// Codes are grouped in blocks of 16; unassigned values are reserved.
 /// These identifiers are not bit flags. Each consumer defines which states apply;
 /// Asset, Node, Guardian, and Route require exactly one Active or Inactive code.
+/// @dev Constants use uint for composition; each identifier must still fit one uint32 slot.
 library States {
     // Activity state: 0xa0000000-0xa000000f. Values after Active are reserved.
     /// @dev The subject is inactive.
-    uint32 constant Inactive = 0xa0000000;
+    uint constant Inactive = 0xa0000000;
     /// @dev The subject is active.
-    uint32 constant Active = 0xa0000001;
+    uint constant Active = 0xa0000001;
 
     // Values 0xa0000010-0xbfffffff are reserved for future state groups.
 }
