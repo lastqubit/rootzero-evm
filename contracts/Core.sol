@@ -13,6 +13,7 @@ import { SchemaAnnot } from "./annotations/Schema.sol";
 import { AccessDenied, AdminAccess, CallerAccess, CommandAccess, enforceSender, GuardianAccess, NodeAccess, PeerAccess, PortAccess } from "./core/Access.sol";
 import { Balances, InsufficientFunds } from "./core/Balances.sol";
 import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
+import { Counterparty } from "./core/Counterparty.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, HostAccount, Runtime } from "./core/Runtime.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
