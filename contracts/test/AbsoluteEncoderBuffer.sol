@@ -30,7 +30,7 @@ library AbsoluteEncoderBuffer {
             }
         }
         uint base;
-        assembly ("memory-safe") { base := add(mload(0x40), 32) }
+        assembly ("memory-safe") { base := add(mload(0x40), 64) }
         uint end = base + capacity;
         if (end > type(uint32).max) revert ValueOverflow();
         value = Encoder.grow(dst, written, capacity);
@@ -73,7 +73,7 @@ library AbsoluteEncoderBuffer {
         Encoder.write32(abs, bytes32(amount));
     }
 
-    /// @notice Append CONTEXT by copying complete validated memory BYTES children.
+    /// @notice Append CONTEXT by copying complete validated memory STATE and INPUT children.
     /// @dev Inherits reserve and the bytes-first writeContext source requirements.
     function writeContext(uint cur, bytes memory dst, bytes32 account, bytes memory state, bytes memory input) internal pure returns (uint nextCur, bytes memory value) {
         uint stateSize = state.length;
@@ -87,7 +87,7 @@ library AbsoluteEncoderBuffer {
         Encoder.copy(abs, input, inputSize);
     }
 
-    /// @notice Append CONTEXT by copying complete validated calldata BYTES children.
+    /// @notice Append CONTEXT by copying complete validated calldata STATE and INPUT children.
     /// @dev Inherits reserve and the bytes-first writeContext source requirements.
     function writeContext(uint cur, bytes memory dst, bytes32 account, uint stateCur, uint inputCur) internal pure returns (uint nextCur, bytes memory value) {
         uint stateSize = Encoder.length(stateCur);
@@ -101,7 +101,7 @@ library AbsoluteEncoderBuffer {
         Encoder.copy(abs, uint32(inputCur), inputSize);
     }
 
-    /// @notice Append CONTEXT by wrapping memory payloads in BYTES headers.
+    /// @notice Append CONTEXT by wrapping memory payloads in STATE and INPUT headers.
     /// @dev Inherits reserve and the bytes-first writeContextWrap source requirements.
     function writeContextWrap(uint cur, bytes memory dst, bytes32 account, bytes memory state, bytes memory input) internal pure returns (uint nextCur, bytes memory value) {
         uint stateSize = state.length;
@@ -111,8 +111,8 @@ library AbsoluteEncoderBuffer {
         (nextCur, value, abs) = reserve(cur, dst, size);
         unchecked { abs = Encoder.writeHeader(abs, Keys.Context, size - 8); }
         abs = Encoder.write32(abs, account);
-        abs = Encoder.wrap(abs, Keys.Bytes, state, stateSize);
-        Encoder.wrap(abs, Keys.Bytes, input, inputSize);
+        abs = Encoder.wrap(abs, Keys.State, state, stateSize);
+        Encoder.wrap(abs, Keys.Input, input, inputSize);
     }
 
     /// @notice Append CONTEXT by wrapping validated calldata payload cursors.
@@ -125,8 +125,8 @@ library AbsoluteEncoderBuffer {
         (nextCur, value, abs) = reserve(cur, dst, size);
         unchecked { abs = Encoder.writeHeader(abs, Keys.Context, size - 8); }
         abs = Encoder.write32(abs, account);
-        abs = Encoder.wrap(abs, Keys.Bytes, uint32(stateCur), stateSize);
-        Encoder.wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+        abs = Encoder.wrap(abs, Keys.State, uint32(stateCur), stateSize);
+        Encoder.wrap(abs, Keys.Input, uint32(inputCur), inputSize);
     }
 
 }

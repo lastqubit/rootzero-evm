@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder cursor-last return order", function () {
   this.timeout(120_000);
@@ -16,8 +16,8 @@ describe("Encoder cursor-last return order", function () {
         const block = mode === 0 ? encodeBalanceBlock(account, 123n) : encodeContextBlock(account, state, input);
         for (const count of [1, 2, 4]) for (const grow of [false, true]) {
           const capacity = grow ? 0 : ethers.dataLength(block) * count;
-          const args = [account, mode === 1 || mode === 2 ? encodeBytesBlock(state) : state,
-            mode === 1 || mode === 2 ? encodeBytesBlock(input) : input, count, capacity, mode];
+          const args = [account, mode === 1 || mode === 2 ? encodeStateBlock(state) : state,
+            mode === 1 || mode === 2 ? encodeInputBlock(input) : input, count, capacity, mode];
           const a = await previous.measure(...args), b = await current.measure(...args);
           expect(b[3]).eq(concat(...Array(count).fill(block)));
           expect(Array.from(b).slice(1)).deep.eq(Array.from(a).slice(1));

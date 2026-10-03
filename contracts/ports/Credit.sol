@@ -13,9 +13,10 @@ using Executions for Execution;
 /// Each ACCOUNT_AMOUNT block calls `creditAccount` for its account.
 abstract contract CreditAccountPort is PortBase, CreditAccountHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = port("portCreditAccount", Specs.AccountAmount, Specs.Empty, 0);
+        (id, descriptor) = port("portCreditAccount", Specs.AccountAmount, Specs.Empty, 0);
     }
 
     /// @notice Execute the port-credit call.
@@ -23,7 +24,7 @@ abstract contract CreditAccountPort is PortBase, CreditAccountHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portCreditAccount(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(data, descriptor, portCreditAccountOne);
+        return runPort(id, descriptor, data, portCreditAccountOne);
     }
 
     function portCreditAccountOne(Execution memory exec) private {

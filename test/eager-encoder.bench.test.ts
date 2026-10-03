@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Short encoder lifecycle gas", function () {
   this.timeout(120_000);
@@ -25,8 +25,8 @@ describe("Short encoder lifecycle gas", function () {
       const block = encodeContextBlock(account, state, input);
       const row: any = { kind: ["contextMemory", "contextCursor", "wrapMemory", "wrapCursor"][mode], size, count, grow };
       for (let i = 0; i < helpers.length; ++i) {
-        const [gas, output] = await helpers[i].contexts(account, mode < 2 ? encodeBytesBlock(state) : state,
-          mode < 2 ? encodeBytesBlock(input) : input, count, grow ? 0 : ethers.dataLength(block) * count, mode);
+        const [gas, output] = await helpers[i].contexts(account, mode < 2 ? encodeStateBlock(state) : state,
+          mode < 2 ? encodeInputBlock(input) : input, count, grow ? 0 : ethers.dataLength(block) * count, mode);
         expect(output).eq(concat(...Array(count).fill(block)));
         row[names[i]] = Number(gas);
       }

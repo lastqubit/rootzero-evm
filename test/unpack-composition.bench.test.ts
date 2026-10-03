@@ -16,7 +16,7 @@ describe("Named unpackers composed from word primitives", function () {
   it("compares identical cursor consumers, including constant keys and next-cursor chaining", async () => {
     const rows: any[] = [];
     const codeRows: any[] = [];
-    for (const [name, words] of [["Amount", 2], ["Balance", 2], ["Position", 5]] as const) {
+    for (const [name, words] of [["AssetAmount", 2], ["Balance", 2], ["Position", 5]] as const) {
       const directName = `Unpack${name}Direct`, composedName = `Unpack${name}Composed`;
       const direct = await deploy(directName), composed = await deploy(composedName);
       const current = name === "Balance" ? await deploy("UnpackBalanceCurrent") : undefined;

@@ -7,7 +7,7 @@ const invalid = ethers.id("InvalidBlock()").slice(0, 10);
 const bounds = ethers.id("OutOfBounds()").slice(0, 10);
 const words = concat(ethers.toBeHex(ethers.MaxUint256, 32), ethers.toBeHex(7, 32));
 const size = (s: string) => ethers.getBytes(s).length;
-const step = (data: string) => encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Bytes, data)));
+const step = (data: string) => encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Input, data)));
 async function errorOf(call: Promise<any>) {
   try { await call; return undefined; }
   catch (e: any) { const data = e.data ?? e.info?.error?.data; if (typeof data !== "string") throw e; return data; }
@@ -40,19 +40,19 @@ describe("Cursor dynamic STEP unpacking", function () {
     });
     it("rejects short fixed prefixes and partial child headers despite valid trailing calldata", async () => {
       for (const length of [0, 1, 31, 32, 63, 64, 65, 71]) {
-        const source = concat(Keys.Step, ethers.toBeHex(length, 4), words, encodeBlock(Keys.Bytes, "0x"));
+        const source = concat(Keys.Step, ethers.toBeHex(length, 4), words, encodeBlock(Keys.Input, "0x"));
         expect(await errorOf(helper.inspect(source, size(source), 0))).eq(invalid);
         expect(await errorOf(helper.values(source, size(source), 0))).eq(invalid);
       }
     });
     it("rejects wrong keys, child length mismatch, and extra children inside the parent", async () => {
       const cases = [
-        encodeBlock(Keys.Call, concat(words, encodeBlock(Keys.Bytes, "0x"))),
+        encodeBlock(Keys.Call, concat(words, encodeBlock(Keys.Input, "0x"))),
         encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.String, "0x"))),
-        encodeBlock(Keys.Step, concat(words, Keys.Bytes, "0x00000002", "0xab")),
-        encodeBlock(Keys.Step, concat(words, Keys.Bytes, "0x00000000", "0xab")),
-        encodeBlock(Keys.Step, concat(words, Keys.Bytes, "0xffffffff")),
-        encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Bytes, "0x"), encodeBlock(Keys.Bytes, "0x"))),
+        encodeBlock(Keys.Step, concat(words, Keys.Input, "0x00000002", "0xab")),
+        encodeBlock(Keys.Step, concat(words, Keys.Input, "0x00000000", "0xab")),
+        encodeBlock(Keys.Step, concat(words, Keys.Input, "0xffffffff")),
+        encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Input, "0x"), encodeBlock(Keys.Input, "0x"))),
       ];
       for (const source of cases) {
         expect(await errorOf(helper.inspect(source, size(source), 0))).eq(invalid);

@@ -60,7 +60,7 @@ describe("Pipeline parser and credit security", function () {
     expect(await host.lastInput()).to.equal(ethers.keccak256(inputs[2]));
   });
 
-  it("preserves STEP/BYTES/length/containment error precedence and rolls back preceding steps", async () => {
+  it("preserves STEP/INPUT/length/containment error precedence and rolls back preceding steps", async () => {
     const valid = encodeStepBlock(local, 0n, "0x");
     const replace = (s: string, at: number, value: string) => concat(ethers.dataSlice(s, 0, at), value,
       ethers.dataSlice(s, at + ethers.dataLength(value)));
@@ -87,7 +87,7 @@ describe("Pipeline parser and credit security", function () {
       while (at < data.length) {
         if (read32(data, at) !== Number(BigInt(Keys.Step))) return "InvalidBlock";
         const end = at + 8 + read32(data, at + 4);
-        if (read32(data, at + 72) !== Number(BigInt(Keys.Bytes))) return "InvalidBlock";
+        if (read32(data, at + 72) !== Number(BigInt(Keys.Input))) return "InvalidBlock";
         if (at + 80 + read32(data, at + 76) !== end) return "InvalidBlock";
         if (end > data.length) return "OutOfBounds";
         at = end;

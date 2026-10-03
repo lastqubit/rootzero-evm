@@ -10,7 +10,7 @@ using Executions for Execution;
 /// @notice Hook implemented by hosts that accept account deposits.
 abstract contract DepositHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// @dev Called once per AMOUNT block. A matching BALANCE block is appended to the
+    /// @dev Called once per ASSET_AMOUNT block. A matching BALANCE block is appended to the
     /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
@@ -22,7 +22,7 @@ abstract contract DepositHook {
 /// @notice Hook implemented by hosts that accept value-funded deposits.
 abstract contract DepositPayableHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// @dev Called once per AMOUNT block. A matching BALANCE block is appended to the
+    /// @dev Called once per ASSET_AMOUNT block. A matching BALANCE block is appended to the
     /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
@@ -43,23 +43,23 @@ abstract contract DepositPayableHook {
 /// For internal balance deductions, use `debitAccount` instead.
 abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
-        (id, descriptor) = command("deposit", Specs.Empty, Specs.Amount, Specs.Balance, 0);
+        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
         annotateAction(id, Actions.Deposit);
     }
 
-    /// @notice Deposit AMOUNT input blocks into the command account and output matching BALANCE blocks.
-    /// @param context Command context carrying the AMOUNT input stream.
+    /// @notice Deposit ASSET_AMOUNT input blocks into the command account and output matching BALANCE blocks.
+    /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
     function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, depositOne);
+        return runCommand(id, descriptor, context, depositOne);
     }
 
     function depositOne(Execution memory exec) private {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         amount = deposit(exec.account, asset, amount);
         exec.outputBalance(asset, amount);
     }
@@ -70,23 +70,23 @@ abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
 /// Use `depositPayable` when the hook needs tracked access to `msg.value` via a mutable budget.
 abstract contract DepositPayable is CommandBase, DepositPayableHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
-        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.Amount, Specs.Balance, Flags.Funded);
+        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, Specs.Balance, Flags.Funded);
         annotateAction(id, Actions.Deposit);
     }
 
-    /// @notice Deposit AMOUNT input blocks with access to a mutable native-value budget.
-    /// @param context Command context carrying the AMOUNT input stream.
+    /// @notice Deposit ASSET_AMOUNT input blocks with access to a mutable native-value budget.
+    /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.
     function depositPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, depositPayableOne);
+        return runCommand(id, descriptor, context, depositPayableOne);
     }
 
     function depositPayableOne(Execution memory exec) private {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         amount = deposit(exec.account, asset, amount, exec);
         exec.outputBalance(asset, amount);
     }

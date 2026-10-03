@@ -20,7 +20,7 @@ export const fixedLayouts = [
     "words": 1
   },
   {
-    "name": "Amount",
+    "name": "AssetAmount",
     "words": 2
   },
   {

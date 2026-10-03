@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder boolean representation benchmark", function () {
   this.timeout(180_000);
@@ -19,8 +19,8 @@ describe("Encoder boolean representation benchmark", function () {
       for (const [a, b] of [[0, 0], [1, 1], [24, 25], [257, 2048]]) {
         const state = "0x" + "ab".repeat(a), input = "0x" + "cd".repeat(b);
         const expected = encodeContextBlock(account, state, input);
-        const stateSource = stateBlock ? encodeBytesBlock(state) : state;
-        const inputSource = inputBlock ? encodeBytesBlock(input) : input;
+        const stateSource = stateBlock ? encodeStateBlock(state) : state;
+        const inputSource = inputBlock ? encodeInputBlock(input) : input;
         for (const memory of [false, true]) for (const writer of [false, true]) for (const count of [1, 16]) {
           const args = [account, stateSource, inputSource, stateBlock, inputBlock, memory, writer, count];
           const results: number[] = [];

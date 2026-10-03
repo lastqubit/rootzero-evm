@@ -31,7 +31,7 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function creditAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, creditAccountOne);
+        return runCommand(id, descriptor, context, creditAccountOne);
     }
 
     function creditAccountOne(Execution memory exec) private {

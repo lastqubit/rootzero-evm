@@ -19,7 +19,7 @@ contract TestBalanceConstraints {
     {
         if (execution) {
             Execution memory exec;
-            exec.openInput(Executions.describe(Specs.Empty, Specs.BalanceConstraints, Specs.Empty, 0), 0, input);
+            exec.openInput(Executions.describe(Specs.Empty, Specs.BalanceConstraints, Specs.Empty), 0, input);
             exec.expectBalanceConstraints(asset, amount);
             return exec.unpackBalanceConstraints();
         }
@@ -43,7 +43,7 @@ contract TestBalanceConstraints {
         uint i;
         if (mode == 2) {
             Execution memory exec;
-            exec.openInput(Executions.describe(Specs.Empty, Specs.BalanceConstraints, Specs.Empty, 0), 0, input);
+            exec.openInput(Executions.describe(Specs.Empty, Specs.BalanceConstraints, Specs.Empty), 0, input);
             while (exec.more()) {
                 BalanceConstraints memory value = exec.unpackBalanceConstraints();
                 assets[i] = value.asset; mins[i] = value.min; maxs[i++] = value.max;

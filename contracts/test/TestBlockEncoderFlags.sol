@@ -18,9 +18,9 @@ library FlagBlockEncoder {
         unchecked {
             abs = E.writeHeader(abs, Keys.Context, size - 8);
             abs = E.write32(abs, account);
-            abs = stateBlock ? E.copy(abs, state, stateSize) : E.wrap(abs, Keys.Bytes, state, stateSize);
+            abs = stateBlock ? E.copy(abs, state, stateSize) : E.wrap(abs, Keys.State, state, stateSize);
             if (inputBlock) E.copy(abs, input, inputSize);
-            else E.wrap(abs, Keys.Bytes, input, inputSize);
+            else E.wrap(abs, Keys.Input, input, inputSize);
         }
     }
     function writeContext(bytes memory dst, uint offset, bytes32 account, bytes memory state, bool stateBlock, bytes memory input, bool inputBlock) internal pure  {
@@ -30,9 +30,9 @@ library FlagBlockEncoder {
         unchecked {
             abs = E.writeHeader(abs, Keys.Context, 32 + (stateBlock ? 0 : 8) + (inputBlock ? 0 : 8) + stateSize + inputSize);
             abs = E.write32(abs, account);
-            abs = stateBlock ? E.copy(abs, state, stateSize) : E.wrap(abs, Keys.Bytes, state, stateSize);
+            abs = stateBlock ? E.copy(abs, state, stateSize) : E.wrap(abs, Keys.State, state, stateSize);
             if (inputBlock) E.copy(abs, input, inputSize);
-            else E.wrap(abs, Keys.Bytes, input, inputSize);
+            else E.wrap(abs, Keys.Input, input, inputSize);
         }
     }
     function createContext(bytes32 account, uint state, bool stateBlock, uint input, bool inputBlock) internal pure returns (bytes memory value)  {
@@ -166,7 +166,7 @@ contract TestEncoderFlagsBaseline1 is FlagEncoderHarness {
             unchecked { abs = E.writeHeader(abs, Keys.Context, size - 8); }
         }
         abs = E.write32(abs, account);
-        abs = E.wrap(abs, Keys.Bytes, state, stateSize);
+        abs = E.wrap(abs, Keys.State, state, stateSize);
         E.copy(abs, input, inputSize);
     }
     function encode(bytes memory dst, bool writer, bytes32 account, uint state, bool, uint input, bool) internal pure override returns (bytes memory value) {

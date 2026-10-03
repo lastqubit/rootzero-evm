@@ -29,12 +29,13 @@ abstract contract MyCommand is CommandBase {
 
     uint private immutable inputSpec;
     uint private immutable descriptor;
+    uint private immutable id;
 
     event PaymentSeen(bytes32 asset, uint amount, uint status);
 
     constructor() {
         inputSpec = schema(INPUT, 1, uint32(64 + Sizes.Status), uint32(64 + Sizes.Status), uint32(64 + Sizes.Status));
-        (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
+        (id, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
     }
 
     function unpackPayment(
@@ -53,7 +54,7 @@ abstract contract MyCommand is CommandBase {
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
         // Each callback decodes one payment with the command-local unpack helper.
-        return runCommand(context, descriptor, myCommandOne);
+        return runCommand(id, descriptor, context, myCommandOne);
     }
 
     function myCommandOne(Execution memory exec) private {

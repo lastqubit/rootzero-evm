@@ -10,14 +10,14 @@ describe("Command context differential corpus", function () {
             ethers.id(`#${key}`).slice(0, 10), ethers.toBeHex(ethers.getBytes(data).length, 4), data,
         ]);
         const balance = block("balance", ethers.concat([ethers.toBeHex(123, 32), ethers.toBeHex(7, 32)]));
-        const amount = block("amount", ethers.concat([ethers.toBeHex(123, 32), ethers.toBeHex(3, 32)]));
+        const amount = block("assetAmount", ethers.concat([ethers.toBeHex(123, 32), ethers.toBeHex(3, 32)]));
         const outcomes: string[] = [];
         const abi = ethers.AbiCoder.defaultAbiCoder();
         for (const mode of [0, 1, 2, 3, 4]) {
             const state = ethers.concat(Array(mode === 2 ? 0 : 2).fill(balance));
             const input = ethers.concat(Array(mode === 2 || mode === 3 ? 2 : 0).fill(amount));
             const valid = ethers.getBytes(block("context", ethers.concat([
-                ethers.toBeHex(1, 32), block("bytes", state), block("bytes", input),
+                ethers.toBeHex(1, 32), block("state", state), block("input", input),
             ])));
             const vectors: Uint8Array[] = [valid, new Uint8Array([...valid, ...valid]), new Uint8Array([...valid, 0])];
             for (let length = 0; length < valid.length; length += 7) vectors.push(valid.slice(0, length));

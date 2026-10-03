@@ -15,7 +15,7 @@ describe("Advanced cursor return comparison", function () {
         const helper = await deploy(`CursorNext${kind}${variant}`), artifact = await hre.artifacts.readArtifact(`CursorNext${kind}${variant}`);
         const runtimeBytes = (artifact.deployedBytecode.length - 2) / 2;
         for (const length of kind === "Step" ? [0, 1, 33, 256] : [64]) {
-          const block = kind === "Balance" ? encodeBlock(Keys.Balance, words) : encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Bytes, "0x" + "ab".repeat(length))));
+          const block = kind === "Balance" ? encodeBlock(Keys.Balance, words) : encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Input, "0x" + "ab".repeat(length))));
           for (const method of kind === "Balance" ? ["measure", "measureDiscard"] : ["measure", "measureData"]) for (const count of [1, 32, 128]) {
             const source = concat(...Array(count).fill(block)), a = await baseline[method](source), b = await helper[method](source);
             expect(b[1]).eq(a[1]); expect(b[2]).eq(a[2]); expect(b[2] >> 64n).eq(0xa5n);

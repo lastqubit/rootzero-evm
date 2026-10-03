@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, portId } from "./helpers/setup.js";
-import { concat, encodeBlock, encodeBookPortPair, localKey, encodeStringBlock, encodeAccountAmountBlock, encodeLabelBlock, encodeUserAccount, endpointDescriptor, Keys } from "./helpers/blocks.js";
+import { concat, encodeBlock, encodeBookPortPair, localKey, encodeStringBlock, encodeAccountAmountBlock, encodeLabelBlock, encodeUserAccount, endpointSpecs, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("BookPort", () => {
@@ -26,7 +26,7 @@ describe("BookPort", () => {
   it("advertises ACCOUNT_AMOUNT input with grouped debit/credit roles and empty output", async () => {
     const id = await portId(host.interface.getFunction("portBook")!.selector, host, 0n);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ input: Keys.AccountAmount, inputHint: 96 }));
+      ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
       .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "portBook"));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation")

@@ -481,14 +481,14 @@ library LegacyBlocks {
 
     // Two-word payloads
 
-    /// @notice Write an AMOUNT block at `i`.
+    /// @notice Write an ASSET_AMOUNT block at `i`.
     /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B64` bytes first.
     /// @param dst Destination buffer.
     /// @param i Relative write position.
     /// @param asset Asset identifier to encode.
     /// @param amount Asset amount to encode.
-    function writeAmount(bytes memory dst, uint i, bytes32 asset, uint amount) internal pure {
-        uint spec = Specs.Amount;
+    function writeAssetAmount(bytes memory dst, uint i, bytes32 asset, uint amount) internal pure {
+        uint spec = Specs.AssetAmount;
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, spec)
@@ -871,7 +871,7 @@ library LegacyBlocks {
     function writeStep(bytes memory dst, uint i, uint cmd, uint value, bytes memory input) internal pure {
         uint len = 64 + Sizes.Header + input.length;
         uint key = uint32(Keys.Step);
-        uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
@@ -880,7 +880,7 @@ library LegacyBlocks {
 
             let q := add(p, 0x48)
             let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(q, 0x08), add(input, 0x20), inputlen)
         }
     }
@@ -921,12 +921,13 @@ library LegacyBlocks {
         uint len = 2 * Sizes.Header + input.length + steps.length;
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
             let q := add(p, 0x08)
             let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(q, 0x08), add(input, 0x20), inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := mload(steps)
@@ -977,7 +978,8 @@ library LegacyBlocks {
     ) internal pure {
         uint len = 32 + 2 * Sizes.Header + state.length + input.length;
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
@@ -985,12 +987,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             mcopy(add(q, 0x08), add(state, 0x20), statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(r, 0x08), add(input, 0x20), inputlen)
         }
     }
@@ -1128,7 +1130,7 @@ library LegacyBlocks {
     ) private pure {
         uint len = max32(64 + Sizes.Header + value.length);
         uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
+        uint byteskey = uint32(blockkey == Keys.Step ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
@@ -1146,7 +1148,7 @@ library LegacyBlocks {
     function copyStep(bytes memory dst, uint i, uint cmd, uint value, bytes calldata input) internal pure {
         uint len = max32(64 + Sizes.Header + input.length);
         uint key = uint32(Keys.Step);
-        uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
@@ -1155,7 +1157,7 @@ library LegacyBlocks {
 
             let q := add(p, 0x48)
             let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(q, 0x08), input.offset, inputlen)
         }
     }
@@ -1170,12 +1172,13 @@ library LegacyBlocks {
         uint len = 2 * Sizes.Header + input.length + steps.length;
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
             let q := add(p, 0x08)
             let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(q, 0x08), input.offset, inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := steps.length
@@ -1199,7 +1202,8 @@ library LegacyBlocks {
     ) internal pure {
         uint len = max32(32 + 2 * Sizes.Header + state.length + input.length);
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, len)))
@@ -1207,12 +1211,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             calldatacopy(add(q, 0x08), state.offset, statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(r, 0x08), input.offset, inputlen)
         }
     }
@@ -1253,7 +1257,7 @@ library LegacyBlocks {
         bytes memory input
     ) private pure {
         uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
+        uint byteskey = uint32(blockkey == Keys.Step ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
@@ -1270,12 +1274,13 @@ library LegacyBlocks {
     function writeRelayAllocated(bytes memory dst, bytes memory input, bytes memory steps) private pure {
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
             let q := add(p, 0x08)
             let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(q, 0x08), add(input, 0x20), inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := mload(steps)
@@ -1291,7 +1296,8 @@ library LegacyBlocks {
         bytes memory input
     ) private pure {
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
@@ -1299,12 +1305,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             mcopy(add(q, 0x08), add(state, 0x20), statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(r, 0x08), add(input, 0x20), inputlen)
         }
     }
@@ -1340,7 +1346,7 @@ library LegacyBlocks {
         bytes calldata input
     ) private pure {
         uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
+        uint byteskey = uint32(blockkey == Keys.Step ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
@@ -1357,12 +1363,13 @@ library LegacyBlocks {
     function copyRelayAllocated(bytes memory dst, bytes calldata input, bytes calldata steps) private pure {
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
             let q := add(p, 0x08)
             let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(q, 0x08), input.offset, inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := steps.length
@@ -1378,7 +1385,8 @@ library LegacyBlocks {
         bytes calldata input
     ) private pure {
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
             mstore(p, or(shl(224, key), shl(192, sub(mload(dst), 8))))
@@ -1386,12 +1394,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             calldatacopy(add(q, 0x08), state.offset, statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(r, 0x08), input.offset, inputlen)
         }
     }
@@ -1461,7 +1469,7 @@ library LegacyBlocks {
         uint size
     ) internal pure {
         uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
+        uint byteskey = uint32(blockkey == Keys.Step ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
@@ -1486,12 +1494,13 @@ library LegacyBlocks {
     ) internal pure {
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
             let q := add(p, 0x08)
             let inputlen := mload(input)
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(q, 0x08), add(input, 0x20), inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := mload(steps)
@@ -1511,7 +1520,8 @@ library LegacyBlocks {
         uint size
     ) internal pure {
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
@@ -1519,12 +1529,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := mload(state)
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             mcopy(add(q, 0x08), add(state, 0x20), statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := mload(input)
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             mcopy(add(r, 0x08), add(input, 0x20), inputlen)
         }
     }
@@ -1602,7 +1612,7 @@ library LegacyBlocks {
         uint size
     ) internal pure {
         uint key = uint32(blockkey);
-        uint byteskey = uint32(Keys.Bytes);
+        uint byteskey = uint32(blockkey == Keys.Step ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
@@ -1627,12 +1637,13 @@ library LegacyBlocks {
     ) internal pure {
         uint key = uint32(Keys.Relay);
         uint byteskey = uint32(Keys.Bytes);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
             let q := add(p, 0x08)
             let inputlen := input.length
-            mstore(q, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(q, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(q, 0x08), input.offset, inputlen)
             q := add(add(q, 0x08), inputlen)
             let stepslen := steps.length
@@ -1652,7 +1663,8 @@ library LegacyBlocks {
         uint size
     ) internal pure {
         uint key = uint32(Keys.Context);
-        uint byteskey = uint32(Keys.Bytes);
+        uint statekey = uint32(Keys.State);
+        uint inputkey = uint32(Keys.Input);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, or(shl(224, key), shl(192, sub(size, 8))))
@@ -1660,12 +1672,12 @@ library LegacyBlocks {
 
             let q := add(p, 0x28)
             let statelen := state.length
-            mstore(q, or(shl(224, byteskey), shl(192, statelen)))
+            mstore(q, or(shl(224, statekey), shl(192, statelen)))
             calldatacopy(add(q, 0x08), state.offset, statelen)
 
             let r := add(add(q, 0x08), statelen)
             let inputlen := input.length
-            mstore(r, or(shl(224, byteskey), shl(192, inputlen)))
+            mstore(r, or(shl(224, inputkey), shl(192, inputlen)))
             calldatacopy(add(r, 0x08), input.offset, inputlen)
         }
     }
@@ -2207,18 +2219,18 @@ library LegacyBlocks {
 
     // Two-word payloads
 
-    /// @notice Decode a low-level fixed-width AMOUNT block at `abs`.
+    /// @notice Decode a low-level fixed-width ASSET_AMOUNT block at `abs`.
     /// @param abs Absolute block position.
     /// @return asset Decoded asset identifier.
     /// @return amount Decoded amount.
-    function unpackAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
+    function unpackAssetAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
         uint64 head;
         assembly ("memory-safe") {
             head := shr(192, calldataload(abs))
             asset := calldataload(add(abs, 0x08))
             amount := calldataload(add(abs, 0x28))
         }
-        if (head != LegacyHeaders.Amount) revert InvalidBlock();
+        if (head != LegacyHeaders.AssetAmount) revert InvalidBlock();
     }
 
     /// @notice Decode a low-level fixed-width BALANCE block at `abs`.
@@ -2551,6 +2563,44 @@ library LegacyBlocks {
         end = abs + len;
     }
 
+    function unpackState(uint abs) internal pure returns (bytes calldata value, uint end) {
+        uint key;
+        uint len;
+        assembly ("memory-safe") {
+            let word := calldataload(abs)
+            key := shr(224, word)
+            len := and(shr(192, word), 0xffffffff)
+            value.offset := add(abs, 0x08)
+            value.length := len
+        }
+        if (key != uint32(Keys.State)) revert InvalidBlock();
+        // len came from uint32: adding the header cannot overflow. One
+        // checked addition retains the original absolute-position overflow panic.
+        unchecked {
+            len += Sizes.Header;
+        }
+        end = abs + len;
+    }
+
+    function unpackInput(uint abs) internal pure returns (bytes calldata value, uint end) {
+        uint key;
+        uint len;
+        assembly ("memory-safe") {
+            let word := calldataload(abs)
+            key := shr(224, word)
+            len := and(shr(192, word), 0xffffffff)
+            value.offset := add(abs, 0x08)
+            value.length := len
+        }
+        if (key != uint32(Keys.Input)) revert InvalidBlock();
+        // len came from uint32: adding the header cannot overflow. One
+        // checked addition retains the original absolute-position overflow panic.
+        unchecked {
+            len += Sizes.Header;
+        }
+        end = abs + len;
+    }
+
     /// @notice Decode one STRING payload and its absolute end position.
     /// @param abs Absolute block position.
     /// @return value Decoded string bytes.
@@ -2582,6 +2632,19 @@ library LegacyBlocks {
     /// is in calldata. No logical-region bounds are added here.
     function unpackTailBytes(uint abs, uint end) private pure returns (bytes calldata value) {
         uint byteskey = uint32(Keys.Bytes);
+        bool valid;
+        assembly ("memory-safe") {
+            let body := add(abs, 8)
+            let len := sub(end, body)
+            valid := and(iszero(gt(len, 0xffffffff)), eq(shr(192, calldataload(abs)), or(shl(32, byteskey), len)))
+            value.offset := body
+            value.length := len
+        }
+        if (!valid) revert InvalidBlock();
+    }
+
+    function unpackTailInput(uint abs, uint end) private pure returns (bytes calldata value) {
+        uint byteskey = uint32(Keys.Input);
         bool valid;
         assembly ("memory-safe") {
             let body := add(abs, 8)
@@ -2639,8 +2702,8 @@ library LegacyBlocks {
         assembly ("memory-safe") {
             account := calldataload(abs)
         }
-        (state, end) = unpackBytes(abs + 32);
-        input = unpackTailBytes(end, limit);
+        (state, end) = unpackState(abs + 32);
+        input = unpackTailInput(end, limit);
         end = limit;
     }
 
@@ -2659,7 +2722,7 @@ library LegacyBlocks {
             cmd := calldataload(abs)
             value := calldataload(add(abs, 0x20))
         }
-        input = unpackTailBytes(abs + 64, limit);
+        input = unpackTailInput(abs + 64, limit);
         end = limit;
     }
 
@@ -2690,7 +2753,7 @@ library LegacyBlocks {
     function unpackRelay(uint abs) internal pure returns (bytes calldata input, bytes calldata steps, uint end) {
         uint limit;
         (abs, limit) = enter(abs, Keys.Relay);
-        (input, abs) = unpackBytes(abs);
+        (input, abs) = unpackInput(abs);
         steps = unpackTailBytes(abs, limit);
         end = limit;
     }
@@ -2920,13 +2983,13 @@ library LegacyBlocks {
         writeBootstrap(value, 0, asset, amount, budget);
     }
 
-    /// @notice Encode an AMOUNT block.
+    /// @notice Encode an ASSET_AMOUNT block.
     /// @param asset Asset identifier.
     /// @param amount Token amount.
-    /// @return value Encoded AMOUNT block bytes.
-    function createAmount(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Amount);
-        writeAmount(value, 0, asset, amount);
+    /// @return value Encoded ASSET_AMOUNT block bytes.
+    function createAssetAmount(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+        value = allocate(Sizes.AssetAmount);
+        writeAssetAmount(value, 0, asset, amount);
     }
 
     /// @notice Encode a BALANCE block.

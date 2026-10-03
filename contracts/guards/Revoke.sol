@@ -15,19 +15,20 @@ using Executions for Execution;
 /// Only callable by active guardian addresses.
 abstract contract Revoke is NodeAccess, GuardBase {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = guard("revoke", Specs.Node);
+        (id, descriptor) = guard("revoke", Specs.Node);
     }
 
     /// @notice Revoke every NODE block in `input` as the active guardian.
     function revoke(bytes calldata input) external onlyGuardian {
-        Execution memory exec = openInput(input, descriptor);
+        runGuard(id, descriptor, input, revokeOne);
+    }
 
-        while (exec.more()) {
-            uint node = exec.unpackNode();
-            revokeNode(node);
-        }
+    function revokeOne(Execution memory exec) private {
+        uint node = exec.unpackNode();
+        revokeNode(node);
     }
 }
 
@@ -36,19 +37,20 @@ abstract contract Revoke is NodeAccess, GuardBase {
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing AllowanceHook.
 abstract contract RevokeAllowance is GuardBase, AllowanceHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = guard("revokeAllowance", Specs.HostAsset);
+        (id, descriptor) = guard("revokeAllowance", Specs.HostAsset);
     }
 
     /// @notice Revoke every HOST_ASSET allowance in `input` as the active guardian.
     function revokeAllowance(bytes calldata input) external onlyGuardian {
-        Execution memory exec = openInput(input, descriptor);
+        runGuard(id, descriptor, input, revokeAllowanceOne);
+    }
 
-        while (exec.more()) {
-            (uint peer, bytes32 asset) = exec.unpackHostAsset();
-            allowance(peer, asset, 0);
-        }
+    function revokeAllowanceOne(Execution memory exec) private {
+        (uint peer, bytes32 asset) = exec.unpackHostAsset();
+        allowance(peer, asset, 0);
     }
 }
 
@@ -57,18 +59,19 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
 abstract contract RevokeAsset is GuardBase, DenyAssetHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = guard("revokeAsset", Specs.Asset);
+        (id, descriptor) = guard("revokeAsset", Specs.Asset);
     }
 
     /// @notice Deny every ASSET block in `input` as the active guardian.
     function revokeAsset(bytes calldata input) external onlyGuardian {
-        Execution memory exec = openInput(input, descriptor);
+        runGuard(id, descriptor, input, revokeAssetOne);
+    }
 
-        while (exec.more()) {
-            bytes32 asset = exec.unpackAsset();
-            denyAsset(asset);
-        }
+    function revokeAssetOne(Execution memory exec) private {
+        bytes32 asset = exec.unpackAsset();
+        denyAsset(asset);
     }
 }

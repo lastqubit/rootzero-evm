@@ -29,7 +29,7 @@ describe("Cursor position-constraint structure comparison", function () {
       for (const [scenario, position, error] of [
         ["asset", [other, 123, liability, 456, other], "UnexpectedValue()"],
         ["liability", [asset, 123, other, 456, other], "UnexpectedValue()"],
-        ["amount", [asset, 122, liability, 456, other], "OutOfRange()"],
+        ["assetAmount", [asset, 122, liability, 456, other], "OutOfRange()"],
         ["debt", [asset, 123, liability, 457, other], "OutOfRange()"],
       ] as const) {
         const r = await helper.measureAttempt(block, position);

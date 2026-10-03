@@ -28,17 +28,33 @@ export function endpointDescriptor({
   state?: string; stateHint?: number; input?: string; inputHint?: number;
   output?: string | bigint; funded?: boolean; admin?: boolean; handoff?: boolean;
 }): bigint {
-  const flags = (funded ? 1n : 0n) | (admin ? 2n : 0n) | (handoff ? 128n : 0n);
   const outputSpec = typeof output === "bigint" ? output : output === Keys.Empty
     ? 0n : (() => { throw new Error("non-empty output lanes require a spec"); })();
   const stateKey = BigInt(state), inputKey = BigInt(input), outputKey = outputSpec >> 224n;
   const sourceKey = stateKey || inputKey;
   const sourceSize = sourceKey === 0n ? 0n : BigInt(8 + (stateKey !== 0n ? stateHint : inputHint));
   const outputSize = outputKey === 0n ? 0n : 8n + ((outputSpec >> 136n) & 0xffffffn);
-  return (stateKey << 224n) | (inputKey << 192n) | (outputKey << 160n)
-    | (sourceKey << 128n) | (sourceSize << 96n) | (outputSize << 64n)
-    | ((stateKey !== 0n ? 64n : 0n) << 56n)
-    | (((stateKey !== 0n ? 1n : 0n) | (inputKey !== 0n ? 2n : 0n)) << 48n) | flags;
+  return (sourceKey << 224n) | (sourceSize << 192n) | (outputSize << 160n)
+    | (stateKey !== 0n ? 1n : 0n);
+}
+
+// Expected discovery specs; runtime descriptor assertions use endpointDescriptor.
+export function endpointSpecs({
+  state = Keys.Empty, stateHint = 0, input = Keys.Empty, inputHint = 0, output = Keys.Empty,
+}: Parameters<typeof endpointDescriptor>[0]): [bigint, bigint, bigint] {
+  const spec = (key: string, hint: number): bigint => {
+    if (key === Keys.Empty) return 0n;
+    const dynamic = new Map<string, number>([
+      [Keys.Swap, 72], [Keys.Step, 72], [Keys.Relay, 16], [Keys.Context, 48],
+      [Keys.Recover, 104], [Keys.Dispatch, 72], [Keys.Call, 72],
+      [Keys.Annotation, 40], [Keys.Label, 40],
+    ]);
+    const min = dynamic.get(key);
+    return min === undefined ? exactSpec(key, hint) : rangedSpec(key, min, 0, hint);
+  };
+  const outputSpec = typeof output === "bigint" ? output : output === Keys.Empty
+    ? 0n : (() => { throw new Error("non-empty output lanes require a spec"); })();
+  return [spec(state, stateHint), spec(input, inputHint), outputSpec];
 }
 
 // Known block keys
@@ -46,6 +62,9 @@ export const Keys = {
   Empty: "0x00000000",
   Local: localKey(1),
   Bytes: blockKey("#bytes"),
+  State: blockKey("#state"),
+  Input: blockKey("#input"),
+  Output: blockKey("#output"),
   String: blockKey("#string"),
   List: blockKey("#list"),
 
@@ -55,11 +74,13 @@ export const Keys = {
   Position: blockKey("#position"),
 
   // Input and value blocks
+  AssetAmount: blockKey("#assetAmount"),
   Amount: blockKey("#amount"),
   Limits: blockKey("#limits"),
   BalanceConstraints: blockKey("#balanceConstraints"),
   PositionConstraints: blockKey("#positionConstraints"),
   Quote: blockKey("#quote"),
+  Rooted: blockKey("#rooted"),
   Bootstrap: blockKey("#bootstrap"),
   Allocation: blockKey("#allocation"),
   Allowance: blockKey("#allowance"),
@@ -119,8 +140,12 @@ export function encodeBlock(key: string, payload: string): string {
   return ethers.concat([key, encodeUint32(payloadBytes.length), payload]);
 }
 
-export function encodeAmountBlock(asset: string, amount: bigint): string {
-  return encodeBlock(Keys.Amount, ethers.concat([pad32(asset), pad32(amount)]));
+export function encodeAmountBlock(amount: bigint): string {
+  return encodeBlock(Keys.Amount, pad32(amount));
+}
+
+export function encodeAssetAmountBlock(asset: string, amount: bigint): string {
+  return encodeBlock(Keys.AssetAmount, ethers.concat([pad32(asset), pad32(amount)]));
 }
 
 export function encodeBootstrapBlock(asset: string, amount: bigint, budget: bigint): string {
@@ -235,7 +260,7 @@ export function encodeStepBlock(cmd: bigint, value: bigint, input: string): stri
   return encodeBlock(Keys.Step, ethers.concat([
     pad32(cmd),
     pad32(value),
-    encodeBytesBlock(input),
+    encodeInputBlock(input),
   ]));
 }
 
@@ -244,7 +269,7 @@ export function encodeCallBlock(target: bigint, value: bigint, data: string): st
 }
 
 export function encodeContextBlock(account: string, state: string, input: string): string {
-  return encodeBlock(Keys.Context, ethers.concat([pad32(account), encodeBytesBlock(state), encodeBytesBlock(input)]));
+  return encodeBlock(Keys.Context, ethers.concat([pad32(account), encodeStateBlock(state), encodeInputBlock(input)]));
 }
 
 export function encodeRelayInputBlock(portal: bigint, resources: bigint): string {
@@ -256,11 +281,19 @@ export function encodeRecoverBlock(handler: bigint, value: bigint, key: string, 
 }
 
 export function encodeRelayBlock(input: string, steps: string): string {
-  return encodeBlock(Keys.Relay, ethers.concat([encodeBytesBlock(input), encodeBytesBlock(steps)]));
+  return encodeBlock(Keys.Relay, ethers.concat([encodeInputBlock(input), encodeBytesBlock(steps)]));
 }
 
 export function encodeDispatchBlock(portal: bigint, resources: bigint, payload: string): string {
   return encodeBlock(Keys.Dispatch, ethers.concat([pad32(portal), pad32(resources), encodeBytesBlock(payload)]));
+}
+
+export function encodeStateBlock(data: string): string {
+  return encodeBlock(Keys.State, data);
+}
+
+export function encodeInputBlock(data: string): string {
+  return encodeBlock(Keys.Input, data);
 }
 
 export function encodeBytesBlock(data: string): string {
@@ -339,3 +372,9 @@ export function encodeHostAccount(host: bigint): string {
 export function encodeBookPortPair(debit: string, credit: string): string {
   return concat(debit, credit);
 }
+
+export function encodeRootedBlock(account: string, deadline: bigint, value: bigint): string {
+  return encodeBlock(Keys.Rooted, concat(pad32(account), pad32(deadline), pad32(value)));
+}
+
+export function encodeOutputBlock(data: string): string { return encodeBlock(Keys.Output, data); }

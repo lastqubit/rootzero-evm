@@ -10,7 +10,7 @@ import {
   encodeHostAssetBlock,
   encodeLabelBlock,
   encodeNodeBlock,
-  endpointDescriptor,
+  endpointSpecs,
   Keys,
   pad32,
 } from "./helpers/blocks.js";
@@ -60,7 +60,7 @@ describe("Guard Actions", () => {
 
     await expect(deploymentTx)
       .to.emit(deployed, "Endpoint")
-      .withArgs(await (deployed as any).host(), await guard("revoke", deployed), endpointDescriptor({ input: Keys.Node, inputHint: 32 }));
+      .withArgs(await (deployed as any).host(), await guard("revoke", deployed), ...endpointSpecs({ input: Keys.Node, inputHint: 32 }));
     await expect(deploymentTx)
       .to.emit(deployed, "Annotation")
       .withArgs(await guard("revoke", deployed), encodeLabelBlock(ethers.ZeroHash, "revoke"));
@@ -69,7 +69,7 @@ describe("Guard Actions", () => {
       .withArgs(
         await (deployed as any).host(),
         await guard("revokeAllowance", deployed),
-        endpointDescriptor({ input: Keys.HostAsset, inputHint: 64 }),
+        ...endpointSpecs({ input: Keys.HostAsset, inputHint: 64 }),
       );
     await expect(deploymentTx)
       .to.emit(deployed, "Annotation")
@@ -82,7 +82,7 @@ describe("Guard Actions", () => {
       .withArgs(
         await (deployed as any).host(),
         await guard("revokeAsset", deployed),
-        endpointDescriptor({ input: Keys.Asset, inputHint: 32 }),
+        ...endpointSpecs({ input: Keys.Asset, inputHint: 32 }),
       );
     await expect(deploymentTx)
       .to.emit(deployed, "Annotation")

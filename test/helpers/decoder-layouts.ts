@@ -3,7 +3,7 @@ export const decoderLayouts = [
   { name: "Asset", words: 1, state: false },
   { name: "Node", words: 1, state: false },
   { name: "Limits", words: 1, state: false },
-  { name: "Amount", words: 2, state: false },
+  { name: "AssetAmount", words: 2, state: false },
   { name: "Balance", words: 2, state: true },
   { name: "AssetLiability", words: 2, state: false },
   { name: "AccountAsset", words: 2, state: false },

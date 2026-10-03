@@ -1,7 +1,7 @@
 ﻿import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeActionBlock, encodeAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeActionBlock, encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Burn", () => {
@@ -75,7 +75,7 @@ describe("Burn", () => {
 
   it("rejects a non-BALANCE block after a valid balance", async () => {
     const asset = ethers.zeroPadValue("0xd1", 32);
-    const state = concat(encodeBalanceBlock(asset, 5n), encodeAmountBlock(asset, 5n));
+    const state = concat(encodeBalanceBlock(asset, 5n), encodeAssetAmountBlock(asset, 5n));
     await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidBlock");
   });
 

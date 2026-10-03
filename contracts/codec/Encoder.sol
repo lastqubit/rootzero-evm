@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {AssetAmount, Position} from "../core/Types.sol";
 import {Keys} from "./Keys.sol";
 import {ValueOverflow} from "../utils/Errors.sol";
 
@@ -19,6 +20,8 @@ library Encoder {
     // General primitives: allocation, positions, sequential writes, and copies.
 
     /// @dev Allocate an uninitialized uint32-sized result with zero padding.
+    /// Reserves an owned word before the bytes length for temporary event prefixes.
+    /// That word is outside the returned length and all logical block offsets.
     /// Use pos(value, 0) for the first write position. Fill all logical bytes before
     /// exposing the result. Only the rounded final allocation is retained: writes
     /// may interleave allocations if they stay inside that owned extent. Any
@@ -26,7 +29,7 @@ library Encoder {
     function allocate(uint size) internal pure returns (bytes memory value) {
         if (size > type(uint32).max) revert ValueOverflow();
         assembly ("memory-safe") {
-            value := mload(0x40)
+            value := add(mload(0x40), 32)
             let abs := add(value, 32)
             mstore(value, size)
             mstore(add(abs, size), 0)
@@ -123,12 +126,13 @@ library Encoder {
 
     // Growable buffers: allocation, initialization, growth, reservation, finalization.
 
-    /// @dev Allocate uninitialized capacity plus one retained scratch word and copy
+    /// @dev Reserve a leading event-prefix word outside logical capacity, then
+    /// allocate uninitialized capacity plus one retained scratch word and copy
     /// only the written prefix. Requires written <= capacity <= uint32.max and
     /// written <= dst.length. Unwritten bytes must never be exposed or read.
     function grow(bytes memory dst, uint written, uint capacity) internal pure returns (bytes memory value) {
         assembly ("memory-safe") {
-            value := mload(0x40)
+            value := add(mload(0x40), 32)
             let padded := add(and(add(capacity, 31), not(31)), 32)
             mstore(value, padded)
             mstore(0x40, add(add(value, 32), padded))
@@ -239,7 +243,11 @@ library Encoder {
 
     /// @notice Append ENTITY, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
-    function writeEntity(uint cur, bytes memory dst, uint entity) internal pure returns (bytes memory value, uint nextCur) {
+    function writeEntity(
+        uint cur,
+        bytes memory dst,
+        uint entity
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 40);
         abs = writeHeader(abs, Keys.Entity, 32);
@@ -286,9 +294,22 @@ library Encoder {
         write32(abs, bytes32(limits));
     }
 
-    /// @notice Append AMOUNT, preserving field order and full-width values.
+    /// @notice Append a full-width scalar AMOUNT.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeAmount(
+        uint cur,
+        bytes memory dst,
+        uint amount
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 40);
+        abs = writeHeader(abs, Keys.Amount, 32);
+        write32(abs, bytes32(amount));
+    }
+
+    /// @notice Append ASSET_AMOUNT, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements.
+    function writeAssetAmount(
         uint cur,
         bytes memory dst,
         bytes32 asset,
@@ -296,9 +317,22 @@ library Encoder {
     ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 72);
-        abs = writeHeader(abs, Keys.Amount, 64);
+        abs = writeHeader(abs, Keys.AssetAmount, 64);
         abs = write32(abs, asset);
         write32(abs, bytes32(amount));
+    }
+
+    /// @notice Append ROOTED to a growable writer, preserving full-width fields.
+    /// @dev Inherits reserve's initialized-writer and lifecycle requirements.
+    function writeRooted(uint cur, bytes memory dst, bytes32 account, uint deadline, uint nativeValue)
+        internal pure returns (bytes memory value, uint nextCur)
+    {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 104);
+        abs = writeHeader(abs, Keys.Rooted, 96);
+        abs = write32(abs, account);
+        abs = write32(abs, bytes32(deadline));
+        write32(abs, bytes32(nativeValue));
     }
 
     /// @notice Append BALANCE to a growable writer and return its updated state.
@@ -311,9 +345,25 @@ library Encoder {
     ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 72);
+        writeBalanceAt(abs, asset, amount);
+    }
+
+    /// @notice Write a complete BALANCE at an already reserved absolute memory position.
+    /// @dev Caller owns 72 writable bytes. Does not allocate or advance a writer.
+    function writeBalanceAt(uint abs, bytes32 asset, uint amount) internal pure returns (uint) {
         abs = writeHeader(abs, Keys.Balance, 64);
         abs = write32(abs, asset);
-        write32(abs, bytes32(amount));
+        return write32(abs, bytes32(amount));
+    }
+
+    /// @notice Write a structured BALANCE into 72 caller-owned writable bytes.
+    /// @dev Does not allocate or advance a writer. Source must not overlap the destination block.
+    function writeBalanceAt(uint abs, AssetAmount memory value) internal pure returns (uint) {
+        uint payload = writeHeader(abs, Keys.Balance, 64);
+        assembly ("memory-safe") {
+            mcopy(payload, value, 64)
+        }
+        return abs + 72;
     }
 
     /// @notice Append ASSETLIABILITY, preserving field order and full-width values.
@@ -533,12 +583,35 @@ library Encoder {
     ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 168);
+        writePositionAt(abs, asset, amount, liability, debt, counterparty);
+    }
+
+    /// @notice Write a complete POSITION at an already reserved absolute memory position.
+    /// @dev Caller owns 168 writable bytes. Does not allocate or advance a writer.
+    function writePositionAt(
+        uint abs,
+        bytes32 asset,
+        uint amount,
+        bytes32 liability,
+        uint debt,
+        bytes32 counterparty
+    ) internal pure returns (uint) {
         abs = writeHeader(abs, Keys.Position, 160);
         abs = write32(abs, asset);
         abs = write32(abs, bytes32(amount));
         abs = write32(abs, liability);
         abs = write32(abs, bytes32(debt));
-        write32(abs, counterparty);
+        return write32(abs, counterparty);
+    }
+
+    /// @notice Write a structured POSITION into 168 caller-owned writable bytes.
+    /// @dev Does not allocate or advance a writer. Source must not overlap the destination block.
+    function writePositionAt(uint abs, Position memory value) internal pure returns (uint) {
+        uint payload = writeHeader(abs, Keys.Position, 160);
+        assembly ("memory-safe") {
+            mcopy(payload, value, 160)
+        }
+        return abs + 168;
     }
 
     // Payload blocks: generic key followed by named wrappers.
@@ -648,7 +721,7 @@ library Encoder {
 
     // Composites: Wrap adds child headers around payloads.
 
-    /// @notice Append STEP by copying complete validated calldata BYTES children.
+    /// @notice Append STEP by copying complete validated calldata STATE and INPUT children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeStep(
         uint cur,
@@ -688,7 +761,7 @@ library Encoder {
         }
         abs = write32(abs, bytes32(cmd));
         abs = write32(abs, bytes32(amount));
-        wrap(abs, Keys.Bytes, input, inputSize);
+        wrap(abs, Keys.Input, input, inputSize);
     }
 
     /// @notice Append STEP, wrapping validated calldata payload cursors in child headers.
@@ -710,14 +783,18 @@ library Encoder {
         }
         abs = write32(abs, bytes32(cmd));
         abs = write32(abs, bytes32(amount));
-        wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+        wrap(abs, Keys.Input, uint32(inputCur), inputSize);
     }
 
     /// @notice Append SWAP by copying a complete validated LIST child, including its header.
     /// @dev Inherits reserve/copy requirements. Does not revalidate hops or route semantics.
-    function writeSwap(uint cur, bytes memory dst, bytes32 asset, uint amount, uint hopsCur)
-        internal pure returns (bytes memory value, uint nextCur)
-    {
+    function writeSwap(
+        uint cur,
+        bytes memory dst,
+        bytes32 asset,
+        uint amount,
+        uint hopsCur
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint size = 72 + length(hopsCur);
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, size);
@@ -729,9 +806,13 @@ library Encoder {
 
     /// @notice Append SWAP, wrapping memory ASSET blocks in a LIST child.
     /// @dev Inherits reserve/copy requirements; does not validate hops or route semantics.
-    function writeSwapWrap(uint cur, bytes memory dst, bytes32 asset, uint amount, bytes memory hops)
-        internal pure returns (bytes memory value, uint nextCur)
-    {
+    function writeSwapWrap(
+        uint cur,
+        bytes memory dst,
+        bytes32 asset,
+        uint amount,
+        bytes memory hops
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint size = 80 + hops.length;
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, size);
@@ -744,9 +825,13 @@ library Encoder {
     /// @notice Append SWAP, wrapping a validated ASSET stream cursor in a LIST child.
     /// @dev Sources exclude the LIST header; inherits reserve/copy requirements.
     /// Does not advance the source or revalidate hops or route semantics.
-    function writeSwapWrap(uint cur, bytes memory dst, bytes32 asset, uint amount, uint hopsCur)
-        internal pure returns (bytes memory value, uint nextCur)
-    {
+    function writeSwapWrap(
+        uint cur,
+        bytes memory dst,
+        bytes32 asset,
+        uint amount,
+        uint hopsCur
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint hopsSize = length(hopsCur);
         uint size = 80 + hopsSize;
         uint abs;
@@ -757,7 +842,7 @@ library Encoder {
         wrap(abs, Keys.List, uint32(hopsCur), hopsSize);
     }
 
-    /// @notice Append CALL by copying complete validated calldata BYTES children.
+    /// @notice Append CALL by copying complete validated calldata STATE and INPUT children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeCall(
         uint cur,
@@ -822,7 +907,7 @@ library Encoder {
         wrap(abs, Keys.Bytes, uint32(payloadCur), payloadSize);
     }
 
-    /// @notice Append DISPATCH by copying complete validated calldata BYTES children.
+    /// @notice Append DISPATCH by copying complete validated calldata STATE and INPUT children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeDispatch(
         uint cur,
@@ -887,7 +972,7 @@ library Encoder {
         wrap(abs, Keys.Bytes, uint32(payloadCur), payloadSize);
     }
 
-    /// @notice Append RELAY by copying complete validated calldata BYTES children.
+    /// @notice Append RELAY by copying complete validated calldata STATE and INPUT children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeRelay(
         uint cur,
@@ -924,7 +1009,7 @@ library Encoder {
         unchecked {
             abs = writeHeader(abs, Keys.Relay, size - 8);
         }
-        abs = wrap(abs, Keys.Bytes, input, inputSize);
+        abs = wrap(abs, Keys.Input, input, inputSize);
         wrap(abs, Keys.Bytes, steps, stepsSize);
     }
 
@@ -945,11 +1030,11 @@ library Encoder {
         unchecked {
             abs = writeHeader(abs, Keys.Relay, size - 8);
         }
-        abs = wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+        abs = wrap(abs, Keys.Input, uint32(inputCur), inputSize);
         wrap(abs, Keys.Bytes, uint32(stepsCur), stepsSize);
     }
 
-    /// @notice Append RECOVER by copying complete validated calldata BYTES children.
+    /// @notice Append RECOVER by copying complete validated calldata STATE and INPUT children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeRecover(
         uint cur,
@@ -1138,9 +1223,9 @@ library Encoder {
         wrap(abs, Keys.String, uint32(bodyCur), bodySize);
     }
 
-    /// @notice Append CONTEXT by copying complete validated memory BYTES children.
+    /// @notice Append CONTEXT by copying complete validated memory STATE and INPUT children.
     /// @dev Inherits reserve's lifecycle requirements. Children must be validated
-    /// complete BYTES blocks, disjoint from destination writes.
+    /// complete STATE and INPUT blocks, disjoint from destination writes.
     function writeContext(
         uint cur,
         bytes memory dst,
@@ -1161,9 +1246,9 @@ library Encoder {
         copy(abs, input, inputSize);
     }
 
-    /// @notice Append CONTEXT by copying complete validated calldata BYTES children.
+    /// @notice Append CONTEXT by copying complete validated calldata STATE and INPUT children.
     /// @dev Inherits reserve's lifecycle requirements. Children must be validated
-    /// complete BYTES blocks, disjoint from destination writes.
+    /// complete STATE and INPUT blocks, disjoint from destination writes.
     function writeContext(
         uint cur,
         bytes memory dst,
@@ -1184,7 +1269,7 @@ library Encoder {
         copy(abs, uint32(inputCur), inputSize);
     }
 
-    /// @notice Append CONTEXT by wrapping memory payloads in BYTES headers.
+    /// @notice Append CONTEXT by wrapping memory payloads in STATE and INPUT headers.
     /// @dev Inherits reserve's lifecycle requirements. Payload ranges must be valid
     /// and disjoint from destination writes.
     function writeContextWrap(
@@ -1203,8 +1288,8 @@ library Encoder {
             abs = writeHeader(abs, Keys.Context, size - 8);
         }
         abs = write32(abs, account);
-        abs = wrap(abs, Keys.Bytes, state, stateSize);
-        wrap(abs, Keys.Bytes, input, inputSize);
+        abs = wrap(abs, Keys.State, state, stateSize);
+        wrap(abs, Keys.Input, input, inputSize);
     }
 
     /// @notice Append CONTEXT by wrapping validated calldata payload cursors.
@@ -1226,8 +1311,8 @@ library Encoder {
             abs = writeHeader(abs, Keys.Context, size - 8);
         }
         abs = write32(abs, account);
-        abs = wrap(abs, Keys.Bytes, uint32(stateCur), stateSize);
-        wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+        abs = wrap(abs, Keys.State, uint32(stateCur), stateSize);
+        wrap(abs, Keys.Input, uint32(inputCur), inputSize);
     }
 
     // Creators: fixed-size blocks, payload blocks, then composites.
@@ -1306,13 +1391,33 @@ library Encoder {
         write32(abs, account);
     }
 
-    /// @notice Create a complete AMOUNT block with zero allocation padding.
+    /// @notice Create a complete scalar AMOUNT block with zero allocation padding.
+    /// @param amount Full-width amount, encoded unchanged; the consumer defines its unit.
+    /// @return value Complete 40-byte AMOUNT block.
+    function createAmount(uint amount) internal pure returns (bytes memory value) {
+        value = allocate(40);
+        uint abs = writeHeader(pos(value, 0), Keys.Amount, 32);
+        write32(abs, bytes32(amount));
+    }
+
+    /// @notice Create a complete ASSET_AMOUNT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createAmount(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+    function createAssetAmount(bytes32 asset, uint amount) internal pure returns (bytes memory value) {
         value = allocate(72);
-        uint abs = writeHeader(pos(value, 0), Keys.Amount, 64);
+        uint abs = writeHeader(pos(value, 0), Keys.AssetAmount, 64);
         abs = write32(abs, asset);
         write32(abs, bytes32(amount));
+    }
+
+    /// @notice Create ROOTED with account, deadline and native value in that order.
+    /// @dev Preserves full-width fields; does not authorize the account, enforce the
+    /// deadline, transfer value, or emit an event. Payload is 96 bytes; total is 104.
+    function createRooted(bytes32 account, uint deadline, uint nativeValue) internal pure returns (bytes memory value) {
+        value = allocate(104);
+        uint abs = writeHeader(pos(value, 0), Keys.Rooted, 96);
+        abs = write32(abs, account);
+        abs = write32(abs, bytes32(deadline));
+        write32(abs, bytes32(nativeValue));
     }
 
     /// @notice Create a complete 72-byte BALANCE block with zero allocation padding.
@@ -1406,7 +1511,11 @@ library Encoder {
 
     /// @notice Create a complete ACCOUNTAMOUNT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createAccountAmount(bytes32 account, bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+    function createAccountAmount(
+        bytes32 account,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value) {
         value = allocate(104);
         uint abs = writeHeader(pos(value, 0), Keys.AccountAmount, 96);
         abs = write32(abs, account);
@@ -1426,7 +1535,11 @@ library Encoder {
 
     /// @notice Create a complete HOSTACCOUNTASSET block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createHostAccountAsset(uint host, bytes32 account, bytes32 asset) internal pure returns (bytes memory value) {
+    function createHostAccountAsset(
+        uint host,
+        bytes32 account,
+        bytes32 asset
+    ) internal pure returns (bytes memory value) {
         value = allocate(104);
         uint abs = writeHeader(pos(value, 0), Keys.HostAccountAsset, 96);
         abs = write32(abs, bytes32(host));
@@ -1436,7 +1549,12 @@ library Encoder {
 
     /// @notice Create a complete QUOTE block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createQuote(bytes32 asset, uint amount, bytes32 liability, uint debt) internal pure returns (bytes memory value) {
+    function createQuote(
+        bytes32 asset,
+        uint amount,
+        bytes32 liability,
+        uint debt
+    ) internal pure returns (bytes memory value) {
         value = allocate(136);
         uint abs = writeHeader(pos(value, 0), Keys.Quote, 128);
         abs = write32(abs, asset);
@@ -1447,7 +1565,12 @@ library Encoder {
 
     /// @notice Create a complete TRANSACTION block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createTransaction(bytes32 from, bytes32 to, bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+    function createTransaction(
+        bytes32 from,
+        bytes32 to,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value) {
         value = allocate(136);
         uint abs = writeHeader(pos(value, 0), Keys.Transaction, 128);
         abs = write32(abs, from);
@@ -1458,7 +1581,12 @@ library Encoder {
 
     /// @notice Create a complete HOSTACCOUNTAMOUNT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createHostAccountAmount(uint host, bytes32 account, bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+    function createHostAccountAmount(
+        uint host,
+        bytes32 account,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value) {
         value = allocate(136);
         uint abs = writeHeader(pos(value, 0), Keys.HostAccountAmount, 128);
         abs = write32(abs, bytes32(host));
@@ -1469,7 +1597,13 @@ library Encoder {
 
     /// @notice Create a complete POSITION block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createPosition(bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) internal pure returns (bytes memory value) {
+    function createPosition(
+        bytes32 asset,
+        uint amount,
+        bytes32 liability,
+        uint debt,
+        bytes32 counterparty
+    ) internal pure returns (bytes memory value) {
         value = allocate(168);
         uint abs = writeHeader(pos(value, 0), Keys.Position, 160);
         abs = write32(abs, asset);
@@ -1536,7 +1670,7 @@ library Encoder {
 
     // Composite creators: values and payloads, with child headers constructed here.
 
-    /// @notice Encode a CONTEXT by wrapping memory-backed state and input in BYTES headers.
+    /// @notice Encode a CONTEXT by wrapping memory-backed state and input in STATE and INPUT headers.
     /// @dev Copies each stream directly to its final destination with MCOPY.
     /// Checks total size, but does not validate the nested stream contents.
     /// @param account Account identifier to encode.
@@ -1556,12 +1690,12 @@ library Encoder {
         unchecked {
             abs = writeHeader(abs, Keys.Context, size - 8);
             abs = write32(abs, account);
-            abs = wrap(abs, Keys.Bytes, state, stateSize);
-            wrap(abs, Keys.Bytes, input, inputSize);
+            abs = wrap(abs, Keys.State, state, stateSize);
+            wrap(abs, Keys.Input, input, inputSize);
         }
     }
 
-    /// @notice Encode a CONTEXT by wrapping calldata-backed state and input in BYTES headers.
+    /// @notice Encode a CONTEXT by wrapping calldata-backed state and input in STATE and INPUT headers.
     /// @dev Requires current <= end <= calldatasize for each cursor. Copies only
     /// their remaining ranges directly into the final output with CALLDATACOPY.
     /// No intermediate buffers, repeated bounds checks, or cursor advancement.
@@ -1571,11 +1705,7 @@ library Encoder {
     /// @param stateCur Validated cursor over the encoded state stream.
     /// @param inputCur Validated cursor over the encoded input stream.
     /// @return value Complete encoded CONTEXT block in memory.
-    function createContext(
-        bytes32 account,
-        uint stateCur,
-        uint inputCur
-    ) internal pure returns (bytes memory value) {
+    function createContext(bytes32 account, uint stateCur, uint inputCur) internal pure returns (bytes memory value) {
         uint stateSize = length(stateCur);
         uint inputSize = length(inputCur);
         uint size = 56 + stateSize + inputSize;
@@ -1584,8 +1714,8 @@ library Encoder {
         unchecked {
             abs = writeHeader(abs, Keys.Context, size - 8);
             abs = write32(abs, account);
-            abs = wrap(abs, Keys.Bytes, uint32(stateCur), stateSize);
-            wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+            abs = wrap(abs, Keys.State, uint32(stateCur), stateSize);
+            wrap(abs, Keys.Input, uint32(inputCur), inputSize);
         }
     }
     /// @notice Create LABEL by wrapping a memory payload in a STRING child header.

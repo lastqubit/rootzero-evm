@@ -26,7 +26,7 @@ abstract contract CheckBalance is CommandBase {
     /// @return Unchanged BALANCE blocks.
     /// @return Zero native budget credit.
     function checkBalance(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, checkBalanceOne);
+        return runCommand(id, descriptor, context, checkBalanceOne);
     }
 
     function checkBalanceOne(Execution memory exec) private pure {

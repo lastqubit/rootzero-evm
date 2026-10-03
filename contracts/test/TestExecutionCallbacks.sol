@@ -14,7 +14,19 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
     bytes32 public lastAccount;
     address public lastCaller;
 
-    constructor() Runtime(0) {}
+    uint private immutable executeId;
+    uint private immutable executeStateId;
+    uint private immutable onceId;
+    uint private immutable emptyId;
+    uint private immutable portId;
+
+    constructor() Runtime(0) {
+        (onceId,) = command("executeOnce", 0, Specs.AssetAmount, Specs.AssetAmount, 0);
+        (emptyId,) = command("executeOnceEmpty", 0, 0, 0, 0);
+        (portId,) = port("executePort", Specs.AssetAmount, Specs.AssetAmount, 0);
+        (executeId,) = command("execute", 0, Specs.AssetAmount, Specs.AssetAmount, 0);
+        (executeStateId,) = command("executeState", Specs.Balance, 0, Specs.AssetAmount, 0);
+    }
 
     function enforceCaller(address caller) internal pure override returns (address) {
         return caller;
@@ -26,23 +38,23 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
 
     // Test entrypoint deliberately bypasses access control.
     function execute(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommand(context, Executions.describe(0, Specs.Amount, Specs.Amount, 0), processOne);
+        return runCommand(executeId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
     }
 
     function executeState(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommand(context, Executions.describe(Specs.Balance, 0, Specs.Amount, 0), processState);
+        return runCommand(executeStateId, Executions.describe(Specs.Balance, 0, Specs.AssetAmount), context, processState);
     }
 
     function executeOnce(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommandOnce(context, Executions.describe(0, Specs.Amount, Specs.Amount, 0), processOne);
+        return runCommandOnce(onceId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
     }
 
     function executeOnceEmpty(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommandOnce(context, Executions.describe(0, 0, 0, 0), processEmpty);
+        return runCommandOnce(emptyId, Executions.describe(0, 0, 0), context, processEmpty);
     }
 
     function executePort(bytes calldata input) external payable returns (bytes memory, uint) {
-        return runPort(input, Executions.describe(0, Specs.Amount, Specs.Amount, 0), processPort);
+        return runPort(portId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), input, processPort);
     }
 
     function processPort(Execution memory exec) private {
@@ -57,7 +69,7 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
     }
 
     function executeManual(bytes calldata context) external payable returns (bytes memory, uint) {
-        Execution memory exec = openCommand(context, Executions.describe(0, Specs.Amount, Specs.Amount, 0));
+        Execution memory exec = openCommand(context, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount));
         while (exec.more()) processOne(exec);
         return exec.close();
     }
@@ -65,15 +77,15 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
     function processState(Execution memory exec) internal pure {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         exec.useValue(1);
-        exec.outputAmount(asset, amount);
+        exec.outputAssetAmount(asset, amount);
     }
 
     function processOne(Execution memory exec) internal {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         if (amount == 13) revert RejectedRequest();
         processed++;
         lastAccount = exec.account;
         lastCaller = msg.sender;
-        exec.outputAmount(asset, amount * 2);
+        exec.outputAssetAmount(asset, amount * 2);
     }
 }

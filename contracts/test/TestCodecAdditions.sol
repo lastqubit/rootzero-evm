@@ -12,7 +12,7 @@ contract TestCodecAdditions {
         else if (kind == 2) value = Encoder.createNode(uint(fields[0]));
         else if (kind == 3) value = Encoder.createStatus(uint(fields[0]));
         else if (kind == 4) value = Encoder.createLimits(uint(fields[0]));
-        else if (kind == 5) value = Encoder.createAmount(fields[0], uint(fields[1]));
+        else if (kind == 5) value = Encoder.createAssetAmount(fields[0], uint(fields[1]));
         else if (kind == 6) value = Encoder.createAssetLiability(fields[0], fields[1]);
         else if (kind == 7) value = Encoder.createAccountAsset(fields[0], fields[1]);
         else if (kind == 8) value = Encoder.createHostAsset(uint(fields[0]), fields[1]);

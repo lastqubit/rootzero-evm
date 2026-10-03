@@ -21,18 +21,20 @@ using Cursors for uint;
 abstract contract MyCommand is CommandBase {
     string private constant INPUT = "many #asset";
     uint private immutable inputSpec = schema(INPUT, 1, 0, 0, 128);
+    uint private immutable id;
     uint private immutable descriptor;
 
     event AssetSeen(uint indexed batch, bytes32 asset);
 
     constructor() {
-        (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
+        (id, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Empty, 0);
     }
 
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
+        exec.logContext(id, descriptor);
         uint batch;
 
         while (exec.more()) {
@@ -49,7 +51,7 @@ abstract contract MyCommand is CommandBase {
             }
         }
 
-        return exec.close();
+        return exec.close(id, descriptor);
     }
 }
 

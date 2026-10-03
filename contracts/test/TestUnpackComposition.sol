@@ -24,7 +24,7 @@ abstract contract UnpackCompositionHarness {
     }
 }
 
-contract UnpackAmountDirect is UnpackCompositionHarness {
+contract UnpackAssetAmountDirect is UnpackCompositionHarness {
     function unpack(uint cur) internal pure override returns (uint sum, uint nextCur) {
         (bytes32 asset, uint amount, uint next) = decode(cur);
         nextCur = next;
@@ -33,7 +33,7 @@ contract UnpackAmountDirect is UnpackCompositionHarness {
 
     function decode(uint cur) private pure returns (bytes32 asset, uint amount, uint nextCur) {
         uint abs = uint32(cur);
-        Blocks.expectHeader(abs, Headers.Amount);
+        Blocks.expectHeader(abs, Headers.AssetAmount);
         nextCur = Blocks.advance(cur, 72);
         assembly ("memory-safe") {
             asset := calldataload(add(abs, 8))
@@ -42,9 +42,9 @@ contract UnpackAmountDirect is UnpackCompositionHarness {
     }
 }
 
-contract UnpackAmountComposed is UnpackCompositionHarness {
+contract UnpackAssetAmountComposed is UnpackCompositionHarness {
     function unpack(uint cur) internal pure override returns (uint sum, uint nextCur) {
-        (bytes32 asset, uint amount, uint next) = Blocks.unpackAmount(cur);
+        (bytes32 asset, uint amount, uint next) = Blocks.unpackAssetAmount(cur);
         nextCur = next;
         unchecked { sum = uint(asset) + amount; }
     }

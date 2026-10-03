@@ -4,7 +4,7 @@ import { deploy, queryId } from "./helpers/setup.js";
 import "./helpers/matchers.js";
 import {
   concat, encodeAssetBlock, encodeBlock, encodeCodesBlock, encodeEntityBlock,
-  encodeLabelBlock, encodeNodeBlock, endpointDescriptor, exactSpec, Keys,
+  encodeLabelBlock, encodeNodeBlock, endpointSpecs, exactSpec, Keys,
 } from "./helpers/blocks.js";
 
 describe("GetEntityCodes", () => {
@@ -16,7 +16,7 @@ describe("GetEntityCodes", () => {
     const id = await queryId("entityCodes(bytes)", query);
     await expect(query.deploymentTransaction()).to.emit(query, "Endpoint").withArgs(
       await query.host(), id,
-      endpointDescriptor({ input: Keys.Entity, inputHint: 32, output: exactSpec(Keys.Codes, 32) }),
+      ...endpointSpecs({ input: Keys.Entity, inputHint: 32, output: exactSpec(Keys.Codes, 32) }),
     );
     await expect(query.deploymentTransaction()).to.emit(query, "Annotation")
       .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "entityCodes"));

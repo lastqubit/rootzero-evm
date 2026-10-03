@@ -269,8 +269,8 @@ library PreviousEncoderOrder {
             abs = writeHeader(abs, Keys.Context, size - 8);
         }
         abs = write32(abs, account);
-        abs = wrap(abs, Keys.Bytes, state, stateSize);
-        wrap(abs, Keys.Bytes, input, inputSize);
+        abs = wrap(abs, Keys.State, state, stateSize);
+        wrap(abs, Keys.Input, input, inputSize);
     }
 
     function writeContextWrap(
@@ -289,8 +289,8 @@ library PreviousEncoderOrder {
             abs = writeHeader(abs, Keys.Context, size - 8);
         }
         abs = write32(abs, account);
-        abs = wrap(abs, Keys.Bytes, uint32(stateCur), stateSize);
-        wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+        abs = wrap(abs, Keys.State, uint32(stateCur), stateSize);
+        wrap(abs, Keys.Input, uint32(inputCur), inputSize);
     }
 
 }

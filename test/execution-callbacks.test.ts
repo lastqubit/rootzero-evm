@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner } from "./helpers/setup.js";
-import { concat, encodeAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Execution runners", () => {
@@ -13,14 +13,14 @@ describe("Execution runners", () => {
 
   it("passes a contract function through a runner and library with shared execution memory", async () => {
     const context = encodeContextBlock(account, "0x", concat(
-      encodeAmountBlock(asset, 3n), encodeAmountBlock(asset, 7n),
+      encodeAssetAmountBlock(asset, 3n), encodeAssetAmountBlock(asset, 7n),
     ));
     const result = await helper.execute.staticCall(context, { value: 5n });
     expect(Array.from(result)).to.deep.equal(Array.from(
       await helper.executeManual.staticCall(context, { value: 5n }),
     ));
     expect(Array.from(result)).to.deep.equal([
-      concat(encodeAmountBlock(asset, 6n), encodeAmountBlock(asset, 14n)), 5n,
+      concat(encodeAssetAmountBlock(asset, 6n), encodeAssetAmountBlock(asset, 14n)), 5n,
     ]);
     await (await helper.execute(context, { value: 5n })).wait();
     expect(await helper.processed()).to.equal(2n);
@@ -38,7 +38,7 @@ describe("Execution runners", () => {
 
   it("propagates callback reverts and rolls back preceding items", async () => {
     const context = encodeContextBlock(account, "0x", concat(
-      encodeAmountBlock(asset, 3n), encodeAmountBlock(asset, 13n),
+      encodeAssetAmountBlock(asset, 3n), encodeAssetAmountBlock(asset, 13n),
     ));
     await expect(helper.execute(context, { gasLimit: 1_000_000 }))
       .to.be.revertedWithCustomError(helper, "RejectedRequest");
@@ -52,16 +52,16 @@ describe("Execution runners", () => {
     ), "0x");
     expect(Array.from(await helper.executeState.staticCall(context, { value: 5n })))
       .to.deep.equal([
-        concat(encodeAmountBlock(asset, 3n), encodeAmountBlock(asset, 7n)), 3n,
+        concat(encodeAssetAmountBlock(asset, 3n), encodeAssetAmountBlock(asset, 7n)), 3n,
       ]);
     await expect(helper.executeState.staticCall(context, { value: 1n }))
       .to.be.revertedWithCustomError(helper, "InsufficientValue");
   });
 
   it("rejects malformed contexts before invoking the callback", async () => {
-    const context = encodeContextBlock(account, "0x", encodeAmountBlock(asset, 3n));
+    const context = encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 3n));
     for (const invalid of [
-      "0x", "0x1234", encodeAmountBlock(asset, 3n),
+      "0x", "0x1234", encodeAssetAmountBlock(asset, 3n),
       ethers.dataSlice(context, 0, ethers.dataLength(context) - 1),
       concat(context, "0x00"), concat(context, context),
     ]) {
@@ -73,16 +73,16 @@ describe("Execution runners", () => {
   });
 
   it("does not silently finish when input is exhausted but state remains", async () => {
-    const context = encodeContextBlock(account, encodeBalanceBlock(asset, 7n), encodeAmountBlock(asset, 3n));
+    const context = encodeContextBlock(account, encodeBalanceBlock(asset, 7n), encodeAssetAmountBlock(asset, 3n));
     await expect(helper.execute(context, { gasLimit: 1_000_000 }))
       .to.be.revertedWithCustomError(helper, "InvalidBlock");
     expect(await helper.processed()).to.equal(0n);
   });
 
   it("runCommandOnce returns the callback output and credit after one invocation", async () => {
-    const context = encodeContextBlock(account, "0x", encodeAmountBlock(asset, 3n));
+    const context = encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 3n));
     expect(Array.from(await helper.executeOnce.staticCall(context, { value: 5n })))
-      .to.deep.equal([encodeAmountBlock(asset, 6n), 5n]);
+      .to.deep.equal([encodeAssetAmountBlock(asset, 6n), 5n]);
     await (await helper.executeOnce(context)).wait();
     expect(await helper.processed()).to.equal(1n);
     expect(await helper.lastAccount()).to.equal(account);
@@ -101,13 +101,13 @@ describe("Execution runners", () => {
   it("runCommandOnce lets the callback reject missing required input and propagates hook errors", async () => {
     await expect(helper.executeOnce(encodeContextBlock(account, "0x", "0x")))
       .to.be.revertedWithCustomError(helper, "InvalidBlock");
-    await expect(helper.executeOnce(encodeContextBlock(account, "0x", encodeAmountBlock(asset, 13n))))
+    await expect(helper.executeOnce(encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 13n))))
       .to.be.revertedWithCustomError(helper, "RejectedRequest");
     expect(await helper.processed()).to.equal(0n);
   });
 
   it("runCommandOnce rejects leftover input or state and rolls back the callback", async () => {
-    const amount = encodeAmountBlock(asset, 3n);
+    const amount = encodeAssetAmountBlock(asset, 3n);
     for (const context of [
       encodeContextBlock(account, "0x", concat(amount, amount)),
       encodeContextBlock(account, encodeBalanceBlock(asset, 7n), amount),
@@ -120,9 +120,9 @@ describe("Execution runners", () => {
   });
 
   it("port shares the input cursor and budget across callbacks and finalizes output", async () => {
-    const input = concat(encodeAmountBlock(asset, 3n), encodeAmountBlock(asset, 7n));
+    const input = concat(encodeAssetAmountBlock(asset, 3n), encodeAssetAmountBlock(asset, 7n));
     expect(Array.from(await helper.executePort.staticCall(input, { value: 5n })))
-      .to.deep.equal([concat(encodeAmountBlock(asset, 6n), encodeAmountBlock(asset, 14n)), 3n]);
+      .to.deep.equal([concat(encodeAssetAmountBlock(asset, 6n), encodeAssetAmountBlock(asset, 14n)), 3n]);
     await (await helper.executePort(input, { value: 5n })).wait();
     expect(await helper.processed()).to.equal(2n);
     expect(await helper.lastAccount()).to.equal(ethers.ZeroHash);
@@ -137,11 +137,11 @@ describe("Execution runners", () => {
   });
 
   it("port rolls back prior callbacks on insufficient budget, malformed input, or hook failure", async () => {
-    const first = encodeAmountBlock(asset, 3n);
+    const first = encodeAssetAmountBlock(asset, 3n);
     for (const [input, value, error] of [
       [concat(first, first), 1n, "InsufficientValue"],
       [concat(first, "0x01"), 5n, "InvalidBlock"],
-      [concat(first, encodeAmountBlock(asset, 13n)), 5n, "RejectedRequest"],
+      [concat(first, encodeAssetAmountBlock(asset, 13n)), 5n, "RejectedRequest"],
     ] as const) {
       await expect(helper.executePort(input, { value, gasLimit: 1_000_000 }))
         .to.be.revertedWithCustomError(helper, error);

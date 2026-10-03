@@ -9,7 +9,7 @@ import {
   encodeAccountAmountBlock,
   encodeAllocationBlock,
   encodeAllowanceBlock,
-  encodeAmountBlock,
+  encodeAssetAmountBlock,
   encodeAssetBlock,
   encodeAssetLiabilityBlock,
   encodeBalanceBlock,
@@ -358,9 +358,9 @@ describe("Cursors", () => {
       expect(await helper.testUnpackBalance(data)).to.deep.equal([asset, amount]);
     });
 
-    it("amount returns a valid encoded AMOUNT block", async () => {
-      const data: string = await helper.testToAmountBlock(asset, amount);
-      expect(data).to.equal(encodeAmountBlock(asset, amount));
+    it("amount returns a valid encoded ASSET_AMOUNT block", async () => {
+      const data: string = await helper.testToAssetAmountBlock(asset, amount);
+      expect(data).to.equal(encodeAssetAmountBlock(asset, amount));
     });
 
     it("bootstrap returns a valid encoded BOOTSTRAP block", async () => {
@@ -383,7 +383,7 @@ describe("Cursors", () => {
     });
 
     it("unpackBalance rejects the wrong key or payload length", async () => {
-      await expect(blocksHelper.unpackBalance(encodeAmountBlock(asset, amount)))
+      await expect(blocksHelper.unpackBalance(encodeAssetAmountBlock(asset, amount)))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
       await expect(blocksHelper.unpackBalance(encodeBlock(Keys.Balance, asset)))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
@@ -398,7 +398,7 @@ describe("Cursors", () => {
       expect(await blocksHelper.unpackAsset(encodeAssetBlock(asset))).to.equal(asset);
       expect(await blocksHelper.unpackNode(encodeNodeBlock(host))).to.equal(host);
       expect(await blocksHelper.unpackStatus(encodeStatusBlock(7n))).to.equal(7n);
-      expect(await blocksHelper.unpackAmount(encodeAmountBlock(asset, amount))).to.deep.equal([asset, amount]);
+      expect(await blocksHelper.unpackAssetAmount(encodeAssetAmountBlock(asset, amount))).to.deep.equal([asset, amount]);
       expect(await blocksHelper.unpackBalance(encodeBalanceBlock(asset, amount))).to.deep.equal([asset, amount]);
       expect(await blocksHelper.unpackAssetLiability(encodeAssetLiabilityBlock(asset, other)))
         .to.deep.equal([asset, other]);
@@ -627,13 +627,13 @@ describe("Cursors", () => {
       const block = encodeListBlock(ethers.hexlify(ethers.randomBytes(64)));
       const spec = exactSpec(Keys.List, 64);
 
-      expect(await blocksHelper.enterAmountAbsolute(block, spec, 32n))
+      expect(await blocksHelper.enterAssetAmountAbsolute(block, spec, 32n))
         .to.deep.equal([8n, 40n, 72n]);
-      expect(await blocksHelper.enterKeyAmountAbsolute(block, Keys.List, 32n))
+      expect(await blocksHelper.enterKeyAssetAmountAbsolute(block, Keys.List, 32n))
         .to.deep.equal([8n, 40n, 72n]);
-      await expect(blocksHelper.enterAmountAbsolute(block, spec, 65n))
+      await expect(blocksHelper.enterAssetAmountAbsolute(block, spec, 65n))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
-      await expect(blocksHelper.enterKeyAmountAbsolute(block, Keys.List, 65n))
+      await expect(blocksHelper.enterKeyAssetAmountAbsolute(block, Keys.List, 65n))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
     });
 
@@ -706,13 +706,13 @@ describe("Cursors", () => {
     });
 
     it("initializes execution output capacity from the input run", async () => {
-      const amountSpec = exactSpec(Keys.Amount, 64);
+      const amountSpec = exactSpec(Keys.AssetAmount, 64);
       const balanceSpec = exactSpec(Keys.Balance, 64);
       const input = concat(
-        encodeAmountBlock(asset, 1n),
-        encodeAmountBlock(asset, 2n),
-        encodeAmountBlock(asset, 3n),
-        encodeAmountBlock(asset, 4n),
+        encodeAssetAmountBlock(asset, 1n),
+        encodeAssetAmountBlock(asset, 2n),
+        encodeAssetAmountBlock(asset, 3n),
+        encodeAssetAmountBlock(asset, 4n),
       );
 
       expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, amountSpec, balanceSpec))
@@ -721,12 +721,12 @@ describe("Cursors", () => {
 
     it("uses state before input as the output hint source", async () => {
       const balanceSpec = exactSpec(Keys.Balance, 64);
-      const amountSpec = exactSpec(Keys.Amount, 64);
+      const amountSpec = exactSpec(Keys.AssetAmount, 64);
       const positionSpec = exactSpec(Keys.Position, 160);
       const state = encodeBalanceBlock(asset, 1n);
       const input = concat(
-        encodeAmountBlock(asset, 2n),
-        encodeAmountBlock(asset, 3n),
+        encodeAssetAmountBlock(asset, 2n),
+        encodeAssetAmountBlock(asset, 3n),
       );
 
       expect(
@@ -740,7 +740,7 @@ describe("Cursors", () => {
 
     it("uses state as the output-hint source when descriptor input is empty", async () => {
       const balanceSpec = exactSpec(Keys.Balance, 64);
-      const amountSpec = exactSpec(Keys.Amount, 64);
+      const amountSpec = exactSpec(Keys.AssetAmount, 64);
       const state = concat(
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
@@ -755,13 +755,13 @@ describe("Cursors", () => {
       const spec = rangedSpec(Keys.Bytes, 0, 0, 0xffffff);
       const descriptor = await blocksHelper.describeSpecs(0, spec, spec);
       const size = 0xffffffn + 8n;
-      expect((descriptor >> 96n) & 0xffffffffn).to.equal(size);
-      expect((descriptor >> 64n) & 0xffffffffn).to.equal(size);
-      expect((descriptor >> 128n) & 0xffffffffn).to.equal(BigInt(Keys.Bytes));
-      expect(descriptor & ((1n << 64n) - 1n)).to.equal(2n << 48n);
+      expect((descriptor >> 192n) & 0xffffffffn).to.equal(size);
+      expect((descriptor >> 160n) & 0xffffffffn).to.equal(size);
+      expect((descriptor >> 224n) & 0xffffffffn).to.equal(BigInt(Keys.Bytes));
+      expect(descriptor & ((1n << 160n) - 1n)).to.equal(0n);
       const noSource = await blocksHelper.describeSpecs(0, 0, exactSpec(Keys.Balance, 64));
-      expect((noSource >> 96n) & 0xffffffffffffffffn).to.equal(0n);
-      expect((noSource >> 64n) & 0xffffffffn).to.equal(72n);
+      expect((noSource >> 192n) & 0xffffffffffffffffn).to.equal(0n);
+      expect((noSource >> 160n) & 0xffffffffn).to.equal(72n);
       expect(await blocksHelper.executionWriterHint(encodeContextBlock(ethers.ZeroHash, "0x", "0x"), 0, 0, exactSpec(Keys.Balance, 64)))
         .to.equal(72n);
     });
@@ -785,24 +785,18 @@ describe("Cursors", () => {
     });
 
     it("packs complete descriptor metadata without exposing field accessors", async () => {
-      const expected =
-        (BigInt(Keys.Balance) << 224n) |
-        (BigInt(Keys.Asset) << 192n) |
-        (BigInt(Keys.Amount) << 160n) |
-        (BigInt(Keys.Balance) << 128n) |
-        (72n << 96n) | (72n << 64n) | (64n << 56n) | (3n << 48n) |
-        3n;
+      const expected = (BigInt(Keys.Balance) << 224n) | (72n << 192n) | (72n << 160n) | 1n;
 
       expect(await blocksHelper.descriptorWord()).to.equal(expected);
     });
 
-    it("precomputes every combination of declared lanes", async () => {
+    it("selects state before input for every combination of declared lanes", async () => {
       for (const state of [0n, exactSpec(Keys.Balance, 64)]) {
-        for (const input of [0n, exactSpec(Keys.Amount, 64)]) {
+        for (const input of [0n, exactSpec(Keys.AssetAmount, 64)]) {
           const descriptor = await blocksHelper.describeSpecs(state, input, 0);
-          const lanes = (state === 0n ? 0n : 1n) | (input === 0n ? 0n : 2n);
-          expect((descriptor >> 48n) & 0xffn).to.equal(lanes);
-          expect(descriptor & ((1n << 48n) - 1n)).to.equal(0n);
+          expect(descriptor & 0xffn).to.equal(state === 0n ? 0n : 1n);
+          expect(descriptor >> 224n).to.equal((state || input) >> 224n);
+          expect(descriptor & (((1n << 160n) - 1n) ^ 0xffn)).to.equal(0n);
         }
       }
     });
@@ -825,20 +819,20 @@ describe("Cursors", () => {
       const stateAsset = ethers.zeroPadValue("0x31", 32);
       const inputAsset = ethers.zeroPadValue("0x32", 32);
       const state = encodeBalanceBlock(stateAsset, 41n);
-      const input = encodeListBlock(encodeAmountBlock(inputAsset, 42n));
+      const input = encodeListBlock(encodeAssetAmountBlock(inputAsset, 42n));
 
-      expect(await blocksHelper.executionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
+      expect(await blocksHelper.executionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
         .to.deep.equal([stateAsset, 41n, inputAsset, 42n]);
     });
 
     it("keeps state/input traversal gas within one percent of tagged relative cursors", async () => {
       const state = encodeBalanceBlock(ethers.zeroPadValue("0x31", 32), 41n);
-      const input = encodeListBlock(encodeAmountBlock(ethers.zeroPadValue("0x32", 32), 42n));
+      const input = encodeListBlock(encodeAssetAmountBlock(ethers.zeroPadValue("0x32", 32), 42n));
 
-      expect(await blocksHelper.executionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
-        .to.deep.equal(await blocksHelper.legacyExecutionEnterAmount(encodeContextBlock(ethers.ZeroHash, state, input)));
-      const specialized = await blocksHelper.executionEnterAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
-      const legacy = await blocksHelper.legacyExecutionEnterAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
+      expect(await blocksHelper.executionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
+        .to.deep.equal(await blocksHelper.legacyExecutionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)));
+      const specialized = await blocksHelper.executionEnterAssetAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
+      const legacy = await blocksHelper.legacyExecutionEnterAssetAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
       // Whole-call estimates include selector dispatch and cursor initialization.
       // Allow small compiler/layout changes while detecting a material regression.
       expect(specialized * 100n).to.be.lessThan(legacy * 101n);
@@ -1051,14 +1045,14 @@ describe("Cursors", () => {
     });
 
     it("rejects a block with the wrong key", async () => {
-      await expect(helper.testMemoryUnpackBalance(encodeAmountBlock(asset, 123n)))
+      await expect(helper.testMemoryUnpackBalance(encodeAssetAmountBlock(asset, 123n)))
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
     it("rejects a wrong key later in a fixed-stride stream", async () => {
       const source = concat(
         encodeBalanceBlock(asset, 123n),
-        encodeAmountBlock(otherAsset, 456n),
+        encodeAssetAmountBlock(otherAsset, 456n),
       );
       await expect(helper.testMemoryUnpackTwoBalances(source))
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
@@ -1143,7 +1137,7 @@ describe("Cursors", () => {
     });
 
     it("wrap(source) creates a cursor over the complete source", async () => {
-      const a = encodeAmountBlock(asset, 1n);
+      const a = encodeAssetAmountBlock(asset, 1n);
       const b = encodeBalanceBlock(asset, 2n);
       const source = concat(a, b);
       const [sourceStart, pos, end, flags] = await helper.testOpen(source);
@@ -1160,12 +1154,12 @@ describe("Cursors", () => {
     });
 
     it("expect(end) succeeds after the complete cursor is consumed", async () => {
-      const source = encodeAmountBlock(asset, 1n);
+      const source = encodeAssetAmountBlock(asset, 1n);
       expect(await helper.testClose(source, ethers.getBytes(source).length)).to.equal(true);
     });
 
     it("expect(end) rejects unread cursor data", async () => {
-      const source = encodeAmountBlock(asset, 1n);
+      const source = encodeAssetAmountBlock(asset, 1n);
       await expect(helper.testClose(source, 0n))
         .to.be.revertedWithCustomError(helper, "UnexpectedPosition");
     });
@@ -1176,10 +1170,10 @@ describe("Cursors", () => {
     });
 
     it("unpack returns a bounded parent payload for child blocks", async () => {
-      const child = encodeAmountBlock(asset, amount);
+      const child = encodeAssetAmountBlock(asset, amount);
       const source = encodeListBlock(child);
 
-      expect(await helper.testEnterAmount(source, exactSpec(Keys.List, ethers.getBytes(child).length)))
+      expect(await helper.testEnterAssetAmount(source, exactSpec(Keys.List, ethers.getBytes(child).length)))
         .to.deep.equal([
           asset,
           amount,
@@ -1213,10 +1207,10 @@ describe("Cursors", () => {
     });
 
     it("enter validates the parent specification", async () => {
-      const child = encodeAmountBlock(asset, amount);
+      const child = encodeAssetAmountBlock(asset, amount);
       const source = encodeListBlock(child);
 
-      await expect(helper.testEnterAmount(source, exactSpec(Keys.Bytes, ethers.getBytes(child).length)))
+      await expect(helper.testEnterAssetAmount(source, exactSpec(Keys.Bytes, ethers.getBytes(child).length)))
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
@@ -1277,7 +1271,7 @@ describe("Cursors", () => {
 
     it("isAt returns false when the key does not match", async () => {
       const source = encodeBalanceBlock(asset, amount);
-      expect(await helper.testIsAtCurrent(source, Keys.Amount)).to.equal(false);
+      expect(await helper.testIsAtCurrent(source, Keys.AssetAmount)).to.equal(false);
     });
 
     it("isAt returns true for a truncated block when the current header key matches", async () => {
@@ -1301,56 +1295,56 @@ describe("Cursors", () => {
 
 
     it("hasAt checks a block key at an arbitrary source position", async () => {
-      const a = encodeAmountBlock(asset, 1n);
+      const a = encodeAssetAmountBlock(asset, 1n);
       const b = encodeBalanceBlock(asset, 2n);
       const source = concat(a, b);
       const i = BigInt(ethers.getBytes(a).length);
       expect(await helper.testHasAt(source, i, Keys.Balance)).to.equal(true);
-      expect(await helper.testHasAt(source, i, Keys.Amount)).to.equal(false);
+      expect(await helper.testHasAt(source, i, Keys.AssetAmount)).to.equal(false);
       expect(await helper.testHasAt(source, BigInt(ethers.getBytes(source).length), Keys.Balance)).to.equal(false);
     });
 
     it("run counts consecutive matching blocks without advancing", async () => {
-      const first = encodeAmountBlock(asset, 1n);
-      const second = encodeAmountBlock(asset, 2n);
+      const first = encodeAssetAmountBlock(asset, 1n);
+      const second = encodeAssetAmountBlock(asset, 2n);
       const balance = encodeBalanceBlock(asset, 3n);
       const source = concat(first, second, balance);
       const balanceAt = BigInt(ethers.getBytes(first).length + ethers.getBytes(second).length);
 
-      expect(await helper.testRun(source, 0n, Keys.Amount)).to.deep.equal([2n, 0n]);
+      expect(await helper.testRun(source, 0n, Keys.AssetAmount)).to.deep.equal([2n, 0n]);
       expect(await helper.testRun(source, 0n, Keys.Balance)).to.deep.equal([0n, 0n]);
       expect(await helper.testRun(source, balanceAt, Keys.Balance)).to.deep.equal([1n, balanceAt]);
     });
 
     it("runCount cheaply counts complete matching blocks for hints", async () => {
-      const first = encodeAmountBlock(asset, 1n);
-      const second = encodeAmountBlock(asset, 2n);
+      const first = encodeAssetAmountBlock(asset, 1n);
+      const second = encodeAssetAmountBlock(asset, 2n);
       const amounts = concat(first, second);
       const source = concat(amounts, encodeBalanceBlock(asset, 3n));
 
-      expect(await helper.testRunCount(source, 0n, Keys.Amount)).to.equal(2n);
+      expect(await helper.testRunCount(source, 0n, Keys.AssetAmount)).to.equal(2n);
       expect(await helper.testRunCount(source, 0n, Keys.Balance)).to.equal(0n);
 
-      const truncated = concat(first, "0x" + Keys.Amount.slice(2) + "00000040");
-      expect(await helper.testRunCount(truncated, 0n, Keys.Amount)).to.equal(1n);
+      const truncated = concat(first, "0x" + Keys.AssetAmount.slice(2) + "00000040");
+      expect(await helper.testRunCount(truncated, 0n, Keys.AssetAmount)).to.equal(1n);
     });
 
     it("exact run requires every source block to have the expected key", async () => {
-      const first = encodeAmountBlock(asset, 1n);
-      const second = encodeAmountBlock(asset, 2n);
+      const first = encodeAssetAmountBlock(asset, 1n);
+      const second = encodeAssetAmountBlock(asset, 2n);
       const amounts = concat(first, second);
 
-      expect(await helper.testRunExact(amounts, Keys.Amount))
+      expect(await helper.testRunExact(amounts, Keys.AssetAmount))
         .to.deep.equal([2n, BigInt(ethers.getBytes(amounts).length)]);
 
-      await expect(helper.testRunExact(concat(amounts, encodeBalanceBlock(asset, 3n)), Keys.Amount))
+      await expect(helper.testRunExact(concat(amounts, encodeBalanceBlock(asset, 3n)), Keys.AssetAmount))
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 
     it("run rejects a matching block that exceeds the cursor boundary", async () => {
-      const truncated = "0x" + Keys.Amount.slice(2) + "00000040";
+      const truncated = "0x" + Keys.AssetAmount.slice(2) + "00000040";
 
-      await expect(helper.testRun(truncated, 0n, Keys.Amount))
+      await expect(helper.testRun(truncated, 0n, Keys.AssetAmount))
         .to.be.revertedWithCustomError(helper, "MalformedBlocks");
     });
 
@@ -1466,7 +1460,7 @@ describe("Cursors", () => {
       expect(data.slice(0, 10)).to.equal(custom);
       expect(await helper.testPeek(data, 0n)).to.deep.equal([custom, 128n]);
       expect(ethers.getBytes(data).length).to.equal(136);
-      expect(data).to.not.include(Keys.Amount.slice(2));
+      expect(data).to.not.include(Keys.AssetAmount.slice(2));
     });
 
     it("takeBlock returns a cursor over the full matching block and advances the source cursor", async () => {
@@ -1508,7 +1502,7 @@ describe("Cursors", () => {
 
     it("decoder and execution raw return unread sources from the current position", async () => {
       const state = encodeBalanceBlock(asset, amount);
-      const input = encodeAmountBlock(asset, 7n);
+      const input = encodeAssetAmountBlock(asset, 7n);
       const first = ethers.zeroPadValue("0x41", 32);
       const second = ethers.zeroPadValue("0x42", 32);
 
@@ -1524,15 +1518,15 @@ describe("Cursors", () => {
     });
 
     it("takeInput returns the unread input source and consumes it", async () => {
-      const input = encodeAmountBlock(asset, amount);
+      const input = encodeAssetAmountBlock(asset, amount);
       expect(await blocksHelper.executionTakeInput(input)).to.deep.equal([input, true]);
     });
 
     it("explicit stream forwarding works independently of EMPTY descriptor declarations", async () => {
       const state = encodeBalanceBlock(asset, amount);
-      const input = encodeAmountBlock(asset, amount);
+      const input = encodeAssetAmountBlock(asset, amount);
       const stateSpec = exactSpec(Keys.Balance, 64);
-      const inputSpec = exactSpec(Keys.Amount, 64);
+      const inputSpec = exactSpec(Keys.AssetAmount, 64);
       expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, inputSpec)).to.equal("0x");
       expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, "0x", input), 0, inputSpec)).to.equal("0x");
       expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, "0x"), stateSpec, 0)).to.equal("0x");
@@ -1540,8 +1534,8 @@ describe("Cursors", () => {
       expect(await blocksHelper.executionForwardStreams(encodeContextBlock(ethers.ZeroHash, state, input), stateSpec, 0)).to.equal("0x");
     });
 
-    it("finish rejects unread execution data", async () => {
-      const input = encodeAmountBlock(asset, amount);
+    it("explicit end check rejects unread execution data", async () => {
+      const input = encodeAssetAmountBlock(asset, amount);
       await expect(blocksHelper.executionFinishUnread(input))
         .to.be.revertedWithCustomError(blocksHelper, "UnconsumedData");
 
@@ -1551,7 +1545,7 @@ describe("Cursors", () => {
     });
 
     it("unpackStep consumes the block and returns the trailing input", async () => {
-      const req = encodeAmountBlock(asset, amount);
+      const req = encodeAssetAmountBlock(asset, amount);
       const step = encodeStepBlock(7n, 55n, req);
       const [cmd, value, outReq, i] = await helper.testUnpackStep(step);
       expect(cmd).to.equal(7n);
@@ -1571,7 +1565,7 @@ describe("Cursors", () => {
     it("unpackContext consumes account, state, and input bytes", async () => {
       const account = encodeUserAccount("0x12");
       const state = encodeBalanceBlock(asset, amount);
-      const input = encodeAmountBlock(asset, 7n);
+      const input = encodeAssetAmountBlock(asset, 7n);
       const context = encodeContextBlock(account, state, input);
       const [outAccount, outState, outInput, i] = await helper.testUnpackContext(context);
       expect(outAccount).to.equal(account);
@@ -1585,7 +1579,7 @@ describe("Cursors", () => {
       const key = ethers.zeroPadValue("0x1234", 32);
       const account = encodeUserAccount("0x12");
       const state = encodeBalanceBlock(asset, amount);
-      const input = encodeAmountBlock(asset, 7n);
+      const input = encodeAssetAmountBlock(asset, 7n);
       const witness = encodeContextBlock(account, state, input);
       const value = (1n << 200n) | 55n;
       const recovery = encodeRecoverBlock(handler, value, key, witness);
@@ -1599,7 +1593,7 @@ describe("Cursors", () => {
 
     it("unpackRelay consumes implementation-specific input and remaining steps", async () => {
       const portal: bigint = await utils.testLocalChainId();
-      const input = encodeStepBlock(0n, 0n, encodeAmountBlock(asset, 7n));
+      const input = encodeStepBlock(0n, 0n, encodeAssetAmountBlock(asset, 7n));
       const relay = encodeRelayBlock(ethers.concat([pad32(portal), pad32(55n)]), input);
       const [outPortal, resources, outInput, i] = await helper.testUnpackRelay(relay);
       expect(outPortal).to.equal(portal);
@@ -1609,7 +1603,7 @@ describe("Cursors", () => {
     });
 
     it("unpackRelay keeps arbitrary command input separate from continuation steps", async () => {
-      const commandInput = encodeAmountBlock(asset, 7n);
+      const commandInput = encodeAssetAmountBlock(asset, 7n);
       const steps = encodeStepBlock(0n, 0n, "0x1234");
       const relay = encodeRelayBlock(commandInput, steps);
       const [outInput, outSteps, i] = await helper.testUnpackRelayStreams(relay);
@@ -1649,14 +1643,14 @@ describe("Cursors", () => {
 
     for (const body of [
       "", "opaque:", "bytes32 asset",
-      "amount: { bytes32 asset, uint amount }",
+      "assetAmount: { bytes32 asset, uint amount }",
       "assets: many #asset as assets",
       "portfolio: many #asset as holdings",
       "relay.input: uint portal, uint resources",
       "longSchemaNameBeyondThirtyTwoCharacters: uint value",
     ]) {
       it(`round-trips the complete schema string ${JSON.stringify(body)}`, async () => {
-        const spec = exactSpec(Keys.Amount, 64);
+        const spec = exactSpec(Keys.AssetAmount, 64);
         const source = encodeSchemaBlock(spec, body);
         expect(await helper.testToSchemaBlock(spec, body)).to.equal(source);
         const [outSpec, outBody, i] = await stringHelper.testUnpackSchema(source);
@@ -1667,7 +1661,7 @@ describe("Cursors", () => {
     }
 
     it("rejects schema truncation, invalid child headers, and the former trailing name word", async () => {
-      const spec = exactSpec(Keys.Amount, 64);
+      const spec = exactSpec(Keys.AssetAmount, 64);
       const source = encodeSchemaBlock(spec, "assets: many #asset as assets");
       for (let length = 0; length < ethers.dataLength(source); length++) {
         await expect(stringHelper.testUnpackSchema(ethers.dataSlice(source, 0, length)))
@@ -1692,7 +1686,7 @@ describe("Cursors", () => {
     it("expectErc20Amount returns the token and amount from a local ERC20 amount block", async () => {
       const token = "0x00000000000000000000000000000000000000a0";
       const assetId = await utils.testToErc20Asset(token);
-      const source = encodeAmountBlock(assetId, 66n);
+      const source = encodeAssetAmountBlock(assetId, 66n);
 
       expect(await erc20Helper.testExpectErc20Amount(source, 0n)).to.deep.equal([token, 66n]);
     });
@@ -1700,7 +1694,7 @@ describe("Cursors", () => {
     it("requireErc20Amount returns the token and amount and advances by one amount block", async () => {
       const token = "0x00000000000000000000000000000000000000a0";
       const assetId = await utils.testToErc20Asset(token);
-      const source = encodeAmountBlock(assetId, 66n);
+      const source = encodeAssetAmountBlock(assetId, 66n);
 
       expect(await erc20Helper.testRequireErc20Amount(source)).to.deep.equal([token, 66n, 72n]);
     });
@@ -1748,7 +1742,7 @@ describe("Cursors", () => {
 
     it("expectErc20Amount reverts InvalidAsset when the asset is not a local ERC20", async () => {
       const assetId = await utils.testToChain();
-      const source = encodeAmountBlock(assetId, 77n);
+      const source = encodeAssetAmountBlock(assetId, 77n);
 
       await expect(erc20Helper.testExpectErc20Amount(source, 0n))
         .to.be.revertedWithCustomError(erc20Helper, "InvalidAsset");
@@ -1759,7 +1753,7 @@ describe("Cursors", () => {
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
       );
-      const input = encodeAmountBlock(asset, 3n);
+      const input = encodeAssetAmountBlock(asset, 3n);
 
       expect(await operation.testOpenSources(encodeContextBlock(ethers.ZeroHash, state, input))).to.equal(true);
     });
@@ -1770,7 +1764,7 @@ describe("Cursors", () => {
         encodeBalanceBlock(asset, 2n),
         encodeBalanceBlock(asset, 3n),
       );
-      const input = encodeAmountBlock(asset, 4n);
+      const input = encodeAssetAmountBlock(asset, 4n);
 
       expect(await operation.testOpenSources(encodeContextBlock(ethers.ZeroHash, state, input))).to.equal(true);
     });

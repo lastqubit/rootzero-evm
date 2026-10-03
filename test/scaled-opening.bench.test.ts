@@ -12,8 +12,8 @@ describe("Default opening after scaled overloads", () => {
       const stream = ethers.concat(Array(count).fill(encodeBalanceBlock(account, 7n)));
       const source = context ? encodeContextBlock(account, stream, "0x1234") : stream;
       for (const allocate of [false, true]) {
-        const descriptor = allocate ? (key << 160n) | (key << 128n) | ((scan ? 0n : 72n) << 96n)
-          | (72n << 64n) | (context ? 64n << 56n : 0n) : 0n;
+        const descriptor = allocate ? (key << 224n) | ((scan ? 0n : 72n) << 192n)
+          | (72n << 160n) | (context ? 1n : 0n) : 0n;
         const a = await previous.measure(source, descriptor, context), b = await current.measure(source, descriptor, context);
         expect(Array.from(b).slice(1)).deep.eq(Array.from(a).slice(1));
         expect(b.used, `default opening: context=${context}, scan=${scan}, count=${count}, allocate=${allocate}`).eq(a.used);

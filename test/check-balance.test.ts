@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBalanceConstraintsBlock, encodePositionBlock, encodePositionConstraintsBlock, encodeLimitsBlock, encodeContextBlock, endpointDescriptor, Keys, MaxUint128 } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeBalanceConstraintsBlock, encodePositionBlock, encodePositionConstraintsBlock, encodeLimitsBlock, encodeContextBlock, endpointSpecs, exactSpec, Keys, MaxUint128 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("CheckBalance command", () => {
@@ -33,8 +33,8 @@ describe("CheckBalance command", () => {
     const id = await commandId("checkBalance(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ state: Keys.Balance, stateHint: 64, input: Keys.BalanceConstraints,
-        output: BigInt(Keys.Balance) << 224n | 64n << 136n }));
+      ...endpointSpecs({ state: Keys.Balance, stateHint: 64, input: Keys.BalanceConstraints, inputHint: 96,
+        output: exactSpec(Keys.Balance, 64) }));
   });
 
   for (const memory of [false, true]) describe(memory ? "Execute" : "normal", () => {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {CommandAccess} from "../core/Access.sol";
-import {STEP_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
+import {STEP_KEY, STATE_KEY, INPUT_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
 import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 import {Flags} from "../utils/Flags.sol";
 
@@ -40,7 +40,7 @@ abstract contract PackedExecuteHook {
 /// @title PreviousPackedPipeline
 /// @notice Frozen packed-input pipeline baseline for cursor separation benchmarks.
 /// @dev This gas-sensitive implementation intentionally inlines the command ID
-/// layout and the CONTEXT, BYTES, and RELAY block encodings. Changes to command
+/// layout and the CONTEXT, STATE, INPUT, BYTES, and RELAY block encodings. Changes to command
 /// selector, target, or flag placement, or to those block layouts, must update
 /// the corresponding assembly and packed-cursor logic here.
 abstract contract PreviousPackedPipeline is CommandAccess, PackedPipeHook, PackedExecuteHook {
@@ -65,7 +65,7 @@ abstract contract PreviousPackedPipeline is CommandAccess, PackedPipeHook, Packe
             cmd := calldataload(add(abs, 8))
             value := calldataload(add(abs, 40))
             head := calldataload(add(abs, 72))
-            if iszero(eq(shr(224, head), BYTES_KEY)) {
+            if iszero(eq(shr(224, head), INPUT_KEY)) {
                 fail(INVALID_BLOCK)
             }
             let input := add(abs, 80)
@@ -84,7 +84,7 @@ abstract contract PreviousPackedPipeline is CommandAccess, PackedPipeHook, Packe
     /// `run` passes either a 64-bit input range cursor for ordinary calls,
     /// or the complete cursor for handoffs. A complete cursor always has a nonzero
     /// command-input offset in bits 64-95, even when that input is empty, because
-    /// takeStep obtained it from a BYTES block inside the current calldata.
+    /// takeStep obtained it from an INPUT block inside the current calldata.
     function invokeCommand(
         bytes4 selector,
         address target,
@@ -100,15 +100,15 @@ abstract contract PreviousPackedPipeline is CommandAccess, PackedPipeHook, Packe
                 let context := add(ptr, 0x44)
                 let stateBlock := add(context, 40)
                 let stateLength := mload(stateBytes)
-                mstore(stateBlock, or(shl(224, BYTES_KEY), shl(192, stateLength)))
+                mstore(stateBlock, or(shl(224, STATE_KEY), shl(192, stateLength)))
                 mcopy(add(stateBlock, 8), add(stateBytes, 32), stateLength)
                 let inputPtr := add(add(stateBlock, 8), stateLength)
                 let end
-                // Ordinary calls carry BYTES input; handoffs carry RELAY(input, remaining steps).
+                // Ordinary calls carry INPUT; handoffs carry RELAY(input, remaining steps).
                 switch iszero(shr(64, inputCursor))
                 case 1 {
                     let inputLength := sub(and(shr(32, inputCursor), 0xffffffff), and(inputCursor, 0xffffffff))
-                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, inputLength)))
+                    mstore(inputPtr, or(shl(224, INPUT_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputPtr, 8), and(inputCursor, 0xffffffff), inputLength)
                     end := add(add(inputPtr, 8), inputLength)
                 }
@@ -117,10 +117,10 @@ abstract contract PreviousPackedPipeline is CommandAccess, PackedPipeHook, Packe
                     let stepsOffset := and(inputCursor, 0xffffffff)
                     let stepsLength := sub(and(shr(32, inputCursor), 0xffffffff), stepsOffset)
                     let relayLength := add(16, add(inputLength, stepsLength))
-                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, add(8, relayLength))))
+                    mstore(inputPtr, or(shl(224, INPUT_KEY), shl(192, add(8, relayLength))))
                     mstore(add(inputPtr, 8), or(shl(224, RELAY_KEY), shl(192, relayLength)))
                     let inputBlock := add(inputPtr, 16)
-                    mstore(inputBlock, or(shl(224, BYTES_KEY), shl(192, inputLength)))
+                    mstore(inputBlock, or(shl(224, INPUT_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputBlock, 8), and(shr(64, inputCursor), 0xffffffff), inputLength)
                     let stepsBlock := add(add(inputBlock, 8), inputLength)
                     mstore(stepsBlock, or(shl(224, BYTES_KEY), shl(192, stepsLength)))

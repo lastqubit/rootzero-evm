@@ -6,7 +6,7 @@ import {
   Keys,
   concat,
   encodeAssetBlock,
-  encodeAmountBlock,
+  encodeAssetAmountBlock,
   encodeBalanceBlock,
   encodeBlock,
   encodeStatusBlock,
@@ -43,14 +43,14 @@ describe("Examples", () => {
       const asset = ethers.zeroPadValue("0x01", 32);
 
       const [output, transactions] = await host.myCommand.staticCall(
-        encodeContextBlock(account, "0x", encodeAmountBlock(asset, 12n)),
+        encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 12n)),
       );
 
       expect(output).to.equal(encodeBalanceBlock(asset, 12n));
       expect(transactions).to.equal(0n);
       await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", "0x")))
         .to.be.revertedWithCustomError(host, "InvalidBlock");
-      const amount = encodeAmountBlock(asset, 12n);
+      const amount = encodeAssetAmountBlock(asset, 12n);
       await expect(host.myCommand.staticCall(encodeContextBlock(account, "0x", concat(amount, amount))))
         .to.be.revertedWithCustomError(host, "UnconsumedData");
     });
@@ -67,7 +67,7 @@ describe("Examples", () => {
         encodeContextBlock(
           account,
           "0x",
-          concat(encodeAmountBlock(first, 10n), encodeAmountBlock(second, 20n)),
+          concat(encodeAssetAmountBlock(first, 10n), encodeAssetAmountBlock(second, 20n)),
         ),
       );
 
@@ -85,7 +85,7 @@ describe("Examples", () => {
       const account = encodeUserAccount(commander);
       const asset = ethers.zeroPadValue("0x33", 32);
       const target = 77n;
-      const input = encodeBlock(Payment, concat(pad32(target), encodeAmountBlock(asset, 30n)));
+      const input = encodeBlock(Payment, concat(pad32(target), encodeAssetAmountBlock(asset, 30n)));
 
       const context = encodeContextBlock(account, "0x", input);
       const [output, transactions] = await host.myCommand.staticCall(context);

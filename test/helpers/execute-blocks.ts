@@ -11,6 +11,6 @@ export function executeStreams(name: string, count: number, asset: bigint) {
   if (name === "Settle") return [positions, "0x"];
   if (name === "CheckBalance") return [balances, ethers.concat(Array.from({ length: count }, () => block(Keys.BalanceConstraints, [asset, 0, ethers.MaxUint256])))];
   if (name === "CheckPosition") return [positions, ethers.concat(Array.from({ length: count }, () => block(Keys.PositionConstraints, [asset, 0, 2, 100])))];
-  const [key, fields] = name === "Bootstrap" ? [Keys.Bootstrap, [asset, 7, 3]] : name === "DebitAccount" ? [Keys.Amount, [asset, 7]] : [Keys.Node, [13]];
+  const [key, fields] = name === "Bootstrap" ? [Keys.Bootstrap, [asset, 7, 3]] : name === "DebitAccount" ? [Keys.AssetAmount, [asset, 7]] : [Keys.Node, [13]];
   return ["0x", ethers.concat(Array.from({ length: count }, () => block(key as string, fields as (number | bigint)[])))];
 }

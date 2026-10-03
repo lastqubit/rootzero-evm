@@ -10,15 +10,15 @@ import {UnexpectedState} from "../utils/Errors.sol";
 using Executions for Execution;
 
 /// @title DebitAccount
-/// @notice Command that deducts AMOUNT blocks from an account and emits matching BALANCE state.
+/// @notice Command that deducts ASSET_AMOUNT blocks from an account and emits matching BALANCE state.
 /// Use for internally recording debits. The virtual `debitAccount` hook is called once per
-/// AMOUNT block.
+/// ASSET_AMOUNT block.
 abstract contract DebitAccount is CommandBase, DebitAccountHook {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.Amount, Specs.Balance, 0);
+        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     /// @notice Return the registered DEBIT_ACCOUNT command ID.
@@ -26,16 +26,16 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
         return id;
     }
 
-    /// @notice Debit AMOUNT input blocks from the command account and output matching BALANCE blocks.
-    /// @param context Command context carrying the AMOUNT input stream.
+    /// @notice Debit ASSET_AMOUNT input blocks from the command account and output matching BALANCE blocks.
+    /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the debited amounts.
     /// @return Zero native budget credit.
     function debitAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, debitAccountOne);
+        return runCommand(id, descriptor, context, debitAccountOne);
     }
 
     function debitAccountOne(Execution memory exec) private {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         debitAccount(exec.account, asset, amount);
         exec.outputBalance(asset, amount);
     }
@@ -49,7 +49,7 @@ abstract contract ExecuteDebitAccount is DebitAccount {
     /// @notice Execute the inherited debit-account command from an internal pipeline.
     /// @param account Account whose funds are debited.
     /// @param state Empty pipeline state required by the command schema.
-    /// @param inputCur AMOUNT block stream.
+    /// @param inputCur ASSET_AMOUNT block stream.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output BALANCE block stream matching the debited amounts.
@@ -61,18 +61,18 @@ abstract contract ExecuteDebitAccount is DebitAccount {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Amount);
+        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.AssetAmount);
         uint i;
         unchecked {
-            (i, output) = Execute.allocateBalances((end - abs) / Sizes.Amount);
+            (i, output) = Execute.allocateBalances((end - abs) / Sizes.AssetAmount);
         }
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = Execute.unpackAmount(abs);
+            (bytes32 asset, uint amount) = Execute.unpackAssetAmount(abs);
             debitAccount(account, asset, amount);
             i = Execute.writeBalance(i, asset, amount);
             unchecked {
-                abs += Sizes.Amount;
+                abs += Sizes.AssetAmount;
             }
         }
 

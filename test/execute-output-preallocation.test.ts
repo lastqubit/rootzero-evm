@@ -16,7 +16,7 @@ describe("Execute output preallocation behavior", () => {
     const native = BigInt(await baseline.nativeAsset());
     for (const command of ["Bootstrap", "DebitAccount"]) {
       const [, input] = executeStreams(command, 2, native);
-      const key = command === "Bootstrap" ? Keys.Bootstrap : Keys.Amount;
+      const key = command === "Bootstrap" ? Keys.Bootstrap : Keys.AssetAmount;
       const hookFailure = command === "Bootstrap" ? block(key, [2n, ethers.MaxUint256, 0n]) : block(key, [2n, ethers.MaxUint256]);
       const overflow = block(Keys.Bootstrap, [native, ethers.MaxUint256, 1n]);
       const cases = [["0x01", input, 100], ["0x", input + "01", 100],
@@ -39,7 +39,7 @@ describe("Execute output preallocation behavior", () => {
     for (const helper of [baseline, ...candidates]) await helper.setAllocate(true);
     for (const command of ["Bootstrap", "DebitAccount"]) {
       const amount = (1n << 255n) + 123n;
-      const input = command === "Bootstrap" ? block(Keys.Bootstrap, [2n, amount, 0n]) : block(Keys.Amount, [2n, amount]);
+      const input = command === "Bootstrap" ? block(Keys.Bootstrap, [2n, amount, 0n]) : block(Keys.AssetAmount, [2n, amount]);
       const expected = await baseline["measure" + command].staticCall("0x", input, 0);
       expect(expected.output).eq(block(Keys.Balance, [2n, amount]));
       for (const helper of candidates) {

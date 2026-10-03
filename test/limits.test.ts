@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { MaxUint128, packLimits, concat, encodeBlock, encodeLimitsBlock, encodeAmountBlock, exactSpec, Keys } from "./helpers/blocks.js";
+import { MaxUint128, packLimits, concat, encodeBlock, encodeLimitsBlock, encodeAssetAmountBlock, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Limits codec", () => {
@@ -71,7 +71,7 @@ describe("Limits codec", () => {
         });
       }
       it("validates the header before quantity bounds", async () => {
-        for (const invalid of [encodeAmountBlock(ethers.toBeHex(MaxUint128, 32), 0n),
+        for (const invalid of [encodeAssetAmountBlock(ethers.toBeHex(MaxUint128, 32), 0n),
           encodeLimitsBlock(10n, 20n).slice(0, 10) + "00000040" + encodeLimitsBlock(10n, 20n).slice(18)]) {
           await expect(helper.check(concat(invalid, next), 0n, MaxUint128, execution))
             .to.be.revertedWithCustomError(helper, "InvalidBlock");
@@ -98,7 +98,7 @@ describe("Limits codec", () => {
     it(`${path} accepts an empty stream`, async () => { expect(await run("0x")).to.equal("0x"); });
 
     it(`${path} rejects another schema`, async () => {
-      await expect(run(encodeAmountBlock(ethers.ZeroHash, 1n)))
+      await expect(run(encodeAssetAmountBlock(ethers.ZeroHash, 1n)))
         .to.be.revertedWithCustomError(helper, "InvalidBlock");
     });
 

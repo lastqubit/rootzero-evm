@@ -49,7 +49,7 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function settle(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, settleOne);
+        return runCommand(id, descriptor, context, settleOne);
     }
 
     function settleOne(Execution memory exec) private {
@@ -62,9 +62,9 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
 /// @notice Funded command that consumes POSITION state blocks through a virtual hook.
 abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("settlePayable", Specs.Position, Specs.Empty, Specs.Empty, Flags.Funded);
         annotateAction(id, Actions.Settle);
     }
@@ -75,7 +75,7 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function settlePayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, settlePayableOne);
+        return runCommand(id, descriptor, context, settlePayableOne);
     }
 
     function settlePayableOne(Execution memory exec) private {

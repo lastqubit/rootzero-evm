@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import {
-  MaxUint128, encodeLimitsBlock, concat, encodeHostAccount, encodeQuoteBlock,  encodeAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
+  MaxUint128, encodeLimitsBlock, concat, encodeHostAccount, encodeQuoteBlock,  encodeAssetAmountBlock, encodeAssetLiabilityBlock, encodeBalanceBlock,
   encodePositionBlock, encodeContextBlock,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
@@ -57,7 +57,7 @@ describe("Realization failure atomicity", () => {
       expect(await helper.realize.staticCall(context("0x", "0x"))).to.deep.equal(["0x", 0n]);
       for (const input of ["0x01", encodeLimitsBlock(0n, MaxUint128),
         encodeQuoteBlock(asset, 0n, liability, MaxUint128), encodeAssetLiabilityBlock(to, liability),
-        concat(encodeAmountBlock(to, 1n), encodeAmountBlock(to, 0n))]) {
+        concat(encodeAssetAmountBlock(to, 1n), encodeAssetAmountBlock(to, 0n))]) {
         for (const state of ["0x", position, concat(position, position)]) {
           await rejectsWithoutChanges(method, state, input, "InvalidBlock");
         }

@@ -28,9 +28,10 @@ abstract contract DispatchPayableHook {
 /// @notice Port endpoint that forwards DISPATCH blocks to a host-defined dispatch hook.
 abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = port("portDispatchPayable", Specs.Dispatch, Specs.Empty, Flags.Funded);
+        (id, descriptor) = port("portDispatchPayable", Specs.Dispatch, Specs.Empty, Flags.Funded);
     }
 
     /// @notice Forward peer-supplied dispatches to the host-defined dispatch hook.
@@ -41,7 +42,7 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
     /// @return Empty response bytes.
     /// @return Remaining native budget credit.
     function portDispatchPayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
-        return runPort(data, descriptor, portDispatchPayableOne);
+        return runPort(id, descriptor, data, portDispatchPayableOne);
     }
 
     function portDispatchPayableOne(Execution memory exec) private {

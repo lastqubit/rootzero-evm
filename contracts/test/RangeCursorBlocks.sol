@@ -24,7 +24,7 @@ library RangeCursorBlocks {
     function unpackStep(uint cur) internal pure returns (uint cmd, uint value, uint inputCur) {
         uint endAbs = boundedEnd(cur, payloadLength(cur, Keys.Step));
         // uint32 position + 72 cannot overflow uint256; tail proves it fits endAbs.
-        unchecked { inputCur = tail(uint(uint32(cur)) + 72, endAbs, Keys.Bytes); }
+        unchecked { inputCur = tail(uint(uint32(cur)) + 72, endAbs, Keys.Input); }
         assembly ("memory-safe") {
             let abs := and(cur, 0xffffffff)
             cmd := calldataload(add(abs, 8))
@@ -34,12 +34,12 @@ library RangeCursorBlocks {
 
     function unpackRelay(uint cur) internal pure returns (uint inputCur, uint stepsCur) {
         uint endAbs = boundedEnd(cur, payloadLength(cur, Keys.Relay));
-        unchecked { return pair(uint(uint32(cur)) + 8, endAbs, Keys.Bytes); }
+        unchecked { return pair(uint(uint32(cur)) + 8, endAbs, Keys.Input, Keys.Bytes); }
     }
 
     function unpackContext(uint cur) internal pure returns (bytes32 account, uint stateCur, uint inputCur) {
         uint endAbs = boundedEnd(cur, payloadLength(cur, Keys.Context));
-        unchecked { (stateCur, inputCur) = pair(uint(uint32(cur)) + 40, endAbs, Keys.Bytes); }
+        unchecked { (stateCur, inputCur) = pair(uint(uint32(cur)) + 40, endAbs, Keys.State, Keys.Input); }
         assembly ("memory-safe") { account := calldataload(add(and(cur, 0xffffffff), 8)) }
     }
 
@@ -107,12 +107,12 @@ library RangeCursorBlocks {
         assembly ("memory-safe") { value := calldataload(abs) }
     }
 
-    function pair(uint abs, uint endAbs, bytes4 key) private pure returns (uint firstCur, uint lastCur) {
-        uint len = lengthAt(abs, key);
+    function pair(uint abs, uint endAbs, bytes4 firstKey, bytes4 lastKey) private pure returns (uint firstCur, uint lastCur) {
+        uint len = lengthAt(abs, firstKey);
         unchecked {
             uint bodyAbs = abs + 8;
             uint nextAbs = bodyAbs + len;
-            lastCur = tail(nextAbs, endAbs, key);
+            lastCur = tail(nextAbs, endAbs, lastKey);
             firstCur = pack(bodyAbs, nextAbs);
         }
     }

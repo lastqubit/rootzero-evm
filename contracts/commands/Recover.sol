@@ -32,9 +32,10 @@ abstract contract RecoverPayableHook {
 /// Produces no output state.
 abstract contract RecoverPayable is CommandBase, RecoverPayableHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("recoverPayable", Specs.Empty, Specs.Recover, Specs.Empty, Flags.Funded);
+        (id, descriptor) = command("recoverPayable", Specs.Empty, Specs.Recover, Specs.Empty, Flags.Funded);
     }
 
     /// @notice Recover each recover block in the command input.
@@ -42,7 +43,7 @@ abstract contract RecoverPayable is CommandBase, RecoverPayableHook {
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function recoverPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, recoverPayableOne);
+        return runCommand(id, descriptor, context, recoverPayableOne);
     }
 
     function recoverPayableOne(Execution memory exec) private {

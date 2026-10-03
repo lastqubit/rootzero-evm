@@ -15,7 +15,7 @@ contract TestOutputAllocation {
         external view returns (Measurement memory result)
     {
         uint spec = workload == 0 ? Specs.Balance : workload == 1 ? Specs.Position : Specs.Bytes;
-        uint descriptor = Executions.describe(0, 0, spec, 0);
+        uint descriptor = Executions.describe(0, 0, spec);
         bytes memory payload = new bytes(workload == 2 ? 16 : workload == 3 ? 128 : 1024);
         bytes memory output;
         uint beforeMemory;
@@ -36,7 +36,7 @@ contract TestOutputAllocation {
         private pure returns (bytes memory)
     {
         Execution memory exec;
-        (exec.buffer, exec.output) = Encoder.init(seed ? uint32(descriptor >> 64) : 0);
+        (exec.buffer, exec.output) = Encoder.init(seed ? uint32(descriptor >> 160) : 0);
         for (uint i; i < count; ++i) {
             if (workload == 0) exec.outputBalance(bytes32(uint(1)), i + 1);
             else if (workload == 1) exec.outputPosition(bytes32(uint(1)), i + 1, bytes32(uint(2)), i + 1, 0);

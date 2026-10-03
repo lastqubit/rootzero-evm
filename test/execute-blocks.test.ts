@@ -84,7 +84,7 @@ describe("Execute", () => {
     }
     const invalidBlock = ethers.id("InvalidBlock()").slice(0, 10);
     for (const [name, key, fields, memory] of [
-      ["DebitAccount", Keys.Amount, [native, ethers.MaxUint256], false],
+      ["DebitAccount", Keys.AssetAmount, [native, ethers.MaxUint256], false],
       ["CreditAccount", Keys.Balance, [native, ethers.MaxUint256], true],
       ["Settle", Keys.Position, [native, ethers.MaxUint256, 2n, 3n, 9n], true],
     ] as const) {

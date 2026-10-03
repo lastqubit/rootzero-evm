@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, encodeActionBlock, endpointDescriptor, Keys } from "./helpers/blocks.js";
+import { concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, encodeActionBlock, endpointSpecs, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Repay command", () => {
@@ -18,9 +18,9 @@ describe("Repay command", () => {
   it("advertises POSITION to POSITION, empty input, and the Repay action", async () => {
     const id = await commandId("repay(bytes)", host);
 
-    const positionSpec = BigInt(Keys.Position) << 224n | 160n << 136n;
+    const positionSpec = exactSpec(Keys.Position, 160);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ state: Keys.Position, stateHint: 160, output: positionSpec }));
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160, output: positionSpec }));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(82n));
   });
 

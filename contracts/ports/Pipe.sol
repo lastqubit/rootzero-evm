@@ -20,9 +20,10 @@ bytes4 constant PortPipePayableSelector = bytes4(keccak256("portPipePayable(byte
 /// Each context's input bytes are passed to the shared pipeline.
 abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = port("portPipePayable", Specs.Context, Specs.Empty, Flags.Funded);
+        (id, descriptor) = port("portPipePayable", Specs.Context, Specs.Empty, Flags.Funded);
     }
 
     /// @notice Execute peer-supplied contexts through the shared payable pipe.
@@ -37,6 +38,7 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
     function portPipePayable(bytes calldata data) external payable onlyPeer returns (bytes memory, uint) {
         Execution memory exec = openInput(data, descriptor);
 
+        exec.logInput(id, descriptor);
         bytes32 account;
         while (exec.more()) {
             uint stateCur;
@@ -47,6 +49,6 @@ abstract contract PipePayablePort is PortBase, PipeHook, CashinHook {
 
         if (account != bytes32(0) && exec.budget != 0) cashin(account, exec.drainBudget());
 
-        return exec.close();
+        return exec.close(id, descriptor);
     }
 }

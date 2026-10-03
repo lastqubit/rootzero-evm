@@ -21,7 +21,7 @@ library ReservedBlockEncoder {
         unchecked { nextI = i + 72; }
     }
 
-    /// @notice Write a CONTEXT by copying two complete BYTES blocks from memory.
+    /// @notice Write a CONTEXT by copying complete STATE and INPUT blocks from memory.
     /// @dev Each source must be exactly one validated BYTES block, including its
     /// eight-byte header. Even an empty payload requires a complete BYTES header.
     /// Reserve 40 + state.length + input.length bytes; the complete size
@@ -47,12 +47,12 @@ library ReservedBlockEncoder {
         }
     }
 
-    /// @notice Write a CONTEXT by copying two complete BYTES blocks from calldata.
+    /// @notice Write a CONTEXT by copying complete STATE and INPUT blocks from calldata.
     /// @dev Same destination and complete-block requirements as the memory overload.
     /// Both cursors must satisfy current <= end <= calldatasize and select exactly
     /// one validated BYTES block. Metadata is ignored; cursors are not advanced.
-    /// @param stateCur Cursor over one complete BYTES block, including its header.
-    /// @param inputCur Cursor over one complete BYTES block, including its header.
+    /// @param stateCur Cursor over one complete STATE block, including its header.
+    /// @param inputCur Cursor over one complete INPUT block, including its header.
     /// @return nextI Relative byte offset immediately after the encoded block.
     function writeContext(bytes memory dst, uint i, bytes32 account, uint stateCur, uint inputCur) internal pure returns (uint nextI) {
         uint stateSize = Encoder.length(stateCur);
@@ -67,7 +67,7 @@ library ReservedBlockEncoder {
         }
     }
 
-    /// @notice Write a CONTEXT at byte offset i, wrapping memory payloads in BYTES headers.
+    /// @notice Write a CONTEXT at byte offset i, wrapping memory payloads in STATE and INPUT headers.
     /// @dev Unchecked destination: reserve 56 + state.length + input.length bytes
     /// plus 24 bytes of writable header scratch after the block. Scratch may be
     /// overwritten. The complete size must fit uint32, and sources must not overlap
@@ -86,13 +86,13 @@ library ReservedBlockEncoder {
         unchecked {
             abs = Encoder.writeHeader(abs, Keys.Context, 48 + stateSize + inputSize);
             abs = Encoder.write32(abs, account);
-            abs = Encoder.wrap(abs, Keys.Bytes, state, stateSize);
-            Encoder.wrap(abs, Keys.Bytes, input, inputSize);
+            abs = Encoder.wrap(abs, Keys.State, state, stateSize);
+            Encoder.wrap(abs, Keys.Input, input, inputSize);
             nextI = i + 56 + stateSize + inputSize;
         }
     }
 
-    /// @notice Write a CONTEXT by wrapping validated calldata payload cursors in BYTES headers.
+    /// @notice Write a CONTEXT by wrapping validated calldata payload cursors in STATE and INPUT headers.
     /// @dev Same destination, size, and scratch preconditions as the memory overload.
     /// Requires current <= end <= calldatasize for both cursors. Copies remaining
     /// ranges, ignores metadata, and leaves cursors unchanged. No bounds checks.
@@ -104,8 +104,8 @@ library ReservedBlockEncoder {
         unchecked {
             abs = Encoder.writeHeader(abs, Keys.Context, 48 + stateSize + inputSize);
             abs = Encoder.write32(abs, account);
-            abs = Encoder.wrap(abs, Keys.Bytes, uint32(stateCur), stateSize);
-            Encoder.wrap(abs, Keys.Bytes, uint32(inputCur), inputSize);
+            abs = Encoder.wrap(abs, Keys.State, uint32(stateCur), stateSize);
+            Encoder.wrap(abs, Keys.Input, uint32(inputCur), inputSize);
             nextI = i + 56 + stateSize + inputSize;
         }
     }

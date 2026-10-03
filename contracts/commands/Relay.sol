@@ -36,14 +36,15 @@ abstract contract RelayPayableHook {
 /// @notice Command that forwards one RELAY block without pipeline state.
 abstract contract RelayPayable is CommandBase, RelayPayableHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("relayPayable", Specs.Empty, Specs.Relay, Specs.Empty, Flags.HandoffFunded);
+        (id, descriptor) = command("relayPayable", Specs.Empty, Specs.Relay, Specs.Empty, Flags.HandoffFunded);
     }
 
     /// @notice Relay one RELAY input block with the command account and empty state.
     function relayPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommandOnce(context, descriptor, relayPayableOnce);
+        return runCommandOnce(id, descriptor, context, relayPayableOnce);
     }
 
     function relayPayableOnce(Execution memory exec) private {
@@ -59,9 +60,10 @@ abstract contract RelayPayable is CommandBase, RelayPayableHook {
 /// Produces no output state.
 abstract contract RelayBalancePayable is CommandBase, RelayPayableHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("relayBalancePayable", Specs.Balance, Specs.Relay, Specs.Empty, Flags.HandoffFunded);
+        (id, descriptor) = command("relayBalancePayable", Specs.Balance, Specs.Relay, Specs.Empty, Flags.HandoffFunded);
     }
 
     /// @notice Relay one RELAY input block with the command account and current state.
@@ -69,7 +71,7 @@ abstract contract RelayBalancePayable is CommandBase, RelayPayableHook {
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
     function relayBalancePayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommandOnce(context, descriptor, relayBalancePayableOnce);
+        return runCommandOnce(id, descriptor, context, relayBalancePayableOnce);
     }
 
     function relayBalancePayableOnce(Execution memory exec) private {

@@ -27,9 +27,10 @@ describe("Execution output payload cursors", () => {
     const prefix = encodeBlock(Keys.Account, ethers.toBeHex(77, 32));
     for (const [kind, layout] of layouts.entries()) for (const size of [0, 1, 31, 32, 33, 65]) for (const whole of [false, true]) {
       const a = "0x" + "ab".repeat(size), b = "0x" + "cd".repeat(size % 3);
-      const key = kind === 1 ? Keys.List : kind === 3 || kind >= 10 ? Keys.String : Keys.Bytes;
+      const key = kind === 1 ? Keys.List : kind === 3 || kind >= 10 ? Keys.String
+        : kind === 4 || kind === 7 ? Keys.Input : kind === 8 ? Keys.State : Keys.Bytes;
       const selectedA = whole ? encodeBlock(key, a) : a;
-      const selectedB = whole ? encodeBlock(Keys.Bytes, b) : b;
+      const selectedB = whole ? encodeBlock(kind === 8 ? Keys.Input : Keys.Bytes, b) : b;
       const sourceA = ethers.concat(["0xfe", selectedA, "0xef"]), sourceB = ethers.concat(["0xfe", selectedB, "0xef"]);
       const expected = ethers.concat([prefix, layout(a, b), layout(a, b)]);
       for (const capacity of [0, ethers.dataLength(expected)]) {

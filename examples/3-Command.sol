@@ -18,11 +18,12 @@ using Executions for Execution;
 abstract contract MyCommand is CommandBase {
     // The descriptor announces accepted input, state, output, and flags.
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
         // Announce this command to the rootzero protocol.
         // Args: name, state, input, output, flags.
-        (, descriptor) = command("myCommand", Specs.Empty, Specs.Amount, Specs.Balance, 0);
+        (id, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     function myCommand(
@@ -30,11 +31,11 @@ abstract contract MyCommand is CommandBase {
     ) external onlyCommand returns (bytes memory, uint) {
         // onlyCommand enforces caller access. The runner opens and
         // closes the execution; runCommandOnce requires this callback to consume all input.
-        return runCommandOnce(context, descriptor, myCommandOnce);
+        return runCommandOnce(id, descriptor, context, myCommandOnce);
     }
 
     function myCommandOnce(Execution memory exec) private pure {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
 
         // Apply your app logic here (e.g. debit the account), then append a BALANCE block.
         exec.outputBalance(asset, amount);

@@ -66,16 +66,14 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     }
 
     function describeSpecs(uint state, uint input, uint output) external pure returns (uint) {
-        return Executions.describe(state, input, output, 0);
+        return Executions.describe(state, input, output);
     }
 
     function descriptorWord() external pure returns (uint) {
         return Executions.describe(
             Specs.Balance,
             Specs.Asset,
-            Specs.Amount,
-            Flags.AdminFunded
-        );
+            Specs.AssetAmount);
     }
 
     function descriptorOpens(
@@ -85,9 +83,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint descriptor = Executions.describe(
             Specs.Balance,
             Specs.Asset,
-            Specs.Amount,
-            0
-        );
+            Specs.AssetAmount);
         Execution memory stateExec;
         Execution memory inputExec;
         stateExec.openContext(descriptor, 0, context);
@@ -102,7 +98,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         uint inputSpec,
         uint outputSpec
     ) external view returns (uint len) {
-        uint descriptor = Executions.describe(stateSpec, inputSpec, outputSpec, 0);
+        uint descriptor = Executions.describe(stateSpec, inputSpec, outputSpec);
         Execution memory exec = openExecution(context, descriptor);
         len = Cursors.limit(exec.output);
     }
@@ -113,14 +109,14 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes32 liability,
         uint debt
     ) external view returns (bytes memory output) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Position, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Position);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
         Executions.outputPosition(exec, asset, amount, liability, debt, bytes32(0));
         output = Executions.finish(exec);
     }
 
     function executionOutputHostAsset(uint host, bytes32 asset) external view returns (bytes memory output) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.HostAsset, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.HostAsset);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
         Executions.outputHostAsset(exec, host, asset);
         output = Executions.finish(exec);
@@ -129,38 +125,38 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionUnpackPosition(
         bytes calldata context
     ) external view returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty) {
-        uint descriptor = Executions.describe(Specs.Position, Specs.Empty, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Position, Specs.Empty, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
         return exec.unpackPosition();
     }
 
-    function executionEnterAmount(
+    function executionEnterAssetAmount(
         bytes calldata context
     ) external view returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount) {
-        uint descriptor = Executions.describe(Specs.Balance, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Balance, Specs.List, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
         uint payloadCur = exec.unpackList();
         uint end = uint32(payloadCur >> 32);
         // This harness explicitly scopes its remaining reads to the selected payload.
         exec.input = payloadCur;
         (stateAsset, stateAmount) = exec.unpackBalance();
-        (inputAsset, inputAmount) = exec.unpackAmount();
+        (inputAsset, inputAmount) = exec.unpackAssetAmount();
         if (uint32(exec.input) != end) revert UnexpectedPosition();
     }
 
     /// @notice Gas baseline reproducing the removed tagged, relative two-lane cursor path.
     /// @dev Kept to compare traversal correctness and detect material gas regressions.
-    function legacyExecutionEnterAmount(
+    function legacyExecutionEnterAssetAmount(
         bytes calldata context
     ) external pure returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount) {
         uint abs;
         assembly ("memory-safe") { abs := context.offset }
         (, bytes calldata state, bytes calldata input, uint endContext) = LegacyBlocks.unpackContext(abs);
         if (endContext != abs + context.length) revert InvalidBlock();
-        return legacyEnterAmount(state, input);
+        return legacyEnterAssetAmount(state, input);
     }
 
-    function legacyEnterAmount(bytes calldata state, bytes calldata input)
+    function legacyEnterAssetAmount(bytes calldata state, bytes calldata input)
         private pure returns (bytes32 stateAsset, uint stateAmount, bytes32 inputAsset, uint inputAmount)
     {
         // Reproduce the legacy descriptor bytes used by this baseline.
@@ -192,8 +188,8 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         (stateAsset, stateAmount) = LegacyBlocks.unpackBalance(stateAbs);
 
         decoders = legacySelect(decoders, 1);
-        (decoders, inputAbs) = legacyConsume(decoders, Sizes.Amount);
-        (inputAsset, inputAmount) = LegacyBlocks.unpackAmount(inputAbs);
+        (decoders, inputAbs) = legacyConsume(decoders, Sizes.AssetAmount);
+        (inputAsset, inputAmount) = LegacyBlocks.unpackAssetAmount(inputAbs);
         if (legacyAbsolute(decoders) != end) revert();
     }
 
@@ -224,7 +220,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     }
 
     function executionList(bytes calldata input, uint spec) external view returns (uint itemsLen, bool complete) {
-        uint descriptor = Executions.describe(Specs.Empty, spec, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, spec, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         uint itemsCur = exec.unpackList(spec);
         itemsLen = Cursors.limit(itemsCur) - Cursors.position(itemsCur);
@@ -237,7 +233,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         bytes4 expectedKey
     ) external view returns (bytes calldata data, bytes32 asset, uint amount, bool complete) {
         uint inputSpec = Specs.create(inputKey, 0, 0, 0);
-        uint descriptor = Executions.describe(Specs.Balance, inputSpec, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Balance, inputSpec, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
         data = Blocks.toBytes(exec.take(expectedKey));
         (asset, amount) = exec.unpackBalance();
@@ -247,7 +243,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionRaw(
         bytes calldata context
     ) external view returns (bytes calldata beforeState, bytes calldata afterState, bytes calldata rawInput) {
-        uint descriptor = Executions.describe(Specs.Balance, Specs.Amount, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Balance, Specs.AssetAmount, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
         beforeState = Blocks.toBytesChecked(exec.state);
         exec.unpackBalance();
@@ -258,7 +254,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionRawEmptyState(
         bytes calldata input
     ) external view returns (bytes calldata state) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Amount, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.AssetAmount, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         return Blocks.toBytesChecked(exec.state);
     }
@@ -266,7 +262,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionTakeState(
         bytes calldata context
     ) external view returns (bytes calldata data, bool complete) {
-        uint descriptor = Executions.describe(Specs.Balance, Specs.Empty, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Balance, Specs.Empty, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
         data = Blocks.toBytesChecked(Executions.takeState(exec, Specs.key(Specs.Balance)));
         complete = !Executions.more(exec);
@@ -275,35 +271,37 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionTakeInput(
         bytes calldata input
     ) external view returns (bytes calldata data, bool complete) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Amount, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.AssetAmount, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
-        data = Blocks.toBytesChecked(Executions.takeInput(exec, Specs.key(Specs.Amount)));
+        data = Blocks.toBytesChecked(Executions.takeInput(exec, Specs.key(Specs.AssetAmount)));
         complete = !Executions.more(exec);
     }
 
     function executionForwardStreams(bytes calldata context, uint stateSpec, uint inputSpec)
         external view returns (bytes memory)
     {
-        Execution memory exec = openExecution(context, Executions.describe(stateSpec, inputSpec, Specs.Empty, 0));
+        Execution memory exec = openExecution(context, Executions.describe(stateSpec, inputSpec, Specs.Empty));
         Executions.takeState(exec, Specs.key(Specs.Balance));
-        Executions.takeInput(exec, Specs.key(Specs.Amount));
+        Executions.takeInput(exec, Specs.key(Specs.AssetAmount));
         return exec.finish();
     }
 
     function executionFinishUnread(bytes calldata input) external view returns (bytes memory) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Amount, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.AssetAmount, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
+        Executions.expectEnd(exec);
         return Executions.finish(exec);
     }
 
     function executionFinishUnreadState(bytes calldata context) external view returns (bytes memory) {
-        uint descriptor = Executions.describe(Specs.Balance, Specs.Empty, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Balance, Specs.Empty, Specs.Empty);
         Execution memory exec = openExecution(context, descriptor);
+        Executions.expectEnd(exec);
         return Executions.finish(exec);
     }
 
     function executionEnterWords(bytes calldata input) external view returns (bytes32 first, bytes32 second) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         (uint abs, uint payloadCur) = exec.enter(Specs.List, 64);
         unchecked {
@@ -323,7 +321,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
             offset := input.offset
         }
 
-        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         uint payloadCur;
         (body, payloadCur) = exec.enter(key, amount);
@@ -341,7 +339,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
             offset := input.offset
         }
 
-        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         uint payloadCur = exec.unpackList();
         uint end = uint32(payloadCur >> 32);
@@ -363,7 +361,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
             offset := input.offset
         }
 
-        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         uint payloadCur = exec.unpackList();
         uint end = uint32(payloadCur >> 32);
@@ -380,7 +378,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         view
         returns (bytes1 a, bytes2 b, bytes4 c, bytes8 d, bytes16 e, bytes32 f)
     {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.List, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         (uint abs, uint payloadCur) = exec.enter(Specs.List, 63);
         unchecked {
@@ -428,7 +426,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         (writerBuffer, writer) = Encoder.writeString(writer, writerBuffer, Cursors.wrap(bytes(value)));
         written = Encoder.finish(writer, writerBuffer);
 
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.String, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.String);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
         Executions.outputStringWrap(exec, Cursors.wrap(bytes(value)));
         output = Executions.finish(exec);
@@ -464,7 +462,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     }
 
     function executionCopies(bytes calldata value) external view returns (bytes memory) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Bytes, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.Empty, Specs.Bytes);
         Execution memory exec = openInput(msg.data[0:0], descriptor);
         Executions.outputBlockWrap(exec, Specs.create(TestKey, 0, 0, 0), Cursors.wrap(value));
         Executions.outputListWrap(exec, Cursors.wrap(value));
@@ -503,7 +501,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
     function executionUnpackAssetLiability(
         bytes calldata input
     ) external view returns (bytes32 asset, bytes32 liability) {
-        uint descriptor = Executions.describe(Specs.Empty, Specs.AssetLiability, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, Specs.AssetLiability, Specs.Empty);
         Execution memory exec = openInput(input, descriptor);
         return exec.unpackAssetLiability();
     }
@@ -725,7 +723,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         outer -= base;
     }
 
-    function enterAmountAbsolute(
+    function enterAssetAmountAbsolute(
         bytes calldata source,
         uint spec,
         uint amount
@@ -737,7 +735,7 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         end -= base;
     }
 
-    function enterKeyAmountAbsolute(
+    function enterKeyAssetAmountAbsolute(
         bytes calldata source,
         bytes4 key,
         uint amount
@@ -918,8 +916,8 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         return LegacyBlocks.unpackBootstrap(position(source));
     }
 
-    function unpackAmount(bytes calldata source) external pure returns (bytes32, uint) {
-        return LegacyBlocks.unpackAmount(position(source));
+    function unpackAssetAmount(bytes calldata source) external pure returns (bytes32, uint) {
+        return LegacyBlocks.unpackAssetAmount(position(source));
     }
 
     function unpackBalance(bytes calldata source) external pure returns (bytes32, uint) {

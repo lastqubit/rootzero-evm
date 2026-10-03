@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodePositionBlock, encodePositionConstraintsBlock, encodeQuoteBlock, encodeContextBlock, endpointDescriptor, Keys } from "./helpers/blocks.js";
+import { concat, encodePositionBlock, encodePositionConstraintsBlock, encodeQuoteBlock, encodeContextBlock, endpointSpecs, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("CheckPosition command", () => {
@@ -24,8 +24,8 @@ describe("CheckPosition command", () => {
     const id = await commandId("checkPosition(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      endpointDescriptor({ state: Keys.Position, stateHint: 160, input: Keys.PositionConstraints,
-        output: BigInt(Keys.Position) << 224n | 160n << 136n }));
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160, input: Keys.PositionConstraints, inputHint: 128,
+        output: exactSpec(Keys.Position, 160) }));
   });
 
   for (const memory of [false, true]) describe(memory ? "Execute" : "normal", () => {

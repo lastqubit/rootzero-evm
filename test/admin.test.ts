@@ -4,7 +4,7 @@ import { commandId, deploy, getSigner, getProvider, hostId } from "./helpers/set
 import "./helpers/matchers.js";
 import {
   Keys,
-  endpointDescriptor,
+  endpointSpecs,
   exactSpec,
   encodeNodeBlock, encodeAccountBlock, encodeAssetBlock, encodeAllowanceBlock,
   encodeCallBlock, encodeContextBlock, encodeLabelBlock, encodeAnnotationBlock, encodeSchemaBlock, concat
@@ -326,7 +326,7 @@ describe("Admin Commands", () => {
         .withArgs(
           await host.host(),
           await cmd("annotate"),
-          endpointDescriptor({ input: Keys.Annotation, inputHint: 256, admin: true }),
+          ...endpointSpecs({ input: Keys.Annotation, inputHint: 256, admin: true }),
         );
       await expect(deployment!).to.emit(host, "Annotation")
         .withArgs(await cmd("annotate"), encodeLabelBlock(ethers.ZeroHash, "annotate"));
@@ -356,8 +356,8 @@ describe("Admin Commands", () => {
     it("publishes a block schema through an Annotation block", async () => {
       const entity = await host.host();
       const data = encodeSchemaBlock(
-        exactSpec(Keys.Amount, 64),
-        "amount: { bytes32 asset, uint amount }",
+        exactSpec(Keys.AssetAmount, 64),
+        "assetAmount: { bytes32 asset, uint amount }",
       );
       const input = encodeAnnotationBlock(entity, data);
 

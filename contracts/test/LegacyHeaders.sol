@@ -12,7 +12,7 @@ library LegacyHeaders {
     uint64 constant Asset = uint64(Specs.Asset >> 192);
     uint64 constant Node = uint64(Specs.Node >> 192);
     uint64 constant Status = uint64(Specs.Status >> 192);
-    uint64 constant Amount = uint64(Specs.Amount >> 192);
+    uint64 constant AssetAmount = uint64(Specs.AssetAmount >> 192);
     uint64 constant Balance = uint64(Specs.Balance >> 192);
     uint64 constant AssetLiability = uint64(Specs.AssetLiability >> 192);
     uint64 constant AccountAsset = uint64(Specs.AccountAsset >> 192);

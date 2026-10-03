@@ -9,27 +9,31 @@ import {CommandBase, Execution, Executions, Specs} from "../commands/Base.sol";
 contract CommandRunnerBenchmark is CommandHost, CommandBase {
     using Executions for Execution;
     uint private immutable sinkDescriptor;
+    uint private immutable sinkId;
     uint private immutable stateDescriptor;
+    uint private immutable stateId;
     uint private immutable inputDescriptor;
+    uint private immutable inputId;
     uint private immutable pairedDescriptor;
+    uint private immutable pairedId;
 
     constructor() CommandHost(Nodes.toHost(msg.sender)) {
-        (, sinkDescriptor) = command("sinkBatch", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        (, stateDescriptor) = command("stateBatch", Specs.Balance, Specs.Empty, Specs.Balance, 0);
-        (, inputDescriptor) = command("inputBatch", Specs.Empty, Specs.Amount, Specs.Balance, 0);
-        (, pairedDescriptor) = command("pairedBatch", Specs.Balance, Specs.Amount, Specs.Balance, 0);
+        (sinkId, sinkDescriptor) = command("sinkBatch", Specs.Balance, Specs.Empty, Specs.Empty, 0);
+        (stateId, stateDescriptor) = command("stateBatch", Specs.Balance, Specs.Empty, Specs.Balance, 0);
+        (inputId, inputDescriptor) = command("inputBatch", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
+        (pairedId, pairedDescriptor) = command("pairedBatch", Specs.Balance, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     function batch(bytes calldata context, uint mode) external payable returns (bytes memory, uint) {
-        if (mode == 0) return runCommand(context, sinkDescriptor, sink);
-        if (mode == 1) return runCommand(context, stateDescriptor, copyState);
-        if (mode == 2) return runCommand(context, inputDescriptor, copyInput);
+        if (mode == 0) return runCommand(sinkId, sinkDescriptor, context, sink);
+        if (mode == 1) return runCommand(stateId, stateDescriptor, context, copyState);
+        if (mode == 2) return runCommand(inputId, inputDescriptor, context, copyInput);
         require(mode == 3);
-        return runCommand(context, pairedDescriptor, pair);
+        return runCommand(pairedId, pairedDescriptor, context, pair);
     }
 
     function single(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommandOnce(context, stateDescriptor, copyState);
+        return runCommandOnce(stateId, stateDescriptor, context, copyState);
     }
 
     function sink(Execution memory exec) private pure { exec.unpackBalance(); }
@@ -40,13 +44,13 @@ contract CommandRunnerBenchmark is CommandHost, CommandBase {
     }
 
     function copyInput(Execution memory exec) private pure {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         exec.outputBalance(asset, amount);
     }
 
     function pair(Execution memory exec) private pure {
         (bytes32 asset, uint amount) = exec.unpackBalance();
-        (bytes32 other, uint increment) = exec.unpackAmount();
+        (bytes32 other, uint increment) = exec.unpackAssetAmount();
         require(asset == other);
         exec.outputBalance(asset, amount + increment);
     }

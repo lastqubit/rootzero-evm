@@ -5,13 +5,13 @@ import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {RangeCursorBlocks} from "./RangeCursorBlocks.sol";
 import {Blocks, Cursors, Keys} from "../Codec.sol";
 import {Specs} from "../codec/Specs.sol";
-import {BYTES_KEY, STEP_KEY} from "../codec/Keys.sol";
+import {INPUT_KEY, STEP_KEY} from "../codec/Keys.sol";
 import {INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 
 library CursorDynamicCandidates {
     function composed(uint cur) internal pure returns (uint a, uint b, uint input) {
         (, uint payloadCur, ) = Blocks.enter(cur, Keys.Step, 64);
-        input = Blocks.unpackExact(payloadCur, Specs.Bytes);
+        input = Blocks.unpackExact(payloadCur, Specs.Input);
         (a, b) = words(cur);
     }
 
@@ -27,7 +27,7 @@ library CursorDynamicCandidates {
         assembly ("memory-safe") {
             let body := add(start, 8)
             let len := sub(end, body)
-            if or(gt(len, 0xffffffff), iszero(eq(shr(192, calldataload(start)), or(shl(32, BYTES_KEY), len)))) {
+            if or(gt(len, 0xffffffff), iszero(eq(shr(192, calldataload(start)), or(shl(32, INPUT_KEY), len)))) {
                 mstore(0, INVALID_BLOCK)
                 revert(28, 4)
             }
@@ -58,7 +58,7 @@ library CursorDynamicCandidates {
             }
             let body := add(start, 80)
             let len := sub(end, body)
-            if or(gt(len, 0xffffffff), iszero(eq(shr(192, calldataload(add(start, 72))), or(shl(32, BYTES_KEY), len)))) {
+            if or(gt(len, 0xffffffff), iszero(eq(shr(192, calldataload(add(start, 72))), or(shl(32, INPUT_KEY), len)))) {
                 mstore(0, INVALID_BLOCK)
                 revert(28, 4)
             }

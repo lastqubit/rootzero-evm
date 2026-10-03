@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeAmountBlock, encodeBalanceBlock, encodeBytesBlock, encodePositionBlock } from "./helpers/blocks.js";
+import { concat, encodeAssetAmountBlock, encodeBalanceBlock, encodeBytesBlock, encodePositionBlock } from "./helpers/blocks.js";
 
 describe("Buffer allocation benchmark", () => {
   it("compares scanning, lazy growth, and byte-length hints with identical output", async () => {
@@ -19,7 +19,7 @@ describe("Buffer allocation benchmark", () => {
         for (let i = 0; i < count; ++i) {
           const amount = workload === 8 ? 128 : workload === 6 ? 0 : workload === 7 ? 264 : workload === 2 ? 256 : workload === 3 ? [0, 16, 256, 2048][i % 4]! : i + 1;
           inputs.push(workload === 2 || workload === 3 || workload >= 6
-            ? encodeBytesBlock("0x" + "a5".repeat(amount)) : encodeAmountBlock(asset, BigInt(amount)));
+            ? encodeBytesBlock("0x" + "a5".repeat(amount)) : encodeAssetAmountBlock(asset, BigInt(amount)));
           if (workload === 1) outputs.push(encodePositionBlock(asset, BigInt(amount), liability, BigInt(amount)));
           else if (workload !== 5 && (workload !== 4 || i % 8 === 0)) outputs.push(encodeBalanceBlock(asset, BigInt(amount)));
         }

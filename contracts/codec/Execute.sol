@@ -56,15 +56,26 @@ library Execute {
     }
 
     /// @notice Decode an AMOUNT at an in-bounds absolute calldata position.
+    /// @dev Checks the exact header; caller establishes containment for 40 bytes.
+    function unpackAmount(uint abs) internal pure returns (uint amount) {
+        uint header;
+        assembly ("memory-safe") {
+            header := shr(192, calldataload(abs))
+            amount := calldataload(add(abs, 8))
+        }
+        if (header != Headers.Amount) revert InvalidBlock();
+    }
+
+    /// @notice Decode an ASSET_AMOUNT at an in-bounds absolute calldata position.
     /// @dev Checks the exact header; caller establishes containment for 72 bytes.
-    function unpackAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
+    function unpackAssetAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
         uint header;
         assembly ("memory-safe") {
             header := shr(192, calldataload(abs))
             asset := calldataload(add(abs, 8))
             amount := calldataload(add(abs, 40))
         }
-        if (header != Headers.Amount) revert InvalidBlock();
+        if (header != Headers.AssetAmount) revert InvalidBlock();
     }
 
     /// @notice Decode a BOOTSTRAP at an in-bounds absolute calldata position.

@@ -9,9 +9,9 @@ const block = (key: string, payload: string) => ethers.concat([
     ethers.id(`#${key}`).slice(0, 10), ethers.toBeHex(ethers.getBytes(payload).length, 4), payload,
 ]);
 const balance = block("balance", ethers.concat([asset, word(7n)]));
-const amount = block("amount", ethers.concat([asset, word(3n)]));
+const amount = block("assetAmount", ethers.concat([asset, word(3n)]));
 const context = (state: string, input: string) => block("context", ethers.concat([
-    word(1n), block("bytes", state), block("bytes", input),
+    word(1n), block("state", state), block("input", input),
 ]));
 
 describe("Command runner validation", function () {
@@ -20,8 +20,7 @@ describe("Command runner validation", function () {
         const key = BigInt(ethers.id("#balance").slice(0, 10));
         const max = (1n << 256n) - 1n;
         for (const flags of [0n, 1n, 2n, 3n]) {
-            const descriptor = (key << 160n) | (key << 128n) | (72n << 96n)
-                | (72n << 64n) | (64n << 56n) | (flags << 48n);
+            const descriptor = (key << 224n) | (72n << 192n) | (72n << 160n) | 1n | (flags << 1n);
             const [exec, offset] = await helper.inspect(context(balance, amount), descriptor, max);
             const state = offset + 48n;
             const end = state + 72n;
@@ -54,11 +53,10 @@ describe("Command runner validation", function () {
         const key = BigInt(ethers.id("#balance").slice(0, 10));
         const max = 0xffffffffn;
         for (const blockSize of [0n, 72n]) {
-            const descriptor = (key << 160n) | (key << 128n) | (blockSize << 96n)
-                | (max << 64n) | (64n << 56n) | (1n << 48n);
+            const descriptor = (key << 224n) | (blockSize << 192n) | (max << 160n) | 1n;
             // Opening is eager: a max-capacity output would require a 4 GiB
             // allocation, so test practical allocation and overflow separately.
-            const practical = (descriptor & ~(max << 64n)) | (72n << 64n);
+            const practical = (descriptor & ~(max << 160n)) | (72n << 160n);
             const [exec] = await helper.inspect(context(balance, "0x"), practical, 0n);
             expect(exec.output).to.equal(72n << 32n);
             expect(ethers.dataLength(exec.buffer)).to.equal(128);

@@ -23,12 +23,10 @@ contract TestBufferAllocation {
     {
         uint descriptor = Executions.describe(
             Specs.Empty,
-            workload == 2 || workload == 3 || workload >= 6 ? Specs.Bytes : Specs.Amount,
-            workload == 1 ? Specs.Position : Specs.Balance,
-            0
-        );
+            workload == 2 || workload == 3 || workload >= 6 ? Specs.Bytes : Specs.AssetAmount,
+            workload == 1 ? Specs.Position : Specs.Balance);
         // Artificial zero block size exercises lazy/fallback behavior.
-        if (workload == 8) descriptor &= ~(uint(type(uint32).max) << 96);
+        if (workload == 8) descriptor &= ~(uint(type(uint32).max) << 192);
         bytes memory output;
         uint startMemory;
         assembly ("memory-safe") { startMemory := mload(0x40) }
@@ -70,7 +68,7 @@ contract TestBufferAllocation {
                 asset = bytes32(uint(1));
                 amount = payload.length;
             } else {
-                (asset, amount) = exec.unpackAmount();
+                (asset, amount) = exec.unpackAssetAmount();
             }
             if (workload == 1) {
                 exec.outputPosition(asset, amount, bytes32(uint(2)), amount, bytes32(0));
@@ -83,30 +81,30 @@ contract TestBufferAllocation {
     }
 
     function hintedCapacity(bytes calldata input, uint descriptor) private pure returns (uint) {
-        uint blockSize = uint32(descriptor >> 96);
+        uint blockSize = uint32(descriptor >> 192);
         uint count;
         if (blockSize != 0 && input.length % blockSize == 0) {
             count = input.length / blockSize;
         } else {
             uint start;
             assembly ("memory-safe") { start := input.offset }
-            count = LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128)));
+            count = LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 224)));
         }
-        return count * uint32(descriptor >> 64);
+        return count * uint32(descriptor >> 160);
     }
 
     function ceilingCapacity(uint length, uint descriptor) private pure returns (uint) {
-        uint blockSize = uint32(descriptor >> 96);
+        uint blockSize = uint32(descriptor >> 192);
         if (blockSize == 0) return 0;
         uint count = length / blockSize;
         if (length % blockSize != 0) ++count;
-        return count * uint32(descriptor >> 64);
+        return count * uint32(descriptor >> 160);
     }
 
     function scannedCapacity(bytes calldata input, uint descriptor) private pure returns (uint) {
         uint start;
         assembly ("memory-safe") { start := input.offset }
-        return LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 128))) * uint32(descriptor >> 64);
+        return LegacyBlocks.runCount(start, start + input.length, bytes4(uint32(descriptor >> 224))) * uint32(descriptor >> 160);
     }
 
 }

@@ -17,7 +17,7 @@ contract TestTextUnpackers {
         if (execution) {
             Execution memory exec;
             uint spec = kind == 0 ? Specs.String : kind == 1 ? Specs.Label : Specs.Schema;
-            exec.openInput(Executions.describe(0, spec, 0, 0), 0, source);
+            exec.openInput(Executions.describe(0, spec, 0), 0, source);
             uint textCur;
             if (kind == 0) textCur = exec.unpackString();
             else if (kind == 1) {

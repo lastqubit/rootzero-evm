@@ -390,7 +390,7 @@ library Blocks {
         }
     }
 
-    /// @notice Validate two same-key children occupying a parent's remainder.
+    /// @notice Validate two typed children occupying a parent's remainder.
     /// @dev Requires a bounded uint32 endAbs, abs at or after the parent payload
     /// start, and abs + 16 + uint32.max not overflowing uint256. The first
     /// child's end stays full-width until tail proves the final child fits.
@@ -398,15 +398,16 @@ library Blocks {
     /// no separate intermediate containment check is needed.
     /// @param abs Absolute first-child header position.
     /// @param endAbs Exclusive end of the already validated parent.
-    /// @param key Required key for both children.
+    /// @param firstKey Required key for the first child.
+    /// @param lastKey Required key for the last child.
     /// @return firstCur Clean cursor over the first child's payload.
     /// @return lastCur Clean cursor over the final child's payload, ending at endAbs.
-    function pair(uint abs, uint endAbs, bytes4 key) private pure returns (uint firstCur, uint lastCur) {
-        uint len = expectKey(abs, key);
+    function pair(uint abs, uint endAbs, bytes4 firstKey, bytes4 lastKey) private pure returns (uint firstCur, uint lastCur) {
+        uint len = expectKey(abs, firstKey);
         unchecked {
             uint body = abs + 8;
             uint nextAbs = body + len;
-            lastCur = tail(nextAbs, endAbs, key);
+            lastCur = tail(nextAbs, endAbs, lastKey);
             firstCur = pack(body, nextAbs);
         }
     }
@@ -1034,14 +1035,25 @@ library Blocks {
     }
 
     /// @notice Decode AMOUNT and return the advanced source cursor.
+    /// @dev Checks the exact header and containment; preserves cursor metadata.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return amount Full-width scalar amount; the consumer defines its unit.
+    /// @return nextCur Advanced source cursor.
+    function unpackAmount(uint cur) internal pure returns (uint amount, uint nextCur) {
+        bytes32 word;
+        (word, nextCur) = unpack32(cur, Keys.Amount);
+        amount = uint(word);
+    }
+
+    /// @notice Decode ASSET_AMOUNT and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return asset Decoded payload value.
     /// @return amount Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackAmount(uint cur) internal pure returns (bytes32 asset, uint amount, uint nextCur) {
+    function unpackAssetAmount(uint cur) internal pure returns (bytes32 asset, uint amount, uint nextCur) {
         bytes32 a;
-        (asset, a, nextCur) = unpack64(cur, Keys.Amount);
+        (asset, a, nextCur) = unpack64(cur, Keys.AssetAmount);
         amount = uint(a);
     }
 
@@ -1088,6 +1100,17 @@ library Blocks {
         bytes32 a;
         (a, asset, nextCur) = unpack64(cur, Keys.HostAsset);
         host = uint(a);
+    }
+
+    /// @notice Decode ROOTED and return the advanced bounded calldata cursor.
+    /// @dev Validates the exact key, 96-byte payload and containment; performs no
+    /// account authorization, deadline enforcement or value validation.
+    function unpackRooted(uint cur) internal pure returns (bytes32 account, uint deadline, uint value, uint nextCur) {
+        bytes32 a;
+        bytes32 b;
+        (account, a, b, nextCur) = unpack96(cur, Keys.Rooted);
+        deadline = uint(a);
+        value = uint(b);
     }
 
     /// @notice Decode BOOTSTRAP and return the advanced source cursor.
@@ -1280,7 +1303,7 @@ library Blocks {
 
     /// @notice Decode SWAP and return its LIST payload as a clean hops cursor.
     /// @dev Validates parent containment and the exact final LIST child. Does not validate
-    /// hop contents, route semantics, or amount; hook implementations enforce those requirements.
+    /// hop contents, route semantics, or amount; consumers enforce those requirements.
     function unpackSwap(uint cur) internal pure returns (bytes32 asset, uint amount, uint hopsCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
@@ -1292,7 +1315,7 @@ library Blocks {
         }
     }
 
-    /// @notice Decode RELAY's input and continuation BYTES children.
+    /// @notice Decode RELAY's INPUT and continuation BYTES children.
     /// @dev Validates the parent once. The final child proves both children fit
     /// and consume the parent exactly; malformed children revert InvalidBlock.
     /// @param cur Bounded source cursor positioned at the RELAY header.
@@ -1303,7 +1326,7 @@ library Blocks {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Relay));
-            (inputCur, stepsCur) = pair(abs + 8, uint32(nextCur), Keys.Bytes);
+            (inputCur, stepsCur) = pair(abs + 8, uint32(nextCur), Keys.Input, Keys.Bytes);
         }
     }
 
@@ -1346,7 +1369,7 @@ library Blocks {
         }
     }
 
-    /// @notice Decode CONTEXT's account and its state/input BYTES children.
+    /// @notice Decode CONTEXT's account and its STATE/INPUT children.
     /// @dev Final-child validation proves the fixed account word and both children
     /// fit before the account is loaded. Child shape failures revert InvalidBlock.
     /// @param cur Bounded source cursor positioned at the CONTEXT header.
@@ -1361,7 +1384,7 @@ library Blocks {
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Context));
             // Children first saves 9 gas/block in the viaIR consuming-loop benchmark.
-            (stateCur, inputCur) = pair(abs + 40, uint32(nextCur), Keys.Bytes);
+            (stateCur, inputCur) = pair(abs + 40, uint32(nextCur), Keys.State, Keys.Input);
         }
         assembly ("memory-safe") {
             account := calldataload(add(abs, 8))
@@ -1382,7 +1405,7 @@ library Blocks {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Step));
             abs += 8;
             // Tail first saves 3 gas/block in minimal viaIR consuming loops.
-            inputCur = tail(abs + 64, uint32(nextCur), Keys.Bytes);
+            inputCur = tail(abs + 64, uint32(nextCur), Keys.Input);
             cmd = uint(read32(abs));
             value = uint(read32(abs + 32));
         }

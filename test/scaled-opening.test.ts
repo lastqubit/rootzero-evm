@@ -9,8 +9,8 @@ function fixture(count: number, context: boolean, scan = false, outputSize = 72n
   const stream = ethers.concat(Array(count).fill(encodeBalanceBlock(account, 7n)));
   const source = context ? encodeContextBlock(account, stream, "0x1234") : stream;
   const key = BigInt(Keys.Balance);
-  const descriptor = (key << 160n) | (key << 128n) | ((scan ? 0n : 72n) << 96n)
-    | (outputSize << 64n) | (context ? 64n << 56n : 0n);
+  const descriptor = (key << 224n) | ((scan ? 0n : 72n) << 192n)
+    | (outputSize << 160n) | (context ? 1n : 0n);
   return { source, descriptor };
 }
 

@@ -21,9 +21,10 @@ abstract contract AllowanceHook {
 /// Each ALLOWANCE block grants or updates a host-scoped asset cap. Only callable by the admin account.
 abstract contract Allowance is AdminBase, AllowanceHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("allowance", Specs.Empty, Specs.Allowance, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("allowance", Specs.Empty, Specs.Allowance, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Apply each ALLOWANCE block in the admin input.
@@ -33,7 +34,7 @@ abstract contract Allowance is AdminBase, AllowanceHook {
     function allowance(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, allowanceOne);
+        return runAdmin(id, descriptor, context, allowanceOne);
     }
 
     function allowanceOne(Execution memory exec) private {

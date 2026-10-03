@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeAmountBlock, encodeBalanceBlock, encodeBalanceConstraintsBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeAssetAmountBlock, encodeBalanceBlock, encodeBalanceConstraintsBlock, encodeContextBlock } from "./helpers/blocks.js";
 
 describe("BALANCE encoder gas", function () {
   this.timeout(120_000);
@@ -31,7 +31,7 @@ describe("BALANCE encoder gas", function () {
     let debited = 0n;
     for (const count of [0, 1, 4, 16, 64]) for (const command of ["checkBalance", "debitAccount"]) {
       const state = concat(...Array(count).fill(encodeBalanceBlock(asset, 100n)));
-      const input = concat(...Array(count).fill(command === "checkBalance" ? encodeBalanceConstraintsBlock(asset, 90n, 110n) : encodeAmountBlock(asset, 100n)));
+      const input = concat(...Array(count).fill(command === "checkBalance" ? encodeBalanceConstraintsBlock(asset, 90n, 110n) : encodeAssetAmountBlock(asset, 100n)));
       const context = encodeContextBlock(account, command === "checkBalance" ? state : "0x", input);
       const execution: number[] = [], receipt: number[] = [];
       for (const host of hosts) {

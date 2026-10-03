@@ -27,7 +27,7 @@ abstract contract CheckPosition is CommandBase {
     /// @return Unchanged POSITION blocks.
     /// @return Zero native budget credit.
     function checkPosition(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, checkPositionOne);
+        return runCommand(id, descriptor, context, checkPositionOne);
     }
 
     function checkPositionOne(Execution memory exec) private pure {

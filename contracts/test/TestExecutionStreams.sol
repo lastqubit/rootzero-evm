@@ -17,7 +17,7 @@ contract TestExecutionStreams {
         external pure returns (bytes calldata selected, uint selectedCur, uint beforeCur, uint afterCur, uint otherCur)
     {
         Execution memory exec;
-        uint descriptor = Executions.describe(Specs.Empty, declared ? Specs.Bytes : Specs.Empty, Specs.Empty, 0);
+        uint descriptor = Executions.describe(Specs.Empty, declared ? Specs.Bytes : Specs.Empty, Specs.Empty);
         Executions.openInput(exec, descriptor, 0, data);
         if (state) {
             exec.state = exec.input;

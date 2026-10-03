@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {CommandAccess} from "./Access.sol";
-import {STEP_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
+import {STEP_KEY, STATE_KEY, INPUT_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
 import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
@@ -57,7 +57,7 @@ abstract contract ExecuteHook {
 /// @title Pipeline
 /// @notice Core pipeline functionality shared by higher-level surfaces.
 /// @dev This gas-sensitive implementation intentionally inlines the command ID
-/// layout and the CONTEXT, BYTES, and RELAY block encodings. Changes to command
+/// layout and the CONTEXT, STATE, INPUT, BYTES, and RELAY block encodings. Changes to command
 /// selector, target, or flag placement, or to those block layouts, must update
 /// the corresponding assembly and packed-cursor logic here.
 abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
@@ -79,7 +79,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             cmd := calldataload(add(abs, 8))
             value := calldataload(add(abs, 40))
             head := calldataload(add(abs, 72))
-            if iszero(eq(shr(224, head), BYTES_KEY)) {
+            if iszero(eq(shr(224, head), INPUT_KEY)) {
                 fail(INVALID_BLOCK)
             }
             let input := add(abs, 80)
@@ -121,16 +121,16 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 let context := add(ptr, 0x44)
                 let stateBlock := add(context, 40)
                 let stateLength := mload(stateBytes)
-                mstore(stateBlock, or(shl(224, BYTES_KEY), shl(192, stateLength)))
+                mstore(stateBlock, or(shl(224, STATE_KEY), shl(192, stateLength)))
                 mcopy(add(stateBlock, 8), add(stateBytes, 32), stateLength)
                 let inputPtr := add(add(stateBlock, 8), stateLength)
                 let end
                 let inputAbs := and(inputCursor, 0xffffffff)
                 let inputLength := sub(and(shr(32, inputCursor), 0xffffffff), inputAbs)
-                // Ordinary calls carry BYTES input; handoffs carry RELAY(input, remaining steps).
+                // Ordinary calls carry INPUT; handoffs carry RELAY(input, remaining steps).
                 switch iszero(stepsCursor)
                 case 1 {
-                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, inputLength)))
+                    mstore(inputPtr, or(shl(224, INPUT_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputPtr, 8), inputAbs, inputLength)
                     end := add(add(inputPtr, 8), inputLength)
                 }
@@ -138,10 +138,10 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                     let stepsOffset := and(stepsCursor, 0xffffffff)
                     let stepsLength := sub(and(shr(32, stepsCursor), 0xffffffff), stepsOffset)
                     let relayLength := add(16, add(inputLength, stepsLength))
-                    mstore(inputPtr, or(shl(224, BYTES_KEY), shl(192, add(8, relayLength))))
+                    mstore(inputPtr, or(shl(224, INPUT_KEY), shl(192, add(8, relayLength))))
                     mstore(add(inputPtr, 8), or(shl(224, RELAY_KEY), shl(192, relayLength)))
                     let inputBlock := add(inputPtr, 16)
-                    mstore(inputBlock, or(shl(224, BYTES_KEY), shl(192, inputLength)))
+                    mstore(inputBlock, or(shl(224, INPUT_KEY), shl(192, inputLength)))
                     calldatacopy(add(inputBlock, 8), inputAbs, inputLength)
                     let stepsBlock := add(add(inputBlock, 8), inputLength)
                     mstore(stepsBlock, or(shl(224, BYTES_KEY), shl(192, stepsLength)))

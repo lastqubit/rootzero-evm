@@ -25,9 +25,10 @@ abstract contract DenyAssetHook {
 /// Each ASSET block in the input calls `allowAsset`. Only callable by the admin account.
 abstract contract AllowAsset is AdminBase, AllowAssetHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("allowAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("allowAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Allow each ASSET block in the admin input.
@@ -37,7 +38,7 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
     function allowAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, allowAssetOne);
+        return runAdmin(id, descriptor, context, allowAssetOne);
     }
 
     function allowAssetOne(Execution memory exec) private {
@@ -51,9 +52,10 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
 /// Each ASSET block in the input calls `denyAsset`. Only callable by the admin account.
 abstract contract DenyAsset is AdminBase, DenyAssetHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("denyAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("denyAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Deny each ASSET block in the admin input.
@@ -63,7 +65,7 @@ abstract contract DenyAsset is AdminBase, DenyAssetHook {
     function denyAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, denyAssetOne);
+        return runAdmin(id, descriptor, context, denyAssetOne);
     }
 
     function denyAssetOne(Execution memory exec) private {

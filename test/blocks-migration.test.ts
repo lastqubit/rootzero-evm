@@ -26,7 +26,7 @@ describe("Blocks migration behavior", () => {
     const next = await deploy("BlocksMigrationCandidate");
     for (const [name, memory, key, words] of [
       ["CreditAccount", true, Keys.Balance, 2], ["Cashout", true, Keys.Balance, 2],
-      ["Settle", true, Keys.Position, 5], ["DebitAccount", false, Keys.Amount, 2],
+      ["Settle", true, Keys.Position, 5], ["DebitAccount", false, Keys.AssetAmount, 2],
       ["Bootstrap", false, Keys.Bootstrap, 3], ["Authorize", false, Keys.Node, 1],
     ] as const) {
       const method = "measure" + name;

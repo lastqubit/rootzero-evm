@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { PeerAccess } from "../core/Access.sol";
-import { Specs } from "../codec/Specs.sol";
-import { InputEndpointBase } from "../core/Endpoint.sol";
-import { Nodes } from "../utils/Nodes.sol";
-import { Execution, Executions } from "../execution/Execution.sol";
+import {PeerAccess} from "../core/Access.sol";
+import {Specs} from "../codec/Specs.sol";
+import {InputEndpointBase} from "../core/Endpoint.sol";
+import {Nodes} from "../utils/Nodes.sol";
+import {Execution, Executions} from "../execution/Execution.sol";
+
+using Executions for Execution;
 
 /// @title PortBase
 /// @notice Abstract base for peer-facing rootzero ports.
@@ -38,55 +40,47 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     /// @notice Publish port metadata and a default label.
     /// @param name Port entrypoint name and default label. It must exactly
     /// match the Solidity port function name used by the canonical ABI.
-    /// @param input Input block specification.
-    /// @param output Output block specification.
+    /// @param input Input lane: upper-half spec and lower-half codes.
+    /// @param output Output lane: upper-half spec and lower-half codes.
     /// @param flags Packed port behavior flags.
     /// @return id Port node ID.
-    /// @return descriptor Packed endpoint lane metadata and flags.
+    /// @return descriptor Packed execution allocation hints and logging flags.
     function port(
         string memory name,
         uint input,
         uint output,
         uint8 flags
     ) internal returns (uint id, uint descriptor) {
-        descriptor = Executions.describe(Specs.Empty, input, output, flags);
-        return port(name, descriptor);
-    }
-
-    /// @notice Publish an already constructed port descriptor and default label.
-    /// @param name Port entrypoint name and default label. It must exactly
-    /// match the Solidity port function name used by the canonical ABI.
-    /// @param descriptor Packed port endpoint descriptor.
-    /// @return id Port node ID.
-    /// @return published Published endpoint descriptor.
-    function port(
-        string memory name,
-        uint descriptor
-    ) internal returns (uint id, uint published) {
-        id = Nodes.toPort(name, address(this), uint8(descriptor));
-        published = endpoint(id, name, descriptor);
+        id = Nodes.toPort(name, address(this), flags);
+        descriptor = endpoint(id, name, Specs.Empty, input, output);
     }
 
     /// @notice Process a port input stream through a callback per item.
     /// @dev Opens raw input with `msg.value` as its initial budget and no account
     /// or state source. The callback must advance input on each iteration; empty
     /// input invokes no callback. No progress guard is enforced. Access control
-    /// remains the caller's responsibility.
-    /// @param input Input block stream.
+    /// remains the caller's responsibility. Callbacks must preserve bounded cursors;
+    /// finalization does not recheck them. Logs selected INPUT before processing
+    /// and OUTPUT afterward.
+    /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed input-only endpoint descriptor.
+    /// @param input Input block stream.
     /// @param process Internal callback that consumes and processes one item.
     /// @return output Final encoded response block stream.
     /// @return credit Remaining native-value budget.
     function runPort(
-        bytes calldata input,
+        uint id,
         uint descriptor,
+        bytes calldata input,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec;
-        Executions.openInput(exec, descriptor, msg.value, input);
-        while (Executions.more(exec)) {
+        exec.openInput(descriptor, msg.value, input);
+        exec.logInput(id, descriptor);
+        while (exec.more()) {
             process(exec);
         }
-        return Executions.close(exec);
+        output = exec.finish(id, descriptor);
+        credit = exec.drainBudget();
     }
 }

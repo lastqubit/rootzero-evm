@@ -30,9 +30,10 @@ abstract contract ProvisionPayableHook {
 /// Each input block supplies the target host plus an asset amount; the output is a CUSTODY state stream.
 abstract contract Provision is CommandBase, ProvisionHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("provision", Specs.Empty, Specs.Allocation, Specs.Custody, 0);
+        (id, descriptor) = command("provision", Specs.Empty, Specs.Allocation, Specs.Custody, 0);
     }
 
     /// @notice Provision ALLOCATION input blocks and output matching CUSTODY state blocks.
@@ -40,7 +41,7 @@ abstract contract Provision is CommandBase, ProvisionHook {
     /// @return CUSTODY block stream matching the provisioned allocations.
     /// @return Zero native budget credit.
     function provision(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, provisionOne);
+        return runCommand(id, descriptor, context, provisionOne);
     }
 
     function provisionOne(Execution memory exec) private {
@@ -56,9 +57,10 @@ abstract contract Provision is CommandBase, ProvisionHook {
 /// The hook receives a mutable native-value budget drawn from `msg.value`.
 abstract contract ProvisionPayable is CommandBase, ProvisionPayableHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("provisionPayable", Specs.Empty, Specs.Allocation, Specs.Custody, Flags.Funded);
+        (id, descriptor) = command("provisionPayable", Specs.Empty, Specs.Allocation, Specs.Custody, Flags.Funded);
     }
 
     /// @notice Provision ALLOCATION input blocks with access to a mutable native-value budget.
@@ -66,7 +68,7 @@ abstract contract ProvisionPayable is CommandBase, ProvisionPayableHook {
     /// @return CUSTODY block stream matching the provisioned allocations.
     /// @return Native value to add to the caller's budget.
     function provisionPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, provisionPayableOne);
+        return runCommand(id, descriptor, context, provisionPayableOne);
     }
 
     function provisionPayableOne(Execution memory exec) private {

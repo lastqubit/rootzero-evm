@@ -14,7 +14,7 @@ describe("Cursor sibling structure comparison", function () {
         const h = await deploy(`Cursor${kind}${variant}`), artifact = await hre.artifacts.readArtifact(`Cursor${kind}${variant}`);
         const runtimeBytes = (artifact.deployedBytecode.length - 2) / 2;
         for (const [x, y] of [[0, 0], [0, 33], [33, 0], [1, 31], [33, 256]]) {
-          const value = encodeBlock(Keys[kind], concat(kind === "Context" ? ethers.toBeHex(123, 32) : "0x", encodeBlock(Keys.Bytes, "0x" + "ab".repeat(x)), encodeBlock(Keys.Bytes, "0x" + "cd".repeat(y))));
+          const value = encodeBlock(Keys[kind], concat(kind === "Context" ? ethers.toBeHex(123, 32) : "0x", encodeBlock(kind === "Context" ? Keys.State : Keys.Input, "0x" + "ab".repeat(x)), encodeBlock(kind === "Context" ? Keys.Input : Keys.Bytes, "0x" + "cd".repeat(y))));
           for (const method of ["measureCursor", "measureData"])
             for (const count of [1, 32, 128]) {
               const source = concat(...Array(count).fill(value)), a = await baseline[method](source), b = await h[method](source);

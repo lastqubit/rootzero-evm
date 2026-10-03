@@ -22,9 +22,9 @@ abstract contract WithdrawHook {
 /// For internal balance credits, use `creditAccount` instead.
 abstract contract Withdraw is CommandBase, WithdrawHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, 0);
         annotateAction(id, Actions.Withdraw);
     }
@@ -34,7 +34,7 @@ abstract contract Withdraw is CommandBase, WithdrawHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function withdraw(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, withdrawOne);
+        return runCommand(id, descriptor, context, withdrawOne);
     }
 
     function withdrawOne(Execution memory exec) private {

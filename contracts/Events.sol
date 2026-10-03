@@ -21,10 +21,6 @@ import { EventEmitter } from "./events/Emitter.sol";
 import { GuardianEvent } from "./events/Guardian.sol";
 import { IntroductionEvent } from "./events/Introduction.sol";
 import { NodeEvent } from "./events/Node.sol";
-import { PositionedEvent, SettledEvent } from "./events/Position.sol";
 import { RootedEvent } from "./events/Rooted.sol";
 import { RouteEvent } from "./events/Route.sol";
 import { UnresolvedEvent } from "./events/Unresolved.sol";
-
-
-

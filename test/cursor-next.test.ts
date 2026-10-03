@@ -6,7 +6,7 @@ const invalid = ethers.id("InvalidBlock()").slice(0, 10), bounds = ethers.id("Ou
 const size = (s: string) => ethers.getBytes(s).length;
 const words = concat(ethers.toBeHex(ethers.MaxUint256, 32), ethers.toBeHex(7, 32));
 const balance = encodeBlock(Keys.Balance, words);
-const step = (data: string) => encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Bytes, data)));
+const step = (data: string) => encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Input, data)));
 async function errorOf(call: Promise<any>) {
   try { await call; return undefined; }
   catch(e: any) { const data = e.data ?? e.info?.error?.data; if (typeof data !== "string") throw e; return data; }
@@ -48,7 +48,7 @@ describe("Unpackers returning the advanced source cursor", function () {
       const cases = kind === "Balance"
         ? [encodeBlock(Keys.Balance, "0x"), encodeBlock(Keys.Balance, concat(words, "0xff"))]
         : [encodeBlock(Keys.Step, words), encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.String, "0x"))),
-          encodeBlock(Keys.Step, concat(words, Keys.Bytes, "0xffffffff")), encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Bytes, "0x"), "0xff"))];
+          encodeBlock(Keys.Step, concat(words, Keys.Input, "0xffffffff")), encodeBlock(Keys.Step, concat(words, encodeBlock(Keys.Input, "0x"), "0xff"))];
       for (const source of cases) {
         expect(await errorOf(helper.inspect(source, size(source), 0, 0))).eq(invalid);
         expect(await errorOf(helper.onlyValues(source))).eq(invalid);

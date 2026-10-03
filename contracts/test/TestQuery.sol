@@ -31,16 +31,14 @@ contract TestQuery is QueryBase {
         (, descriptor) = query("incrementQuery", valueSpec, valueSpec);
     }
 
-    function incrementQuery(bytes calldata input) external view returns (bytes memory out) {
-        Execution memory exec = openInput(input, descriptor);
+    function incrementQuery(bytes calldata input) external view returns (bytes memory) {
+        return runQuery(descriptor, input, incrementOne);
+    }
+
+    function incrementOne(Execution memory exec) private view {
         uint valueSpec = ValueSpec;
-
-        while (exec.more()) {
-            uint foo = uint(exec.unpack32(valueSpec));
-            output32(exec, valueSpec, bytes32(foo + 1));
-        }
-
-        out = close(exec);
+        uint value = uint(exec.unpack32(valueSpec));
+        output32(exec, valueSpec, bytes32(value + 1));
     }
 }
 
@@ -57,16 +55,14 @@ contract TestKeyedLocalQuery is QueryBase {
         (, descriptor) = query("keyedLocalQuery", valueSpec, valueSpec);
     }
 
-    function keyedLocalQuery(bytes calldata input) external view returns (bytes memory out) {
-        Execution memory exec = openInput(input, descriptor);
+    function keyedLocalQuery(bytes calldata input) external view returns (bytes memory) {
+        return runQuery(descriptor, input, keyedLocalOne);
+    }
+
+    function keyedLocalOne(Execution memory exec) private view {
         uint valueSpec = ValueSpec;
-
-        while (exec.more()) {
-            uint foo = uint(exec.unpack32(valueSpec));
-            output32(exec, valueSpec, bytes32(foo + 2));
-        }
-
-        out = close(exec);
+        uint value = uint(exec.unpack32(valueSpec));
+        output32(exec, valueSpec, bytes32(value + 2));
     }
 }
 

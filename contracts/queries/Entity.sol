@@ -7,21 +7,21 @@ import {QueryBase} from "./Base.sol";
 
 using Executions for Execution;
 
-/// @notice Hook implemented by hosts that expose current entity conditions.
+/// @notice Hook implemented by hosts that expose entity kinds and current conditions.
 abstract contract GetEntityCodesHook {
-    /// @notice Resolve current condition codes for one entity.
+    /// @notice Resolve kind and current condition codes for one entity.
     /// @dev Zero means unknown or no condition reported, not explicitly inactive.
     /// Implementations define entity kinds, applicable conditions, and valid code
-    /// packing. Return current conditions, not historical actions or effects.
+    /// packing. Return entity kinds and current conditions, not historical actions or effects.
     /// Active/Inactive is optional; when applicable, use one unambiguous state.
     /// The query encodes the returned word unchanged without semantic validation.
     /// @param entity Generic full-width entity identifier, as used by annotations.
-    /// @return codes Packed identifiers describing the entity's current condition.
+    /// @return codes Packed identifiers describing the entity's kind and current condition.
     function entityCodes(uint entity) internal view virtual returns (uint codes);
 }
 
 /// @title GetEntityCodes
-/// @notice Query current conditions for one or more entities.
+/// @notice Query kinds and current conditions for one or more entities.
 /// Input is an ENTITY stream; output is one CODES block per entity in input order.
 abstract contract GetEntityCodes is QueryBase, GetEntityCodesHook {
     uint private immutable descriptor;
@@ -34,7 +34,7 @@ abstract contract GetEntityCodes is QueryBase, GetEntityCodesHook {
     /// @param input Block stream of entity { uint entity } entries.
     /// @return One codes { uint codes } block per input entry, including zero codes.
     function entityCodes(bytes calldata input) external view returns (bytes memory) {
-        return runQuery(input, descriptor, entityCodesOne);
+        return runQuery(descriptor, input, entityCodesOne);
     }
 
     function entityCodesOne(Execution memory exec) private view {

@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import {ethers} from "ethers";
 import {commandId, deploy, getSigner, hostId, portId} from "./helpers/setup.js";
-import {concat, encodeAssetBlock, endpointDescriptor, Keys} from "./helpers/blocks.js";
+import {concat, encodeAssetBlock, endpointSpecs, Keys} from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Singular asset endpoints", () => {
@@ -15,8 +15,8 @@ describe("Singular asset endpoints", () => {
     for (const method of ["allowAsset", "denyAsset", "portAllowAsset", "portDenyAsset"]) {
       const admin = !method.startsWith("port");
       const id = admin ? await commandId(`${method}(bytes)`, host, 2n) : await portId(`${method}(bytes)`, host);
-      const descriptor = endpointDescriptor({input: Keys.Asset, inputHint: 32, admin});
-      await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id, descriptor);
+      const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, admin});
+      await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id, ...specs);
     }
   });
 

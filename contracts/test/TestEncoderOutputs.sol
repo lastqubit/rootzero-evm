@@ -53,8 +53,8 @@ contract TestEncoderOutputs {
                 if (previous) {
                     uint i;
                     (exec.output, exec.buffer, i) = LegacyBuffers.reserve(exec.output, exec.buffer, 72, 72);
-                    LegacyBlocks.writeAmount(exec.buffer, i, fields[0], uint(fields[1]));
-                } else Executions.outputAmount(exec, fields[0], uint(fields[1]));
+                    LegacyBlocks.writeAssetAmount(exec.buffer, i, fields[0], uint(fields[1]));
+                } else Executions.outputAssetAmount(exec, fields[0], uint(fields[1]));
             }
             else if (kind == 6) {
                 if (previous) {

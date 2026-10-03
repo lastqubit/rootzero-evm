@@ -12,9 +12,9 @@ using Executions for Execution;
 /// @notice Repay each POSITION debt and emit the position with debt cleared.
 abstract contract Repay is CommandBase, RepayHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("repay", Specs.Position, Specs.Empty, Specs.Position, 0);
         annotateAction(id, Actions.Repay);
     }
@@ -24,7 +24,7 @@ abstract contract Repay is CommandBase, RepayHook, ActionAnnot {
     /// @return Positions with zero debt and all other fields preserved.
     /// @return Zero native budget credit.
     function repay(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, repayOne);
+        return runCommand(id, descriptor, context, repayOne);
     }
 
     function repayOne(Execution memory exec) private {

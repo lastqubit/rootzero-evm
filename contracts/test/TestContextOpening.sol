@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 import {Blocks} from "../codec/Blocks.sol";
 import {Encoder} from "../codec/Encoder.sol";
 import {Cursors} from "../utils/Cursors.sol";
-import {BYTES_KEY, CONTEXT_KEY} from "../codec/Keys.sol";
+import {STATE_KEY, INPUT_KEY, CONTEXT_KEY} from "../codec/Keys.sol";
 import {INVALID_BLOCK, InvalidBlock} from "../utils/Errors.sol";
 import {Execution} from "../execution/Execution.sol";
 
@@ -54,7 +54,7 @@ library PreviousContextOpening {
             account := calldataload(add(start, 8))
             let stateHeader := add(start, 40)
             head := calldataload(stateHeader)
-            if iszero(eq(shr(224, head), BYTES_KEY)) {
+            if iszero(eq(shr(224, head), STATE_KEY)) {
                 fail(INVALID_BLOCK)
             }
             let stateStart := add(stateHeader, 8)
@@ -64,7 +64,7 @@ library PreviousContextOpening {
             // Match unpackTailBytes, including underflow and exact header length.
             if or(
                 gt(inputLength, 0xffffffff),
-                iszero(eq(shr(192, calldataload(stateEnd)), or(shl(32, BYTES_KEY), inputLength)))
+                iszero(eq(shr(192, calldataload(stateEnd)), or(shl(32, INPUT_KEY), inputLength)))
             ) {
                 fail(INVALID_BLOCK)
             }

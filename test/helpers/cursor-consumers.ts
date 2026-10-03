@@ -9,7 +9,7 @@ export function consumerBlock(kind: string, children: number) {
   if (kind === "Chain") return concat(balance, constraints);
   const body = concat(...Array(children).fill(balance));
   return kind === "Envelope" ? encodeBlock(Keys.Bytes, body)
-    : encodeBlock(Keys.Step, concat(ethers.toBeHex(11, 32), ethers.toBeHex(13, 32), encodeBlock(Keys.Bytes, body)));
+    : encodeBlock(Keys.Step, concat(ethers.toBeHex(11, 32), ethers.toBeHex(13, 32), encodeBlock(Keys.Input, body)));
 }
 export function expectedConsumer(kind: string, children: number, count: number) {
   return {

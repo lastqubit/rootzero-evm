@@ -11,9 +11,10 @@ using Executions for Execution;
 /// Only callable by the admin account.
 abstract contract Appoint is AdminBase, GuardianAccess {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("appoint", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("appoint", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Appoint each user ACCOUNT block in the admin input as a guardian.
@@ -23,7 +24,7 @@ abstract contract Appoint is AdminBase, GuardianAccess {
     function appoint(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, appointOne);
+        return runAdmin(id, descriptor, context, appointOne);
     }
 
     function appointOne(Execution memory exec) private {
@@ -38,9 +39,10 @@ abstract contract Appoint is AdminBase, GuardianAccess {
 /// Only callable by the admin account.
 abstract contract Dismiss is AdminBase, GuardianAccess {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("dismiss", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("dismiss", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Dismiss each user ACCOUNT block in the admin input from guardian status.
@@ -50,7 +52,7 @@ abstract contract Dismiss is AdminBase, GuardianAccess {
     function dismiss(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, dismissOne);
+        return runAdmin(id, descriptor, context, dismissOne);
     }
 
     function dismissOne(Execution memory exec) private {

@@ -4,6 +4,12 @@ pragma solidity ^0.8.33;
 /// @dev Right-aligned Keys.Bytes for direct assembly use: bytes4(keccak256("#bytes")).
 uint constant BYTES_KEY = 0x6911b332;
 
+/// @dev Right-aligned Keys.State for direct assembly use: bytes4(keccak256("#state")).
+uint constant STATE_KEY = 0xe31b08ab;
+
+/// @dev Right-aligned Keys.Input for direct assembly use: bytes4(keccak256("#input")).
+uint constant INPUT_KEY = 0x6b2ede62;
+
 /// @dev Right-aligned Keys.Step for direct assembly use: bytes4(keccak256("#step")).
 uint constant STEP_KEY = 0x53a8ad94;
 
@@ -30,6 +36,13 @@ library Keys {
     /// @dev Reserved UTF-8 string child block.
     bytes4 constant String = bytes4(keccak256("#string"));
 
+    /// @dev Context state container; payload is a block stream.
+    bytes4 constant State = bytes4(keccak256("#state"));
+    /// @dev Context input container; payload is a block stream.
+    bytes4 constant Input = bytes4(keccak256("#input"));
+    /// @dev Event-only container for an execution output stream.
+    bytes4 constant Output = bytes4(keccak256("#output"));
+
     // Live pipeline state
 
     /// @dev Asset balance state - (bytes32 asset, uint amount)
@@ -50,8 +63,10 @@ library Keys {
     /// @dev Quoted asset and liability quantities; interpretation belongs to the consumer.
     bytes4 constant Quote = bytes4(keccak256("#quote"));
 
-    /// @dev Input amount - (bytes32 asset, uint amount)
+    /// @dev Scalar input amount; the consumer defines its unit - (uint amount)
     bytes4 constant Amount = bytes4(keccak256("#amount"));
+    /// @dev Asset input amount - (bytes32 asset, uint amount)
+    bytes4 constant AssetAmount = bytes4(keccak256("#assetAmount"));
     /// @dev Pipeline bootstrap request - (bytes32 asset, uint amount, uint budget)
     bytes4 constant Bootstrap = bytes4(keccak256("#bootstrap"));
     /// @dev Host-scoped input amount - (uint host, bytes32 asset, uint amount)
@@ -63,15 +78,18 @@ library Keys {
     /// @dev Transfer record passed through the pipeline - (bytes32 from, bytes32 to, bytes32 asset, uint amount)
     bytes4 constant Transaction = bytes4(keccak256("#transaction"));
 
+    /// @dev Root pipeline context - (bytes32 account, uint deadline, uint value).
+    bytes4 constant Rooted = bytes4(keccak256("#rooted"));
+
     // Composite and annotation blocks
 
     /// @dev Swap route - (bytes32 asset, uint amount, many #asset as hops)
     bytes4 constant Swap = bytes4(keccak256("#swap"));
-    /// @dev Sub-command invocation - (uint cmd, uint value, #bytes as input)
+    /// @dev Sub-command invocation - (uint cmd, uint value, #input)
     bytes4 constant Step = bytes4(keccak256("#step"));
-    /// @dev Pipeline handoff envelope - (#bytes as input, #bytes as steps)
+    /// @dev Pipeline handoff envelope - (#input, #bytes as steps)
     bytes4 constant Relay = bytes4(keccak256("#relay"));
-    /// @dev Command context transport - (bytes32 account, #bytes as state, #bytes as input)
+    /// @dev Command context transport - (bytes32 account, #state, #input)
     bytes4 constant Context = bytes4(keccak256("#context"));
     /// @dev Recoverable witness - (uint handler, uint value, bytes32 key, #bytes as witness)
     bytes4 constant Recover = bytes4(keccak256("#recover"));

@@ -13,7 +13,7 @@ contract TestExpectLimits {
         external view returns (uint used, uint cursor)
     {
         Execution memory exec;
-        exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty), 0, input);
         Position memory position;
         position.amount = amount;
         position.debt = debt;
@@ -27,7 +27,7 @@ contract TestExpectLimits {
         external view returns (uint used, uint cursor)
     {
         Execution memory exec;
-        exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty, 0), 0, input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.Limits, Specs.Empty), 0, input);
         Position memory position;
         position.amount = amount;
         position.debt = debt;

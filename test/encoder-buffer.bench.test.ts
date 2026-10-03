@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder buffer lifecycle gas", function () {
   this.timeout(120_000);
@@ -19,8 +19,8 @@ describe("Encoder buffer lifecycle gas", function () {
         const capacity = scenario === "grow" ? 0 : ethers.dataLength(block) * count + 24;
         const results: any[] = [];
         for (const helper of helpers) {
-          const r = await helper.measure(account, mode === 1 || mode === 2 ? encodeBytesBlock(state) : state,
-            mode === 1 || mode === 2 ? encodeBytesBlock(input) : input, count, capacity, mode, scenario === "warm");
+          const r = await helper.measure(account, mode === 1 || mode === 2 ? encodeStateBlock(state) : state,
+            mode === 1 || mode === 2 ? encodeInputBlock(input) : input, count, capacity, mode, scenario === "warm");
           expect(r[3]).eq(concat(...Array(count).fill(block)));
           results.push(r);
         }

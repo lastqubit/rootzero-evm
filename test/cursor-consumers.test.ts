@@ -41,7 +41,7 @@ describe("Complete absolute-position and cursor consumers", function () {
       } else {
         const bodies = [badBalance, ethers.dataSlice(balance, 0, size(balance) - 1), concat(balance, "0xff")];
         cases = bodies.map(body => kind === "Envelope" ? encodeBlock(Keys.Bytes, body)
-          : encodeBlock(Keys.Step, concat(ethers.toBeHex(11, 32), ethers.toBeHex(13, 32), encodeBlock(Keys.Bytes, body))));
+          : encodeBlock(Keys.Step, concat(ethers.toBeHex(11, 32), ethers.toBeHex(13, 32), encodeBlock(Keys.Input, body))));
       }
       for (const source of cases) expect(await rejected(helper.measure(concat(source, balance), size(source), 0, 0))).eq(true);
     });

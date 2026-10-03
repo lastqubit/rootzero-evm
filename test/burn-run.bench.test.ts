@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { deploy, getProvider, getSigner, hostId } from "./helpers/setup.js";
-import { encodeAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
 
 describe("Burn loop versus CommandBase.runCommand", function () {
   this.timeout(180_000);
@@ -50,7 +50,7 @@ describe("Burn loop versus CommandBase.runCommand", function () {
 
   it("preserves revert data for malformed sources and access failures", async () => {
     const balance = encodeBalanceBlock(asset, 1n);
-    const amount = encodeAmountBlock(asset, 1n);
+    const amount = encodeAssetAmountBlock(asset, 1n);
     const valid = encodeContextBlock(account, balance, "0x");
     async function failure(host: any, context: string) {
       try {

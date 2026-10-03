@@ -16,7 +16,7 @@ describe("Cursor dynamic structure comparison", function () {
       const runtimeBytes = (artifact.deployedBytecode.length - 2) / 2;
       for (const length of [0, 1, 33, 256]) {
         const block = encodeBlock(Keys.Step, concat(ethers.toBeHex(1, 32), ethers.toBeHex(2, 32),
-          encodeBlock(Keys.Bytes, "0x" + "ab".repeat(length))));
+          encodeBlock(Keys.Input, "0x" + "ab".repeat(length))));
         for (const method of ["measureCursor", "measureData"]) for (const count of [1, 32, 128]) {
           const source = concat(...Array(count).fill(block));
           const a = await baseline[method](source), b = await helper[method](source);

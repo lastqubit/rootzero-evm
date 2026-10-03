@@ -15,7 +15,10 @@ describe("Groups annotation", () => {
     const descriptor = endpointDescriptor({ state: Keys.Balance, stateHint: 64, output: exactSpec(Keys.Position, 160) });
     expect(await host.commandId()).to.equal(id);
     expect(await host.descriptor()).to.equal(descriptor);
-    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id, descriptor);
+    await expect(host.deploymentTransaction()).to.emit(host, "EventAbi").withArgs(
+      "event Endpoint(uint indexed host, uint id, uint state, uint input, uint output)",
+    );
+    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id, exactSpec(Keys.Balance, 64), 0n, exactSpec(Keys.Position, 160));
     await expect(host.deploymentTransaction()).to.emit(host, "Annotation").withArgs(id, encoded(description));
     const [spec, body] = await host.catalog();
     expect(ethers.toBeHex(spec >> 224n, 4)).to.equal(groupsKey);

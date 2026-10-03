@@ -21,7 +21,7 @@ library Sizes {
     uint constant B128 = Header + 4 * Word;
     /// @dev 8 header + 160 payload = 168 bytes total.
     uint constant B160 = Header + 5 * Word;
-    /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested BYTES header.
+    /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested INPUT header.
     uint constant Step = 2 * Header + 2 * Word;
     /// @dev STATUS block: 8 header + 32 status code = 40 bytes
     uint constant Status = B32;
@@ -45,8 +45,8 @@ library Sizes {
 
     /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
     uint constant Bootstrap = B96;
-    /// @dev AMOUNT block: 8 header + 32 asset + 32 amount = 72 bytes
-    uint constant Amount = B64;
+    /// @dev ASSET_AMOUNT block: 8 header + 32 asset + 32 amount = 72 bytes
+    uint constant AssetAmount = B64;
     /// @dev HOST_ASSET block: 8 header + 32 host + 32 asset = 72 bytes
     uint constant HostAsset = B64;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
@@ -98,7 +98,7 @@ library PreviousSpecs {
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact64;
     uint constant Quote = uint(bytes32(Keys.Quote)) | Exact160;
 
-    uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
+    uint constant AssetAmount = uint(bytes32(Keys.AssetAmount)) | Exact64;
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;

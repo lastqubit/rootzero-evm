@@ -71,8 +71,8 @@ contract TestExecutionDecoders {
             if (previous) {
                 uint abs = uint32(exec.input);
                 exec.input = Cursors.advance(exec.input, 72);
-                (asset, amount) = LegacyBlocks.unpackAmount(abs);
-            } else (asset, amount) = exec.unpackAmount();
+                (asset, amount) = LegacyBlocks.unpackAssetAmount(abs);
+            } else (asset, amount) = exec.unpackAssetAmount();
             data = abi.encode(asset, amount);
         }
         else if (kind == 5) {

@@ -135,8 +135,8 @@ contract TestBlockEncoderCopy is BlockEncoderHarness {
         bytes32 account = Blocks.read32(abs);
         uint stateCur;
         uint inputCur;
-        (stateCur, cur) = Blocks.take(cur, Keys.Bytes);
-        (inputCur, cur) = Blocks.take(cur, Keys.Bytes);
+        (stateCur, cur) = Blocks.take(cur, Keys.State);
+        (inputCur, cur) = Blocks.take(cur, Keys.Input);
         require(uint32(cur) == uint32(cur >> 32));
         return PreviousContextCreator.createContext(account, stateCur, inputCur);
     }

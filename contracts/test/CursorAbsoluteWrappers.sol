@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 import {LegacyHeaders} from "./LegacyHeaders.sol";
-import {STEP_KEY, BYTES_KEY} from "../codec/Keys.sol";
+import {STEP_KEY, INPUT_KEY} from "../codec/Keys.sol";
 import {Position} from "../core/Types.sol";
 import {INVALID_BLOCK, OUT_OF_BOUNDS, UNEXPECTED_VALUE, OUT_OF_RANGE} from "../utils/Errors.sol";
 
@@ -45,7 +45,7 @@ library CursorAbsoluteWrappers {
         endAbs = endAt(abs, limit, bytes4(uint32(STEP_KEY)));
         assembly ("memory-safe") {
             inputAbs := add(abs, 80)
-            if or(lt(endAbs, inputAbs), iszero(eq(shr(192, calldataload(add(abs, 72))), or(shl(32, BYTES_KEY), sub(endAbs, inputAbs))))) {
+            if or(lt(endAbs, inputAbs), iszero(eq(shr(192, calldataload(add(abs, 72))), or(shl(32, INPUT_KEY), sub(endAbs, inputAbs))))) {
                 mstore(0, INVALID_BLOCK) revert(28, 4)
             }
             cmd := calldataload(add(abs, 8))

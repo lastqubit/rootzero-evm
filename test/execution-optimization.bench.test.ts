@@ -125,7 +125,7 @@ describe("Execution optimization", function () {
         }
       }
     }
-    const badKey = encodeBlock(Keys.Amount, blob(64));
+    const badKey = encodeBlock(Keys.AssetAmount, blob(64));
     const badLength = encodeBlock(Keys.Balance, blob(63));
     for (const source of [balance, badKey, badLength, ethers.concat([badKey, "0xab"]),
       ethers.concat([balance, badKey, "0xab"]), ethers.concat([balance, "0xab"]),

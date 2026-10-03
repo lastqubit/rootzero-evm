@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 import {RangeCursorBlocks} from "./RangeCursorBlocks.sol";
 import {Blocks, Cursors} from "../Codec.sol";
 import {BALANCE_HEADER} from "../codec/Specs.sol";
-import {STEP_KEY, BYTES_KEY} from "../codec/Keys.sol";
+import {STEP_KEY, INPUT_KEY} from "../codec/Keys.sol";
 import {INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 
 /// @dev Direct alternatives isolate the effect of packing intermediate ranges.
@@ -48,7 +48,7 @@ library CursorNextCandidates {
                 mstore(0, OUT_OF_BOUNDS) revert(28, 4)
             }
             let bodyAbs := add(abs, 80)
-            if or(lt(endAbs, bodyAbs), iszero(eq(shr(192, calldataload(add(abs, 72))), or(shl(32, BYTES_KEY), sub(endAbs, bodyAbs))))) {
+            if or(lt(endAbs, bodyAbs), iszero(eq(shr(192, calldataload(add(abs, 72))), or(shl(32, INPUT_KEY), sub(endAbs, bodyAbs))))) {
                 mstore(0, INVALID_BLOCK) revert(28, 4)
             }
             cmd := calldataload(add(abs, 8))

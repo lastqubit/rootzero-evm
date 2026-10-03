@@ -5,16 +5,15 @@ import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {RangeCursorBlocks} from "./RangeCursorBlocks.sol";
 import {Blocks, Cursors, Keys} from "../Codec.sol";
 import {Specs} from "../codec/Specs.sol";
-import {BYTES_KEY} from "../codec/Keys.sol";
 import {INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
 
 /// @dev Retained alternatives for measuring cursor handoff and redundant checks.
 library CursorSiblingsCandidates {
     function composed(uint cur, bytes4 key, uint prefix) internal pure returns (uint first, uint last) {
         (, uint body, ) = Blocks.enter(cur, key, prefix);
-        (first, ) = Blocks.unpack(body, Keys.Bytes);
+        (first, ) = Blocks.unpack(body, key == Keys.Context ? Keys.State : Keys.Input);
         uint rest = (body & ~uint(type(uint32).max)) | (first >> 32);
-        last = Blocks.unpackExact(rest, Specs.Bytes);
+        last = Blocks.unpackExact(rest, key == Keys.Context ? Specs.Input : Specs.Bytes);
     }
 
     function checked(uint cur, bytes4 key, uint prefix) internal pure returns (uint first, uint last) {
@@ -22,6 +21,8 @@ library CursorSiblingsCandidates {
     }
 
     function fused(uint cur, bytes4 key, uint prefix, bool checkFirst) internal pure returns (uint first, uint last) {
+        uint firstKey = uint32(key == Keys.Context ? Keys.State : Keys.Input);
+        uint lastKey = uint32(key == Keys.Context ? Keys.Input : Keys.Bytes);
         assembly ("memory-safe") {
             let start := and(cur, 0xffffffff)
             let header := calldataload(start)
@@ -36,7 +37,7 @@ library CursorSiblingsCandidates {
             }
             let child := add(add(start, 8), prefix)
             header := calldataload(child)
-            if iszero(eq(shr(224, header), BYTES_KEY)) {
+            if iszero(eq(shr(224, header), firstKey)) {
                 mstore(0, INVALID_BLOCK)
                 revert(28, 4)
             }
@@ -49,7 +50,7 @@ library CursorSiblingsCandidates {
                 }
             }
             let finalBody := add(next, 8)
-            if or(lt(end, finalBody), iszero(eq(shr(192, calldataload(next)), or(shl(32, BYTES_KEY), sub(end, finalBody))))) {
+            if or(lt(end, finalBody), iszero(eq(shr(192, calldataload(next)), or(shl(32, lastKey), sub(end, finalBody))))) {
                 mstore(0, INVALID_BLOCK)
                 revert(28, 4)
             }

@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import "./helpers/matchers.js";
-import { concat, encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeBytesBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder context overloads", () => {
   it("chains every CONTEXT writer using its returned relative offset", async () => {
@@ -12,7 +12,7 @@ describe("Encoder context overloads", () => {
       const state = "0x" + "ab".repeat(a), input = "0x" + "cd".repeat(b);
       const expected = encodeContextBlock(account, state, input);
       for (const wrap of [false, true]) for (const memory of [false, true]) {
-        const [output, nextI] = await helper.chain(account, wrap ? state : encodeBytesBlock(state), wrap ? input : encodeBytesBlock(input), wrap, memory);
+        const [output, nextI] = await helper.chain(account, wrap ? state : encodeStateBlock(state), wrap ? input : encodeInputBlock(input), wrap, memory);
         expect(nextI).eq(BigInt(3 + 2 * ethers.dataLength(expected)));
         expect(ethers.dataSlice(output, 0, Number(nextI))).eq(concat("0xefefef", expected, expected));
         expect(ethers.dataSlice(output, Number(nextI) + 24)).eq("0x" + "ef".repeat(32));

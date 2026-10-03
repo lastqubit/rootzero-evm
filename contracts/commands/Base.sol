@@ -3,9 +3,8 @@ pragma solidity ^0.8.33;
 
 import {CallerAccess} from "../core/Access.sol";
 import {EndpointBase} from "../core/Endpoint.sol";
-import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
-import {HostAmount, Position} from "../core/Types.sol";
+import {HostAmount} from "../core/Types.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Flags} from "../utils/Flags.sol";
 import {Nodes} from "../utils/Nodes.sol";
@@ -38,12 +37,12 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @notice Publish command metadata and a default label.
     /// @param name Command entrypoint name and default label. It must exactly
     /// match the Solidity command function name used by the canonical ABI.
-    /// @param state State block specification.
-    /// @param input Input block specification.
-    /// @param output Output block specification.
+    /// @param state State lane: upper-half spec and lower-half codes.
+    /// @param input Input lane: upper-half spec and lower-half codes.
+    /// @param output Output lane: upper-half spec and lower-half codes.
     /// @param flags Packed command behavior flags.
     /// @return id Command node ID.
-    /// @return descriptor Packed endpoint lane metadata and flags.
+    /// @return descriptor Packed execution allocation hints and logging flags.
     function command(
         string memory name,
         uint state,
@@ -51,19 +50,8 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         uint output,
         uint8 flags
     ) internal returns (uint id, uint descriptor) {
-        descriptor = Executions.describe(state, input, output, flags);
-        return command(name, descriptor);
-    }
-
-    /// @notice Publish an already constructed command descriptor and default label.
-    /// @param name Command entrypoint name and default label. It must exactly
-    /// match the Solidity command function name used by the canonical ABI.
-    /// @param descriptor Packed command endpoint descriptor.
-    /// @return id Command node ID.
-    /// @return published Published endpoint descriptor.
-    function command(string memory name, uint descriptor) internal returns (uint id, uint published) {
-        id = Nodes.toCommand(name, address(this), uint8(descriptor));
-        published = endpoint(id, name, descriptor);
+        id = Nodes.toCommand(name, address(this), flags);
+        descriptor = endpoint(id, name, state, input, output);
     }
 
     /// @notice Decode one command context and open bounded state and input sources.
@@ -83,28 +71,35 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @dev Opens exactly one CONTEXT using `msg.value` as its initial budget.
     /// The callback shares the execution and must advance state or input on each
     /// iteration until both sources are consumed. No progress guard is enforced.
+    /// Callbacks must preserve bounded cursors; the completed batch is finalized
+    /// without a separate consumption check.
     /// Source pairing, parent boundaries, and access control remain the caller's
     /// responsibility.
-    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// Nonzero lane codes select logging. Before processing, emits one LOG0 record
+    /// [id:32][STATE block and/or INPUT block], including container headers.
+    /// After processing, emits [id:32][OUTPUT block] when output codes are nonzero.
+    /// Nested executions and callback events occur between these records.
+    /// @param id Registered command endpoint ID used as the log prefix.
     /// @param descriptor Packed endpoint descriptor.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that consumes and processes one batch item.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runCommand(
-        bytes calldata context,
+        uint id,
         uint descriptor,
+        bytes calldata context,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openCommand(context, descriptor);
+        exec.logContext(id, descriptor);
 
-        while (Executions.more(exec)) {
+        while (exec.more()) {
             process(exec);
         }
 
-        // Normal loop exit already proves that neither source has unread bytes.
-        output = Encoder.finish(exec.output, exec.buffer);
-        credit = exec.budget;
-        exec.budget = 0;
+        output = exec.finish(id, descriptor);
+        credit = exec.drainBudget();
     }
 
     /// @notice Run a context through a callback exactly once.
@@ -112,19 +107,22 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// Invokes the callback even when both sources are empty, then requires both
     /// sources to be fully consumed. The callback defines required input and
     /// state shapes; parent boundaries and access control remain the caller's
-    /// responsibility.
-    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// responsibility. Logs selected context before processing and output on close.
+    /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed endpoint descriptor.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that processes the complete execution.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runCommandOnce(
-        bytes calldata context,
+        uint id,
         uint descriptor,
+        bytes calldata context,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openCommand(context, descriptor);
+        exec.logContext(id, descriptor);
         process(exec);
-        return Executions.close(exec);
+        return exec.close(id, descriptor);
     }
 }

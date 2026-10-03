@@ -36,7 +36,7 @@ abstract contract PreviousEncoderCheckBalance is CommandBase {
     /// @return Unchanged BALANCE blocks.
     /// @return Zero native budget credit.
     function checkBalance(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, checkBalanceOne);
+        return runCommand(id, descriptor, context, checkBalanceOne);
     }
 
     function checkBalanceOne(Execution memory exec) private pure {
@@ -52,7 +52,7 @@ abstract contract PreviousEncoderDebitAccount is CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.Amount, Specs.Balance, 0);
+        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     /// @notice Return the registered DEBIT_ACCOUNT command ID.
@@ -60,16 +60,16 @@ abstract contract PreviousEncoderDebitAccount is CommandBase, DebitAccountHook {
         return id;
     }
 
-    /// @notice Debit AMOUNT input blocks from the command account and output matching BALANCE blocks.
-    /// @param context Command context carrying the AMOUNT input stream.
+    /// @notice Debit ASSET_AMOUNT input blocks from the command account and output matching BALANCE blocks.
+    /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the debited amounts.
     /// @return Zero native budget credit.
     function debitAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, debitAccountOne);
+        return runCommand(id, descriptor, context, debitAccountOne);
     }
 
     function debitAccountOne(Execution memory exec) private {
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         debitAccount(exec.account, asset, amount);
         PreviousBalanceOutput.outputBalance(exec, asset, amount);
     }

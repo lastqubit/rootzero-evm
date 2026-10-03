@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
 import hre from "hardhat";
 import { deploy } from "./helpers/setup.js";
-import { encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder context benchmark", function () {
   this.timeout(120_000);
@@ -19,8 +19,8 @@ describe("Encoder context benchmark", function () {
           ? await payloadWriter.measureWrite(account, state, input, count, 3, memory)
           : await payload.measure(account, state, input, count, memory);
         const after = writer
-          ? await blocksWriter.measureWrite(account, encodeBytesBlock(state), encodeBytesBlock(input), count, 3, memory)
-          : await blocks.measure(account, encodeBytesBlock(state), encodeBytesBlock(input), count, memory);
+          ? await blocksWriter.measureWrite(account, encodeStateBlock(state), encodeInputBlock(input), count, 3, memory)
+          : await blocks.measure(account, encodeStateBlock(state), encodeInputBlock(input), count, memory);
         for (const result of [before, after]) {
           expect(writer ? ethers.dataSlice(result[2], 3, 3 + 56 + a + b) : result[2]).eq(expected);
         }

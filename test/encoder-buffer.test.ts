@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBytesBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock } from "./helpers/blocks.js";
 
 describe("Encoder growable buffers", function () {
   this.timeout(120_000);
@@ -13,8 +13,8 @@ describe("Encoder growable buffers", function () {
       const block = mode === 0 ? encodeBalanceBlock(account, 123n) : encodeContextBlock(account, state, input);
       const blockSize = ethers.dataLength(block);
       for (const count of [0, 1, 4]) for (const capacity of [0, 1, blockSize - 1, blockSize, blockSize * count]) {
-        const [, , cur, output] = await helper.measure(account, mode === 1 || mode === 2 ? encodeBytesBlock(state) : state,
-          mode === 1 || mode === 2 ? encodeBytesBlock(input) : input, count, capacity, mode, false);
+        const [, , cur, output] = await helper.measure(account, mode === 1 || mode === 2 ? encodeStateBlock(state) : state,
+          mode === 1 || mode === 2 ? encodeInputBlock(input) : input, count, capacity, mode, false);
         expect(output).eq(concat(...Array(count).fill(block)));
         expect(cur & 0xffffffffn).eq(BigInt(count * blockSize));
         expect((cur >> 32n) & 0xffffffffn).gte(BigInt(count * blockSize));

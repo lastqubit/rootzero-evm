@@ -15,9 +15,9 @@ using Executions for Execution;
 /// asset credit second. Accounts may differ. Any failure reverts the entire call.
 abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = port("portBook", Specs.AccountAmount, Specs.Empty, 0);
         annotateGroups(id, "#input as (debit, credit)");
     }
@@ -30,7 +30,7 @@ abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portBook(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(data, descriptor, portBookOne);
+        return runPort(id, descriptor, data, portBookOne);
     }
 
     function portBookOne(Execution memory exec) private {

@@ -12,7 +12,7 @@ contract TestErc20CursorHelper {
     function expectErc20Amount(uint cur, uint i) private view returns (address token, uint amount) {
         bytes32 asset;
         cur = cur.seek(i);
-        (asset, amount, cur) = Blocks.unpackAmount(cur);
+        (asset, amount, cur) = Blocks.unpackAssetAmount(cur);
         token = Assets.erc20Addr(asset);
     }
 
@@ -40,7 +40,7 @@ contract TestErc20CursorHelper {
     function testRequireErc20Amount(bytes calldata source) external view returns (address token, uint amount, uint i) {
         uint cur = Cursors.wrap(source);
         bytes32 asset;
-        (asset, amount, cur) = Blocks.unpackAmount(cur);
+        (asset, amount, cur) = Blocks.unpackAssetAmount(cur);
         token = Assets.erc20Addr(asset);
         i = cur.position() - Cursors.base(source);
     }

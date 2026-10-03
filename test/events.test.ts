@@ -173,34 +173,6 @@ describe("Activity event", () => {
   });
 });
 
-describe("Positioned Event", () => {
-  it("publishes its ABI and emits the resulting position with its action", async () => {
-    const positioned = await deploy("TestPositionedEvent");
-    const receipt = await positioned.deploymentTransaction()!.wait();
-    const abi = receipt!.logs
-      .map((log: any) => {
-        try {
-          return positioned.interface.parseLog(log);
-        } catch {
-          return null;
-        }
-      })
-      .find((log: any) => log?.name === "EventAbi");
-
-    expect(abi!.args.abi).to.equal(
-      "event Positioned(bytes32 indexed account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint codes)",
-    );
-
-    const account = ethers.zeroPadValue("0x01", 32);
-    const asset = ethers.zeroPadValue("0x02", 32);
-    const liability = ethers.zeroPadValue("0x03", 32);
-    const counterparty = ethers.zeroPadValue("0x04", 32);
-    await expect(positioned.emitPositioned(account, asset, 100n, liability, 25n, counterparty, 80n | (0x80000001n << 32n)))
-      .to.emit(positioned, "Positioned")
-      .withArgs(account, asset, 100n, liability, 25n, counterparty, 80n | (0x80000001n << 32n));
-  });
-});
-
 describe("Balance events", () => {
   const signatures = [
     "event Balance(bytes32 indexed account, bytes32 asset, uint balance)",

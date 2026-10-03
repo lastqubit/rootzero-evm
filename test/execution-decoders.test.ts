@@ -52,8 +52,9 @@ describe("Execution composite cursor decoders", () => {
       const prefix = ethers.concat(values.map(value => ethers.toBeHex(value, 32)));
       const data = "0x" + "ab".repeat(size);
       const two = kind === 2 || kind === 6;
-      const childKey = key(kind === 4 || kind === 5 ? "string" : "bytes");
-      const children = kind < 2 ? data : ethers.concat([encodeBlock(childKey, data), ...(two ? [encodeBlock(childKey, "0xcdef")] : [])]);
+      const childKey = key(kind === 4 || kind === 5 ? "string"
+        : kind === 2 || kind === 7 ? "input" : kind === 6 ? "state" : "bytes");
+      const children = kind < 2 ? data : ethers.concat([encodeBlock(childKey, data), ...(two ? [encodeBlock(key(kind === 6 ? "input" : "bytes"), "0xcdef")] : [])]);
       const block = encodeBlock(key(name), ethers.concat([prefix, children]));
       const source = ethers.concat([block, encodeBlock(key("bytes"), "0x12")]);
       const length = ethers.dataLength(source);

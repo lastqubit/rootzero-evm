@@ -33,7 +33,7 @@ library Sizes {
     uint constant B128 = Header + 4 * Word;
     /// @dev 8 header + 160 payload = 168 bytes total.
     uint constant B160 = Header + 5 * Word;
-    /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested BYTES header.
+    /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested INPUT header.
     uint constant Step = 2 * Header + 2 * Word;
     /// @dev Minimum SWAP size: header + asset + amount + LIST header, before hops.
     uint constant Swap = 2 * Header + 2 * Word;
@@ -68,12 +68,16 @@ library Sizes {
 
     /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
     uint constant Bootstrap = B96;
-    /// @dev AMOUNT block: 8 header + 32 asset + 32 amount = 72 bytes
-    uint constant Amount = B64;
+    /// @dev ASSET_AMOUNT block: 8 header + 32 asset + 32 amount = 72 bytes
+    uint constant AssetAmount = B64;
+    /// @dev AMOUNT block: 8 header + 32 amount = 40 bytes.
+    uint constant Amount = B32;
     /// @dev HOST_ASSET block: 8 header + 32 host + 32 asset = 72 bytes
     uint constant HostAsset = B64;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant HostAmount = B96;
+    /// @dev ROOTED block: 8-byte header plus account, deadline and value.
+    uint constant Rooted = B96;
     /// @dev TRANSACTION block: 8 header + 32 from + 32 to + 32 asset + 32 amount = 136 bytes
     uint constant Transaction = B128;
 }
@@ -107,6 +111,9 @@ library Specs {
 
     uint constant Empty = uint(bytes32(Keys.Empty));
     uint constant List = uint(bytes32(Keys.List)) | UnboundedHint128;
+    uint constant State = uint(bytes32(Keys.State)) | UnboundedHint128;
+    uint constant Input = uint(bytes32(Keys.Input)) | UnboundedHint128;
+    uint constant Output = uint(bytes32(Keys.Output)) | UnboundedHint128;
     uint constant Bytes = uint(bytes32(Keys.Bytes)) | UnboundedHint128;
     uint constant String = uint(bytes32(Keys.String)) | UnboundedHint128;
 
@@ -123,7 +130,9 @@ library Specs {
     uint constant PositionConstraints = uint(bytes32(Keys.PositionConstraints)) | Exact128;
     uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
-    uint constant Amount = uint(bytes32(Keys.Amount)) | Exact64;
+    uint constant AssetAmount = uint(bytes32(Keys.AssetAmount)) | Exact64;
+    uint constant Amount = uint(bytes32(Keys.Amount)) | Exact32;
+    uint constant Rooted = uint(bytes32(Keys.Rooted)) | Exact96;
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;

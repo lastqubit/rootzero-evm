@@ -24,9 +24,9 @@ abstract contract PayoutHook {
 /// Each BALANCE block is paired with one ACCOUNT block at the same position.
 abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, 0);
         annotateAction(id, Actions.Payout);
     }
@@ -38,7 +38,7 @@ abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function payout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, payoutOne);
+        return runCommand(id, descriptor, context, payoutOne);
     }
 
     function payoutOne(Execution memory exec) private {

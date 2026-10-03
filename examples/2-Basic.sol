@@ -8,7 +8,7 @@ pragma solidity ^0.8.33;
 // you only write the business logic specific to your app.
 //
 // DebitAccount:
-//   - opens an execution over the AMOUNT run in `input`
+//   - opens an execution over the ASSET_AMOUNT run in `input`
 //   - calls `debitAccount` for each block in that run
 //   - returns matching BALANCE blocks as the response
 
@@ -21,7 +21,7 @@ contract ExampleHost is Host, DebitAccount {
 
     constructor(uint rootzero) Host(rootzero) {}
 
-    // debitAccount is the hook DebitAccount calls for each AMOUNT block.
+    // debitAccount is the hook DebitAccount calls for each ASSET_AMOUNT block.
     // Implement this with whatever storage your app uses.
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         balances[account][asset] -= amount;

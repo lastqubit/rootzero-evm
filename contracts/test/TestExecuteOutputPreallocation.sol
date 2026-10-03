@@ -146,7 +146,7 @@ abstract contract PreallocatedDebitAccount is PreallocatedWriter, DebitAccount {
     /// @notice Execute the inherited debit-account command from an internal pipeline.
     /// @param account Account whose funds are debited.
     /// @param state Empty pipeline state required by the command schema.
-    /// @param inputCur AMOUNT block stream.
+    /// @param inputCur ASSET_AMOUNT block stream.
     /// @param value Native value assigned to the command; returned unused as credit.
     /// @return handled Always true because this helper executed the command.
     /// @return output BALANCE block stream matching the debited amounts.
@@ -158,16 +158,16 @@ abstract contract PreallocatedDebitAccount is PreallocatedWriter, DebitAccount {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Amount);
+        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.AssetAmount);
         uint cur;
         (cur, output) = initOutput(end - abs);
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = Execute.unpackAmount(abs);
+            (bytes32 asset, uint amount) = Execute.unpackAssetAmount(abs);
             debitAccount(account, asset, amount);
             cur = writeBalanceOutput(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Amount;
+                abs += Sizes.AssetAmount;
             }
         }
 

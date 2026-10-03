@@ -25,9 +25,9 @@ abstract contract BurnHook {
 /// Produces no output state.
 abstract contract Burn is CommandBase, BurnHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, 0);
         annotateAction(id, Actions.Burn);
     }
@@ -37,7 +37,7 @@ abstract contract Burn is CommandBase, BurnHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function burn(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, burnOne);
+        return runCommand(id, descriptor, context, burnOne);
     }
 
     function burnOne(Execution memory exec) private {

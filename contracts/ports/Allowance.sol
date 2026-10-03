@@ -10,26 +10,27 @@ using Executions for Execution;
 
 /// @title RequestAllowancePort
 /// @notice Port that lets trusted peers set their own asset allowances.
-/// Each AMOUNT block is scoped to the authenticated caller and applied through
+/// Each ASSET_AMOUNT block is scoped to the authenticated caller and applied through
 /// the shared authoritative allowance hook.
 abstract contract RequestAllowancePort is PortBase, AllowanceHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = port("portRequestAllowance", Specs.Amount, Specs.Empty, 0);
+        (id, descriptor) = port("portRequestAllowance", Specs.AssetAmount, Specs.Empty, 0);
     }
 
     /// @notice Set asset allowances for the calling peer.
-    /// @param data AMOUNT block stream supplied by the trusted peer.
+    /// @param data ASSET_AMOUNT block stream supplied by the trusted peer.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portRequestAllowance(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(data, descriptor, portRequestAllowanceOne);
+        return runPort(id, descriptor, data, portRequestAllowanceOne);
     }
 
     function portRequestAllowanceOne(Execution memory exec) private {
         uint peer = caller();
-        (bytes32 asset, uint amount) = exec.unpackAmount();
+        (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         allowance(peer, asset, amount);
     }
 }

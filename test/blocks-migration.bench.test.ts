@@ -18,7 +18,7 @@ describe("Remaining Blocks production caller migrations", function () {
       ["CreditAccount", true, Keys.Balance, [1, 7]],
       ["Cashout", true, Keys.Balance, [1, 7]],
       ["Settle", true, Keys.Position, [1, 7, 2, 3, 9]],
-      ["DebitAccount", false, Keys.Amount, [2, 7]],
+      ["DebitAccount", false, Keys.AssetAmount, [2, 7]],
       ["Bootstrap", false, Keys.Bootstrap, [2, 7, 3]],
       ["Authorize", false, Keys.Node, [13]],
     ] as const) {

@@ -13,10 +13,8 @@ contract TestOperation {
     ) external pure returns (bool) {
         uint descriptor = Executions.describe(
             Specs.Balance,
-            Specs.Amount,
-            Specs.Empty,
-            0
-        );
+            Specs.AssetAmount,
+            Specs.Empty);
         Execution memory exec;
         exec.openContext(descriptor, 0, context);
         return true;

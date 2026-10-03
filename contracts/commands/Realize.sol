@@ -28,9 +28,9 @@ abstract contract RealizeHook {
 /// @notice Realize each POSITION and return the hook's fulfilled result.
 abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
         (id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, 0);
         annotateAction(id, Actions.Realize);
     }
@@ -40,7 +40,7 @@ abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.
     function realize(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, realizeOne);
+        return runCommand(id, descriptor, context, realizeOne);
     }
 
     function realizeOne(Execution memory exec) private {

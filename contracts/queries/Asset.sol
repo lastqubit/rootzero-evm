@@ -33,7 +33,7 @@ abstract contract GetAssetCodes is QueryBase, GetAssetCodesHook {
     /// @param input Block stream of asset { bytes32 asset } entries.
     /// @return One codes { uint codes } block for each input entry, in the same order.
     function assetCodes(bytes calldata input) external view returns (bytes memory) {
-        return runQuery(input, descriptor, assetCodesOne);
+        return runQuery(descriptor, input, assetCodesOne);
     }
 
     function assetCodesOne(Execution memory exec) private view {

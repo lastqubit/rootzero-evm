@@ -2,8 +2,9 @@
 pragma solidity ^0.8.33;
 
 /// @title Flags
-/// @notice Shared endpoint behavior flags encoded in both endpoint IDs and descriptors.
-/// @dev Bit 6 is reserved for endpoint-defined custom behavior.
+/// @notice Public endpoint behavior flags encoded in endpoint IDs.
+/// @dev Bits 2-5 are unassigned; bit 6 is reserved for endpoint-defined behavior.
+/// Logging is selected by nonzero endpoint lane codes, independently of flags.
 library Flags {
     /// @dev Endpoint accepts nonzero native value.
     uint8 internal constant Funded = 1 << 0;

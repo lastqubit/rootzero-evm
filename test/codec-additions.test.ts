@@ -10,7 +10,7 @@ const layouts: [keyof typeof Keys, number][] = [
   ["Node", 1],
   ["Status", 1],
   ["Limits", 1],
-  ["Amount", 2],
+  ["AssetAmount", 2],
   ["AssetLiability", 2],
   ["AccountAsset", 2],
   ["HostAsset", 2],

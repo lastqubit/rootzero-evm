@@ -4,6 +4,8 @@ pragma solidity ^0.8.33;
 import {CommandBase, Execution, Executions, Flags, Specs} from "../Base.sol";
 import {NodeAccess} from "../../core/Access.sol";
 
+using Executions for Execution;
+
 /// @title AdminBase
 /// @notice Shared base for admin commands.
 abstract contract AdminBase is NodeAccess, CommandBase {
@@ -21,23 +23,29 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     /// enforces admin access before processing, including for empty batches.
     /// The callback shares the execution and must advance state or input on each
     /// iteration until both sources are consumed. No progress guard is enforced.
+    /// Callbacks must preserve bounded cursors; finalization does not recheck them.
     /// Source pairing and parent boundaries remain the callback's responsibility.
-    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// Logs selected context after authorization and output after processing.
+    /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed admin endpoint descriptor.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that consumes and processes one batch item.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runAdmin(
-        bytes calldata context,
+        uint id,
         uint descriptor,
+        bytes calldata context,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openAdminCommand(context, descriptor);
 
-        while (Executions.more(exec)) {
+        exec.logContext(id, descriptor);
+        while (exec.more()) {
             process(exec);
         }
 
-        return Executions.close(exec);
+        output = exec.finish(id, descriptor);
+        credit = exec.drainBudget();
     }
 }

@@ -32,7 +32,7 @@ abstract contract GetBalance is QueryBase, GetBalanceHook {
     /// @param input Block-stream input consisting of `accountAsset(account, asset)*`.
     /// @return Block-stream response containing one `accountAmount(account, asset, amount)` block per input block.
     function getBalance(bytes calldata input) external view returns (bytes memory) {
-        return runQuery(input, descriptor, getBalanceOne);
+        return runQuery(descriptor, input, getBalanceOne);
     }
 
     function getBalanceOne(Execution memory exec) private view {

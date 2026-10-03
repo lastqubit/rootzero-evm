@@ -22,9 +22,10 @@ abstract contract AllocateHook {
 /// position; the output is a matching CUSTODY state stream.
 abstract contract Allocate is CommandBase, AllocateHook {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("allocate", Specs.Balance, Specs.Node, Specs.Custody, 0);
+        (id, descriptor) = command("allocate", Specs.Balance, Specs.Node, Specs.Custody, 0);
     }
 
     /// @notice Allocate BALANCE state blocks to matching NODE input blocks.
@@ -32,7 +33,7 @@ abstract contract Allocate is CommandBase, AllocateHook {
     /// @return CUSTODY block stream matching the allocated balances.
     /// @return Zero native budget credit.
     function allocate(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, allocateOne);
+        return runCommand(id, descriptor, context, allocateOne);
     }
 
     function allocateOne(Execution memory exec) private {

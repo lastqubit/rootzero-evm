@@ -34,7 +34,7 @@ contract TestQuote {
 
     function execute(bytes calldata context, bool scalar) external pure returns (bytes memory) {
         Execution memory exec;
-        exec.openContext(Executions.describe(Specs.Position, Specs.Quote, Specs.Quote, 0), 0, context);
+        exec.openContext(Executions.describe(Specs.Position, Specs.Quote, Specs.Quote), 0, context);
         while (exec.more()) {
             exec.unpackPosition();
             if (scalar) {

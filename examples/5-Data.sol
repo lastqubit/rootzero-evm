@@ -8,7 +8,7 @@ pragma solidity ^0.8.33;
 //
 // This example defines a context-local input key for a block that carries a
 // fixed `host` ID followed by an
-// AMOUNT child block in its tail.
+// ASSET_AMOUNT child block in its tail.
 
 import {CommandBase, Execution, Executions, HostAmount, Sizes, Specs} from "../contracts/Commands.sol";
 
@@ -18,14 +18,15 @@ using Executions for Execution;
 using Blocks for uint;
 
 abstract contract MyCommand is CommandBase {
-    string private constant INPUT = "{ uint host, #amount as amount }";
+    string private constant INPUT = "{ uint host, #assetAmount as amount }";
     uint private immutable inputSpec;
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint32 size = uint32(32 + Sizes.Amount);
+        uint32 size = uint32(32 + Sizes.AssetAmount);
         inputSpec = schema(INPUT, 1, size);
-        (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Custody, 0);
+        (id, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Custody, 0);
     }
 
     // sendToHost is the virtual hook implementers override to move the asset.
@@ -37,14 +38,14 @@ abstract contract MyCommand is CommandBase {
         (uint abs, uint payloadCur) = exec.enter(inputSpec, 32);
 
         peer = uint(Blocks.read32(abs));
-        // The fixed-size outer schema leaves exactly one AMOUNT block.
-        (asset, amount,) = payloadCur.unpackAmount();
+        // The fixed-size outer schema leaves exactly one ASSET_AMOUNT block.
+        (asset, amount,) = payloadCur.unpackAssetAmount();
     }
 
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, myCommandOne);
+        return runCommand(id, descriptor, context, myCommandOne);
     }
 
     function myCommandOne(Execution memory exec) private {

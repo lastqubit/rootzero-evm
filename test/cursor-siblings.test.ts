@@ -22,8 +22,10 @@ describe("Cursor sibling unpacking", function () {
     for (const variant of ["Baseline", "Composed", "Checked", "Fused", "RangeReference"])
       describe(`${kind}/${variant}`, () => {
         let h: any;
+        const firstKey = kind === "Context" ? Keys.State : Keys.Input;
+        const lastKey = kind === "Context" ? Keys.Input : Keys.Bytes;
         const prefix = kind === "Context" ? ethers.toBeHex(ethers.MaxUint256, 32) : "0x";
-        const block = (a: string, b: string) => encodeBlock(Keys[kind], concat(prefix, encodeBlock(Keys.Bytes, a), encodeBlock(Keys.Bytes, b)));
+        const block = (a: string, b: string) => encodeBlock(Keys[kind], concat(prefix, encodeBlock(firstKey, a), encodeBlock(lastKey, b)));
         before(async () => { h = await deploy(`Cursor${kind}${variant}`); });
         it("returns separate exact payload cursors for empty, unaligned, and unequal siblings", async () => {
           for (const [x, y] of [[0, 0], [0, 33], [33, 0], [1, 31], [31, 1], [32, 33], [256, 129]]) {
@@ -49,13 +51,14 @@ describe("Cursor sibling unpacking", function () {
           expect(await errorOf(h.inspect(source, 2, 3))).eq(bounds);
         });
         it("rejects missing headers, malformed siblings, and extra children even when cursors are discarded", async () => {
-          const child = encodeBlock(Keys.Bytes, "0x");
+          const child = encodeBlock(firstKey, "0x");
+          const last = encodeBlock(lastKey, "0x");
           const bodies = [
             concat(prefix, encodeBlock(Keys.String, "0x"), child),
             concat(prefix, child, encodeBlock(Keys.String, "0x")),
-            concat(prefix, child), concat(prefix, child, Keys.Bytes, "0x000000"),
-            concat(prefix, child, child, "0xff"), concat(prefix, child, child, child),
-            concat(prefix, child, Keys.Bytes, "0xffffffff"),
+            concat(prefix, child), concat(prefix, child, lastKey, "0x000000"),
+            concat(prefix, child, last, "0xff"), concat(prefix, child, last, child),
+            concat(prefix, child, lastKey, "0xffffffff"),
           ];
           for (const body of bodies) {
             const value = encodeBlock(Keys[kind], body);
@@ -64,13 +67,13 @@ describe("Cursor sibling unpacking", function () {
           }
           if (kind === "Context")
             for (const length of [0, 1, 31]) {
-              const source = concat(Keys.Context, ethers.toBeHex(length, 4), prefix, child, child);
+              const source = concat(Keys.Context, ethers.toBeHex(length, 4), prefix, child, last);
               expect(await errorOf(h.inspect(source, size(source), 0))).eq(invalid);
             }
         });
         it("rejects a first child extending past its parent without narrowing its end", async () => {
           for (const length of [9, 256, 0xffffffff]) {
-            const value = encodeBlock(Keys[kind], concat(prefix, Keys.Bytes, ethers.toBeHex(length, 4), encodeBlock(Keys.Bytes, "0x")));
+            const value = encodeBlock(Keys[kind], concat(prefix, firstKey, ethers.toBeHex(length, 4), encodeBlock(lastKey, "0x")));
             const expected = variant === "Composed" ? bounds : invalid;
             expect(await errorOf(h.inspect(value, size(value), 0))).eq(expected);
             expect(await errorOf(h.values(value, size(value), 0))).eq(expected);

@@ -19,7 +19,7 @@ contract TestPositionConstraints {
 
     function checkExecution(bytes calldata input, Position memory position) external pure returns (PositionConstraints memory) {
         Execution memory exec;
-        exec.openInput(Executions.describe(Specs.Empty, Specs.PositionConstraints, Specs.Empty, 0), 0, input);
+        exec.openInput(Executions.describe(Specs.Empty, Specs.PositionConstraints, Specs.Empty), 0, input);
         exec.expectPositionConstraints(position);
         return exec.unpackPositionConstraints();
     }
@@ -50,7 +50,7 @@ contract TestPositionConstraints {
 
     function execute(bytes calldata context) external pure returns (bytes32[] memory values) {
         Execution memory exec;
-        exec.openContext(Executions.describe(Specs.Position, Specs.PositionConstraints, Specs.Empty, 0), 0, context);
+        exec.openContext(Executions.describe(Specs.Position, Specs.PositionConstraints, Specs.Empty), 0, context);
         values = new bytes32[](Blocks.length(exec.input) / Sizes.PositionConstraints * 4);
         uint i;
         while (exec.more()) {

@@ -33,7 +33,7 @@ abstract contract Cashout is CommandBase, CashoutHook, ActionAnnot {
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function cashout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(context, descriptor, cashoutOne);
+        return runCommand(id, descriptor, context, cashoutOne);
     }
 
     function cashoutOne(Execution memory exec) private {

@@ -31,7 +31,7 @@ pragma solidity ^0.8.33;
 // - a custom schema consisting of exactly one `many #x` item uses its custom
 //   key for the outer list block and contains repeated `#x` items directly,
 //   whether or not the item is wrapped in braces
-// - endpoint descriptor lanes identify their top-level block key directly
+// - endpoint lanes identify their top-level block key directly
 // - `portal` fields identify destination portal hosts. By convention the value
 //   is the portal implementation's host ID; core passes it through unchanged
 //   and hooks may validate or resolve it for their transport
@@ -61,7 +61,7 @@ pragma solidity ^0.8.33;
 // - `#bytes` is a reserved child block that stores raw bytes and has no body
 // - `#string` is a reserved child block that stores UTF-8 string bytes and has no body
 // - generic lists use the stable key derived from `#list`
-// - standard keys are derived from block aliases, e.g. bytes4(keccak256("#amount"))
+// - standard keys are derived from block aliases, e.g. bytes4(keccak256("#assetAmount"))
 // - custom keys are opaque bytes4 tags and only need to be unique in their
 //   active context; use a `#schema` annotation to publish their meaning
 // - see `docs/Schema.md` for the full working spec
@@ -107,6 +107,10 @@ library Schemas {
     string constant Bytes = "";
     string constant String = "";
     string constant List = "";
+    /// @dev Semantic containers for block streams; child schemas depend on the endpoint.
+    string constant State = "";
+    string constant Input = "";
+    string constant Output = "";
 
     // Live pipeline state
 
@@ -122,13 +126,14 @@ library Schemas {
     string constant Asset = "bytes32 asset";
     string constant Status = "uint code";
     string constant Codes = "uint codes";
+    string constant Amount = "uint amount";
 
     /// @dev High 128 bits: inclusive minimum; low 128 bits: inclusive maximum; context defines meaning.
     string constant Limits = "uint limits";
 
     // Two-word payloads
 
-    string constant Amount = "bytes32 asset, uint amount";
+    string constant AssetAmount = "bytes32 asset, uint amount";
     string constant AssetLiability = "bytes32 asset, bytes32 liability";
     string constant AccountAsset = "bytes32 account, bytes32 asset";
     string constant HostAsset = "uint host, bytes32 asset";
@@ -136,6 +141,8 @@ library Schemas {
     // Three-word payloads
 
     string constant BalanceConstraints = "bytes32 asset, uint min, uint max";
+    /// @dev Root pipeline context; value uses the emitting chain native-value unit.
+    string constant Rooted = "bytes32 account, uint deadline, uint value";
     string constant Bootstrap = "bytes32 asset, uint amount, uint budget";
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     string constant Allowance = "uint host, bytes32 asset, uint amount";
@@ -157,11 +164,11 @@ library Schemas {
     // Composite payloads
 
     string constant Swap = "bytes32 asset, uint amount, many #asset as hops";
-    string constant Step = "uint cmd, uint value, #bytes as input";
+    string constant Step = "uint cmd, uint value, #input";
     string constant Call = "uint target, uint value, #bytes as payload";
-    string constant Relay = "#bytes as input, #bytes as steps";
+    string constant Relay = "#input, #bytes as steps";
     string constant Dispatch = "uint portal, uint resources, #bytes as payload";
-    string constant Context = "bytes32 account, #bytes as state, #bytes as input";
+    string constant Context = "bytes32 account, #state, #input";
     string constant Recover = "uint handler, uint value, bytes32 key, #bytes as witness";
     string constant Annotation = "uint entity, #bytes as data";
 

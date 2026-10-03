@@ -2,10 +2,10 @@ import { expect } from "chai";
 import { commandId, deploy, getProvider, getSigner, hostId, portId } from "./helpers/setup.js";
 import {
   Keys,
-  endpointDescriptor,
+  endpointSpecs,
   concat,
   encodeContextBlock,
-  encodeAmountBlock,
+  encodeAssetAmountBlock,
   encodeAccountAmountBlock,
   encodeBalanceBlock,
   encodeNodeBlock,
@@ -55,7 +55,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portRequestAllowance(bytes)"),
-        endpointDescriptor({ input: Keys.Amount, inputHint: 64 }),
+        ...endpointSpecs({ input: Keys.AssetAmount, inputHint: 64 }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -66,7 +66,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portRequestAsset(bytes)"),
-        endpointDescriptor({ input: Keys.Amount, inputHint: 64 }),
+        ...endpointSpecs({ input: Keys.AssetAmount, inputHint: 64 }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -77,7 +77,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portCreditAccount(bytes)"),
-        endpointDescriptor({ input: Keys.AccountAmount, inputHint: 96 }),
+        ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -88,7 +88,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portDebitAccount(bytes)"),
-        endpointDescriptor({ input: Keys.AccountAmount, inputHint: 96 }),
+        ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -99,7 +99,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portPipePayable(bytes)"),
-        endpointDescriptor({ input: Keys.Context, inputHint: 512, funded: true }),
+        ...endpointSpecs({ input: Keys.Context, inputHint: 512, funded: true }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -110,7 +110,7 @@ describe("Port Entrypoints", () => {
       .withArgs(
         await host.host(),
         await port("portDispatchPayable(bytes)"),
-        endpointDescriptor({ input: Keys.Dispatch, inputHint: 256, funded: true }),
+        ...endpointSpecs({ input: Keys.Dispatch, inputHint: 256, funded: true }),
       );
     await expect(tx!)
       .to.emit(host, "Annotation")
@@ -150,7 +150,7 @@ describe("Port Entrypoints", () => {
 
     it("sets one allowance through the shared hook scoped to the caller host", async () => {
       const peer = await callerHost(1);
-      const tx = await callAs(1, method, encodeAmountBlock(asset, 123n));
+      const tx = await callAs(1, method, encodeAssetAmountBlock(asset, 123n));
       await expect(tx).to.emit(host, "PortRequestAllowanceCalled").withArgs(peer, asset, 123n);
     });
 
@@ -161,8 +161,8 @@ describe("Port Entrypoints", () => {
         1,
         method,
         concat(
-          encodeAmountBlock(asset, 123n),
-          encodeAmountBlock(asset2, 456n),
+          encodeAssetAmountBlock(asset, 123n),
+          encodeAssetAmountBlock(asset2, 456n),
         )
       );
       await expect(tx).to.emit(host, "PortRequestAllowanceCalled").withArgs(peer, asset, 123n);
@@ -171,17 +171,17 @@ describe("Port Entrypoints", () => {
 
     it("returns empty bytes and zero credit after processing amount blocks", async () => {
       const signer = await getSigner(1);
-      const result = await (host.connect(signer) as any)[method].staticCall(encodeAmountBlock(asset, 123n));
+      const result = await (host.connect(signer) as any)[method].staticCall(encodeAssetAmountBlock(asset, 123n));
       expect(result).to.deep.equal(["0x", 0n]);
     });
 
     it("reverts AccessDenied for the commander", async () => {
-      await expect(callAs(0, method, encodeAmountBlock(asset, 123n)))
+      await expect(callAs(0, method, encodeAssetAmountBlock(asset, 123n)))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
     it("reverts AccessDenied for an untrusted caller", async () => {
-      await expect(callAs(2, method, encodeAmountBlock(asset, 123n)))
+      await expect(callAs(2, method, encodeAssetAmountBlock(asset, 123n)))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
@@ -196,7 +196,7 @@ describe("Port Entrypoints", () => {
 
     it("passes the peer, supplied asset, and amount to the hook", async () => {
       const peer = await callerHost(1);
-      const tx = await callAs(1, method, encodeAmountBlock(suppliedAsset, 123n));
+      const tx = await callAs(1, method, encodeAssetAmountBlock(suppliedAsset, 123n));
 
       await expect(tx)
         .to.emit(host, "PortRequestAssetCalled")
@@ -207,8 +207,8 @@ describe("Port Entrypoints", () => {
       const peer = await callerHost(1);
       const secondAsset = ethers.zeroPadValue("0xd2", 32);
       const tx = await callAs(1, method, concat(
-        encodeAmountBlock(suppliedAsset, 123n),
-        encodeAmountBlock(secondAsset, 456n),
+        encodeAssetAmountBlock(suppliedAsset, 123n),
+        encodeAssetAmountBlock(secondAsset, 456n),
       ));
 
       await expect(tx).to.emit(host, "PortRequestAssetCalled").withArgs(peer, suppliedAsset, 123n);
@@ -218,18 +218,18 @@ describe("Port Entrypoints", () => {
     it("returns empty bytes and zero credit after processing requests", async () => {
       const signer = await getSigner(1);
       const result = await (host.connect(signer) as any)[method].staticCall(
-        encodeAmountBlock(suppliedAsset, 123n),
+        encodeAssetAmountBlock(suppliedAsset, 123n),
       );
       expect(result).to.deep.equal(["0x", 0n]);
     });
 
     it("reverts AccessDenied for the commander", async () => {
-      await expect(callAs(0, method, encodeAmountBlock(suppliedAsset, 123n)))
+      await expect(callAs(0, method, encodeAssetAmountBlock(suppliedAsset, 123n)))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
     it("reverts AccessDenied for an untrusted caller", async () => {
-      await expect(callAs(2, method, encodeAmountBlock(suppliedAsset, 123n)))
+      await expect(callAs(2, method, encodeAssetAmountBlock(suppliedAsset, 123n)))
         .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 

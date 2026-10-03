@@ -162,8 +162,8 @@ contract TestCursorHelper {
         return LegacyBlocks.createBalance(asset, amount);
     }
 
-    function testToAmountBlock(bytes32 asset, uint amount) external pure returns (bytes memory) {
-        return LegacyBlocks.createAmount(asset, amount);
+    function testToAssetAmountBlock(bytes32 asset, uint amount) external pure returns (bytes memory) {
+        return LegacyBlocks.createAssetAmount(asset, amount);
     }
 
     function testToBootstrapBlock(bytes32 asset, uint amount, uint budget) external pure returns (bytes memory) {
@@ -359,7 +359,7 @@ contract TestCursorHelper {
         return LegacyBlocks.peek(Cursors.base(source) + i, cur.limit());
     }
 
-    function testEnterAmount(bytes calldata source, uint spec)
+    function testEnterAssetAmount(bytes calldata source, uint spec)
         external
         pure
         returns (bytes32 asset, uint amount, uint i, uint end)
@@ -367,7 +367,7 @@ contract TestCursorHelper {
         uint cur;
         (cur,) = Blocks.unpack(Cursors.wrap(source), spec);
         end = cur.limit();
-        (asset, amount, cur) = Blocks.unpackAmount(cur);
+        (asset, amount, cur) = Blocks.unpackAssetAmount(cur);
         cur.expect(end);
         i = relativePosition(cur, source);
         end -= Cursors.base(source);

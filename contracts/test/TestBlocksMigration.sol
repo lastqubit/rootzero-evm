@@ -100,16 +100,16 @@ contract BlocksMigrationBaseline is MigrationHooks {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Cursors.bounds(input, Sizes.Amount);
+        (uint abs, uint end) = Cursors.bounds(input, Sizes.AssetAmount);
         uint cur;
         (output, cur) = Encoder.init(input.length);
 
         while (abs < end) {
-            (bytes32 asset, uint amount) = LegacyBlocks.unpackAmount(abs);
+            (bytes32 asset, uint amount) = LegacyBlocks.unpackAssetAmount(abs);
             debitAccount(account, asset, amount);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Amount;
+                abs += Sizes.AssetAmount;
             }
         }
 
@@ -304,7 +304,7 @@ contract BlocksMigrationCandidate is MigrationHooks {
         while (Cursors.more(inputCur)) {
             bytes32 asset;
             uint amount;
-            (asset, amount, inputCur) = Blocks.unpackAmount(inputCur);
+            (asset, amount, inputCur) = Blocks.unpackAssetAmount(inputCur);
             debitAccount(account, asset, amount);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
         }

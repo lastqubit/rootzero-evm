@@ -9,9 +9,9 @@ const block = (key: string, payload: string) => ethers.concat([
     ethers.id(`#${key}`).slice(0, 10), ethers.toBeHex(ethers.getBytes(payload).length, 4), payload,
 ]);
 const balance = block("balance", ethers.concat([asset, word(7n)]));
-const amount = block("amount", ethers.concat([asset, word(3n)]));
+const amount = block("assetAmount", ethers.concat([asset, word(3n)]));
 const context = (state: string, input: string) => block("context", ethers.concat([
-    word(1n), block("bytes", state), block("bytes", input),
+    word(1n), block("state", state), block("input", input),
 ]));
 
 describe("Command runner gas", function () {

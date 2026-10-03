@@ -12,9 +12,10 @@ using Blocks for uint;
 /// by the admin account.
 abstract contract Annotate is AdminBase {
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        (, descriptor) = command("annotate", Specs.Empty, Specs.Annotation, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("annotate", Specs.Empty, Specs.Annotation, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Publish each ANNOTATION block in the admin input.
@@ -24,7 +25,7 @@ abstract contract Annotate is AdminBase {
     function annotate(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(context, descriptor, annotateOne);
+        return runAdmin(id, descriptor, context, annotateOne);
     }
 
     function annotateOne(Execution memory exec) private {

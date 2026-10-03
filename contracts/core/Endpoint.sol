@@ -14,40 +14,22 @@ abstract contract EndpointBase is EndpointEvent, LabelAnnot, SchemaAnnot {
     /// @notice Create and publish endpoint metadata with a default label.
     /// @param id Endpoint node ID.
     /// @param name Default human-readable endpoint label.
-    /// @param state State block specification.
-    /// @param input Input block specification.
-    /// @param output Output block specification.
-    /// @param flags Packed endpoint behavior flags.
-    /// @return descriptor Packed endpoint lane metadata and flags.
+    /// @param state State lane: upper-half spec and lower-half codes.
+    /// @param input Input lane: upper-half spec and lower-half codes.
+    /// @param output Output lane: upper-half spec and lower-half codes.
+    /// @return descriptor Packed execution allocation hints and logging flags.
     function endpoint(
         uint id,
         string memory name,
         uint state,
         uint input,
-        uint output,
-        uint8 flags
-    ) internal returns (uint descriptor) {
-        descriptor = Executions.describe(state, input, output, flags);
-        return endpoint(id, name, descriptor);
-    }
-
-    /// @notice Publish already constructed endpoint metadata with a default label.
-    /// @param id Endpoint node ID.
-    /// @param name Default human-readable endpoint label.
-    /// @param descriptor Packed endpoint lane metadata and flags.
-    /// @return The published endpoint descriptor.
-    function endpoint(uint id, string memory name, uint descriptor) internal returns (uint) {
-        emit Endpoint(host, id, descriptor);
+        uint output) internal returns (uint descriptor) {
+        descriptor = Executions.describe(state, input, output);
+        emit Endpoint(host, id, state, input, output);
         label(id, bytes32(0), name);
-        return descriptor;
     }
 
-    /// @notice Finalize an execution output and return its encoded block stream.
-    /// @param exec Completed endpoint execution.
-    /// @return Encoded output block stream.
-    function close(Execution memory exec) internal pure returns (bytes memory) {
-        return Executions.finish(exec);
-    }
+
 }
 
 /// @title InputEndpointBase
