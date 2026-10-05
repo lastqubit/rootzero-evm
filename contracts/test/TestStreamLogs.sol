@@ -83,4 +83,26 @@ contract TestStreamLogs {
         else assembly ("memory-safe") { log1(add(data, 32), mload(data), id) }
         used = initial - gasleft();
     }
+    /// @dev Scalar log scratch must preserve live allocations and allocator state.
+    function emitScalars(uint codes, bytes32 subject, uint amount, bytes memory live) external {
+        bytes32 digest = keccak256(live);
+        uint beforeFree;
+        assembly ("memory-safe") {
+            beforeFree := mload(0x40)
+            mstore(beforeFree, not(0))
+            mstore(add(beforeFree, 32), not(0))
+            mstore(add(beforeFree, 64), not(0))
+            mstore(add(beforeFree, 96), not(0))
+        }
+        Logs.pipeline(subject, amount, codes);
+        Logs.balance(subject, amount, codes);
+        Logs.pipeline(subject, amount, codes);
+        uint afterFree;
+        uint zero;
+        assembly ("memory-safe") {
+            afterFree := mload(0x40)
+            zero := mload(0x60)
+        }
+        require(beforeFree == afterFree && zero == 0 && digest == keccak256(live));
+    }
 }
