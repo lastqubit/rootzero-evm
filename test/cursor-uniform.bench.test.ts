@@ -14,7 +14,9 @@ describe("Uniform unpacker consuming loops", function () {
       const key = kind === "64" || kind === "160" ? "0xdeadbeef" : Keys[kind as keyof typeof Keys];
       const values = kind === "160" ? [1, 2, 3, 4, 5] : kind === "Relay" ? [] : kind === "Context" ? [1] : [1, 2];
       const children = ["64", "160", "Balance"].includes(kind) ? [] : kind === "Step" ? ["0x" + "ab".repeat(33)] : ["0x", "0x" + "ab".repeat(33)];
-      const block = encodeBlock(key, concat(...values.map(v => ethers.toBeHex(v, 32)), ...children.map(c => encodeBlock(Keys.Bytes, c))));
+      const childKeys = kind === "Step" ? [Keys.Input]
+        : kind === "Relay" ? [Keys.Input, Keys.Bytes] : [Keys.State, Keys.Input];
+      const block = encodeBlock(key, concat(...values.map(v => ethers.toBeHex(v, 32)), ...children.map((c, i) => encodeBlock(childKeys[i], c))));
       const checksum = BigInt(values.reduce((a, v) => a + v, 0) + children.reduce((a, c) => a + ethers.getBytes(c).length, 0));
       const artifact = await hre.artifacts.readArtifact(`CursorUniform${kind}`);
       for (const count of [1, 32, 128]) {

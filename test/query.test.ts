@@ -33,22 +33,19 @@ describe("Queries", () => {
     return queryId(query.interface.getFunction(method)!.selector, query);
   }
 
-  it("emits Endpoint discovery events with query id as the second argument", async () => {
+  it("emits Endpoint discovery events with query ID and three lanes", async () => {
     const tx = query.deploymentTransaction();
     expect(tx).to.not.equal(null);
 
     await expect(tx!)
-      .to.emit(query, "Endpoint")
-      .withArgs(
-        await query.host(),
-        await qry("incrementQuery"),
+      .to.emitEndpoint(query).withArgs(await qry("incrementQuery"),
         ...endpointSpecs({ input: Value, inputHint: 32, output: ValueSpec }),
       );
     await expect(tx!)
-      .to.emit(query, "Annotation")
+      .to.emitAnnotation(query)
       .withArgs(await query.host(), encodeSchemaBlock(ValueSpec, "uint value"));
     await expect(tx!)
-      .to.emit(query, "Annotation")
+      .to.emitAnnotation(query)
       .withArgs(await qry("incrementQuery"), encodeLabelBlock(ethers.ZeroHash, "incrementQuery"));
   });
 
@@ -86,14 +83,11 @@ describe("Queries", () => {
       expect(tx).to.not.equal(null);
 
       await expect(tx!)
-        .to.emit(keyedQuery, "Endpoint")
-        .withArgs(
-          await keyedQuery.host(),
-          await keyedQry("keyedLocalQuery"),
+        .to.emitEndpoint(keyedQuery).withArgs(await keyedQry("keyedLocalQuery"),
           ...endpointSpecs({ input: KeyedValue, inputHint: 32, output: KeyedValueSpec }),
         );
       await expect(tx!)
-        .to.emit(keyedQuery, "Annotation")
+        .to.emitAnnotation(keyedQuery)
         .withArgs(await keyedQuery.host(), encodeSchemaBlock(KeyedValueSpec, "{ uint value }"));
     });
 
@@ -114,7 +108,7 @@ describe("Qualified schemas", () => {
     expect(tx).to.not.equal(null);
 
     await expect(tx!)
-      .to.emit(schema, "Annotation")
+      .to.emitAnnotation(schema)
       .withArgs(
         await schema.host(),
         encodeSchemaBlock(

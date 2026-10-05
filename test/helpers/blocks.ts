@@ -41,11 +41,12 @@ export function endpointDescriptor({
 // Expected discovery specs; runtime descriptor assertions use endpointDescriptor.
 export function endpointSpecs({
   state = Keys.Empty, stateHint = 0, input = Keys.Empty, inputHint = 0, output = Keys.Empty,
-}: Parameters<typeof endpointDescriptor>[0]): [bigint, bigint, bigint] {
+  stateCodes = 0n, inputCodes = 0n, outputCodes = 0n,
+}: Parameters<typeof endpointDescriptor>[0] & { stateCodes?: bigint; inputCodes?: bigint; outputCodes?: bigint }): [bigint, bigint, bigint] {
   const spec = (key: string, hint: number): bigint => {
     if (key === Keys.Empty) return 0n;
     const dynamic = new Map<string, number>([
-      [Keys.Swap, 72], [Keys.Step, 72], [Keys.Relay, 16], [Keys.Context, 48],
+      [Keys.Bootstrap, 40], [Keys.Swap, 72], [Keys.Step, 72], [Keys.Relay, 16], [Keys.Context, 48],
       [Keys.Recover, 104], [Keys.Dispatch, 72], [Keys.Call, 72],
       [Keys.Annotation, 40], [Keys.Label, 40],
     ]);
@@ -54,7 +55,7 @@ export function endpointSpecs({
   };
   const outputSpec = typeof output === "bigint" ? output : output === Keys.Empty
     ? 0n : (() => { throw new Error("non-empty output lanes require a spec"); })();
-  return [spec(state, stateHint), spec(input, inputHint), outputSpec];
+  return [spec(state, stateHint) | stateCodes, spec(input, inputHint) | inputCodes, outputSpec | outputCodes];
 }
 
 // Known block keys
@@ -80,7 +81,7 @@ export const Keys = {
   BalanceConstraints: blockKey("#balanceConstraints"),
   PositionConstraints: blockKey("#positionConstraints"),
   Quote: blockKey("#quote"),
-  Rooted: blockKey("#rooted"),
+  Pipeline: blockKey("#pipeline"),
   Bootstrap: blockKey("#bootstrap"),
   Allocation: blockKey("#allocation"),
   Allowance: blockKey("#allowance"),
@@ -98,6 +99,11 @@ export const Keys = {
   Recover: blockKey("#recover"),
   Relay: blockKey("#relay"),
   Dispatch: blockKey("#dispatch"),
+  AssetPreimage: blockKey("#assetPreimage"),
+  Envelope: blockKey("#envelope"),
+  Resolution: blockKey("#resolution"),
+  Introduction: blockKey("#introduction"),
+  Endpoint: blockKey("#endpoint"),
   Label: blockKey("#label"),
   Annotation: blockKey("#annotation"),
   Action: blockKey("#action"),
@@ -148,8 +154,8 @@ export function encodeAssetAmountBlock(asset: string, amount: bigint): string {
   return encodeBlock(Keys.AssetAmount, ethers.concat([pad32(asset), pad32(amount)]));
 }
 
-export function encodeBootstrapBlock(asset: string, amount: bigint, budget: bigint): string {
-  return encodeBlock(Keys.Bootstrap, ethers.concat([pad32(asset), pad32(amount), pad32(budget)]));
+export function encodeBootstrapBlock(budget: bigint, balances: string = "0x"): string {
+  return encodeBlock(Keys.Bootstrap, ethers.concat([pad32(budget), encodeListBlock(balances)]));
 }
 
 export function encodeBalanceBlock(asset: string, amount: bigint): string {
@@ -373,8 +379,8 @@ export function encodeBookPortPair(debit: string, credit: string): string {
   return concat(debit, credit);
 }
 
-export function encodeRootedBlock(account: string, deadline: bigint, value: bigint): string {
-  return encodeBlock(Keys.Rooted, concat(pad32(account), pad32(deadline), pad32(value)));
+export function encodePipelineBlock(account: string, budget: bigint): string {
+  return encodeBlock(Keys.Pipeline, concat(pad32(account), pad32(budget)));
 }
 
 export function encodeOutputBlock(data: string): string { return encodeBlock(Keys.Output, data); }

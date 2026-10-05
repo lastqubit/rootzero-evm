@@ -34,7 +34,7 @@ describe("Additional cursor codecs", () => {
   before(async () => { helper = await deploy("TestCodecAdditions"); });
 
   for (const [kind, [name, count]] of layouts.entries()) {
-    it(`creates ${name} with exact field order and zero padding`, async () => {
+    it(`creates ${name === "Bootstrap" ? "historical fixed Bootstrap" : name} with exact field order and zero padding`, async () => {
       const expected = encodeBlock(Keys[name], concat(...fields.slice(0, count)));
       expect(await helper.fixedBlock(kind, fields)).deep.eq([expected, ethers.ZeroHash]);
     });

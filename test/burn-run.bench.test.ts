@@ -1,8 +1,8 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { deploy, getProvider, getSigner, hostId } from "./helpers/setup.js";
-import { encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { commandId, deploy, getProvider, getSigner, hostId } from "./helpers/setup.js";
+import { encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock, encodeStateBlock } from "./helpers/blocks.js";
 
 describe("Burn loop versus CommandBase.runCommand", function () {
   this.timeout(180_000);
@@ -28,8 +28,14 @@ describe("Burn loop versus CommandBase.runCommand", function () {
       const before = await (await loop[method](context)).wait();
       const after = await (await run[method](context)).wait();
       const events = (receipt: any) => receipt.logs.map((log: any) => ({ topics: [...log.topics], data: log.data }));
-      expect(after.logs.length).to.equal(count);
-      expect(events(after)).to.deep.equal(events(before));
+      expect(after.logs.length).to.equal(count + 1);
+      for (const [receipt, host] of [[before, loop], [after, run]] as const) {
+        expect(receipt.logs[0].topics).deep.eq([]);
+        expect(receipt.logs[0].data).eq(ethers.concat([
+          ethers.toBeHex(await commandId(method, host), 32), encodeStateBlock(state),
+        ]));
+      }
+      expect(events(after).slice(1)).to.deep.equal(events(before).slice(1));
       rows.push({ count, loopGas: Number(before.gasUsed), runGas: Number(after.gasUsed),
         delta: Number(after.gasUsed - before.gasUsed) });
     }
@@ -41,7 +47,7 @@ describe("Burn loop versus CommandBase.runCommand", function () {
     mkdirSync(".npm-cache", { recursive: true });
     writeFileSync(".npm-cache/burn-run-results.json", JSON.stringify({
       compiler: "0.8.35", optimizerRuns: 200, evmTarget: "cancun",
-      measurement: "Transaction receipt gas; identical calldata, selector, access check, and event-only hook",
+      measurement: "Transaction receipt gas; identical calldata, selector, access check, lane log, and event-only hook",
       rows, runtimeBytes,
     }, null, 2) + "\n");
     console.table(rows);

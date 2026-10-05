@@ -8,6 +8,7 @@ import {Runtime} from "../core/Runtime.sol";
 
 contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
     mapping(bytes32 => uint) public balances;
+    event Debited(bytes32 asset, uint amount);
 
     constructor() Runtime(0) {}
 
@@ -18,6 +19,7 @@ contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
 
     function debitAccount(bytes32, bytes32 asset, uint amount) internal override {
         balances[asset] -= amount;
+        emit Debited(asset, amount);
     }
 
     function measureBalance(bytes memory state, bytes calldata input, uint value)

@@ -4,6 +4,8 @@ declare global {
   namespace Chai {
     interface Assertion {
       revertedWithCustomError(contract: BaseContract, errorName: string): Promise<void>;
+      emitEndpoint(contract: BaseContract): Promise<void> & {withArgs(...args: unknown[]): Promise<void>};
+      emitAnnotation(contract: BaseContract): Promise<void> & {withArgs(...args: unknown[]): Promise<void>};
       emit(
         contract: BaseContract,
         eventName: string,

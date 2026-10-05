@@ -21,9 +21,11 @@ describe("Uniform CursorBlocks unpacking contract", function () {
     const values = kind === "160" ? [1n, 2n, 3n, 4n, ethers.MaxUint256]
       : kind === "Relay" ? [] : kind === "Context" ? [ethers.MaxUint256] : [ethers.MaxUint256, 7n];
     const prefix = concat(...values.map(word));
+    const childKeys = kind === "Step" ? [Keys.Input]
+      : kind === "Relay" ? [Keys.Input, Keys.Bytes] : [Keys.State, Keys.Input];
     const make = (length: number) => {
       const children = fixed ? [] : kind === "Step" ? ["0x" + "ab".repeat(length)] : ["0x" + "ab".repeat(length), "0x123456"];
-      const block = encodeBlock(key, concat(prefix, ...children.map(c => encodeBlock(Keys.Bytes, c))));
+      const block = encodeBlock(key, concat(prefix, ...children.map((c, i) => encodeBlock(childKeys[i], c))));
       return { children, block };
     };
     before(async () => { helper = await deploy(`CursorUniform${kind}`); });
@@ -58,7 +60,8 @@ describe("Uniform CursorBlocks unpacking contract", function () {
     it("validates the complete shape when cursor returns are discarded", async () => {
       const cases = fixed ? [encodeBlock(key, "0x"), encodeBlock(key, concat(prefix, "0xff"))]
         : [encodeBlock(key, prefix), encodeBlock(key, concat(prefix, encodeBlock(Keys.String, "0x"))),
-          encodeBlock(key, concat(prefix, Keys.Bytes, "0xffffffff")),
+          encodeBlock(key, concat(prefix, childKeys[0], "0xffffffff")),
+          encodeBlock(key, concat(prefix, ...childKeys.map(() => encodeBlock(Keys.Bytes, "0x")))),
           encodeBlock(key, concat(prefix, encodeBlock(Keys.Bytes, "0x"), encodeBlock(Keys.Bytes, "0x"), "0xff"))];
       for (const source of cases) {
         expect(await errorOf(helper.inspect(source, size(source), 0, 0, key))).eq(invalid);

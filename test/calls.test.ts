@@ -128,7 +128,7 @@ describe("Command calls", () => {
       expect(await helper.testPipe.staticCall(account, states[0], steps, { value: 7n })).to.equal(7n);
       const tx = await helper.testPipe(account, states[0], steps, { value: 7n });
       const receipt = await tx.wait();
-      const calls = receipt!.logs.map((log) => helper.interface.parseLog(log)).filter((log) => log?.name === "ContextCalled");
+      const calls = receipt!.logs.filter((log) => log.topics.length).map((log) => helper.interface.parseLog(log)).filter((log) => log?.name === "ContextCalled");
       expect(calls.map((log) => [...log!.args])).to.deep.equal(
         outputs.map((input, i) => [encodeContextBlock(account, states[i], input), 7n]),
       );

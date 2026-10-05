@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, encodeActionBlock, endpointSpecs, exactSpec, Keys } from "./helpers/blocks.js";
+import { concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, endpointSpecs, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Repay command", () => {
@@ -19,9 +19,8 @@ describe("Repay command", () => {
     const id = await commandId("repay(bytes)", host);
 
     const positionSpec = exactSpec(Keys.Position, 160);
-    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      ...endpointSpecs({ state: Keys.Position, stateHint: 160, output: positionSpec }));
-    await expect(host.deploymentTransaction()).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(82n));
+    await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (82n << 32n), output: positionSpec }));
   });
 
   describe("calldata command", () => {

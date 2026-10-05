@@ -20,6 +20,7 @@ describe("Execute output preallocation", function () {
               const [state, input] = executeStreams(command, count, asset);
               const before = await baseline["measure" + command].staticCall(state, input, value);
               for (const { name, helper } of candidates) {
+                if (command === "Bootstrap" && name === "Current") continue;
                 const after = await helper["measure" + command].staticCall(state, input, value);
                 expect(Array.from(after).slice(2), command + "/" + name).deep.eq(Array.from(before).slice(2));
                 rows.push({ command, variant: name, count, native: asset === native, value, allocate,

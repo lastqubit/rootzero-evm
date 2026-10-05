@@ -72,7 +72,6 @@ import {HostAsset as CoreHostAsset} from "../Core.sol";
 import {AssetLiability as CoreAssetLiability} from "../Core.sol";
 import {Balances as CoreBalances} from "../Core.sol";
 import {Flags as EndpointFlags} from "../Endpoints.sol";
-import {ResolvedEvent, UnresolvedEvent, ActivityEvent} from "../Events.sol";
 import {
     AccessDenied,
     CashinHook as CoreCashinHook,

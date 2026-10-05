@@ -15,10 +15,12 @@ import {ValueOverflow} from "../utils/Errors.sol";
 /// Default composite writers copy complete children; their Wrap variants add child headers.
 /// Cursor parameters use stateCur/inputCur in both; function names and NatSpec
 /// specify whether their ranges include child headers.
+/// @dev Preserves the old return order with the current allocator prefix, so the
+/// benchmark isolates tuple ordering rather than memory ownership differences.
 library PreviousEncoderOrder {
     // General primitives: allocation, positions, sequential writes, and copies.
 
-    /// @dev Allocate an uninitialized uint32-sized result with zero padding.
+    /// @dev Allocate an uninitialized uint32-sized result with zero padding and an owned leading word.
     /// Use pos(value, 0) for the first write position. Fill all logical bytes before
     /// exposing the result. Only the rounded final allocation is retained: writes
     /// may interleave allocations if they stay inside that owned extent. Any
@@ -26,7 +28,7 @@ library PreviousEncoderOrder {
     function allocate(uint size) internal pure returns (bytes memory value) {
         if (size > type(uint32).max) revert ValueOverflow();
         assembly ("memory-safe") {
-            value := mload(0x40)
+            value := add(mload(0x40), 32)
             let abs := add(value, 32)
             mstore(value, size)
             mstore(add(abs, size), 0)
@@ -128,7 +130,7 @@ library PreviousEncoderOrder {
     /// written <= dst.length. Unwritten bytes must never be exposed or read.
     function grow(bytes memory dst, uint written, uint capacity) internal pure returns (bytes memory value) {
         assembly ("memory-safe") {
-            value := mload(0x40)
+            value := add(mload(0x40), 32)
             let padded := add(and(add(capacity, 31), not(31)), 32)
             mstore(value, padded)
             mstore(0x40, add(add(value, 32), padded))

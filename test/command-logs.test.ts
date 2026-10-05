@@ -1,3 +1,4 @@
+import { decodeEndpointLog } from "./helpers/endpoint-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
@@ -17,9 +18,8 @@ describe("Command runner logs", () => {
       const helper = await deploy("TestCommandLogs", ...codes, 255);
       expect((await helper.descriptor()) & ((1n << 160n) - 1n)).eq(1n | (BigInt(mask) << 1n));
       const deployment = await helper.deploymentTransaction().wait();
-      const endpoint = deployment.logs.map((l: any) => { try { return helper.interface.parseLog(l); } catch { return null; } })
-        .find((l: any) => l?.name === "Endpoint");
-      expect(Array.from(endpoint.args).slice(2)).deep.eq([
+      const endpoint = deployment.logs.map(decodeEndpointLog).find((value: bigint[] | null) => value !== null)!;
+      expect(endpoint.slice(1)).deep.eq([
         exactSpec(Keys.Balance, 64) | codes[0], exactSpec(Keys.AssetAmount, 64) | codes[1], exactSpec(Keys.Balance, 64) | codes[2],
       ]);
       const prefix = ethers.toBeHex(await helper.id(), 32);

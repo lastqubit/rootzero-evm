@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeNodeBlock, encodeStepBlock } from "./helpers/blocks.js";
+import { concat, encodeInputBlock, encodeNodeBlock, encodePipelineBlock, encodeStepBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("ExecuteAuthorize", () => {
@@ -17,18 +17,25 @@ describe("ExecuteAuthorize", () => {
     node = await hostId(await (await getSigner(4)).getAddress());
   });
 
+  async function expectPipelineInput(input: string) {
+    const receipt = await (await host.testPipe(admin, "0x", encodeStepBlock(command, 0n, input))).wait();
+    expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
+      { topics: [], data: ethers.concat([ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(admin, 0n)]) },
+      { topics: [], data: ethers.concat([ethers.toBeHex(command, 32), encodeInputBlock(input)]) },
+    ]);
+  }
+
   it("authorizes nodes without allowlisting the local command", async () => {
     const second = await hostId(await (await getSigner(5)).getAddress());
     expect(await host.isAuthorized(command)).to.equal(false);
-    await expect(host.testPipe(admin, "0x", encodeStepBlock(command, 0n,
-      concat(encodeNodeBlock(node), encodeNodeBlock(second)))))
-      .to.emit(host, "Node").withArgs(await host.host(), node, 16n | (0xa0000001n << 32n));
+    const input = concat(encodeNodeBlock(node), encodeNodeBlock(second));
+    await expectPipelineInput(input);
     expect(await host.isAuthorized(node)).to.equal(true);
     expect(await host.isAuthorized(second)).to.equal(true);
   });
 
   it("accepts an empty node stream", async () => {
-    await host.testPipe(admin, "0x", encodeStepBlock(command, 0n, "0x"));
+    await expectPipelineInput("0x");
   });
 
   it("rejects non-admin accounts", async () => {

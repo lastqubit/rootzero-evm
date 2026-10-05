@@ -7,7 +7,6 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Accounts} from "../utils/Accounts.sol";
 
 import {Host} from "../core/Host.sol";
-import {Allocate} from "../commands/Allocate.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {ExecuteCashout} from "../commands/Cashout.sol";
 import {Deposit, DepositPayable} from "../commands/Deposit.sol";
@@ -15,7 +14,6 @@ import {Withdraw} from "../commands/Withdraw.sol";
 import {ExecuteCreditAccount} from "../commands/Credit.sol";
 import {ExecuteDebitAccount} from "../commands/Debit.sol";
 import {Payout} from "../commands/Payout.sol";
-import {Provision, ProvisionPayable} from "../commands/Provision.sol";
 import {RelayPayable, RelayBalancePayable} from "../commands/Relay.sol";
 import {RecoverPayable} from "../commands/Recover.sol";
 import {Realize} from "../commands/Realize.sol";
@@ -26,7 +24,7 @@ import {BookPort} from "../ports/Book.sol";
 import {AllowAsset, DenyAsset} from "../commands/admin/Asset.sol";
 import {Allowance} from "../commands/admin/Allowance.sol";
 import {RevokeAllowance, RevokeAsset} from "../guards/Revoke.sol";
-import {HostAmount, Position} from "../core/Types.sol";
+import {Position} from "../core/Types.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
 import {Specs} from "../codec/Specs.sol";
@@ -36,7 +34,6 @@ using Executions for Execution;
 
 contract TestHost is
     Host,
-    Allocate,
     ExecuteBootstrap,
     ExecuteCashout,
     Deposit,
@@ -45,8 +42,6 @@ contract TestHost is
     ExecuteCreditAccount,
     ExecuteDebitAccount,
     Payout,
-    Provision,
-    ProvisionPayable,
     RelayPayable,
     RelayBalancePayable,
     RecoverPayable,
@@ -62,7 +57,6 @@ contract TestHost is
     RevokeAllowance,
     RevokeAsset
 {
-    event AllocateCalled(uint host_, bytes32 account, bytes32 asset, uint amount);
     event CashoutCalled(bytes32 account, uint amount);
     event DepositCalled(bytes32 account, bytes32 asset, uint amount);
     event DepositPayableCalled(bytes32 account, bytes32 asset, uint amount, uint remaining);
@@ -70,8 +64,6 @@ contract TestHost is
     event CreditToCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
     event DebitFromCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
     event PayoutCalled(bytes32 account, bytes32 to, bytes32 asset, uint amount);
-    event ProvisionCalled(uint host_, bytes32 account, bytes32 asset, uint amount);
-    event ProvisionPayableCalled(uint host_, bytes32 account, bytes32 asset, uint amount, uint remaining);
     event RelayCalled(uint portal, uint resources, bytes32 account, bytes context);
     event RecoverCalled(uint handler, uint value, bytes32 key, bytes witness, uint spent);
     event RealizeCalled(bytes32 account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty);
@@ -109,12 +101,8 @@ contract TestHost is
     uint public realizeFee;
     uint public realizeDebtFee;
 
-    constructor(uint rootzero) Host(rootzero) Allocate() Deposit() Provision() {
+    constructor(uint rootzero) Host(rootzero) Deposit() {
         schema("relay.input: uint portal, uint resources", 3, 64);
-    }
-
-    function allocate(bytes32 account, HostAmount memory custody) internal override {
-        emit AllocateCalled(custody.host, account, custody.asset, custody.amount);
     }
 
     function cashout(bytes32 account, uint amount) internal override {
@@ -182,20 +170,6 @@ contract TestHost is
         position.debt -= realizeDebtFee;
         position.counterparty = bytes32(0);
         return position;
-    }
-
-    function provision(bytes32 account, HostAmount memory custody) internal override {
-        emit ProvisionCalled(custody.host, account, custody.asset, custody.amount);
-    }
-
-    function provision(
-        bytes32 account,
-        HostAmount memory custody,
-        Execution memory funds
-    ) internal override {
-        emit ProvisionPayableCalled(
-            custody.host, account, custody.asset, funds.useValue(custody.amount), funds.budget
-        );
     }
 
     function relay(
@@ -317,4 +291,3 @@ contract TestHost is
     }
 
 }
-

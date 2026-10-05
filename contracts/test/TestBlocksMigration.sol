@@ -43,11 +43,11 @@ contract BlocksMigrationBaseline is MigrationHooks {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Cursors.bounds(input, Sizes.Bootstrap);
+        (uint abs, uint end) = Cursors.bounds(input, 104);
         // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
         uint cur;
         unchecked {
-            (output, cur) = Encoder.init(input.length / Sizes.Bootstrap * Sizes.Balance);
+            (output, cur) = Encoder.init(input.length / 104 * Sizes.Balance);
         }
         credit = value;
 
@@ -56,7 +56,7 @@ contract BlocksMigrationBaseline is MigrationHooks {
             credit = bootstrap(account, asset, amount, budget, credit);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Bootstrap;
+                abs += 104;
             }
         }
 
@@ -246,13 +246,15 @@ contract BlocksMigrationCandidate is MigrationHooks {
         // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
         uint cur;
         unchecked {
-            (output, cur) = Encoder.init(input.length / Sizes.Bootstrap * Sizes.Balance);
+            (output, cur) = Encoder.init(input.length / 104 * Sizes.Balance);
         }
         credit = value;
 
         while (Cursors.more(inputCur)) {
             bytes32 asset; uint amount; uint budget;
-            (asset, amount, budget, inputCur) = Blocks.unpackBootstrap(inputCur);
+            bytes32 amountWord; bytes32 budgetWord;
+            (asset, amountWord, budgetWord, inputCur) = Blocks.unpack96(inputCur, Keys.Bootstrap);
+            amount = uint(amountWord); budget = uint(budgetWord);
             credit = bootstrap(account, asset, amount, budget, credit);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
         }

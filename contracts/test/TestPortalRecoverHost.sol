@@ -47,6 +47,5 @@ contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
         uint resolvedCur = resolve(key, witnessCur);
         (bytes4 selector, address target) = enforcePort(handler);
         funds.rawCall(selector, target, value, resolvedCur, true);
-        emit Resolved(host, key);
     }
 }

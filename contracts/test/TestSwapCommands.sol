@@ -1,39 +1,36 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {CommandHost, Position} from "../Core.sol";
-import {SwapExactIn, SwapExactOut, SwapExactInHook, SwapExactOutHook} from "../Endpoints.sol";
-import {Blocks} from "../codec/Blocks.sol";
+import {CommandHost, Counterparty} from "../Core.sol";
+import {SwapExactIn, SwapExactOut} from "../Endpoints.sol";
 
 contract TestSwapCommands is CommandHost, SwapExactIn, SwapExactOut {
-    Position private result;
     uint public calls;
-    bool public reject;
+    uint private adjustment;
+    uint private rejectAt;
     error HookRejected();
-    event SwapCalled(bool exactIn, bytes32 asset, uint amount, bytes hops);
+    event SwapCalled(bool exactIn, bytes32 asset, uint amount, bytes32 next);
 
-    constructor(uint commander) CommandHost(commander) {}
+    constructor(uint commander, bytes32 account) CommandHost(commander) Counterparty(account) {}
 
-    function configure(Position calldata position, bool fail) external {
-        result = position;
-        reject = fail;
+    function configure(uint delta, uint failAt) external {
+        adjustment = delta;
+        rejectAt = failAt;
     }
 
-    function swapExactIn(bytes32 liability, uint debt, uint hopsCur)
-        internal override returns (Position memory)
+    function swapExactIn(bytes32 liability, uint debt, bytes32 asset)
+        internal override returns (uint amount)
     {
-        if (reject) revert HookRejected();
-        ++calls;
-        emit SwapCalled(true, liability, debt, Blocks.toBytes(hopsCur));
-        return result;
+        if (++calls == rejectAt) revert HookRejected();
+        emit SwapCalled(true, liability, debt, asset);
+        return debt - adjustment;
     }
 
-    function swapExactOut(bytes32 asset, uint amount, uint hopsCur)
-        internal override returns (Position memory)
+    function swapExactOut(bytes32 asset, uint amount, bytes32 liability)
+        internal override returns (uint debt)
     {
-        if (reject) revert HookRejected();
-        ++calls;
-        emit SwapCalled(false, asset, amount, Blocks.toBytes(hopsCur));
-        return result;
+        if (++calls == rejectAt) revert HookRejected();
+        emit SwapCalled(false, asset, amount, liability);
+        return amount + adjustment;
     }
 }

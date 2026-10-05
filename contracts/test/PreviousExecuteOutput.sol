@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
+import {Logs} from "../codec/Logs.sol";
+import {Keys} from "../codec/Keys.sol";
 // Frozen before adopting exact execute output allocation.
 import {CommandBase} from "../commands/Base.sol";
 import {DebitAccount} from "../commands/Debit.sol";
@@ -13,7 +17,7 @@ abstract contract PreviousOutputBootstrap is CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {
-        (id,) = command("bootstrap", Specs.Empty, Specs.Bootstrap, Specs.Balance, 0);
+        (id,) = command("bootstrap", Specs.Empty, HistoricalSpecs.Bootstrap, Specs.Balance, 0);
     }
 
     /// @notice Return the registered BOOTSTRAP command ID.
@@ -61,20 +65,20 @@ abstract contract PreviousOutputBootstrap is CommandBase, DebitAccountHook {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Bootstrap);
+        (uint abs, uint end) = Execute.bounds(inputCur, 104);
         // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
         uint cur;
         unchecked {
-            (output, cur) = Encoder.init((end - abs) / Sizes.Bootstrap * Sizes.Balance);
+            (output, cur) = Encoder.init((end - abs) / 104 * Sizes.Balance);
         }
         credit = value;
 
         while (abs < end) {
-            (bytes32 asset, uint amount, uint budget) = Execute.unpackBootstrap(abs);
+            (bytes32 asset, uint amount, uint budget) = LegacyBlocks.unpackBootstrap(abs);
             credit = bootstrap(account, asset, amount, budget, credit);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Bootstrap;
+                abs += 104;
             }
         }
 
@@ -113,6 +117,7 @@ abstract contract PreviousOutputDebitAccount is DebitAccount {
         }
 
         output = Encoder.finish(cur, output);
+        Logs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }

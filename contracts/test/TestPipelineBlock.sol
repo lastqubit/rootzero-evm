@@ -2,37 +2,37 @@
 pragma solidity ^0.8.33;
 import {Keys, Specs, Sizes, Headers, Schemas, Encoder, Blocks, Cursors, Execution, Executions, Logs} from "../Codec.sol";
 
-contract TestRooted {
-    function layoutRooted() external pure returns (bytes4, uint, uint, uint, string memory) {
-        return (Keys.Rooted, Specs.Rooted, Headers.Rooted, Sizes.Rooted, Schemas.Rooted);
+contract TestPipelineBlock {
+    function layoutPipeline() external pure returns (bytes4, uint, uint, uint, string memory) {
+        return (Keys.Pipeline, Specs.Pipeline, Headers.Pipeline, Sizes.Pipeline, Schemas.Pipeline);
     }
-    function encode(bytes32 account, uint deadline, uint value, uint capacity)
+    function encode(bytes32 account, uint budget, uint capacity)
         external pure returns (bytes memory created, bytes memory written, bytes memory output)
     {
-        created = Encoder.createRooted(account, deadline, value);
+        created = Encoder.createPipeline(account, budget);
         (bytes memory buffer, uint cur) = Encoder.init(capacity);
-        (buffer, cur) = Encoder.writeRooted(cur, buffer, account, deadline, value);
+        (buffer, cur) = Encoder.writePipeline(cur, buffer, account, budget);
         written = Encoder.finish(cur, buffer);
         Execution memory exec;
         (exec.buffer, exec.output) = Encoder.init(capacity);
-        Executions.outputRooted(exec, account, deadline, value);
+        Executions.outputPipeline(exec, account, budget);
         output = Executions.finish(exec);
     }
     function decode(bytes calldata source, uint size, bool execution)
-        external pure returns (bytes32 account, uint deadline, uint value, uint consumed, uint remaining)
+        external pure returns (bytes32 account, uint budget, uint consumed, uint remaining)
     {
         uint abs = Cursors.base(source);
         uint cur = Cursors.create(abs, abs + size);
         if (execution) {
             Execution memory exec;
             exec.input = cur;
-            (account, deadline, value) = Executions.unpackRooted(exec);
+            (account, budget) = Executions.unpackPipeline(exec);
             cur = exec.input;
-        } else (account, deadline, value, cur) = Blocks.unpackRooted(cur);
+        } else (account, budget, cur) = Blocks.unpackPipeline(cur);
         consumed = Cursors.position(cur) - abs;
         remaining = Cursors.length(cur);
     }
-    function emitRooted(uint codes, bytes32 account, uint deadline, uint value) external {
-        Logs.rooted(account, deadline, value, codes);
+    function emitPipeline(uint codes, bytes32 account, uint budget) external {
+        Logs.pipeline(account, budget, codes);
     }
 }

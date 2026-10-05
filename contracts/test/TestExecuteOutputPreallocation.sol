@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {LegacyBlocks} from "./LegacyBlocks.sol";
+import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
+import {Logs} from "../codec/Logs.sol";
 import {PreviousOutputBootstrap, PreviousOutputDebitAccount} from "./PreviousExecuteOutput.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {ExecuteDebitAccount, DebitAccount} from "../commands/Debit.sol";
@@ -72,7 +75,7 @@ abstract contract PreallocatedBootstrap is PreallocatedWriter, CommandBase, Debi
     uint private immutable id;
 
     constructor() {
-        (id,) = command("bootstrap", Specs.Empty, Specs.Bootstrap, Specs.Balance, 0);
+        (id,) = command("bootstrap", Specs.Empty, HistoricalSpecs.Bootstrap, Specs.Balance, 0);
     }
 
     /// @notice Return the registered BOOTSTRAP command ID.
@@ -120,20 +123,20 @@ abstract contract PreallocatedBootstrap is PreallocatedWriter, CommandBase, Debi
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Execute.bounds(inputCur, Sizes.Bootstrap);
+        (uint abs, uint end) = Execute.bounds(inputCur, 104);
         // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
         uint cur;
         unchecked {
-            (cur, output) = initOutput((end - abs) / Sizes.Bootstrap * Sizes.Balance);
+            (cur, output) = initOutput((end - abs) / 104 * Sizes.Balance);
         }
         credit = value;
 
         while (abs < end) {
-            (bytes32 asset, uint amount, uint budget) = Execute.unpackBootstrap(abs);
+            (bytes32 asset, uint amount, uint budget) = LegacyBlocks.unpackBootstrap(abs);
             credit = bootstrap(account, asset, amount, budget, credit);
             cur = writeBalanceOutput(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Bootstrap;
+                abs += 104;
             }
         }
 
@@ -172,6 +175,7 @@ abstract contract PreallocatedDebitAccount is PreallocatedWriter, DebitAccount {
         }
 
         output = finishOutput(cur, output);
+        Logs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }

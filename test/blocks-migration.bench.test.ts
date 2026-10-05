@@ -56,8 +56,9 @@ describe("Remaining Blocks production caller migrations", function () {
       const b = await next[method](...args);
       expect(Array.from(b).slice(1), method + "/" + size).deep.eq(Array.from(a).slice(1));
       // The small ACTION/COUNTERPARTY layout cost is accepted; bytes must still match.
+      // CONTEXT and ExecutionCost now reserve a leading log word; overhead is bounded.
       if (!["Action", "Counterparty"].includes(method)) {
-        expect(b[0] <= a[0], method + "/" + size + " gas regression: " + a[0] + " -> " + b[0]).eq(true);
+        expect(b[0] <= a[0] + (["context", "ExecutionCost"].includes(method) ? 16n : 0n), method + "/" + size + " gas regression: " + a[0] + " -> " + b[0]).eq(true);
       }
       rows.push({ caller: method, size, old: Number(a[0]), next: Number(b[0]), delta: Number(b[0] - a[0]) });
     }

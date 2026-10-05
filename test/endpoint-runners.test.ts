@@ -45,6 +45,25 @@ describe("Endpoint runner lifecycle", () => {
     await expect(helper.peer(bad,{value: 9n})).revertedWithCustomError(helper,"Rejected");
     await expect(helper.protect(bad)).revertedWithCustomError(helper,"Rejected");
   });
+  it("runs admin once with logging, budget settlement and complete consumption", async () => {
+    const helper = await deploy("TestEndpointRunners", 7);
+    const context = encodeContextBlock(account, state, input);
+    expect(Array.from(await helper.adminOnce.staticCall(context, { value: 9n }))).deep.eq([output, 8n]);
+    const receipt = await (await helper.adminOnce(context, { value: 9n })).wait();
+    const prefix = ethers.toBeHex(await helper.ids(6), 32);
+    expect(receipt.logs.length).eq(3);
+    expect(receipt.logs[0].data).eq(concat(prefix, encodeStateBlock(state), encodeInputBlock(input)));
+    expect(receipt.logs[2].data).eq(concat(prefix, encodeOutputBlock(output)));
+    await expect(helper.adminOnce(encodeContextBlock(ethers.ZeroHash, "0x", "0x")))
+      .revertedWithCustomError(helper, "Rejected");
+    // An authorized empty context still invokes the callback, which requires a balance.
+    await expect(helper.adminOnce(encodeContextBlock(account, "0x", "0x")))
+      .revertedWithCustomError(helper, "InvalidBlock");
+    await expect(helper.adminOnce(encodeContextBlock(account, concat(state, state), concat(input, input)), { value: 9n }))
+      .revertedWithCustomError(helper, "UnconsumedData");
+    await expect(helper.adminOnce(encodeContextBlock(account, state, encodeAssetAmountBlock(asset, 13n)), { value: 9n }))
+      .revertedWithCustomError(helper, "Rejected");
+  });
   it("rejects logging codes on view query registration", async () => {
     const helper = await deploy("TestQueryCodes", 0, 0);
     for (const codes of [[1,0],[0,1],[1,1]]) {

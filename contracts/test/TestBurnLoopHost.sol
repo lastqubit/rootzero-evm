@@ -4,27 +4,28 @@ pragma solidity ^0.8.33;
 import {Host} from "../core/Host.sol";
 import {CommandBase, Execution, Executions, Specs} from "../commands/Base.sol";
 import {BurnHook} from "../commands/Burn.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
+import {Codes} from "../utils/Codes.sol";
 
-/// @dev Frozen pre-run Burn implementation for comparison with TestBurnHost.
-abstract contract BurnLoopBaseline is CommandBase, BurnHook, ActionAnnot {
+/// @dev Pre-run Burn loop with current lane logging, for comparison with TestBurnHost.
+abstract contract BurnLoopBaseline is CommandBase, BurnHook {
     using Executions for Execution;
+    uint private constant STATE = Specs.Balance | Codes.AccountBurn;
+
     uint private immutable descriptor;
+    uint private immutable id;
 
     constructor() {
-        uint id;
-        (id, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        annotateAction(id, Actions.Burn);
+        (id, descriptor) = command("burn", STATE, Specs.Empty, Specs.Empty, 0);
     }
 
     function burn(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
+        exec.logContext(id, descriptor);
         while (exec.more()) {
             (bytes32 asset, uint amount) = exec.unpackBalance();
             burn(exec.account, asset, amount);
         }
-        return exec.close();
+        return exec.close(id, descriptor);
     }
 }
 

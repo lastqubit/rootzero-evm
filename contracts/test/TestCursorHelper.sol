@@ -232,7 +232,7 @@ contract TestCursorHelper {
         bytes calldata source
     ) external pure returns (bytes32 asset, uint amount, uint budget) {
         uint cur = Cursors.wrap(source);
-        (asset, amount, budget,) = Blocks.unpackBootstrap(cur);
+        (asset, amount, budget) = LegacyBlocks.unpackBootstrap(uint32(cur));
     }
 
     function testUnpackPosition(

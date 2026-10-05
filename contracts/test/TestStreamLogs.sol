@@ -6,6 +6,34 @@ import {Logs, Encoder} from "../Codec.sol";
 contract TestStreamLogs {
     event Ordinary(uint value);
 
+    function emitMemoryWrap(uint prefix, bytes4 key, bytes memory source, bool sharedEmpty)
+        external returns (bytes memory data)
+    {
+        if (!sharedEmpty) data = source;
+        bytes32 beforeHash = keccak256(data);
+        uint length = data.length;
+        uint pointer;
+        uint zero;
+        assembly ("memory-safe") {
+            pointer := mload(0x40)
+            zero := mload(0x60)
+            // Dirty scratch must not leak into either emitted record.
+            mstore(pointer, not(0))
+            mstore(add(pointer, 32), not(0))
+        }
+        Logs.memCopyWrap(prefix, key, data);
+        Logs.memCopyWrap(prefix, key, data);
+        uint afterPointer;
+        uint afterZero;
+        assembly ("memory-safe") {
+            afterPointer := mload(0x40)
+            afterZero := mload(0x60)
+        }
+        require(pointer == afterPointer && zero == afterZero, "memory changed");
+        require(data.length == length && keccak256(data) == beforeHash, "data changed");
+        emit Ordinary(7);
+    }
+
     function emitStream(bytes32 id, bytes memory source, uint count, bool sharedEmpty, uint offset, uint size)
         external returns (bytes memory data)
     {

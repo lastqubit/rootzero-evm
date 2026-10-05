@@ -1,3 +1,4 @@
+import { expectResolution, HostResolved, HostUnresolved } from "./helpers/resolution-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getProvider, getSigner, hostId, portId } from "./helpers/setup.js";
@@ -5,6 +6,7 @@ import {
   encodeDispatchBlock,
   encodeContextBlock,
   encodeNodeBlock,
+  encodePipelineBlock,
   encodeRecoverBlock,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
@@ -87,7 +89,11 @@ describe("Portal", () => {
     const tx = await portal.testForward(key, message, 7n, { value: 7n, gasLimit: 500_000 });
     await expect(tx).to.emit(commander, "CashinCalled").withArgs(await portal.getAdminAccount(), 7n);
     const receipt = await tx.wait();
-    expect(receipt!.logs).to.have.length(1);
+    expect(receipt!.logs).to.have.length(2);
+    expect(receipt!.logs[0].topics).deep.eq([]);
+    expect(receipt!.logs[0].data).eq(ethers.concat([
+      ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(await portal.getAdminAccount(), 7n),
+    ]));
 
     const after = BigInt(await provider.send("eth_getBalance", [commanderAddr, "latest"]));
     expect(after).to.equal(before + 7n);
@@ -120,7 +126,7 @@ describe("Portal", () => {
 
     const tx = await portal.testForward(key, message, 0n);
 
-    await expect(tx).to.emit(portal, "Unresolved").withArgs(await portal.host(), key, digest);
+    await expectResolution(tx, portal, key, digest, HostUnresolved);
   });
 
   it("recovers a matching witness through the supplied handler and resolves the key", async () => {
@@ -149,7 +155,7 @@ describe("Portal", () => {
     const tx = await recoverPortal(commander, portal, input, 5n);
 
     await expect(tx).to.emit(recoveryTarget, "PortDispatchCalled").withArgs(0n, "0xcafe", 9n, 5n);
-    await expect(tx).to.emit(portal, "Resolved").withArgs(await portal.host(), key);
+    await expectResolution(tx, portal, key, ethers.keccak256(witness), HostResolved);
 
     const second = encodeRecoverBlock(recoveryHandler, 0n, key, witness);
     await expect(recoverPortal(commander, portal, second))
@@ -175,8 +181,7 @@ describe("Portal", () => {
       .to.deep.equal(["0x", 2n]);
     const tx = await recoverPortal(commander, portal, input, 7n);
     await expect(tx).to.emit(target, "CashinCalled").withArgs(ethers.zeroPadValue("0xab", 32), 5n);
-    await expect(tx)
-      .to.emit(portal, "Resolved").withArgs(await portal.host(), key);
+    await expectResolution(tx, portal, key, ethers.keccak256(witness), HostResolved);
   });
 
   it("restores the unresolved witness when the recovery handler fails", async () => {
@@ -210,8 +215,27 @@ describe("Portal", () => {
       retryData,
       { gasLimit: 5_000_000n },
     );
+    await expectResolution(retry, portal, key, ethers.keccak256(witness), HostResolved);
     await expect(retry).to.emit(recoveryTarget, "PortDispatchCalled")
       .withArgs(0n, "0xdead", 4n, 0n);
+  });
+
+  it("distinguishes successive digests stored under the same key", async () => {
+    const target = await deployPortHost();
+    const handler = await dispatchPort(target);
+    const { portal, commander } = await deployPortal();
+    await authorizePortal(commander, portal, handler);
+    await authorize(target, await portal.host());
+    const key = ethers.id("reused key");
+    const first = encodeDispatchBlock(0n, 0n, "0x11");
+    const second = encodeDispatchBlock(0n, 0n, "0x22");
+    for (const witness of [first, second]) {
+      await expectResolution(portal.testForward(key, witness, 0n), portal, key, ethers.keccak256(witness), HostUnresolved);
+    }
+    await expect(recoverPortal(commander, portal, encodeRecoverBlock(handler, 0n, key, first)))
+      .revertedWithCustomError(portal, "BadWitness");
+    await expectResolution(recoverPortal(commander, portal, encodeRecoverBlock(handler, 0n, key, second)),
+      portal, key, ethers.keccak256(second), HostResolved);
   });
 
   it("rejects recovery when the witness does not match the recorded digest", async () => {

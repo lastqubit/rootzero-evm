@@ -6,7 +6,7 @@ import {Encoder as E} from "../codec/Encoder.sol";
 import {Keys} from "../codec/Keys.sol";
 import {Cursors} from "../utils/Cursors.sol";
 
-/// @dev Benchmark-only candidate. true selects a validated complete BYTES child.
+/// @dev Benchmark-only candidate. true selects a validated complete STATE/INPUT child.
 /// Same size, bounds, non-overlap, and scratch preconditions as Encoder.
 library FlagBlockEncoder {
     function createContext(bytes32 account, bytes memory state, bool stateBlock, bytes memory input, bool inputBlock) internal pure returns (bytes memory value)  {
@@ -44,9 +44,9 @@ library FlagBlockEncoder {
         unchecked {
             abs = E.writeHeader(abs, Keys.Context, size - 8);
             abs = E.write32(abs, account);
-            abs = stateBlock ? E.copy(abs, uint32(state), stateSize) : E.wrap(abs, Keys.Bytes, uint32(state), stateSize);
+            abs = stateBlock ? E.copy(abs, uint32(state), stateSize) : E.wrap(abs, Keys.State, uint32(state), stateSize);
             if (inputBlock) E.copy(abs, uint32(input), inputSize);
-            else E.wrap(abs, Keys.Bytes, uint32(input), inputSize);
+            else E.wrap(abs, Keys.Input, uint32(input), inputSize);
         }
     }
     function writeContext(bytes memory dst, uint offset, bytes32 account, uint state, bool stateBlock, uint input, bool inputBlock) internal pure  {
@@ -56,9 +56,9 @@ library FlagBlockEncoder {
         unchecked {
             abs = E.writeHeader(abs, Keys.Context, 32 + (stateBlock ? 0 : 8) + (inputBlock ? 0 : 8) + stateSize + inputSize);
             abs = E.write32(abs, account);
-            abs = stateBlock ? E.copy(abs, uint32(state), stateSize) : E.wrap(abs, Keys.Bytes, uint32(state), stateSize);
+            abs = stateBlock ? E.copy(abs, uint32(state), stateSize) : E.wrap(abs, Keys.State, uint32(state), stateSize);
             if (inputBlock) E.copy(abs, uint32(input), inputSize);
-            else E.wrap(abs, Keys.Bytes, uint32(input), inputSize);
+            else E.wrap(abs, Keys.Input, uint32(input), inputSize);
         }
     }
 }
@@ -184,7 +184,7 @@ contract TestEncoderFlagsBaseline1 is FlagEncoderHarness {
             unchecked { abs = E.writeHeader(abs, Keys.Context, size - 8); }
         }
         abs = E.write32(abs, account);
-        abs = E.wrap(abs, Keys.Bytes, uint32(state), stateSize);
+        abs = E.wrap(abs, Keys.State, uint32(state), stateSize);
         E.copy(abs, uint32(input), inputSize);
     }
 }
@@ -219,7 +219,7 @@ contract TestEncoderFlagsBaseline2 is FlagEncoderHarness {
         }
         abs = E.write32(abs, account);
         abs = E.copy(abs, state, stateSize);
-        E.wrap(abs, Keys.Bytes, input, inputSize);
+        E.wrap(abs, Keys.Input, input, inputSize);
     }
     function encode(bytes memory dst, bool writer, bytes32 account, uint state, bool, uint input, bool) internal pure override returns (bytes memory value) {
         uint stateSize = E.length(state);
@@ -237,7 +237,7 @@ contract TestEncoderFlagsBaseline2 is FlagEncoderHarness {
         }
         abs = E.write32(abs, account);
         abs = E.copy(abs, uint32(state), stateSize);
-        E.wrap(abs, Keys.Bytes, uint32(input), inputSize);
+        E.wrap(abs, Keys.Input, uint32(input), inputSize);
     }
 }
 contract TestEncoderFlagsLiteral3 is FlagEncoderHarness {

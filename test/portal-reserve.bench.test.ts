@@ -1,3 +1,4 @@
+import { decodeResolutionLog, HostUnresolved } from "./helpers/resolution-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -39,9 +40,9 @@ describe("Portal explicit reserve benchmark", function () {
           const remaining = Number(last.gas) - Number(last.gasCost);
           const saved = snapshot - requested;
           expect(remaining).to.be.greaterThan(5000);
-          const event = receipt.logs.map((log: any) => portal.interface.parseLog(log))
-            .find((log: any) => log?.name === "Unresolved");
-          expect(event?.args.digest).to.equal(ethers.keccak256(message));
+          const event = receipt.logs.map(decodeResolutionLog)
+            .find((log: any) => log?.codes === HostUnresolved);
+          expect(event?.digest).to.equal(ethers.keccak256(message));
           results.push({ bytes, priorMemory, value: Number(value), reserve: saved,
             requiredReserve: saved - remaining, gasAfterPipe: Number(after.gas),
             gasAfterReturn: remaining });

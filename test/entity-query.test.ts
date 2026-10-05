@@ -14,11 +14,10 @@ describe("GetEntityCodes", () => {
 
   it("publishes its entity input, codes output, and default label", async () => {
     const id = await queryId("entityCodes(bytes)", query);
-    await expect(query.deploymentTransaction()).to.emit(query, "Endpoint").withArgs(
-      await query.host(), id,
+    await expect(query.deploymentTransaction()).to.emitEndpoint(query).withArgs(id,
       ...endpointSpecs({ input: Keys.Entity, inputHint: 32, output: exactSpec(Keys.Codes, 32) }),
     );
-    await expect(query.deploymentTransaction()).to.emit(query, "Annotation")
+    await expect(query.deploymentTransaction()).to.emitAnnotation(query)
       .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "entityCodes"));
   });
 

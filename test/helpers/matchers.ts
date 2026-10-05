@@ -1,3 +1,6 @@
+import { decodeEndpointLog } from "./endpoint-logs.js";
+import { decodeAnnotationLog } from "./annotation-logs.js";
+import { commandId } from "./setup.js";
 import * as chai from "chai";
 import type { BaseContract, ContractTransactionResponse, Log } from "ethers";
 import { id } from "ethers";
@@ -42,62 +45,42 @@ function parseLog(contract: BaseContract, log: Log) {
   }
 }
 
-function argsMatch(parsed: ReturnType<typeof parseLog>, args: unknown[]): boolean {
-  if (!parsed) return false;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === undefined) continue;
-    const actual = parsed.args[i];
-    if (actual?.toString() !== (args[i] as { toString(): string }).toString()) return false;
-  }
-  return true;
-}
+type LogArgs = readonly unknown[];
+type DecodeLog = (log: Log) => readonly LogArgs[];
+type Transaction = ContractTransactionResponse | Promise<ContractTransactionResponse>;
 
-function makeEmitPromise(
-  txPromise: Promise<ContractTransactionResponse> | ContractTransactionResponse,
+function makeLogPromise(
+  transaction: Transaction,
   contract: BaseContract,
-  eventName: string
+  label: string,
+  decoder: () => DecodeLog | Promise<DecodeLog>,
 ): Promise<void> & { withArgs(...args: unknown[]): Promise<void> } {
-  const guardedTxPromise = Promise.resolve(txPromise);
-  guardedTxPromise.catch(() => {});
+  const pending = Promise.resolve(transaction);
+  pending.catch(() => {});
 
-  const check = async (args?: unknown[]) => {
-    const tx = await guardedTxPromise;
-    const receipt = await tx.wait();
-    if (!receipt) throw new chai.AssertionError(`No receipt returned for '${eventName}'`);
-
-    if (args && args.length > 0) {
-      // Find a log matching name AND args
-      const found = receipt.logs.some((log) => {
-        const parsed = parseLog(contract, log);
-        return parsed?.name === eventName && argsMatch(parsed, args);
-      });
-      if (!found) {
-        // Find any log with matching name for a better error message
-        const nameMatch = receipt.logs.find((log) => parseLog(contract, log)?.name === eventName);
-        if (nameMatch) {
-          const parsed = parseLog(contract, nameMatch)!;
-          const actualArgs = Array.from({ length: args.length }, (_, i) => parsed.args[i]?.toString());
-          throw new chai.AssertionError(
-            `Event '${eventName}' emitted but args don't match.\n  Expected: [${args.map(String)}]\n  Got:      [${actualArgs}]`
-          );
-        }
-        throw new chai.AssertionError(`Expected event '${eventName}' to be emitted but it wasn't`);
-      }
-    } else {
-      const found = receipt.logs.some((log) => parseLog(contract, log)?.name === eventName);
-      if (!found) throw new chai.AssertionError(`Expected event '${eventName}' to be emitted but it wasn't`);
-    }
+  const check = async (args: unknown[] = []) => {
+    const receipt = await (await pending).wait();
+    if (!receipt) throw new chai.AssertionError(`No receipt returned for '${label}'`);
+    const address = (await contract.getAddress()).toLowerCase();
+    const decode = await decoder();
+    const records = receipt.logs
+      .filter(log => log.address.toLowerCase() === address)
+      .flatMap(log => decode(log));
+    if (records.some(values => args.every((arg, i) =>
+      arg === undefined || String(values[i]) === String(arg)))) return;
+    throw new chai.AssertionError(
+      `Expected '${label}' with args [${args.map(String)}]; found ${records.length} matching records`
+      + (records.length ? `: ${records.map(values => "[" + values.map(String).join(", ") + "]").join(", ")}` : ""),
+    );
   };
 
-  const thenable = {
+  return {
     withArgs: (...args: unknown[]) => check(args),
     then: (onFulfilled?: ((value: void) => unknown) | null, onRejected?: ((reason: unknown) => unknown) | null) =>
       check().then(onFulfilled, onRejected),
     catch: (onRejected?: ((reason: unknown) => unknown) | null) => check().catch(onRejected),
     finally: (onFinally?: (() => void) | null) => check().finally(onFinally ?? undefined),
-  };
-
-  return thenable as Promise<void> & { withArgs(...args: unknown[]): Promise<void> };
+  } as Promise<void> & { withArgs(...args: unknown[]): Promise<void> };
 }
 
 chai.use((chaiLib, utils) => {
@@ -135,13 +118,32 @@ chai.use((chaiLib, utils) => {
   );
 
   chaiLib.Assertion.addMethod(
+    "emitEndpoint",
+    function (this: object, contract: BaseContract) {
+      return makeLogPromise(utils.flag(this, "object"), contract, "ENDPOINT", () => log => {
+        const values = decodeEndpointLog(log);
+        return values ? [values] : [];
+      });
+    }
+  );
+
+  chaiLib.Assertion.addMethod(
+    "emitAnnotation",
+    function (this: object, contract: BaseContract) {
+      return makeLogPromise(utils.flag(this, "object"), contract, "ANNOTATION", async () => {
+        const endpoint = await commandId("annotate(bytes)", contract, 2n);
+        return log => decodeAnnotationLog(log, endpoint).map(value => [value.entity, value.data]);
+      });
+    }
+  );
+
+  chaiLib.Assertion.addMethod(
     "emit",
     function (this: object, contract: BaseContract, eventName: string) {
-      const val: Promise<ContractTransactionResponse> | ContractTransactionResponse =
-        utils.flag(this, "object");
-      return makeEmitPromise(val, contract, eventName);
+      return makeLogPromise(utils.flag(this, "object"), contract, eventName, () => log => {
+        const parsed = parseLog(contract, log);
+        return parsed?.name === eventName ? [parsed.args] : [];
+      });
     }
   );
 });
-
-

@@ -363,10 +363,10 @@ describe("Cursors", () => {
       expect(data).to.equal(encodeAssetAmountBlock(asset, amount));
     });
 
-    it("bootstrap returns a valid encoded BOOTSTRAP block", async () => {
+    it("historical bootstrap retains its fixed three-word encoding", async () => {
       const budget = 19n;
       const data: string = await helper.testToBootstrapBlock(asset, amount, budget);
-      expect(data).to.equal(encodeBootstrapBlock(asset, amount, budget));
+      expect(data).to.equal(encodeBlock(Keys.Bootstrap, concat(pad32(asset), pad32(amount), pad32(budget))));
       expect(await blocksHelper.unpackBootstrap(data)).to.deep.equal([asset, amount, budget]);
       expect(await helper.testUnpackBootstrap(data)).to.deep.equal([asset, amount, budget]);
     });
@@ -664,7 +664,7 @@ describe("Cursors", () => {
 
     it("publishes an action annotation", async () => {
       await expect(blocksHelper.publishAction(123n, 4n))
-        .to.emit(blocksHelper, "Annotation")
+        .to.emitAnnotation(blocksHelper)
         .withArgs(123n, encodeActionBlock(4n));
     });
 
@@ -675,14 +675,14 @@ describe("Cursors", () => {
         expect(ethers.dataSlice(encoded, 8)).to.equal(account);
         expect(await helper.testToCounterpartyBlock(account)).to.equal(encoded);
         await expect(blocksHelper.publishCounterparty(123n, account))
-          .to.emit(blocksHelper, "Annotation").withArgs(123n, encoded);
+          .to.emitAnnotation(blocksHelper).withArgs(123n, encoded);
       });
     }
 
     it("leaves counterparty claim validation to consumers", async () => {
       const value = pad32(456n);
       await expect(blocksHelper.publishCounterparty(123n, value))
-        .to.emit(blocksHelper, "Annotation")
+        .to.emitAnnotation(blocksHelper)
         .withArgs(123n, encodeCounterpartyBlock(value));
     });
 

@@ -13,7 +13,7 @@ describe("ExecutionCost annotation", () => {
     const host = await deploy("TestExecutionCostAnnotation", 10_000n, 5_000n);
     const id = await commandId("costed(bytes)", host);
     expect(await host.commandId()).to.equal(id);
-    await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
+    await expect(host.deploymentTransaction()).to.emitAnnotation(host)
       .withArgs(id, encoded(10_000n, 5_000n));
     const [spec, body] = await host.catalog();
     expect(spec).to.equal(exactSpec(key, 64));
@@ -29,7 +29,7 @@ describe("ExecutionCost annotation", () => {
       const data = encoded(base, batch);
       expect(await host.encode(base, batch)).to.equal(data);
       expect(ethers.dataLength(data)).to.equal(72);
-      await expect(host.publish(base, batch)).to.emit(host, "Annotation")
+      await expect(host.publish(base, batch)).to.emitAnnotation(host)
         .withArgs(await host.commandId(), data);
     }
   });

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
 import {MalformedBlocks} from "./LegacyErrors.sol";
 
 import {Keys} from "../codec/Keys.sol";
@@ -238,7 +239,6 @@ library LegacyBlocks {
         }
     }
 
-
     /// @notice Return whether `abs` identifies a header with `key` before an absolute end.
     /// @param abs Absolute calldata position to inspect.
     /// @param end Absolute region boundary.
@@ -251,7 +251,6 @@ library LegacyBlocks {
         }
         return bytes4(read32(abs)) == key;
     }
-
 
     /// @notice Find the first block with `key` at or after absolute position `abs`.
     /// @param abs Absolute search position.
@@ -337,7 +336,6 @@ library LegacyBlocks {
     }
 
     // Generic block writes
-
 
     /// @notice Write a custom block with one payload word at `i`.
     /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B32` bytes first.
@@ -564,14 +562,14 @@ library LegacyBlocks {
     // Three-word payloads
 
     /// @notice Write a BOOTSTRAP block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.Bootstrap` bytes first.
+    /// @dev DANGER: Unchecked memory write. Reserve 104 bytes first.
     /// @param dst Destination buffer.
     /// @param i Relative write position.
     /// @param asset Asset identifier to bootstrap.
     /// @param amount Balance amount to source.
     /// @param budget Native-value budget to source.
     function writeBootstrap(bytes memory dst, uint i, bytes32 asset, uint amount, uint budget) internal pure {
-        uint spec = Specs.Bootstrap;
+        uint spec = HistoricalSpecs.Bootstrap;
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
             mstore(p, spec)
@@ -2852,7 +2850,6 @@ library LegacyBlocks {
 
     // Generic factories
 
-
     /// @notice Encode a block with a raw payload.
     /// @param key Block type key.
     /// @param payload Raw payload bytes.
@@ -2979,7 +2976,7 @@ library LegacyBlocks {
     /// @param budget Native-value budget to source.
     /// @return value Encoded BOOTSTRAP block bytes.
     function createBootstrap(bytes32 asset, uint amount, uint budget) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Bootstrap);
+        value = allocate(104);
         writeBootstrap(value, 0, asset, amount, budget);
     }
 

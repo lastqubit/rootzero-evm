@@ -1,3 +1,4 @@
+import { decodeIntroductionLog } from "./helpers/introduction-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, getProvider, hostId } from "./helpers/setup.js";
@@ -19,18 +20,14 @@ describe("Host Introduction", () => {
     const contract = await factory.deploy(await rootzero.host());
     const receipt = await contract.deploymentTransaction()!.wait();
 
-    const rootzeroIface = rootzero.interface;
-    const hostIntroducedLog = receipt!.logs.find((log: any) => {
-      try {
-        return rootzeroIface.parseLog(log)?.name === "Introduction";
-      } catch { return false; }
-    });
-    expect(hostIntroducedLog).to.not.be.undefined;
-    const parsed = rootzeroIface.parseLog(hostIntroducedLog!);
-    expect(parsed!.args.host).to.equal(await rootzero.host());
-    expect(parsed!.args.peer).to.not.equal(0n);
-    expect(parsed!.args.origin).to.equal(encodeUserAccount(await (await getSigner(0)).getAddress()));
-    expect(parsed!.args.blocknum).to.be.greaterThan(0n);
+    const receiver = (await rootzero.getAddress()).toLowerCase();
+    const logs = receipt!.logs.filter(log => log.address.toLowerCase() === receiver)
+      .map(decodeIntroductionLog).filter(value => value !== null);
+    expect(logs).deep.eq([{
+      peer: await (contract as any).host(),
+      origin: encodeUserAccount(await (await getSigner(0)).getAddress()),
+      blocknum: BigInt(receipt!.blockNumber),
+    }]);
   });
 
   it("introduces a command host to its contract commander", async () => {
@@ -40,19 +37,11 @@ describe("Host Introduction", () => {
     const contract = await factory.deploy(await rootzero.host());
     const receipt = await contract.deploymentTransaction()!.wait();
 
-    const introduced = receipt!.logs
-      .map((log: any) => {
-        try {
-          return rootzero.interface.parseLog(log);
-        } catch {
-          return null;
-        }
-      })
-      .find((log) => log?.name === "Introduction");
-
-    expect(introduced).to.not.be.undefined;
-    expect(introduced!.args.host).to.equal(await rootzero.host());
-    expect(introduced!.args.peer).to.equal(await (contract as any).host());
+    const receiver = (await rootzero.getAddress()).toLowerCase();
+    const introduced = receipt!.logs.filter(log => log.address.toLowerCase() === receiver)
+      .map(decodeIntroductionLog).find(value => value !== null);
+    expect(introduced).to.not.equal(undefined);
+    expect(introduced!.peer).to.equal(await (contract as any).host());
   });
 
   it("rejects deployment when a contract commander cannot accept introductions", async () => {
@@ -91,24 +80,27 @@ describe("Host Introduction", () => {
     const HOST_PREFIX = 0x03020200n;
     const correctHostId = (HOST_PREFIX << 224n) | (CHAIN_ID << 192n) | BigInt(callerAddr);
 
-    await expect(
-      rootzero.connect(signer).introduce(correctHostId, 1n)
-    ).to.emit(rootzero, "Introduction")
-      .withArgs(await rootzero.host(), correctHostId, encodeUserAccount(callerAddr), 1n);
+    const receipt = await (await rootzero.connect(signer).introduce(correctHostId, 1n)).wait();
+    expect(receipt.logs.map(decodeIntroductionLog)).deep.eq([{
+      peer: correctHostId, origin: encodeUserAccount(callerAddr), blocknum: 1n,
+    }]);
+    expect(receipt.logs[0].address.toLowerCase()).eq((await rootzero.getAddress()).toLowerCase());
   });
 
-  it("Introduction event contains correct host, peer, origin, and blocknum", async () => {
+  it("Introduction preserves a caller-supplied full-width block claim", async () => {
     const signer = await getSigner(0);
     const callerAddr = await signer.getAddress();
     const CHAIN_ID = 31337n;
     const HOST_PREFIX = 0x03020200n;
     const hostId = (HOST_PREFIX << 224n) | (CHAIN_ID << 192n) | BigInt(callerAddr);
 
-    const provider = await getProvider();
-    const blockNum = await provider.getBlockNumber();
-    const tx = await rootzero.connect(signer).introduce(hostId, BigInt(blockNum));
-    await expect(tx)
-      .to.emit(rootzero, "Introduction")
-      .withArgs(await rootzero.host(), hostId, encodeUserAccount(callerAddr), BigInt(blockNum));
+    for (const blocknum of [0n, ethers.MaxUint256]) {
+      const receipt = await (await rootzero.connect(signer).introduce(hostId, blocknum)).wait();
+      expect(receipt.logs.map(decodeIntroductionLog)).deep.eq([{
+        peer: hostId, origin: encodeUserAccount(callerAddr), blocknum,
+      }]);
+    }
+    expect(rootzero.interface.getEvent("Introduction")).eq(null);
+    expect(rootzero.interface.getEvent("EventAbi")).eq(null);
   });
 });

@@ -9,6 +9,15 @@ describe("Balance ledgers", () => {
   const account = ethers.zeroPadValue("0x21", 32);
   const otherAccount = ethers.zeroPadValue("0x22", 32);
 
+  it("has no legacy event ABI and leaves logging to callers", async () => {
+    const ledger = await deploy("TestBalancesLedger");
+    expect(ledger.interface.getEvent("EventAbi")).eq(null);
+    expect(ledger.interface.getEvent("Balance")).eq(null);
+    expect((await ledger.deploymentTransaction().wait()).logs).deep.eq([]);
+    expect((await (await ledger.creditToAccount(account, asset, 10n)).wait()).logs).deep.eq([]);
+    expect((await (await ledger.debitFromAccount(account, asset, 1n)).wait()).logs).deep.eq([]);
+  });
+
   it("credits and debits account balances independently by account and asset", async () => {
     const ledger = await deploy("TestBalancesLedger");
 

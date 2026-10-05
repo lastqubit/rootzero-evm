@@ -32,7 +32,7 @@ describe("CheckBalance command", () => {
   it("registers the BALANCE / BALANCE_CONSTRAINTS / BALANCE command", async () => {
     const id = await commandId("checkBalance(bytes)", host);
     expect(await host.commandId()).to.equal(id);
-    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
+    await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
       ...endpointSpecs({ state: Keys.Balance, stateHint: 64, input: Keys.BalanceConstraints, inputHint: 96,
         output: exactSpec(Keys.Balance, 64) }));
   });

@@ -218,9 +218,9 @@
       "stateSize": 288,
       "inputSize": 288,
       "mask": 1,
-      "separate": 3160,
+      "separate": 3161,
       "combined": 3276,
-      "delta": 116
+      "delta": 115
     },
     {
       "previous": 3381,
@@ -228,9 +228,9 @@
       "stateSize": 288,
       "inputSize": 288,
       "mask": 2,
-      "separate": 3160,
+      "separate": 3161,
       "combined": 3276,
-      "delta": 116
+      "delta": 115
     },
     {
       "previous": 5792,
@@ -238,9 +238,9 @@
       "stateSize": 288,
       "inputSize": 288,
       "mask": 3,
-      "separate": 6242,
+      "separate": 6243,
       "combined": 5699,
-      "delta": -543
+      "delta": -544
     },
     {
       "previous": 59,
@@ -253,14 +253,14 @@
       "delta": 14
     },
     {
-      "previous": 10458,
+      "previous": 10459,
       "saved": 105,
       "stateSize": 1152,
       "inputSize": 2304,
       "mask": 1,
       "separate": 10238,
-      "combined": 10353,
-      "delta": 115
+      "combined": 10354,
+      "delta": 116
     },
     {
       "previous": 19900,

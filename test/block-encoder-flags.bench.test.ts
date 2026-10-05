@@ -36,7 +36,7 @@ describe("Encoder boolean representation benchmark", function () {
               }
               expect(result[1]).eq(0n);
             } else {
-              expect(result[1]).eq(BigInt(count * (32 + Math.ceil(size / 32) * 32)));
+              expect(result[1]).eq(BigInt(count * (64 + Math.ceil(size / 32) * 32)));
             }
             results.push(Number(result[0]));
           }

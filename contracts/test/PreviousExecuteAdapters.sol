@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
+import {Logs} from "../codec/Logs.sol";
+import {Keys} from "../codec/Keys.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {LegacyMemory} from "./LegacyMemory.sol";
-// Frozen execute adapters before Execute specialization.
+// Frozen decoder/writer bodies before Execute specialization; logging matches production.
 
 import {Encoder} from "../codec/Encoder.sol";
 import {Cursors} from "../utils/Cursors.sol";
@@ -22,7 +25,7 @@ abstract contract PreviousExecuteBootstrap is CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {
-        (id,) = command("bootstrap", Specs.Empty, Specs.Bootstrap, Specs.Balance, 0);
+        (id,) = command("bootstrap", Specs.Empty, HistoricalSpecs.Bootstrap, Specs.Balance, 0);
     }
 
     /// @notice Return the registered BOOTSTRAP command ID.
@@ -70,11 +73,11 @@ abstract contract PreviousExecuteBootstrap is CommandBase, DebitAccountHook {
         uint value
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (state.length != 0) revert UnexpectedState();
-        (uint abs, uint end) = Cursors.bounds(inputCur, Sizes.Bootstrap);
+        (uint abs, uint end) = Cursors.bounds(inputCur, 104);
         // floor(input.length / 104) * 72 <= input.length, so multiplication cannot overflow.
         uint cur;
         unchecked {
-            (output, cur) = Encoder.init((end - abs) / Sizes.Bootstrap * Sizes.Balance);
+            (output, cur) = Encoder.init((end - abs) / 104 * Sizes.Balance);
         }
         credit = value;
 
@@ -83,7 +86,7 @@ abstract contract PreviousExecuteBootstrap is CommandBase, DebitAccountHook {
             credit = bootstrap(account, asset, amount, budget, credit);
             (output, cur) = Encoder.writeBalance(cur, output, asset, amount);
             unchecked {
-                abs += Sizes.Bootstrap;
+                abs += 104;
             }
         }
 
@@ -122,6 +125,7 @@ abstract contract PreviousExecuteDebitAccount is DebitAccount {
         }
 
         output = Encoder.finish(cur, output);
+        Logs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }
@@ -143,6 +147,7 @@ abstract contract PreviousExecuteCreditAccount is CreditAccount {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Balance);
+        Logs.memCopyWrap(creditAccountId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = LegacyMemory.unpackBalance(abs);
@@ -173,6 +178,7 @@ abstract contract PreviousExecuteCashout is Cashout {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Balance);
+        Logs.memCopyWrap(cashoutId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = LegacyMemory.unpackBalance(abs);
@@ -205,6 +211,7 @@ abstract contract PreviousExecuteSettle is Settle {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Position);
+        Logs.memCopyWrap(settleId(), Keys.State, state);
 
         while (abs < end) {
             settle(account, LegacyMemory.unpackPositionValue(abs));
@@ -236,6 +243,7 @@ abstract contract PreviousExecuteAuthorize is Authorize {
         if (state.length != 0) revert UnexpectedState();
 
         (uint abs, uint end) = Cursors.bounds(inputCur, Sizes.B32);
+        Logs.copyWrap(authorizeId(), Keys.Input, abs, end - abs);
         while (abs < end) {
             authorizeNode(LegacyBlocks.unpackNode(abs));
             unchecked {

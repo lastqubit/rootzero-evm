@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 
+import {Keys} from "../codec/Keys.sol";
 import {Blocks} from "../codec/Blocks.sol";
 
 import {Execution, Executions} from "../execution/Execution.sol";
@@ -123,7 +124,12 @@ contract TestExecutionDecoders {
                 uint abs = uint32(exec.input);
                 exec.input = Cursors.advance(exec.input, 104);
                 (asset, amount, budget) = LegacyBlocks.unpackBootstrap(abs);
-            } else (asset, amount, budget) = exec.unpackBootstrap();
+            } else {
+                // Historical fixed Bootstrap layout for this decoder comparison.
+                bytes32 a; bytes32 b;
+                (asset, a, b, exec.input) = Blocks.unpack96(exec.input, Keys.Bootstrap);
+                amount = uint(a); budget = uint(b);
+            }
             data = abi.encode(asset, amount, budget);
         }
         else if (kind == 10) {

@@ -4,7 +4,7 @@ import { concat, encodeStepBlock } from "./helpers/blocks.js";
 
 describe("Independent Pipeline cursors", function () {
   this.timeout(120_000);
-  it("compares independent input/stream cursors with the frozen packed-input pipeline", async () => {
+  it("compares independent input/stream cursors with the frozen packed-input pipeline and matching context logs", async () => {
     const packed = await deploy("TestPackedPipelineOptimization");
     const separate = await deploy("TestPipelineOptimization");
     const rows: { mode: string; count: number; bytes?: number; packed: number; separate: number; delta: number }[] = [];
@@ -40,9 +40,10 @@ describe("Independent Pipeline cursors", function () {
     for (const row of rows) {
       // Solidity 0.8.35/viaIR: checked budget addition and the centralized invocation
       // trade a small measured cost for simpler code versus the frozen assembly baseline.
+      // Matching PIPELINE logs add a fixed 9-gas compiler-layout difference.
       // Keep an explicit ceiling so further regressions still fail this benchmark.
-      const ceiling = row.mode === "handoff" ? 39
-        : (row.mode === "internal" ? 29 : 39) * row.count - 8;
+      const ceiling = row.mode === "handoff" ? 48
+        : (row.mode === "internal" ? 29 : 39) * row.count + 1;
       expect(row.delta, row.mode + "/" + row.count + " gas regression").at.most(ceiling);
     }
   });

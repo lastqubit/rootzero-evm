@@ -23,7 +23,7 @@ describe("Single balance log composition", function () {
           : variant === "Existing" ? block : "0x");
         expect(result.guard).eq(ethers.AbiCoder.defaultAbiCoder().encode(
           ["bytes32", "uint256"], [ethers.toBeHex(ethers.MaxUint256, 32), 0x1234]));
-        expect(result.retainedBytes).eq(variant === "Create" ? BigInt(count * 128) : 0n);
+        expect(result.retainedBytes).eq(variant === "Create" ? BigInt(count * 160) : 0n);
         const receipt = await (await helper.measure(...args)).wait();
         expect(receipt.logs).to.have.length(count);
         for (const log of receipt.logs) {

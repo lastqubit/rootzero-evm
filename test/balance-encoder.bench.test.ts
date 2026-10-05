@@ -17,7 +17,7 @@ describe("BALANCE encoder gas", function () {
         expect(r[2]).eq(factory ? encodeBalanceBlock(asset, 100n) : concat(...Array(count).fill(encodeBalanceBlock(asset, 100n))));
         results.push(r);
       }
-      expect(results[1][1]).eq(factory ? results[0][1] - 32n * BigInt(count) : 0n);
+      expect(results[1][1]).eq(factory ? results[0][1] : 0n);
       rows.push({ count, factory, old: Number(results[0][0]), current: Number(results[1][0]) });
     }
     console.table(rows);
@@ -25,7 +25,7 @@ describe("BALANCE encoder gas", function () {
     writeFileSync(".npm-cache/balance-encoder-results.json", JSON.stringify({ compiler: hre.config.solidity.profiles.default.compilers[0], rows }, null, 2));
   });
 
-  it("compares real checkBalance and debitAccount commands with only the output encoder changed", async () => {
+  it("compares real checkBalance and debitAccount commands with the frozen writer and current output logging", async () => {
     const hosts = await Promise.all(["TestBalanceEncoderCommandsPrevious", "TestBalanceEncoderCommands"].map(name => deploy(name)));
     const account = ethers.toBeHex(3, 32), asset = ethers.toBeHex(1, 32), rows: any[] = [];
     let debited = 0n;

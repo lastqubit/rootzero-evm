@@ -1,3 +1,4 @@
+import { decodeResolutionLog, HostUnresolved } from "./helpers/resolution-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -62,9 +63,9 @@ describe("Portal pipe out-of-gas benchmark", function () {
         const afterCall = callIndex < 0 ? undefined
           : trace.structLogs.slice(callIndex + 1).find((step: any) => step.depth === 1);
         expect(await portal.getUnresolved(key)).to.equal(digest);
-        const events = receipt.logs.map((log: any) => portal.interface.parseLog(log));
-        expect(events.some((event: any) => event?.name === "Unresolved"
-          && event.args.key === key && event.args.digest === digest)).to.equal(true);
+        const events = receipt.logs.map(decodeResolutionLog);
+        expect(events.some((event: any) => event?.codes === HostUnresolved
+          && event.key === key && event.digest === digest)).to.equal(true);
         results.push({ bytes: size, state, minimumTransactionGas: high,
           pipeAttempted: callIndex >= 0, gasAfterPipe: afterCall ? Number(afterCall.gas) : null,
           gasUsed: Number(receipt.gasUsed) });

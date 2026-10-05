@@ -15,8 +15,11 @@ describe("Singular asset endpoints", () => {
     for (const method of ["allowAsset", "denyAsset", "portAllowAsset", "portDenyAsset"]) {
       const admin = !method.startsWith("port");
       const id = admin ? await commandId(`${method}(bytes)`, host, 2n) : await portId(`${method}(bytes)`, host);
-      const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, admin});
-      await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id, ...specs);
+      const allow = method === "allowAsset";
+      const inputCodes = admin ? 0x20000002n | ((allow ? 20n : 21n) << 32n)
+        | ((allow ? 0xa0000001n : 0xa0000000n) << 64n) : 0n;
+      const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, inputCodes, admin});
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...specs);
     }
   });
 

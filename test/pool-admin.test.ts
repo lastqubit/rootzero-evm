@@ -26,11 +26,10 @@ describe("Pool admin commands", () => {
 
     it(`${method} publishes its admin descriptor, label, and pair grouping`, async () => {
       const id = await commandId(method + "(bytes)", host, 2n);
-      await expect(host.deploymentTransaction()).to.emit(host, "Endpoint")
-        .withArgs(await host.host(), id, ...endpointSpecs({ input: key, inputHint: size, admin: true }));
-      await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...endpointSpecs({ input: key, inputHint: size, inputCodes: 0x20000002n | (0x20000008n << 32n) | ((method === "addPool" ? 4n : 5n) << 64n), admin: true }));
+      await expect(host.deploymentTransaction()).to.emitAnnotation(host)
         .withArgs(id, encodeLabelBlock(ethers.ZeroHash, method));
-      await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
+      await expect(host.deploymentTransaction()).to.emitAnnotation(host)
         .withArgs(id, encodeBlock(blockKey("#groups"), encodeStringBlock("#input as (first, second)")));
     });
 
@@ -39,7 +38,7 @@ describe("Pool admin commands", () => {
       const context = encodeContextBlock(admin, "0x", input);
       expect(await host[method].staticCall(context)).deep.eq(["0x", 0n]);
       const receipt = await (await host[method](context)).wait();
-      const events = receipt.logs.map((log: any) => host.interface.parseLog(log))
+      const events = receipt.logs.filter((log: any) => log.topics.length).map((log: any) => host.interface.parseLog(log))
         .filter((log: any) => log?.name === event);
       expect(events.map((log: any) => Array.from(log.args))).deep.eq(add
         ? [[first, 0n, second, ethers.MaxUint256], [second, 7n, second, 11n]]

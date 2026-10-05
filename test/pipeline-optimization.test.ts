@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeStepBlock, Keys } from "./helpers/blocks.js";
+import { concat, encodeStepBlock, encodePipelineBlock, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Pipeline parser and credit security", function () {
@@ -19,6 +19,19 @@ describe("Pipeline parser and credit security", function () {
     host = await deploy("TestPipelineOptimization");
     local = await host.localId();
     external = await host.externalId();
+  });
+
+  it("logs account and initial budget first, including empty pipelines and independently of msg.value", async () => {
+    for (const budget of [0n, 42n, ethers.MaxUint256]) {
+      for (const steps of ["0x", encodeStepBlock(local, 0n, ethers.toBeHex(0n, 32))]) {
+        const receipt = await (await host.measure(steps, budget, "0x")).wait();
+        expect(receipt.logs[0].topics).deep.eq([]);
+        expect(receipt.logs[0].data).eq(concat(
+          ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(ethers.ZeroHash, budget),
+        ));
+        expect(receipt.logs.length).eq(steps === "0x" ? 1 : 2);
+      }
+    }
   });
 
   it("accepts maximum budget and emits the exact overflow panic with atomic rollback", async () => {
@@ -53,7 +66,7 @@ describe("Pipeline parser and credit security", function () {
     const steps = concat(...inputs.map((input, i) => encodeStepBlock(i % 2 ? external : local, 0n, input)));
     expect((await host.measure.staticCall(steps, 42n, "0x"))[1]).to.equal(42n);
     const receipt = await (await host.measure(steps, 42n, "0x")).wait();
-    const events = receipt.logs.map((log: any) => host.interface.parseLog(log));
+    const events = receipt.logs.filter((log: any) => log.topics.length).map((log: any) => host.interface.parseLog(log));
     expect(events.map((event: any) => [event.args.input, event.args.assigned]))
       .to.deep.equal(inputs.map(input => [input, 0n]));
     expect(await host.calls()).to.equal(3n);

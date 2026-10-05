@@ -1,3 +1,4 @@
+import { expectInputLog } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
@@ -11,6 +12,7 @@ import {
   encodeLabelBlock,
   encodeNodeBlock,
   endpointSpecs,
+  exactSpec,
   Keys,
   pad32,
 } from "./helpers/blocks.js";
@@ -59,33 +61,26 @@ describe("Guard Actions", () => {
     await deployed.waitForDeployment();
 
     await expect(deploymentTx)
-      .to.emit(deployed, "Endpoint")
-      .withArgs(await (deployed as any).host(), await guard("revoke", deployed), ...endpointSpecs({ input: Keys.Node, inputHint: 32 }));
+      .to.emitEndpoint(deployed).withArgs(await guard("revoke", deployed), 0n, exactSpec(Keys.Node, 32) | 0x20000002n | (17n << 32n) | (0xa0000000n << 64n), 0n);
     await expect(deploymentTx)
-      .to.emit(deployed, "Annotation")
+      .to.emitAnnotation(deployed)
       .withArgs(await guard("revoke", deployed), encodeLabelBlock(ethers.ZeroHash, "revoke"));
     await expect(deploymentTx)
-      .to.emit(deployed, "Endpoint")
-      .withArgs(
-        await (deployed as any).host(),
-        await guard("revokeAllowance", deployed),
+      .to.emitEndpoint(deployed).withArgs(await guard("revokeAllowance", deployed),
         ...endpointSpecs({ input: Keys.HostAsset, inputHint: 64 }),
       );
     await expect(deploymentTx)
-      .to.emit(deployed, "Annotation")
+      .to.emitAnnotation(deployed)
       .withArgs(
         await guard("revokeAllowance", deployed),
         encodeLabelBlock(ethers.ZeroHash, "revokeAllowance"),
       );
     await expect(deploymentTx)
-      .to.emit(deployed, "Endpoint")
-      .withArgs(
-        await (deployed as any).host(),
-        await guard("revokeAsset", deployed),
+      .to.emitEndpoint(deployed).withArgs(await guard("revokeAsset", deployed),
         ...endpointSpecs({ input: Keys.Asset, inputHint: 32 }),
       );
     await expect(deploymentTx)
-      .to.emit(deployed, "Annotation")
+      .to.emitAnnotation(deployed)
       .withArgs(
         await guard("revokeAsset", deployed),
         encodeLabelBlock(ethers.ZeroHash, "revokeAsset"),
@@ -155,9 +150,7 @@ describe("Guard Actions", () => {
     await host.authorize(...adminCtx(encodeNodeBlock(node)));
     expect(await host.isAuthorized(node)).to.be.true;
 
-    await expect(host.connect(guardianSigner).revoke(encodeNodeBlock(node)))
-      .to.emit(host, "Node")
-      .withArgs(await host.host(), node, 17n | (0xa0000000n << 32n));
+    await expectInputLog(host.connect(guardianSigner).revoke(encodeNodeBlock(node)), host, "revoke", encodeNodeBlock(node), true);
 
     expect(await host.isAuthorized(node)).to.be.false;
   });
@@ -168,7 +161,8 @@ describe("Guard Actions", () => {
 
     await host.authorize(...adminCtx(ethers.concat([encodeNodeBlock(node1), encodeNodeBlock(node2)])));
 
-    await host.connect(guardianSigner).revoke(ethers.concat([encodeNodeBlock(node1), encodeNodeBlock(node2)]));
+    const input = ethers.concat([encodeNodeBlock(node1), encodeNodeBlock(node2)]);
+    await expectInputLog(host.connect(guardianSigner).revoke(input), host, "revoke", input, true);
 
     expect(await host.isAuthorized(node1)).to.be.false;
     expect(await host.isAuthorized(node2)).to.be.false;
@@ -182,7 +176,7 @@ describe("Guard Actions", () => {
   });
 
   it("accepts an empty revoke batch", async () => {
-    await host.connect(guardianSigner).revoke("0x");
+    await expectInputLog(host.connect(guardianSigner).revoke("0x"), host, "revoke", "0x", true);
   });
 
   it("reverts InvalidBlock when revoke input is not NODE blocks", async () => {
@@ -217,9 +211,7 @@ describe("Guard Actions", () => {
   it("appointing the same guardian twice is idempotent", async () => {
     const guardianAccount = await utils.testToUserAccount(guardianAddress);
 
-    await expect(host.appoint(...adminCtx(encodeAccountBlock(guardianAccount))))
-      .to.emit(host, "Guardian")
-      .withArgs(await host.host(), guardianAccount, 18n | (0xa0000001n << 32n));
+    await expectInputLog(host.appoint(...adminCtx(encodeAccountBlock(guardianAccount))), host, "appoint", encodeAccountBlock(guardianAccount));
 
     expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
   });

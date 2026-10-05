@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
 
 import {Specs} from "../codec/Specs.sol";
 
@@ -16,7 +17,7 @@ library LegacyHeaders {
     uint64 constant Balance = uint64(Specs.Balance >> 192);
     uint64 constant AssetLiability = uint64(Specs.AssetLiability >> 192);
     uint64 constant AccountAsset = uint64(Specs.AccountAsset >> 192);
-    uint64 constant Bootstrap = uint64(Specs.Bootstrap >> 192);
+    uint64 constant Bootstrap = uint64(HistoricalSpecs.Bootstrap >> 192);
     uint64 constant Allocation = uint64(Specs.Allocation >> 192);
     uint64 constant Allowance = uint64(Specs.Allowance >> 192);
     uint64 constant Custody = uint64(Specs.Custody >> 192);

@@ -8,8 +8,8 @@ import {Runtime} from "../core/Runtime.sol";
 
 contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     using Executions for Execution;
-    uint[6] public ids;
-    uint[6] private descriptors;
+    uint[7] public ids;
+    uint[7] private descriptors;
     event Processed(uint amount);
     error Rejected();
     constructor(uint mask) Runtime(0) {
@@ -19,6 +19,7 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
         (ids[0], descriptors[0]) = command("batch", st, inp, out, 0);
         (ids[1], descriptors[1]) = command("once", st, inp, out, 0);
         (ids[2], descriptors[2]) = command("admin", st, inp, out, 0);
+        (ids[6], descriptors[6]) = command("adminOnce", st, inp, out, 0);
         (ids[3], descriptors[3]) = port("peer", inp, out, 0);
         (ids[4], descriptors[4]) = guard("protect", inp);
         (ids[5], descriptors[5]) = query("read", Specs.AssetAmount, Specs.AssetAmount);
@@ -31,6 +32,9 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     }
     function admin(bytes calldata context) external payable returns(bytes memory,uint) {
         return runAdmin(ids[2], descriptors[2], context, contextOne);
+    }
+    function adminOnce(bytes calldata context) external payable returns(bytes memory,uint) {
+        return runAdminOnce(ids[6], descriptors[6], context, contextOne);
     }
     function peer(bytes calldata input) external payable onlyPeer returns(bytes memory,uint) {
         return runPort(ids[3], descriptors[3], input, inputOne);

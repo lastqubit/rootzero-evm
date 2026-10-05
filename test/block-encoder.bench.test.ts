@@ -43,7 +43,7 @@ describe("Encoder context benchmark", function () {
         const a = await old.measure(account, state, input, count, memorySource);
         const b = await current.measure(account, state, input, count, memorySource);
         expect(a[2]).eq(expected); expect(b[2]).eq(expected);
-        expect(b[1]).eq(a[1] - 32n * BigInt(count)); // Final result only; no retained scratch word.
+        expect(b[1]).eq(a[1]); // Owned leading log word replaces the baseline's retained scratch word.
         rows.push({ memorySource, stateSize, inputSize, count, old: Number(a[0]), current: Number(b[0]), delta: Number(b[0] - a[0]), allocated: Number(b[1]) });
         const wa = await oldWriter.measureWrite(account, state, input, count, 3, memorySource);
         const wb = await currentWriter.measureWrite(account, state, input, count, 3, memorySource);

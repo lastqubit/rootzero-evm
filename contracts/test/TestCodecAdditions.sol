@@ -16,7 +16,8 @@ contract TestCodecAdditions {
         else if (kind == 6) value = Encoder.createAssetLiability(fields[0], fields[1]);
         else if (kind == 7) value = Encoder.createAccountAsset(fields[0], fields[1]);
         else if (kind == 8) value = Encoder.createHostAsset(uint(fields[0]), fields[1]);
-        else if (kind == 9) value = Encoder.createBootstrap(fields[0], uint(fields[1]), uint(fields[2]));
+        // Index 9 retains the historical fixed Bootstrap layout for this corpus.
+        else if (kind == 9) value = abi.encodePacked(bytes4(keccak256("#bootstrap")), uint32(96), fields[0], fields[1], fields[2]);
         else if (kind == 10) value = Encoder.createAllocation(uint(fields[0]), fields[1], uint(fields[2]));
         else if (kind == 11) value = Encoder.createAllowance(uint(fields[0]), fields[1], uint(fields[2]));
         else if (kind == 12) value = Encoder.createCustody(uint(fields[0]), fields[1], uint(fields[2]));

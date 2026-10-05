@@ -25,11 +25,11 @@ describe("BookPort", () => {
   }
   it("advertises ACCOUNT_AMOUNT input with grouped debit/credit roles and empty output", async () => {
     const id = await portId(host.interface.getFunction("portBook")!.selector, host, 0n);
-    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
+    await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
       ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }));
-    await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
+    await expect(host.deploymentTransaction()).to.emitAnnotation(host)
       .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "portBook"));
-    await expect(host.deploymentTransaction()).to.emit(host, "Annotation")
+    await expect(host.deploymentTransaction()).to.emitAnnotation(host)
       .withArgs(id, encodeBlock(ethers.id("#groups").slice(0, 10), encodeStringBlock("#input as (debit, credit)")));
     expect(ethers.dataLength(booking)).to.equal(208);
     expect(await peer.portBook.staticCall(booking)).to.deep.equal(["0x", 0n]);

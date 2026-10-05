@@ -1,3 +1,4 @@
+import { expectInputLog } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, getProvider, hostId } from "./helpers/setup.js";
@@ -89,12 +90,10 @@ describe("Admin Commands", () => {
       expect(await host.testAuthorizeId()).to.equal(await cmd("authorize"));
     });
 
-    it("authorizes a node and emits Node event", async () => {
+    it("authorizes a node and logs input", async () => {
       const nodeId = await hostId(await (await getSigner(4)).getAddress());
       const input = encodeNodeBlock(nodeId);
-      await expect(callAs(0, "authorize", adminCtx(input)))
-        .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, 16n | (0xa0000001n << 32n));
+      await expectInputLog(callAs(0, "authorize", adminCtx(input)), host, "authorize", encodeNodeBlock(nodeId));
       expect(await host.isAuthorized(nodeId)).to.be.true;
     });
 
@@ -149,14 +148,12 @@ describe("Admin Commands", () => {
       expect(await host.testUnauthorizeId()).to.equal(await cmd("unauthorize"));
     });
 
-    it("revokes node and emits Node event with false", async () => {
+    it("revokes node and logs input", async () => {
       const nodeId = await hostId(await (await getSigner(8)).getAddress());
       // authorize first
       await callAs(0, "authorize", adminCtx(encodeNodeBlock(nodeId)));
       // then unauthorize
-      await expect(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))))
-        .to.emit(host, "Node")
-        .withArgs(await host.host(), nodeId, 17n | (0xa0000000n << 32n));
+      await expectInputLog(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))), host, "unauthorize", encodeNodeBlock(nodeId));
       expect(await host.isAuthorized(nodeId)).to.be.false;
     });
 
@@ -173,14 +170,12 @@ describe("Admin Commands", () => {
   });
 
   describe("appoint", () => {
-    it("assigns the guardian role to a user account and emits Guardian", async () => {
+    it("assigns the guardian role to a user account and logs input", async () => {
       const guardianAddress = await (await getSigner(2)).getAddress();
       const guardianAccount = await utils.testToUserAccount(guardianAddress);
       const input = encodeAccountBlock(guardianAccount);
 
-      await expect(callAs(0, "appoint", adminCtx(input)))
-        .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, 18n | (0xa0000001n << 32n));
+      await expectInputLog(callAs(0, "appoint", adminCtx(input)), host, "appoint", encodeAccountBlock(guardianAccount));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
     });
@@ -213,16 +208,14 @@ describe("Admin Commands", () => {
   });
 
   describe("dismiss", () => {
-    it("removes the guardian role and emits Guardian with false", async () => {
+    it("removes the guardian role and logs input", async () => {
       const guardianAddress = await (await getSigner(3)).getAddress();
       const guardianAccount = await utils.testToUserAccount(guardianAddress);
       const input = encodeAccountBlock(guardianAccount);
 
       await callAs(0, "appoint", adminCtx(input));
 
-      await expect(callAs(0, "dismiss", adminCtx(input)))
-        .to.emit(host, "Guardian")
-        .withArgs(await host.host(), guardianAccount, 19n | (0xa0000000n << 32n));
+      await expectInputLog(callAs(0, "dismiss", adminCtx(input)), host, "dismiss", encodeAccountBlock(guardianAccount));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.false;
     });
@@ -322,13 +315,10 @@ describe("Admin Commands", () => {
       const deployment = host.deploymentTransaction();
       expect(deployment).to.not.equal(null);
 
-      await expect(deployment!).to.emit(host, "Endpoint")
-        .withArgs(
-          await host.host(),
-          await cmd("annotate"),
-          ...endpointSpecs({ input: Keys.Annotation, inputHint: 256, admin: true }),
+      await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("annotate"),
+          0n, endpointSpecs({ input: Keys.Annotation, inputHint: 256, admin: true })[1] | 0x20000002n | (8n << 32n), 0n,
         );
-      await expect(deployment!).to.emit(host, "Annotation")
+      await expect(deployment!).to.emitAnnotation(host)
         .withArgs(await cmd("annotate"), encodeLabelBlock(ethers.ZeroHash, "annotate"));
     });
 
@@ -338,7 +328,7 @@ describe("Admin Commands", () => {
       const input = encodeAnnotationBlock(entity, data);
 
       await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emit(host, "Annotation")
+        .to.emitAnnotation(host)
         .withArgs(entity, data);
     });
 
@@ -349,7 +339,7 @@ describe("Admin Commands", () => {
       const input = encodeAnnotationBlock(entity, data);
 
       await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emit(host, "Annotation")
+        .to.emitAnnotation(host)
         .withArgs(entity, data);
     });
 
@@ -362,7 +352,7 @@ describe("Admin Commands", () => {
       const input = encodeAnnotationBlock(entity, data);
 
       await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emit(host, "Annotation")
+        .to.emitAnnotation(host)
         .withArgs(entity, data);
     });
 

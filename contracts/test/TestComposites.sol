@@ -7,9 +7,9 @@ import {Keys} from "../codec/Keys.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {max32} from "../utils/Utils.sol";
 
-/// @dev Frozen composite factories/decoders; allocator and public writers stay identical.
+/// @dev Frozen composite algorithms with current State/Input child keys; allocator and writers stay identical.
 library PreviousComposites {
-    function unpackBytes(uint abs) internal pure returns (bytes calldata value, uint end) {
+    function unpackChild(uint abs, bytes4 key) internal pure returns (bytes calldata value, uint end) {
         uint head;
         uint len;
         assembly ("memory-safe") {
@@ -18,7 +18,7 @@ library PreviousComposites {
             value.offset := add(abs, 0x08)
             value.length := len
         }
-        if (uint32(head >> 224) != uint32(Keys.Bytes)) revert InvalidBlock();
+        if (uint32(head >> 224) != uint32(key)) revert InvalidBlock();
         end = abs + Sizes.Header + len;
     }
     function unpackString(uint abs) internal pure returns (bytes calldata value, uint end) {
@@ -188,7 +188,7 @@ library PreviousComposites {
             cmd := calldataload(abs)
             value := calldataload(add(abs, 0x20))
         }
-        (input, end) = unpackBytes(abs + 64);
+        (input, end) = unpackChild(abs + 64, Keys.Input);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -201,7 +201,7 @@ library PreviousComposites {
             target := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
         }
-        (payload, end) = unpackBytes(abs + 64);
+        (payload, end) = unpackChild(abs + 64, Keys.Bytes);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -214,7 +214,7 @@ library PreviousComposites {
             portal := calldataload(abs)
             resources := calldataload(add(abs, 0x20))
         }
-        (payload, end) = unpackBytes(abs + 64);
+        (payload, end) = unpackChild(abs + 64, Keys.Bytes);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -223,8 +223,8 @@ library PreviousComposites {
     ) internal pure returns (bytes calldata input, bytes calldata steps, uint end) {
         uint limit;
         (abs, limit) = LegacyBlocks.enter(abs, Keys.Relay);
-        (input, abs) = unpackBytes(abs);
-        (steps, end) = unpackBytes(abs);
+        (input, abs) = unpackChild(abs, Keys.Input);
+        (steps, end) = unpackChild(abs, Keys.Bytes);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -236,8 +236,8 @@ library PreviousComposites {
         assembly ("memory-safe") {
             account := calldataload(abs)
         }
-        (state, end) = unpackBytes(abs + 32);
-        (input, end) = unpackBytes(end);
+        (state, end) = unpackChild(abs + 32, Keys.State);
+        (input, end) = unpackChild(end, Keys.Input);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -251,7 +251,7 @@ library PreviousComposites {
             resources := calldataload(add(abs, 0x20))
             key := calldataload(add(abs, 0x40))
         }
-        (witness, end) = unpackBytes(abs + 96);
+        (witness, end) = unpackChild(abs + 96, Keys.Bytes);
         if (end != limit) revert InvalidBlock();
     }
 
@@ -263,7 +263,7 @@ library PreviousComposites {
         assembly ("memory-safe") {
             entity := calldataload(abs)
         }
-        (stream, end) = unpackBytes(abs + 32);
+        (stream, end) = unpackChild(abs + 32, Keys.Bytes);
         if (end != limit) revert InvalidBlock();
     }
 }

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, commandId } from "./helpers/setup.js";
-import { encodeLimitsBlock, concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, encodeActionBlock, endpointSpecs, Keys } from "./helpers/blocks.js";
+import { encodeLimitsBlock, concat, encodePositionBlock, encodeContextBlock, encodeStepBlock, encodeUserAccount, endpointSpecs, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Settle command", () => {
@@ -18,9 +18,8 @@ describe("Settle command", () => {
     const id = await commandId("settle(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     const tx = host.deploymentTransaction();
-    await expect(tx).to.emit(host, "Endpoint").withArgs(await host.host(), id,
-      ...endpointSpecs({ state: Keys.Position, stateHint: 160 }));
-    await expect(tx).to.emit(host, "Annotation").withArgs(id, encodeActionBlock(67n));
+    await expect(tx).to.emitEndpoint(host).withArgs(id,
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (67n << 32n) }));
   });
 
   it("does not expose or authorize the removed book command", async () => {

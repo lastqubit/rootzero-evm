@@ -2,6 +2,8 @@
 pragma solidity ^0.8.33;
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {Blocks} from "../codec/Blocks.sol";
+import {Logs} from "../codec/Logs.sol";
+import {Entities} from "../utils/Entities.sol";
 
 import {PreviousPackedPipeline} from "./PreviousPackedPipeline.sol";
 import {AccessDenied} from "../core/Access.sol";
@@ -53,6 +55,8 @@ contract TestPackedPipelineOptimization is PreviousPackedPipeline {
         external payable returns (uint used, uint remaining)
     {
         uint initial = gasleft();
+        // Match production context logging while retaining the frozen parser.
+        Logs.pipeline(bytes32(0), budget, Entities.Account);
         remaining = pipe(bytes32(0), state, Cursors.wrap(steps), budget);
         used = initial - gasleft();
     }

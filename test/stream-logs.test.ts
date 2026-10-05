@@ -1,9 +1,22 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBytesBlock, encodePositionBlock, encodeCodesBlock } from "./helpers/blocks.js";
+import { Keys, encodeStateBlock, concat, encodeBytesBlock, encodePositionBlock, encodeCodesBlock } from "./helpers/blocks.js";
 
 describe("Correlated stream logs", () => {
+  it("wraps ordinary memory and the shared empty value without modifying either", async () => {
+    const helper = await deploy("TestStreamLogs");
+    for (const sharedEmpty of [false, true]) for (const stream of ["0x", encodeCodesBlock(70n), encodeBytesBlock("0xabcdef")]) {
+      const expected = sharedEmpty ? "0x" : stream;
+      const args = [123n, Keys.State, stream, sharedEmpty] as const;
+      expect(await helper.emitMemoryWrap.staticCall(...args)).eq(expected);
+      const receipt = await (await helper.emitMemoryWrap(...args)).wait();
+      expect(receipt.logs.slice(0, 2).map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq(
+        Array(2).fill({ topics: [], data: concat(ethers.toBeHex(123n, 32), encodeStateBlock(expected)) }));
+      expect(helper.interface.parseLog(receipt.logs[2]).name).eq("Ordinary");
+    }
+  });
+
   it("emits exact empty, single and mixed block streams without changing memory", async () => {
     const helper = await deploy("TestStreamLogs");
     const streams = ["0x", encodeCodesBlock(80n), concat(

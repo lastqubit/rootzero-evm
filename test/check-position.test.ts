@@ -23,7 +23,7 @@ describe("CheckPosition command", () => {
   it("registers the POSITION / POSITION_CONSTRAINTS / POSITION command", async () => {
     const id = await commandId("checkPosition(bytes)", host);
     expect(await host.commandId()).to.equal(id);
-    await expect(host.deploymentTransaction()).to.emit(host, "Endpoint").withArgs(await host.host(), id,
+    await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
       ...endpointSpecs({ state: Keys.Position, stateHint: 160, input: Keys.PositionConstraints, inputHint: 128,
         output: exactSpec(Keys.Position, 160) }));
   });

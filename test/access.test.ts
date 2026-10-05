@@ -1,3 +1,4 @@
+import { expectInputLog } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
@@ -74,16 +75,14 @@ describe("Access Control", () => {
       .to.be.revertedWithCustomError(utils, "AccessDenied");
   });
 
-  it("authorize emits Node event with active=true", async () => {
+  it("authorize logs authorization input", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(3);
     const nodeBlock = encodeNodeBlock(dummyNode);
     const ctx = [encodeContextBlock(adminAccount, "0x", nodeBlock)] as const;
 
-    await expect(host.connect(signers[0]).authorize(...ctx))
-      .to.emit(host, "Node")
-      .withArgs(await host.host(), dummyNode, 16n | (0xa0000001n << 32n));
+    await expectInputLog(host.connect(signers[0]).authorize(...ctx), host, "authorize", encodeNodeBlock(dummyNode));
   });
 
   it("node is authorized after authorize call", async () => {
@@ -96,16 +95,14 @@ describe("Access Control", () => {
     expect(await host.isAuthorized(dummyNode)).to.be.true;
   });
 
-  it("unauthorize emits Node event with active=false", async () => {
+  it("unauthorize logs revocation input", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(5);
     // First authorize
     await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)));
     // Then unauthorize
-    await expect(
-      host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)))
-    ).to.emit(host, "Node").withArgs(await host.host(), dummyNode, 17n | (0xa0000000n << 32n));
+    await expectInputLog(host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode))), host, "unauthorize", encodeNodeBlock(dummyNode));
   });
 
   it("node is not authorized after unauthorize call", async () => {

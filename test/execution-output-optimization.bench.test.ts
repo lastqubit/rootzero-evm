@@ -51,10 +51,20 @@ describe("Execution cursor encoder migration", function () {
           const expected = ethers.concat([prefix, ...Array(count).fill(layouts[name](a, b))]);
           expect(before.output).to.equal(expected);
           expect(after.output).to.equal(expected);
-          expect(after.footprint).to.equal(before.footprint);
+          // Each grown buffer now owns a reserved word before its length.
+          let allocated = capacity || 64, written = prefixSize, growths = 0;
+          for (let i = 0; i < count; i++) {
+            if (written + blockSize > allocated) {
+              do { allocated *= 2; } while (written + blockSize > allocated);
+              growths++;
+            }
+            written += blockSize;
+          }
+          expect(after.footprint).to.equal(before.footprint + 32n * BigInt(growths));
           // Record tradeoffs: primitive composition and cursor conversion need
           // not beat the frozen assembly writer at every compiler call site.
           rows.push({ operation: method, size, count, capacity,
+            beforeBytes: Number(before.footprint), afterBytes: Number(after.footprint),
             before: Number(before.usedGas), after: Number(after.usedGas), saved: Number(before.usedGas - after.usedGas) });
         }
       }

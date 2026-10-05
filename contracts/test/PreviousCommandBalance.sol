@@ -5,8 +5,8 @@ import {Execution, Executions, CommandBase, Specs} from "../commands/Base.sol";
 
 import {Sizes} from "../codec/Specs.sol";
 import {OutOfBounds} from "../utils/Errors.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
 import {Actions} from "../utils/Actions.sol";
+import {Entities} from "../utils/Entities.sol";
 
 /// @dev Previous production balance decoder; all other execution helpers stay shared.
 library PreviousCommandBalance {
@@ -64,13 +64,13 @@ abstract contract PreviousCommandWithdrawHook {
 /// @notice Command that delivers BALANCE state blocks to an external destination.
 /// Use `withdraw` for assets being sent outside the protocol (e.g. ERC-20 transfers, ETH sends).
 /// For internal balance credits, use `creditAccount` instead.
-abstract contract PreviousCommandWithdraw is CommandBase, PreviousCommandWithdrawHook, ActionAnnot {
+abstract contract PreviousCommandWithdraw is CommandBase, PreviousCommandWithdrawHook {
+    uint private constant STATE = Specs.Balance | Entities.Account | (Actions.Withdraw << 32);
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        annotateAction(id, Actions.Withdraw);
+        (id, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, 0);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.
