@@ -359,10 +359,12 @@ also uses `allocate` and `pos`. The creator composes those primitives directly:
 delegating to the returning writer added 38 gas per creation in the tested harness.
 
 `Executions.outputBalance`, `Writers.appendBalance`, and the direct Bootstrap and
-Debit pipeline writers now use `Encoder`. Reservation and advancement now happen inside the cursor writer. Bootstrap and
-Debit now allocate the final output through `Execute.allocateBalances` and write
-within it directly, without growth or finalization. Bootstrap derives its exact
-count from the inner AssetAmount list.
+Debit pipeline writers migrated to `Encoder`. At that stage Bootstrap and Debit
+allocated the final output through `Execute.allocateBalances` and wrote within it
+directly, without growth or finalization. Bootstrap now uses a single allocation
+for output plus reserved log space, with inline fixed-size writes. Its exact output
+count still comes from the inner AssetAmount list; reserved log bytes do not count
+toward the returned length.
 At that intermediate stage, Writers also initialized and finalized through Encoder;
 its remaining formats still used the old helpers. Writers has since been removed. `Codec.sol` exports the library.
 

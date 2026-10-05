@@ -99,12 +99,14 @@ npm test -- test/execute-blocks.test.ts
 npm run bench -- test/execute-blocks.bench.test.ts
 ```
 
-Bootstrap unwraps exactly one composite block with `Blocks.unpackBootstrapExact`
-and validates the inner ASSET_AMOUNT stride. The exact helper rejects malformed
-framing, truncation and trailing data with `InvalidBlock`; the stream-oriented
-`Blocks.unpackBootstrap` remains available for decoding within a larger stream. Bootstrap
-and Debit allocate exactly one BALANCE per validated ASSET_AMOUNT block
-through allocateBalances, advance an absolute memory position with writeBalance,
-and return the completed buffer without finalization. Hooks may allocate between
+Bootstrap directly validates one BOOTSTRAP and its final LIST, including exact
+lengths and ASSET_AMOUNT stride, then checks every item header during processing.
+`Blocks.unpackBootstrapExact` and the stream-oriented `Blocks.unpackBootstrap`
+remain available to other callers. Bootstrap reserves returned balances, a
+writable log prefix and worst-case log space in one allocation before hooks run.
+Only the returned balances count toward output.length; logical padding is cleared.
+The private forkLog helper accepts only this reserved layout and copies the
+initialized prefix when native funding requires a separate log. Debit continues
+to use allocateBalances and writeBalance for an exactly sized output stream. Hooks may allocate between
 writes. Counts are bounded by validated source lengths; the helper rejects byte
 sizes exceeding uint32.max. See the [output benchmark](ExecuteOutputPreallocation.md).

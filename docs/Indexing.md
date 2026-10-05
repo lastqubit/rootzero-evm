@@ -853,14 +853,21 @@ as one credit, rather than also emitting Account/Credit for the same operation.
 ### Bootstrap accounting
 
 Bootstrap emits one `[Account/Bootstrap codes][BALANCE stream]` after all debit
-hooks complete. Every block records an actual nonzero account debit: non-native
-debits appear in request order, followed by the combined chainAsset debit if
-nonzero. Account identity comes from the deployment's pipeline context. If no
-account debit occurs, no log is emitted. The endpoint INPUT lane has no log codes.
+hooks complete. Non-native requests appear in request order, including zero
+amounts, followed by the combined actual chainAsset debit if nonzero. Zero
+non-native entries describe a zero delta and do not invoke debit hooks. Account
+identity comes from the deployment's pipeline context. A log is omitted only
+when there are no non-native requests and no native debit. The endpoint INPUT
+lane has no log codes.
+
+This zero-inclusive policy differs from v1.50.0, which omitted zero entries.
+Consumers must accept zero deltas and must not infer that a Bootstrap log implies
+a nonzero debit or one hook call per block. Output count, order and requested
+amounts are unchanged; native requests still aggregate into one actual debit.
 
 Assigned value may cover requested chainAsset balances and the budget. Only the
-uncovered amount appears in the log; requested splits, zero amounts and the
-budget itself are not logged. Indexers apply every emitted Balance as a debit;
+uncovered native amount appears in the log; native request splits, zero native
+amounts and the budget itself are not logged. Indexers apply every emitted Balance as a debit;
 there is no separate Account/Debit record to combine or override. Deployments
 using the earlier INPUT-log policy must be decoded according to their version.
 
@@ -870,6 +877,77 @@ of 3 and 4 chainAsset, budget 5, and assigned value 4, output contains balances
 All logs revert if any funding operation fails. The former fixed Bootstrap
 payload and additive per-item budget semantics require deployment-version-aware
 decoding and must not be used for this schema.
+
+### Bootstrap shared output and reserved log space
+
+The current implementation validates the outer BOOTSTRAP and final LIST together,
+then validates each exact ASSET_AMOUNT header in one processing pass. It reserves
+`[output:size][writable log prefix:32][log capacity:size + 72]` before hooks run.
+The output retains its own bytes-length word and Encoder leading word. Its logical
+padding is cleared separately after shortening the larger allocation. The private
+forkLog helper accepts only this layout and copies only the initialized prefix.
+Native funding and checked arithmetic are unchanged; zero-amount hooks remain skipped.
+Scalar Pipeline and Balance logs use temporary memory without advancing the allocator.
+There is no asset pre-scan, loop unrolling, or singleton path.
+
+The Commander reference used Solidity 0.8.33/Osaka. These upstream measurements
+use **Solidity 0.8.35, viaIR, optimizer 200, Cancun** with identical inputs and
+compiler settings for all three variants. The stock adapter and scalar log helpers
+are frozen from v1.50.0. The zero-inclusive reference retains the stock decoder and
+allocation, includes zero non-native entries, skips zero hooks, and uses the same
+new scalar log helpers. This isolates implementation savings from the event policy.
+
+| Balances | Cases | Receipt gas saved vs zero-inclusive | Mean saving | Positive-request saving vs stock |
+|---|---:|---:|---:|---:|
+| 1 | 37 | 212 to 404 | 332.0 | 376 to 654 |
+| 2 | 83 | 262 to 496 | 442.4 | 460 to 765 |
+| 3 | 169 | 314 to 591 | 539.8 | 548 to 880 |
+| 4 | 353 | 370 to 692 | 641.1 | 638 to 1000 |
+
+All **642** short-list cases improve against the same-policy reference; the
+unweighted mean saving is **570.94 gas**. There are **177 regressions versus stock**,
+all in zero-containing scenarios whose log contents intentionally differ. Worst
+extra receipt gas versus stock is 431/890/1,346/1,796 for 1/2/3/4 balances.
+Every positive-amount scenario improves versus stock.
+
+An additional 18 scenarios cover 0/5/8/15/32/128 entries in native, non-native and
+mixed layouts. All improve against the zero-inclusive reference, by 320 to 11,967 gas.
+The 32- and 128-entry non-native cases cost 595 and 3,648 more gas than stock due
+to retained zero entries. These samples are correctness and gas checks, not an
+exhaustive performance guarantee for arbitrary larger lists or hook implementations.
+
+Runtime bytecode in the identical ledger test harness is **3,325 bytes**, versus
+**3,945** for stock and **3,868** for the zero-inclusive reference: reductions of
+620 and 543 bytes. These are harness sizes, not Commander deployment sizes.
+The original patch was adapted to preserve zero-hook skipping, zero output padding
+and InvalidBlock for reversed cursors. Consolidating the framing checks also
+removed regressions observed in the first upstream adaptation.
+
+The benchmark performs Bootstrap/credit/cashin ledger roundtrips using real assigned
+native value. It checks exact returned output and credit, all five ledger balances,
+hook counts, exact logs, native custody and caller wallet changes including fees.
+The common harness includes a hook-call counter and output-padding assertions;
+absolute gas is not a prediction for a specific deployed host. It does not perform
+ERC-20 transfers or swaps. The matrix covers all 30 native/non-native orderings,
+budgets 0/9, absent/partial/exact/excess assigned value, positive/alternating-zero/
+all-zero amounts, and repeated non-native assets. Dirty-memory and allocating-hook
+checks run separately so they do not distort the gas comparison.
+
+Release validation: 2,214 tests including all benchmarks; 431 differential
+malformed/funding cases; 100 dirty-memory scenarios across all three variants;
+explicit rollback, reversed-cursor, full-width, padding and scalar allocator checks;
+and TypeScript checking. The existing authorization and reentrancy paths are unchanged.
+
+Raw measurements, including per-case execution gas and receipt gas, are saved in
+[BOOTSTRAP_SHORT.json](benchmarks/BOOTSTRAP_SHORT.json). Reproduce with:
+
+```sh
+npm run bench -- test/bootstrap-short.bench.test.ts
+npm test
+npm run typecheck
+```
+
+The benchmark writes its fresh capture to `.npm-cache/bootstrap-short-matrix.json`.
 
 ### Commander event migration benchmarks
 
@@ -946,7 +1024,9 @@ by these benchmark fixtures.
 Measured 2026-10-05 with the same compiler/network settings as the Commander
 comparison above. `bootstrap-debit-logs.bench.test.ts` originally compared input-logging
 Bootstrap against two test-only candidates with identical funding, checked sums,
-output allocation and ledger hooks. That input logger is now a frozen baseline.
+output allocation and ledger hooks. That input logger is now a frozen baseline. The hybrid comparison also uses
+frozen v1.50.0 behavior; the current zero-inclusive candidate has a separate
+`bootstrap-short.bench.test.ts` matrix.
 
 Both candidates reserve space for `request count + 1` Balance blocks before
 processing requests. They append each nonzero non-native debit and, last, the
