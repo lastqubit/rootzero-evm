@@ -8,6 +8,20 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.51.0
+
+- Optimize Bootstrap with direct exact framing validation, inline fixed-size item
+  reads/writes and one allocation for output plus reserved log space. Preserve
+  checked native funding, zero-amount hook skipping, output padding and malformed
+  cursor errors. Keep the log shared until native handling requires separation.
+- **Event compatibility:** Bootstrap now retains zero-valued non-native requests
+  in their original order. They represent zero deltas and do not invoke debit
+  hooks. Native logging remains one aggregate actual debit, omitted when zero.
+  Wire schemas and output balances are unchanged.
+- Emit scalar Pipeline and Balance logs from temporary memory without advancing
+  the allocator. Add frozen stock and zero-inclusive benchmarks, the 642-case
+  short-list matrix, malformed-input comparisons and hook/memory regressions.
+
 ## 1.50.0
 
 - **Breaking: block-based logging and discovery.** Replace built-in ABI events
