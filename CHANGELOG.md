@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.50.0
+
 - **Breaking: block-based logging and discovery.** Replace built-in ABI events
   with topic-free LOG0 records. Remove EventEmitter, EventAbi, Events.sol and the
   Activity, Annotation, Asset/AssetPreimage, Balance, Dispatch, Endpoint, Guardian,
