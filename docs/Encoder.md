@@ -7,8 +7,7 @@ only under contracts/test for historical comparisons, outside the package.
 Complete-child creator measurements below are historical and use the test-only
 `PreviousContextCreator`; that API has been removed from Encoder.
 
-The creator API now includes the fixed layouts supported by the writers, plus
-BOOTSTRAP. These allocate the final block once and compose `writeHeader` and
+The creator API includes the fixed layouts supported by the writers. These allocate the final block once and compose `writeHeader` and
 `write32`, preserving full-width fields without semantic validation.
 
 `createBlock(key, data)` accepts a memory payload or a validated calldata payload
@@ -49,8 +48,10 @@ writers return `(dst, nextCur)`. Cursor arguments remain first.
 
 The return-order benchmark (`test/encoder-order.bench.test.ts`) compares identical
 consumers against the previous cursor-first returns, using solc 0.8.35, viaIR,
-optimizer 200, and Cancun. Across 78 cases, output bytes, cursor metadata, and
-memory allocation match. With exact capacity, balance writes cost 5 more gas per
+optimizer 200, and Cancun. Both candidates now reserve the same logging prefix
+to isolate return ordering. The original 78-case measurements below predate that
+prefix: output bytes, cursor metadata, and memory allocation matched. With exact
+capacity, balance writes cost 5 more gas per
 block; all four context variants save 12 gas per block. Starting from zero
 capacity, 1/2/4 balance writes cost 21/42/68 more gas; context savings are unchanged.
 Both benchmark contracts have 1,555 bytes of executable runtime code. These are
@@ -359,7 +360,9 @@ delegating to the returning writer added 38 gas per creation in the tested harne
 
 `Executions.outputBalance`, `Writers.appendBalance`, and the direct Bootstrap and
 Debit pipeline writers now use `Encoder`. Reservation and advancement now happen inside the cursor writer. Bootstrap and
-Debit initialize with the exact output size and finalize through Encoder.
+Debit now allocate the final output through `Execute.allocateBalances` and write
+within it directly, without growth or finalization. Bootstrap derives its exact
+count from the inner AssetAmount list.
 At that intermediate stage, Writers also initialized and finalized through Encoder;
 its remaining formats still used the old helpers. Writers has since been removed. `Codec.sol` exports the library.
 
@@ -705,14 +708,34 @@ early must use `expectEnd()` or checked close when complete consumption is requi
 Do not append after finalization. Low-level logging remains available through
 `Logs.memWrap(id, Keys.Output, output)` for finished Encoder-owned buffers.
 
-### Rooted context logging
+### Pipeline context logging
 
 ```solidity
-Logs.rooted(account, deadline, value, codes);
+Logs.pipeline(account, budget, codes);
 ```
 
-This encodes `Encoder.createRooted(account, deadline, value)` and emits it through
-`Logs.mem`: 32 bytes of codes plus a 104-byte ROOTED block, with no topics or extra
-tag. All values remain full width. The helper supplies no pipeline lifetime or
-account-inheritance behavior; the emitter defines that convention. See
-[Rooted schema](Schema.md#rooted-pipeline-context) for the payload and codecs.
+This encodes `Encoder.createPipeline(account, budget)` and emits it through
+`Logs.mem`: 32 bytes of codes plus a 72-byte PIPELINE block, without topics.
+budget is the invocation's initial native-value budget. Nested pipelines preserve
+the account; special implementations must explicitly log account switches and
+restoration. The helper performs no authorization or execution. `Pipeline.pipe`
+calls it at entry, including empty pipelines. See [Pipeline context](Schema.md#pipeline-context).
+
+
+### Envelope logging
+
+```solidity
+Logs.envelope(portal, resources, key, digest, codes);
+```
+
+The helper constructs Encoder.createEnvelope and emits it through Logs.mem:
+32 bytes of codes plus a 136-byte Envelope block. digest is keccak256 of the
+exact forwarded payload; key remains an independent transport lookup key.
+The caller defines scope and action codes. No hashing or transport occurs here.
+See [Transport envelopes](Schema.md#transport-envelopes).
+
+`Encoder.createBootstrap(uint budget, bytes memory balances)` creates one
+composite BOOTSTRAP containing the budget and a LIST wrapping the supplied
+ASSET_AMOUNT stream. It allocates the final 48 + balances.length bytes once.
+The former three-scalar Bootstrap creator and fixed Bootstrap size/header
+constants are removed.

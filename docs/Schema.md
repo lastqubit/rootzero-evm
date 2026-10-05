@@ -39,13 +39,17 @@ Custom block keys do not have to be keccak-derived. They
 are opaque `bytes4` tags and only need to be unique in the context where they are
 used. A host can publish the meaning of a custom key as an annotation:
 
-```solidity
-event Annotation(uint indexed entity, bytes data);
+```txt
+[codes:32][#annotation { uint entity, #bytes as data }]
 #schema { uint spec, #string as body }
 ```
 
+Standard helpers emit LOG0 with Host/Annotate codes. The admin annotate command
+logs its complete INPUT stream of Annotation blocks instead. See Indexing.md for
+publisher scope, endpoint resolution and historical ABI compatibility.
+
 Annotation merge behavior is defined by the annotation block type rather than
-by the `Annotation` event. A `#schema` annotation is identified by its entity
+by the `#annotation` envelope. A `#schema` annotation is identified by its entity
 and the block key encoded in `spec`: distinct keys accumulate, while the latest
 trusted claim for the same key replaces the earlier one. Other annotation types
 may define additive, historical, or explicitly revocable behavior instead.
@@ -383,9 +387,85 @@ on the port ID is `#input as (debit, credit)`. Each pair occupies 208 bytes with
 parent header. Two bounded reads enforce complete pairs before calling the hook;
 a missing second block or malformed header reverts the whole batch.
 
+## Asset Preimages
+
+`#assetPreimage` has schema `bytes32 asset, #bytes as preimage`.
+Its payload is 40 bytes plus the preimage length; the complete block is 48 bytes
+plus that length. The BYTES child must occupy the remainder of the parent exactly.
+`Keys.AssetPreimage`, `Specs.AssetPreimage` and `Schemas.AssetPreimage`
+define the layout; the spec has minimum 40, unbounded maximum and hint 256.
+`Encoder.createAssetPreimage` preserves the complete preimage without validating
+its hash or implying host support. Emit existing blocks through endpoint lane
+logging or the generic Logs.mem/Logs.copy primitives.
+
+For opaque keccak asset IDs, require at least three preimage bytes, hash-format
+byte 0x01 and the Asset category byte. Verify
+`asset == 0x02 || preimage[1:3] || bytes29(keccak256(preimage))`.
+Unknown hash formats require their own rules. Keep the emitting publisher with
+the claim; malformed or mismatched claims must not become verified preimages.
+Asset lifecycle logs continue to use the existing `#asset` block and separate
+scope/action/state codes.
+
+## Transport envelopes
+
+`#envelope` has schema `uint portal, uint resources, bytes32 key, bytes32 digest`.
+Its key is bytes4(keccak256("#envelope")); the payload is exactly 128 bytes,
+136 including the header. Keys/Specs/Sizes/Headers/Schemas.Envelope define it.
+Encoder.createEnvelope preserves the four full-width fields without validation.
+
+portal identifies the destination portal host. resources is chain-specific.
+key is an independent transport correlation or recovery lookup key.
+digest is keccak256 of the exact forwarded payload bytes, excluding Envelope
+routing fields and block headers unless those bytes are themselves part of the
+forwarded payload. This matches Portal's witness hashing convention.
+
+Logs.envelope(portal, resources, key, digest, codes) emits codes plus the block:
+168 bytes using LOG0, without topics. The caller establishes host/account scope
+and supplies Relay or Dispatch action codes. The helper neither computes the
+digest nor sends a message. Account scope requires documented pipeline context
+or explicit account-bearing blocks; host scope normally resolves from the emitter.
+A separately published payload must match the digest to be accepted.
+
+Relay/Dispatch input schemas and runners are unchanged. The legacy Relay and
+Dispatch ABI-event mixins have been removed; applications choose where to emit envelopes.
+
+## Resolution records
+
+`#resolution` has schema `bytes32 key, bytes32 digest`: exactly 64 payload bytes,
+72 bytes including the header. Keys/Specs/Sizes/Headers/Schemas.Resolution define
+the canonical layout. Encoder.createResolution constructs it; Logs.resolution
+emits codes plus the block (104 bytes, no topics).
+The key and digest identify a recovery record on the emitting host. Codes select
+Unresolved or Resolved; the codec does not mutate storage or verify witnesses.
+Resolved denotes consumption of a matching record. It does not certify downstream
+delivery separately, and subsequent transaction reverts discard the log.
+
+## Host Introduction
+
+The canonical `#introduction` schema is `uint peer, bytes32 origin, uint blocknum`.
+Its payload is exactly 96 bytes (104 including the header).
+`Keys.Introduction`, `Specs.Introduction`, `Sizes.Introduction`,
+`Headers.Introduction` and `Schemas.Introduction` define the layout.
+`Encoder.createIntroduction` constructs it and `Logs.introduction` emits it.
+HostIntroduce codes scope the log to the receiving host identified by the emitter.
+The host validates the peer against the caller; origin is transaction provenance,
+and blocknum is an unverified caller-supplied claim. Introduction grants no trust.
+Indexers preload this schema for discovery.
+
+## Endpoint Registration
+
+The canonical `#endpoint` schema is `uint id, uint state, uint input, uint output`.
+Its payload is exactly 128 bytes (136 including the header). Each lane retains
+its complete Spec + Codes word. `Keys.Endpoint`, `Specs.Endpoint`,
+`Sizes.Endpoint`, `Headers.Endpoint` and `Schemas.Endpoint` define this layout;
+`Encoder.createEndpoint` constructs it and `Logs.endpoint` emits it.
+Registration uses HostAdd codes and the emitter identifies the publishing host.
+Indexers preload this layout and codes to decode discovery without an ABI event
+or a prior endpoint registration.
+
 ## Endpoint Lanes
 
-Endpoint events publish `[spec:16][codes:16]` for each state, input, and output lane.
+Endpoint blocks publish `[spec:16][codes:16]` for each state, input, and output lane.
 The upper half retains the spec fields; the lower half holds four uint32 codes.
 `Lanes.create(spec, codes)` rejects overflow and overlap; `Lanes.spec` and
 `Lanes.codes` extract each component. Zero codes disable logging. Plain Specs
@@ -1185,7 +1265,7 @@ debt                 bytes32 liability, uint debt
 accountAsset         bytes32 account, bytes32 asset
 assetLiability       bytes32 asset, bytes32 liability
 hostAsset            uint host, bytes32 asset
-bootstrap            bytes32 asset, uint amount, uint budget
+bootstrap            uint budget, many #assetAmount as balances
 allocation           uint host, bytes32 asset, uint amount
 allowance            uint host, bytes32 asset, uint amount
 custody              uint host, bytes32 asset, uint amount
@@ -1230,9 +1310,14 @@ with hops in forward order ending at the output asset. `swapExactOut` interprets
 them as the desired output asset and amount, with hops in reverse order ending
 at the input asset. Hops excludes the asset named in the fixed fields: A ? B ? C
 is encoded as A with [B, C] for exact-in, or C with [B, A] for exact-out.
-The codec validates the outer
-container and final LIST framing; hooks validate amounts and route contents.
-Each hook returns a complete Position for subsequent position constraints.
+The codec validates the outer container and final LIST framing. The commands
+accept empty routes, validate each ASSET block and invoke one scalar hook
+per hop. Exact-in carries the returned amount forward; exact-out carries the
+returned debt backward. Hooks validate amounts and asset pairs and settle
+intermediate assets internally. Each command produces one aggregate Position
+with its immutable Counterparty; position constraints remain separate commands.
+Empty routes invoke no hook and return a Position with equal asset/liability and
+amount/debt. The position is logged normally; settlement may still book both legs.
 
 `#codes` carries one packed word using the event-code convention: up to eight
 nonzero uint32 IDs, lowest slot first, followed by zero padding. Zero represents
@@ -1270,30 +1355,38 @@ on any host where it has sufficient balances, or realized by its own host.
 The subtype does not dictate routing. Deriving a host account does not invoke
 that host or make it a trusted peer.
 
-## Rooted pipeline context
+## Pipeline context
 
-The standard `#rooted` block has the schema:
+The standard `#pipeline` block has the schema:
 
 ```text
-bytes32 account, uint deadline, uint value
+bytes32 account, uint budget
 ```
 
-Its key is `bytes4(keccak256("#rooted"))`. The payload is exactly 96 bytes and
-contains the account, expiry timestamp, and native value in that order, each as a
-full 32-byte word. The complete block is 104 bytes. `deadline` uses Unix seconds;
-`value` uses the emitting chain's native-value unit (wei on EVM).
+Its key is `bytes4(keccak256("#pipeline"))`. Both fields are full 32-byte words:
+64 payload bytes, 72 bytes including the header. budget is this invocation's initial
+native-value budget (wei on EVM), not necessarily msg.value and not an additive
+funding record across nested calls.
+There is no deadline; expiry enforcement belongs to the invoking entrypoint.
 
-`Keys.Rooted`, `Schemas.Rooted`, `Specs.Rooted`, `Headers.Rooted`, and `Sizes.Rooted`
-expose the layout. `Encoder.createRooted`/`writeRooted` encode it;
-`Blocks.unpackRooted` validates and decodes it. Executions provides `outputRooted`
-and `unpackRooted` for output writing and input consumption.
+`Keys.Pipeline`, `Schemas.Pipeline`, `Specs.Pipeline`, `Headers.Pipeline` and
+`Sizes.Pipeline` expose the layout. `Encoder.createPipeline`/`writePipeline`
+encode it; `Blocks.unpackPipeline` validates and decodes it. Executions provides
+`outputPipeline` and `unpackPipeline`.
 
-These are data codecs: they do not authorize the account, enforce the deadline,
-transfer value, start a pipeline, or automatically change the execution account.
-`Logs.rooted(account, deadline, value, codes)` emits `codes | ROOTED block` through
-LOG0. The caller decides when to emit it and defines pipeline boundaries and
-nested-context handling for indexers. Adding this schema does not change the
-existing Rooted ABI event or automatically emit context from pipeline runners.
+`Logs.pipeline(account, budget, codes)` emits codes plus one PIPELINE block using
+LOG0. These helpers do not authorize accounts, transfer funds, start pipelines,
+or change the execution account. `Pipeline.pipe` emits this log before processing
+any steps, using `Entities.Account` codes, including when the step stream is empty.
+
+The convention is to emit context when a pipeline starts; nested pipelines retain
+the same account. Special implementations that change accounts must explicitly
+log the switch and restoration and document their interpretation for indexers.
+Ordinary pipelines need no end marker to restore account context.
+
+This replaces the Rooted schema and helper APIs and removes RootedEvent and its
+public export. The new key prevents confusing the two-word Pipeline layout with
+the historical three-word Rooted layout. Historical logs retain their original decoder.
 
 ### Event output containers and capacity
 
@@ -1311,3 +1404,17 @@ to emit a wrapper without copying, then restores both. It requires a finished
 Encoder-owned buffer, not arbitrary Solidity bytes. Resolve addresses after any
 growth. This prefix space wraps the whole buffer; nested streams still need
 explicit header reservations within their logical output.
+
+### Bootstrap funding request
+
+BOOTSTRAP contains a full-width budget followed by one LIST of ASSET_AMOUNT
+blocks. Its minimum payload is 40 bytes; the complete block is 48 + 72 * count
+bytes. Budget is the minimum native credit remaining after requested balances
+are funded. ExecuteBootstrap accepts exactly one outer block, including an empty
+list for budget-only funding, and produces one BALANCE per inner item. The total
+requested chainAsset amount must fit uint256; it is accumulated with checked
+arithmetic before assigned value is applied.
+
+This replaces the former fixed `(asset, amount, budget)` payload under the same
+key. Clients and indexers must select the schema for the deployed version;
+old encodings are not accepted by the new command.

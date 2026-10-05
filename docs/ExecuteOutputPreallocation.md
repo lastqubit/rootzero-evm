@@ -1,5 +1,9 @@
 # Execute output preallocation experiment
 
+These measurements predate composite Bootstrap. Its historical comparisons retain
+the fixed Bootstrap layout; current behavior and gas are covered by
+`bootstrap.test.ts` and `adapter-optimizations.bench.test.ts`.
+
 Bootstrap and Debit know their final output size from fixed-stride input bounds.
 The chosen exact-allocation path is now implemented in Execute and used
 by both production adapters. The benchmark retains three experimental writers

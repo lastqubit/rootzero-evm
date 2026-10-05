@@ -10,7 +10,7 @@ of the protocol: the base contracts, block codecs, and helpers that rootzero
 applications compose.
 
 Two decisions shape everything below. First, all data that crosses a host
-boundary is encoded in one binary block format, so a input means the same
+boundary is encoded in one binary block format, so an input means the same
 bytes on every chain. Second, every surface operates on *runs* of blocks rather
 than single values, so batching is the default, not a feature added later. This
 guide introduces the protocol bottom-up: blocks, then identities, then hosts
@@ -41,8 +41,7 @@ contract ExampleHost is CommandHost, Balances, Deposit {
     constructor(uint commander) CommandHost(commander) {}
 
     function deposit(bytes32 account, bytes32 asset, uint amount) internal override returns (uint) {
-        uint balance = creditTo(account, asset, amount);
-        emit Balance(account, asset, balance);
+        creditTo(account, asset, amount);
         return amount;
     }
 }
@@ -73,7 +72,7 @@ return the authorized endpoint's selector and address for direct use with the
 free raw-call helpers.
 
 Deploy it with the local host ID encoding your native identity as commander and you can call its commands
-directly. A input is a run of binary blocks — here, a single `#assetAmount` block
+directly. An input is a run of binary blocks — here, a single `#assetAmount` block
 asking to deposit an asset (the encoders are a few lines each; see
 [`test/helpers/setup.ts`](test/helpers/setup.ts) and
 [`test/helpers/blocks.ts`](test/helpers/blocks.ts) for reference
@@ -85,7 +84,8 @@ const host = await ethers.deployContract("ExampleHost", [commander]);
 
 const account = encodeUserAccount(user.address); // receiving account
 const input = encodeAssetAmountBlock(asset, 100n); // what to deposit
-await host.deposit({ account, state: "0x", input: input }); // emits Balance
+const context = encodeContextBlock(account, "0x", input);
+await host.deposit(context); // logs the credited amount in the Deposit OUTPUT lane
 ```
 
 The rest of this guide explains the ideas this example leans on — blocks, IDs,
@@ -246,8 +246,9 @@ The Rootzero asset is the singleton global ID
 on every chain. Access it as `Assets.Rootzero`; EVM chain-coin
 and ERC-20 asset IDs remain chain-local.
 
-Opaque asset declarations use `AssetPreimage(bytes32 indexed asset, bytes preimage)`.
-The asset ID is indexed and there is no host argument. The preimage uses
+Opaque asset declarations use LOG0 with `Codes.AssetAnnotate` followed by an
+`#assetPreimage { bytes32 asset, #bytes as preimage }` block. Indexers read the asset
+ID from the block and retain the emitter as its publisher. The preimage uses
 `[0x01][Asset][subtype][payload...]`, letting offchain indexers or witnesses
 verify and resolve
 `[0x02][Asset][subtype][bytes29(keccak256(preimage))]` assets.
@@ -447,10 +448,15 @@ and exact debt; hops run forward toward the output asset. For `swapExactOut`,
 the input asset. Both routes exclude the asset named in the fixed fields.
 For an A ? B ? C swap, exact-in encodes A with hops [B, C], while exact-out
 encodes C with hops [B, A].
-The exact-in hook takes `(liability, debt, hopsCur)`; the exact-out hook takes
-`(asset, amount, hopsCur)`. Both return the complete Position.
-The implementation validates amounts and routes and defines settlement;
-the wrappers decode the SWAP container and preserve the returned Position.
+Commands validate each ASSET block. Empty routes call no hook and produce a
+Position with equal asset/liability and amount/debt; the position is still returned
+and logged, and normal settlement rules apply. The exact-in
+hook takes `(liability, debt, asset)` and returns the amount received; the
+exact-out hook takes `(asset, amount, liability)` and returns the debt required.
+The command feeds each result into the next hop and builds one aggregate Position
+using the shared immutable `Counterparty`. A concrete host initializes that base
+with `Counterparty(account)` once, even when it inherits both swap commands.
+Hooks validate amounts and asset pairs and settle intermediate assets internally.
 Use position-constraint commands to check the resulting amounts separately.
 
 The standard `Deposit` mixin shows the canonical shape: open the execution,
@@ -588,7 +594,7 @@ Lane codes select logging independently of this flags byte.
 
 `CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
 their payout policy and choose the accounting and events to emit. The hook has
-no `ChainAsset` or `ActivityEvent` inheritance.
+no `ChainAsset` inheritance or built-in flow logging.
 
 The free `sendChainAsset(account, amount)` helper in `core/Cash.sol`, also exported
 by `Core.sol` and `Endpoints.sol`, transfers the exact amount to
@@ -610,9 +616,6 @@ state to other accounts), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
 returns counterparty zero; input is empty, and an optional following
 `checkPosition` validates the result against POSITION_CONSTRAINTS),
-`allocate` (turn balance state
-into custody),
-`provision` (provision custody from an external allocation),
 `checkBalance` (validate each balance's asset and amount against paired BALANCE_CONSTRAINTS
 and return it unchanged; `ExecuteCheckBalance` validates memory state directly),
 `checkPosition` (validate each position against paired POSITION_CONSTRAINTS and return it unchanged;
@@ -636,14 +639,17 @@ Each step names a command, the native value it may spend, and its input.
 The returned state threads into the next command and the final state must be
 empty. Each returned native credit replenishes the budget before running the
 next step, allowing one command to fund later commands. The standard
-`bootstrap` command consumes a stream of
-`#bootstrap { bytes32 asset, uint amount, uint budget }` requests and atomically
-debits each asset through the standard account hook, introduces matching
-`#balance` state, and debits each nonzero budget contribution from the account's
-chain asset through the same hook. Its pipeline-local implementation uses assigned step value first when
-bootstrapping the chain asset, debits any remainder from the account, and
-returns unused assigned value as credit. Bootstrap is registered with command
-metadata but is only executable through local pipeline execution. This is the core of
+`bootstrap` command consumes exactly one
+`#bootstrap { uint budget, many #assetAmount as balances }` block and returns one
+`#balance` per requested item, in order. Non-chain assets debit the account as
+requested. Assigned step value funds chainAsset balances first; their uncovered
+amounts and any shortfall against the minimum remaining `budget` debit chainAsset
+once after the loop. Excess assigned value remains available as returned credit.
+An empty balances list supports budget-only funding. Bootstrap logs actual nonzero
+debits in one Account/Bootstrap Balance stream after funding, with the combined
+chainAsset debit last. No debit means no log.
+Bootstrap is registered with command metadata but is only executable through
+local pipeline execution. This is the core of
 `Pipeline.pipe`:
 
 ```solidity
@@ -740,7 +746,7 @@ Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
 `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
 `ExecuteSettle` to register canonical command metadata while executing
 their local command IDs through `executeBootstrap`, `executeCashout`,
-`executeDebitAccount`, `executeCreditAccount`, and `executeSettle`. The bootstrap and debit adapters decode fixed-stride calldata
+`executeDebitAccount`, `executeCreditAccount`, and `executeSettle`. The bootstrap and debit adapters decode fixed-stride AssetAmount calldata
 input directly; cashout, credit, and settle decode memory-backed pipeline
 state. All return `handled = true` and avoid an
 external self-call. The host's `execute` hook must authorize a command before
@@ -926,14 +932,13 @@ drop a trusted node immediately.
 
 ## Events and Discovery
 
-Hosts are self-describing. At deployment a host emits the ABI of every event it
-uses (`EventAbi`), block schema events, endpoint specs, and labels for
-human-readable names. State changes then follow evented
-conventions: `Balance` for account ledger changes (including host accounts),
-and `Activity(account, subject, value, codes)` for activities and value movement.
-Direct flows carry an asset and amount with effect codes; richer activities can
-use a correlation ID for companion details under a documented emitter schema. An indexer can reconstruct the entire repository — endpoints,
-names, access sets, balances — from logs alone, with no artifact files.
+Hosts publish Endpoint and Annotation blocks for endpoint lanes, schemas and
+human-readable labels. Protocol logs use LOG0 with scope/action/state codes or
+endpoint IDs followed by block streams. Indexers preload the standard catalog
+and apply each endpoint's documented semantics to balances and other state.
+Code catalogs are exported by Utils.sol; Logs and the block codecs by Codec.sol.
+Legacy event mixins, EventEmitter, EventAbi and the Events.sol barrel are removed.
+Applications can still declare their own Solidity events.
 
 ## Development
 
@@ -971,7 +976,6 @@ Import from the package entry points rather than deep paths:
   `Specs`
 - `@rootzero/contracts/Utils.sol` — `Ids`, `Nodes`, `Assets`, `Accounts`,
   cursor, layout, and value helpers
-- `@rootzero/contracts/Events.sol` — protocol event contracts
 
 `Core.sol`, `Commands.sol`, `Endpoints.sol`, and `Utils.sol` each export all
 shared protocol errors from `utils/Errors.sol`, including `QueryFailed` and
@@ -987,7 +991,6 @@ Repo layout:
 - `contracts/queries` — read-only query endpoints
 - `contracts/codec` — block schemas, cursor parsing, buffers, and writers
 - `contracts/utils` — ids, nodes, assets, accounts, layout, ECDSA
-- `contracts/events` — event contracts and emitters
 - `docs` — [`Schema.md`](https://github.com/lastqubit/rootzero-evm/blob/main/docs/Schema.md) (wire format and schema DSL)
 
 Use this library to create a new rootzero host, implement a command, or reuse
@@ -1001,4 +1004,4 @@ emit one `[endpoint ID][OUTPUT block]` log after processing the batch. Output he
 only append blocks; returned streams remain unchanged. Both swap commands publish
 `Actions.Swap` in their output lane and use this format, including empty batches.
 Logs carry no implicit account. See [runner logs](docs/Indexing.md#command-runner-stream-logs)
-for indexer rules. Ordinary events continue to use `EventAbi`.
+for indexer rules. Application-defined ordinary events use their own supplied ABIs.

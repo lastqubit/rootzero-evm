@@ -7,22 +7,18 @@ alone, without contract artifacts, traces, or `eth_call`.
 
 This document is the companion to [`Schema.md`](Schema.md): Schema.md describes
 how to decode block payloads; this document describes what the log stream
-guarantees, the event conventions hosts are expected to follow, and a small set
-of proposed improvements. Sections marked **Proposed** are not yet implemented.
+guarantees and the event conventions hosts are expected to follow.
 
-## Self-Describing ABI
+## Block-based discovery
 
-Every event mixin emits `EventAbi` once from its constructor with the full ABI
-string of the event it declares:
-
-```txt
-event EventAbi(string abi)
-```
-
-An indexer that replays a host's deployment logs learns the complete event ABI
-of that host without artifact files. Only `EventAbi` itself must be known a
-priori for ordinary events. Topic-free runner logs and correlated block-stream logs
-use the fixed conventions below instead of `EventAbi`.
+Protocol discovery and state logs use LOG0 with canonical block schemas.
+Indexers preload the standard key/schema and code catalogs, then learn endpoint
+lanes and custom schemas from deployment logs. The library no longer provides
+ABI-event mixins, EventEmitter, EventAbi, or the Events.sol barrel.
+Code catalogs are exported through Utils.sol and logging through Codec.sol.
+Applications may still declare ordinary Solidity events and supply their ABIs
+through their own tooling; historical EventAbi-based deployments retain their
+original decoding conventions.
 
 ## Repository Discovery
 
@@ -31,7 +27,7 @@ discovery event from its constructor, so a host's deployment transaction
 contains its full endpoint catalog:
 
 ```txt
-event Endpoint(uint indexed host, uint id, uint state, uint input, uint output)
+[Codes.HostAdd:32][#endpoint { uint id, uint state, uint input, uint output }]
 ```
 
 - `state`, `input`, and `output` are packed lanes: `[spec:16][codes:16]`.
@@ -48,10 +44,15 @@ event Endpoint(uint indexed host, uint id, uint state, uint input, uint output)
   Indexers resolve schemas from the three published specs. A top-level list can
   use a context-local key with a schema body containing one `many #item`;
   nested lists with siblings continue to use `#list`.
-- This event signature replaces the former descriptor-bearing Endpoint event.
-  Decode historical deployments using their published EventAbi; do not apply the
-  new field layout to old logs. Lane codes require the deployment's encoding version: EventAbi alone cannot distinguish older spec-only semantics.
-- Block schema strings are published as `#schema` blocks in `Annotation` events.
+- Registration uses LOG0, without topics or an EventAbi announcement. Codes.HostAdd
+  packs Entities.Host then Actions.Add. The emitter and chain identify the
+  publishing host through the standard host-ID convention; no host word is repeated.
+  Indexers preload these codes and the canonical Endpoint key
+  (bytes4(keccak256("#endpoint"))) and four-word layout before decoding discovery.
+  This avoids depending on an endpoint registration to decode its own announcement.
+- Decode historical Endpoint ABI logs using their published EventAbi and deployment
+  version; their descriptor/spec-only/lane layouts retain their original semantics.
+- Block schema strings are published as `#schema` blocks inside LOG0 `#annotation` envelopes.
   Hosts may publish additional schema claims later through the admin `annotate`
   command.
 
@@ -79,34 +80,23 @@ Annotation helpers are `ActionAnnot`, `CounterpartyAnnot`, `ExecutionCost`,
 Their functions are `annotateAction`, `annotateCounterparty`, `executionCost`,
 `annotateGroups`, `label`, and `schema`, respectively.
 
-`ActivityEvent` (exported by `Events.sol`) provides
-`Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)`.
-The subject identifies an asset or another entity; zero is available when unused.
-For a direct asset flow, subject is the asset and value is the amount. Include the
-matching `Effects.Spend`, `Effects.Receive`, `Effects.Lock`, or `Effects.Unlock`
-code to describe the movement, alongside any action codes.
-
-For richer activities, value can instead be a correlation ID, with companion
-events describing assets, amounts, and other details. Codes and the documented
-emitter schema must unambiguously distinguish these interpretations; the numeric
-value alone cannot identify its mode. In reference mode, zero means no identifier
-and must not join unrelated activities. Nonzero IDs should be unique within the
-emitting contract; indexers scope them by chain and emitter address. Amounts have
-no uniqueness requirement and zero amounts are valid.
-
-Companion events can reference the ID when their schema supports it. Existing
-Balance events and endpoint output logs do not carry this reference. Hosts must
-document any ordering used to associate details without an explicit reference.
-The event declaration does not validate these conventions.
+Account activity uses scoped codes and typed blocks in command state/input/output
+logs or standalone LOG0 streams. Balance blocks carry asset amounts; Position and
+account-bearing blocks provide richer detail. Effects.Spend, Receive, Lock and
+Unlock describe movement alongside the operation's action codes.
+Account scope must resolve to an explicit account-bearing block or documented
+pipeline context; a scope-kind code alone does not identify an account.
+ActivityEvent and RouteEvent and their public exports have been removed. Replay
+historical ABI logs with their original EventAbi and deployment conventions.
 
 `codes` packs up to eight total `uint32` action, entity-kind, effect, or state identifiers, starting in
 the least significant 32 bits. Entries must be contiguous and nonzero, followed
 by zero padding in the unused high slots. A zero word represents an empty list.
-The event mixin does not validate packing; emitters are responsible for this
+The logging primitives do not validate packing; emitters are responsible for this
 convention. Order and duplicates are preserved; adjacency does not imply
 action-to-effect pairing. This is an ID list, not a bitmask. All codes fields share this format.
 
-Use `Actions`, `Entities`, `Effects`, and `States`, all exported by `Events.sol` and `Utils.sol`.
+Use `Actions`, `Entities`, `Effects`, and `States`, all exported by `Utils.sol`.
 The top three bits of each `uint32` code reserve space for eight categories;
 the remaining 29 bits allow 536,870,912 values per category.
 
@@ -137,14 +127,14 @@ Effects define `Spend = 0x80000000`,
 other effect IDs are reserved. There is no `Effects.None`: use zero for no codes.
 Effects describe asset outcomes for the
 account; actions describe the operations responsible. Asset IDs and quantities
-remain in detail events rather than the activity summary.
+are carried by the typed blocks in the logged stream.
 
 States define `Inactive = 0xa0000000` and `Active = 0xa0000001`. Both are
 nonzero: omitted state information is distinct from explicitly inactive. States
-describe resulting conditions; each consumer defines which states apply. Asset, Node, Guardian, and Route
+describe resulting conditions; each consumer defines which states apply. Asset and route membership logs (and historical Node/Guardian events)
 require exactly one Active or Inactive code; other events define their own requirements.
 
-`Codes`, exported by `Events.sol` and `Utils.sol`, provides packed uint
+`Codes`, exported by `Utils.sol`, provides packed uint
 combinations in action-catalog order, with each active/inactive pair together:
 
 | Purpose | Active combination | Inactive combination |
@@ -155,10 +145,30 @@ combinations in action-catalog order, with each active/inactive pair together:
 | Roles | AppointThenActive | DismissThenInactive |
 | Asset support | AllowThenActive | DenyThenInactive |
 
-Each combination places the action first and resulting state second. They are
+The two-slot combinations above place the action first and resulting state second. They are
 compile-time combinations of standard IDs, not a separate category. Pass them
 directly as codes; hosts can define other combinations locally. Create and
 Update do not imply a particular state, so callers compose those explicitly.
+Scoped log combinations put the scope entity kind in the first (lowest uint32)
+slot. Remaining slots describe the subject, operation and result in the order
+specified by the named combination; no universal order applies to those slots.
+Legacy unscoped combinations and event families retain their existing semantics.
+Do not reinterpret their first action as a scope.
+
+Scope kinds are not identities. Each event family must define where its actual
+scope ID and affected subject IDs come from. Host-scoped endpoint logs resolve
+host identity through the trusted Endpoint registration, keyed by chain, emitter
+and endpoint ID. Index each affected subject as well as that host. Account-scoped
+logs require an explicit account block or a reliably associated execution/root
+context; an Account code alone cannot recover the account. Unknown scope kinds
+or unresolved IDs must not be guessed from adjacent logs.
+
+Account operations use `Codes.AccountWithdraw`, `Codes.AccountDeposit`,
+`Codes.AccountCredit`, and `Codes.AccountDebit`. Each packs `Entities.Account`
+first and the corresponding action second. Commands combine these codes with a
+spec, for example `Specs.Balance | Codes.AccountWithdraw`. These names preserve
+the existing encoded values and do not add a redundant Balance entity code.
+
 `Codes.AddRouteThenActive` explicitly combines `Actions.Add`,
 `Entities.Route`, and `States.Active` in that order:
 
@@ -184,16 +194,13 @@ can be passed directly without shifting. Category capacity is independent of
 packing capacity: an activity still holds at most eight codes in total.
 
 ```solidity
-emit Activity(account, asset, amount, Actions.Deposit | (Effects.Receive << 32));
-emit Activity(account, asset, amount, Effects.Lock);
-uint codes = Actions.Swap | (Effects.Spend << 32)
-    | (Effects.Receive << 64);
-// The host's swap schema defines value as a reference to companion details.
-emit Activity(account, bytes32(0), correlationId, codes);
+uint codes = Entities.Account | (Actions.Deposit << 32) | (Effects.Receive << 64);
+// The surrounding documented context must identify the affected account.
+bytes memory data = Encoder.createBalance(asset, amount);
+Logs.mem(codes, Encoder.pos(data, 0), data.length);
 ```
 
-Cast each ID to `uint` before shifting so shifts beyond the first slot retain
-their bits. To decode a word, read `uint32(word)` then shift `word >>= 32`, up to
+Catalog constants already use `uint`, so shifts retain their bits. To decode a word, read `uint32(word)` then shift `word >>= 32`, up to
 eight times; zero terminates the list and all remaining slots must also be zero.
 For each nonzero code, decode its category with `code >> 29` and its local
 identifier with `code & 0x1fffffff`. Category 0 identifies actions, category 1 identifies entity kinds, category 4 identifies effects, and category 5
@@ -206,9 +213,30 @@ at construction, and the admin `annotate` command publishes mutable annotations
 later:
 
 ```txt
-event Annotation(uint indexed entity, bytes data)
+[codes:32][#annotation { uint entity, #bytes as data }]
 #label { bytes32 namespace, #string as name }
 ```
+
+Standalone annotation logs use `Codes.HostAnnotate` (`Entities.Host` followed by
+`Actions.Annotate`, action 8). The scope is the publishing host, resolved from the
+chain and emitting contract's address using the standard host-ID convention;
+verified endpoint registrations also identify that host. `entity` is the annotated
+subject and remains a full-width uint, with no restriction to a particular ID kind.
+Index claims by publisher, annotated entity and annotation-type identity.
+
+`Logs.annotation(entity, data, codes)` constructs an ANNOTATION block using
+`Encoder.createAnnotation` and emits it through `Logs.mem`. Standard annotation
+helpers supply HostAnnotate codes. The `annotate` admin command instead logs one
+`[endpoint ID:32][INPUT header][ANNOTATION blocks...]` batch from existing calldata.
+The one-shot admin runner authorizes before logging; takeAnnotations validates
+every envelope and its BYTES child without interpreting the enclosed claims.
+Resolve its scope/codes through Endpoint metadata, then process each annotation
+in stream order. Empty input emits an empty INPUT container; a failed batch leaves
+no logs. Both paths preserve the same annotation payloads and merge semantics.
+
+Indexers preload the canonical Annotation, Bytes, Input and Schema layouts to
+bootstrap discovery. The removed `AnnotationEvent` mixin no longer emits an ABI
+announcement; historical Annotation ABI logs retain their original decoder.
 
 Annotations are claims by the emitting contract: any contract may annotate any
 entity, so indexers decide which emitters they trust per entity and annotation
@@ -216,7 +244,7 @@ type. Constructor label annotations emitted by the host itself are trustworthy
 for that host's own endpoints. Consumers process annotation events in log order
 and blocks within `data` in stream order.
 
-`Annotation` is a policy-neutral envelope. There is no universal rule that a
+`#annotation` is a policy-neutral envelope. There is no universal rule that a
 later block replaces an earlier block: every annotation type defines its own
 logical identity and merge behavior. A type may replace an earlier value,
 accumulate distinct values, preserve every value as history, or define an
@@ -261,28 +289,71 @@ fall back to a lower-precedence schema.
 New annotation types must document their logical identity, whether values
 replace or accumulate, and how values are revoked when revocation is supported.
 
-Host topology and access state are fully evented by the library:
+Recovery records use one fixed-size Resolution block:
 
 ```txt
-event Introduction(uint indexed host, uint peer, bytes32 origin, uint blocknum)
-event Node(uint indexed host, uint node, uint codes)
-event Guardian(uint indexed host, bytes32 account, uint codes)
+[Codes.HostUnresolved:32][#resolution { bytes32 key, bytes32 digest }]
+[Codes.HostResolved:32][#resolution { bytes32 key, bytes32 digest }]
 ```
 
-`Introduction` fires on the receiving host when a peer host introduces itself
-during construction. `origin` records `tx.origin` as a chain-agnostic user
-account for provenance and must not be treated as authorization. Every
-node-trust change routes through `authorizeNode` or `revokeNode` and every
-guardian change through `appointGuardian` or `dismissGuardian`, so `Node` and `Guardian` are exhaustive:
-replaying them yields the exact current access sets.
+The combinations pack Entities.Host then States.Unresolved (0xa0000010) or
+States.Resolved (0xa0000011). Index records by chain, emitter, key and digest;
+the emitter identifies the owning host. Unresolved records a retained digest.
+Resolved means the matching record was consumed, not independent downstream
+delivery success. Portal logs consumption inside resolve; a later recovery revert
+rolls back the storage deletion and log together. Reusing a key can replace its
+digest, so preserve the digest in both records and apply logs in order.
+Logs.resolution only encodes and logs; Portal retains storage and witness checks.
+The old ResolvedEvent/UnresolvedEvent mixins and exports are removed. Preload the
+Resolution schema; historical ABI events retain their original decoder.
 
-For both events, `codes` includes exactly one `States.Active` or
-`States.Inactive` describing the resulting membership. Host emits
-`Codes.AuthorizeThenActive` and `Codes.RevokeThenInactive` for nodes, including
-guardian-triggered revocations, and `Codes.AppointThenActive` and
-`Codes.DismissThenInactive` for guardians. Repeated operations still emit.
-Indexers derive membership from the explicit state code independently of action
-recognition. The numeric status field is removed; use the ABI for each deployment.
+Host topology uses one LOG0 record on the receiving host:
+
+```txt
+[Codes.HostIntroduce:32][#introduction { uint peer, bytes32 origin, uint blocknum }]
+```
+
+Codes.HostIntroduce packs Entities.Host followed by Actions.Introduce (9).
+The emitter identifies the receiving host; peer is the introducing host and must
+match msg.sender. This records a discovery claim without granting authorization
+or trust. origin records tx.origin as a user account for provenance.
+blocknum is a caller-supplied claim, not a verified deployment block. Built-in
+outbound helpers supply the current block number, including when called after
+deployment. Indexers can use the receipt block for the observed introduction time.
+Preload the canonical Introduction key and three-word layout alongside Endpoint
+discovery. No Introduction ABI announcement is emitted; historical ABI logs retain
+their original decoder.
+
+Host authorization and guardian changes now use endpoint-prefixed LOG0 INPUT
+batches instead of per-item Node and Guardian events:
+
+| Endpoint | Scope | Subject blocks | Codes after scope |
+|---|---|---|---|
+| authorize / ExecuteAuthorize | Host | Node | Authorize, Active |
+| unauthorize / guardian revoke | Host | Node | Revoke, Inactive |
+| appoint | Host | Account | Guardian, Appoint, Active |
+| dismiss | Host | Account | Guardian, Dismiss, Inactive |
+
+The endpoint registration supplies lane codes; its emitter identifies the host. Each Node or
+Account block supplies an affected subject ID. Index authorization by host and
+node, and guardian membership by host and guardian account. Active/Inactive sets
+the resulting boolean; repeated operations remain idempotent. Empty batches
+emit an empty INPUT container and change no membership. Logs precede the hooks
+after access checks and roll back with any failed operation.
+
+The default Host validates IDs without transforming them, so these input batches
+reconstruct its access sets when mutations use the advertised entrypoints.
+Internal mutation hooks no longer emit events: custom entrypoints, constructor
+initialization and overrides must provide equivalent logging and honor advertised
+semantics if their state is to be reconstructed. ExecuteAuthorize explicitly
+logs the same input envelope as the admin runner; guardian revoke logs through
+its guard runner.
+
+NodeEvent and GuardianEvent mixins and their public exports have been removed.
+Custom emitters must migrate to scoped input logs or explicitly declared custom
+logs. Historical deployments still have topic-based Node/Guardian logs: decode
+those using their advertised ABI. Other event families remain unchanged during
+this migration.
 
 All account, asset, and node IDs are 32-byte values with one top-byte rule:
 `0x00` is null/unset, `0x01` is Rootzero-native, `0x02` is opaque
@@ -309,15 +380,16 @@ subtype-specific preimage payload or dedicated helper is currently provided.
 ### Cold-Start Recipe
 
 1. Start from the chain's configured commander host ID, resolve its native
-   target, and replay its deployment logs: `EventAbi` gives the event ABIs,
+   target, and replay its deployment logs using the canonical block catalog:
    the discovery events give the endpoint catalog, and `Annotation` label blocks
    give names.
-2. Follow `Introduction` events on the commander to enumerate hosts. The `peer`
+2. Follow `Introduction` blocks on the commander to enumerate hosts. The `peer`
    ID embeds the introduced host's address; the receiving `host` is the
    commander that accepted the introduction, and the peer's admin account
    derives from the native identity encoded by the commander host ID.
 3. For each host, repeat step 1 against its deployment logs, then replay
-   `Node` and `Guardian` for live access sets.
+   host-scoped authorization/guardian INPUT logs for live access sets (legacy
+   deployments use Node and Guardian events).
 4. Subscribe to the state events below for balances and flows.
 
 The endpoint repository — commands, admin commands, ports, queries, and guards
@@ -328,7 +400,7 @@ today. No changes are proposed to the discovery layer.
 
 Most state-event emission remains a host responsibility: asset and ledger
 mutation flows through virtual hooks (`deposit`, `withdraw`, `burn`,
-`creditAccount`, `debitAccount`, `payout`, the realization commands, `provision`, `allowAsset`,
+`creditAccount`, `debitAccount`, `payout`, the realization commands, `allowAsset`,
 `denyAsset`, ...), and the hook implementation is the layer that knows the
 host's ledger policy - in particular the asset binding and the resulting
 balance. Command-returned native credit replenishes the pipeline budget. The
@@ -341,27 +413,27 @@ The `create-rootzero` template
 (`rootzero-evm-commander`) is the reference implementation of the remaining
 host conventions.
 
-```txt
-event Balance(bytes32 indexed account, bytes32 asset, uint balance)
-event Activity(bytes32 indexed account, bytes32 subject, uint value, uint codes)
-event Asset(uint indexed host, bytes32 asset, uint codes)
-event AssetPreimage(bytes32 indexed asset, bytes preimage)
-event Route(uint indexed host, uint portal, uint codes)
-event Rooted(bytes32 indexed account, uint deadline, uint value)
-```
-
 ### Host Conventions
 
-`AssetPreimage` publishes an opaque asset's preimage, with the asset ID as the
-indexed field and no host argument. The emitting contract remains available in
-the log address; consumers validate that the preimage derives the declared ID.
-This event declares a preimage and does not imply support on a host.
+Asset metadata and lifecycle records use LOG0 block streams:
 
-`Asset` records an asset lifecycle or administrative action and its resulting
-active/inactive state on a host. `Actions.Create` means creation and
-`Actions.Delete` means deletion. Support decisions use `Codes.AllowThenActive`
-and `Codes.DenyThenInactive`. Hosts supply emissions and must include exactly
-one `States.Active` or `States.Inactive`, consistent with the resulting state.
+```txt
+[Codes.AssetAnnotate:32][#assetPreimage { bytes32 asset, #bytes as preimage }]
+[host-scoped action/state codes:32][#asset { bytes32 asset }]
+```
+
+Codes.AssetAnnotate packs Entities.Asset then Actions.Annotate. Index by the asset
+field and retain the emitter as the publisher of the claim. Validate that the
+complete preimage derives the declared opaque ID before accepting the claim.
+This declares metadata; it implies neither asset creation nor support on a host.
+The encoder preserves bytes without validating that correspondence.
+
+Lifecycle logs start with Entities.Host, followed by action and resulting-state
+codes. The emitter identifies the host; use a #hostAsset block containing an
+explicit host ID when reporting about another host. Actions.Create means creation
+and Actions.Delete means deletion. Support decisions use Allow then Active or
+Deny then Inactive after the host-scope slot. Hosts supply emissions and include
+exactly one States.Active or States.Inactive consistent with the resulting state.
 Create and Update can result in either state; callers select it explicitly.
 Indexers retain action codes to distinguish operations and derive membership
 from the state code even when an action is unrecognized. The event no longer
@@ -378,17 +450,22 @@ apply. Zero codes means unknown or no condition reported, not inactive. This
 query does not report historical actions or effects and does not reconstruct
 event history. The query preserves the hook's codes without semantic validation.
 
-Preimage emitters inherit `AssetPreimageEvent`; asset action emitters use
-`AssetEvent`. Both are exported by `Events.sol`. Historical Asset and
-AssetStatus event signatures must be decoded with their deployment's ABI.
+Prefer endpoint state/input/output lane logging for existing asset streams.
+For standalone preimage publication, construct a block with Encoder.createAssetPreimage
+and emit it through Logs.mem with Codes.AssetAnnotate. Existing calldata streams
+can use Logs.copy. These primitives do not validate codes or claims.
+AssetEvent and AssetPreimageEvent and their public exports are removed; no ABI
+announcement is emitted. Preload the Asset and AssetPreimage schemas to decode
+these logs. Historical Asset, AssetPreimage and AssetStatus ABI events retain
+their deployment-specific decoders.
 
-`Route` records the operation on a host's route to a portal and its resulting
-active/inactive state. Use `Codes.AddThenActive` and `Codes.RemoveThenInactive`
-for route membership changes, and `Codes.EnableThenActive` and
-`Codes.DisableThenInactive` for a route that remains configured. These describe
-the route, not creation or deletion of the destination portal. Hosts supply
-consistent emissions, including repeated operations. Exactly one Active or
-Inactive code is required; no numeric status field remains.
+Route changes use command state/input/output logs identifying the portal, or
+equivalent standalone block streams. Pack Entities.Host first and include
+Entities.Route where the block shape alone does not identify the route relationship.
+Use Add/Remove for membership and Enable/Disable for a configured route, with
+exactly one resulting Active/Inactive state. These describe the route, not creation
+or deletion of the destination portal. Index by host and portal, including repeated
+operations. No replacement Route event envelope or dedicated log helper is needed.
 
 A host that wants to be indexable from logs alone must follow these rules. A
 host that omits them still works on-chain, but its ledger is invisible to
@@ -401,24 +478,24 @@ its chain context. A root host labels itself with an
 `Annotation` containing a `#label` block. Child hosts are discovered through
 `Introduction` on their commander.
 
-**Balances.** The `Balance` event identifies a `bytes32` account, asset,
-and resulting total. The built-in `Balances` ledger keys every
-balance by `(account, asset)`, including host holdings under `Accounts.toHost(host)`.
-Its mutation helpers leave event emission to the host. There is no separate
-host balance event or ledger.
+**Balances.** Use Balance blocks with documented account context, or AccountAmount
+blocks carrying the account explicitly. The built-in Balances ledger keys every
+balance by (account, asset), including host holdings under Accounts.toHost(host).
+Its mutation helpers emit no logs; commands or custom callers provide logging.
 
-Each event replaces the indexed balance for `(emitting host, account, asset)`.
-Process events in block, transaction, and log order. Hosts that expose their
-ledger through logs must emit a resulting balance for every change at their
-chosen settlement boundary. Indexers may derive `change = balance - previousBalance`
-using arbitrary-precision signed arithmetic; an unknown previous balance is not
-implicitly zero. A stream indexed from initialization, or a consistent starting
-snapshot, is required to reconstruct deltas. The event itself supports the full
-uint256 balance range.
+The endpoint's codes and documented semantics distinguish deltas from resulting
+totals. Credit/debit flows can reconstruct balances by ordered deltas; a resulting
+total supplies a checkpoint. Do not treat every Balance block as a resulting total.
+An unknown starting balance is not implicitly zero. All amounts retain uint256 width.
 
-The three-field signature changes topic zero from the former four-field event.
-Indexers spanning both versions must decode each signature separately, using
-the published `EventAbi` metadata.
+The old BalanceEvent and its ABI announcement are removed. Decode historical
+three-field and four-field Balance ABI events using their original definitions.
+
+**Transport.** Relay and Dispatch use Envelope blocks with scope/action codes.
+The old RelayEvent and DispatchEvent mixins are removed. Host scope resolves from
+the emitter; account scope needs documented pipeline context or explicit blocks.
+Envelope.digest hashes the exact forwarded payload bytes. Legacy ABI logs permitted
+payload-or-envelope digests; retain deployment-specific rules for those records.
 
 **Positions.** The `swapExactIn` and `swapExactOut` commands emit one
 [endpoint-prefixed OUTPUT log](#command-runner-stream-logs) after processing the
@@ -436,8 +513,9 @@ The legacy `PositionedEvent` and `SettledEvent` mixins and tagged state-log help
 have been removed. Replay older deployment logs using their original ABI metadata
 or the historical tagged formats documented below.
 
-**Flows.** Operations that move value emit `Activity(account, asset, amount, codes)`
-per affected amount. Include the matching effect code and the action when known.
+**Flows.** Operations that move value log appropriate amount-bearing blocks through
+endpoint lanes or LOG0 streams. Identify the account and include the matching
+effect code and the action when known.
 In the table below, each listed code occupies a separate uint32 slot; combine them
 by widening to uint and shifting, not by OR-ing IDs into the same slot.
 
@@ -452,15 +530,13 @@ by widening to uint and shifting, not by OR-ing IDs into the same slot.
 | payout | `Actions.Payout` | `Effects.Spend` or `Effects.Receive` per account |
 | realize | `Actions.Realize` | host-defined |
 | final pipeline budget | host posting action | `Effects.Receive` |
-| provision (lock custody) | per operation | `Effects.Lock` |
+| custody locking | per operation | `Effects.Lock` |
 | custody release | per operation | `Effects.Unlock` |
 
 `CashoutHook` is abstract and has no event-emitter inheritance. Hosts implementing
-cashout are responsible for their own flow events and event ABI publication.
-The free `sendChainAsset` transfer helper emits no events; hosts may inherit
-`ActivityEvent` and emit
-`Activity(account, chainAsset, amount, Actions.Cashout | (Effects.Spend << 32))`
-after a successful payout according to their event policy.
+cashout are responsible for their flow logging. The free sendChainAsset transfer
+helper emits no logs. After a successful payout, a host can log a Balance block
+with account-scoped Cashout and Spend codes and documented account identity.
 
 `Balance` and flow events are complementary, not redundant: flow events record
 that value moved and why; balance events record the resulting total, which gives
@@ -474,9 +550,10 @@ the final budget. Synchronous EVM execution
 remains atomic: if settlement or a later pipeline step reverts, its event is
 reverted as well.
 
-**Asset gating.** Hosts that gate assets emit `Asset` from their
-`allowAsset`/`denyAsset` hooks, with `Codes.AllowThenActive` or
-`Codes.DenyThenInactive` describing the resulting support state.
+**Asset gating.** Hosts that gate assets emit host-scoped Asset block logs from
+their allowAsset/denyAsset hooks or equivalent command logging. Pack Entities.Host
+first, then Allow and Active or Deny and Inactive. These describe the resulting
+support state; publishing a preimage does not change it.
 
 **Opaque assets.** Hosts that create or register opaque asset IDs emit `AssetPreimage`
 with the canonical preimage used to resolve the asset. Indexers should treat
@@ -485,38 +562,37 @@ with the canonical preimage used to resolve the asset. Indexers should treat
 with `[formatHash][category][subtype]`; `0x01` means keccak256, and the category
 must be `Asset`. The rest of the payload is not yet standardized.
 
-**Invocations.** Top-level pipeline entrypoints emit `Rooted` once per
-invocation with the acting account, deadline, and attached value. Detailed
-effects are not duplicated into the invocation event; an indexer groups all
-logs of the transaction to attribute effects to the invocation.
+**Invocations.** The Pipeline schema records account and initial native-value budget.
+Pipeline.pipe emits Entities.Account codes plus this block before its step loop,
+including empty pipelines.
+The convention is a start log per pipeline invocation with the account
+preserved across nesting. Special implementations that change accounts must log
+switches and restoration explicitly. Do not sum nested initial budgets as funding.
+Deadlines remain an entrypoint concern and are absent from this schema.
+The Rooted ABI event and three-field Rooted schema have been removed; decode
+historical records using their original formats.
 
 ### Codes and Correlation
 
-All events carrying codes use the same uint packing as Activity: up to eight
+All events carrying codes use the standard uint packing: up to eight
 nonzero uint32 action/entity-kind/effect/state IDs, lowest slot first, with zero-filled unused high
 slots. Zero means no codes. Order and duplicates are preserved; adjacency does
 not pair actions with effects. Each ID includes its category bits: category 0
 is Actions, category 1 is Entities, category 4 is Effects, category 5 is States, and other categories remain reserved.
-A single Actions, Entities, Effects, or States constant can be passed directly. When composing
-multiple codes in Solidity, widen to uint before shifting by 32 bits or more.
+Actions, Entities, Effects, and States constants already use uint and can be
+composed directly with shifts of 32 bits per slot.
 
-Asset, Node, Guardian, and Route require exactly one occurrence of either
+Asset and route membership logs (and historical Node/Guardian events) require exactly one occurrence of either
 States.Active or States.Inactive. Missing, duplicate, or conflicting membership
 state codes violate their convention; indexers must not infer a valid membership
-update from such logs. Event declarations perform no runtime validation, so
+update from such logs. Logging primitives perform no runtime validation, so
 emitters are responsible for satisfying the convention. Other code categories
 may coexist and retain their ordinary ordering and duplicate rules.
 
-Codes describe this event's operations or outcomes. Direct asset-flow Activity
-events carry explicit effect codes because their name does not specify direction
-or custody changes. Reference-mode Activity events follow their documented schema
-for joining companion details; do not interpret their value as an amount.
-
-Activity replaces the Spent, Received, Locked, and Unlocked helpers and exports.
-Adding subject changes Activity's signature topic; the new value field replaces
-the former correlation-only id. Decode historical Activity and flow logs using
-their deployment's ABI and conventions, including published EventAbi metadata.
-Do not apply the new signature or field meanings retrospectively.
+Codes describe the logged operations or outcomes. Asset-flow block logs need
+explicit effect codes where the endpoint's documented semantics do not establish
+direction or custody changes. Historical Activity logs retain their original
+amount/reference interpretation; do not reinterpret them as block streams.
 
 **Shared action semantics.** In every event carrying `codes`, each action ID states
 which operation occurred. Its canonical meaning is the same across event types:
@@ -524,21 +600,22 @@ which operation occurred. Its canonical meaning is the same across event types:
 `Actions.Add`/`Actions.Remove` mean membership changes, and
 `Actions.Refund` means a refund. The event identifies the affected entity or
 effect and supplies context. Resulting state codes do not redefine the action. For example,
-`Asset(host, asset, Actions.Create | (States.Inactive << 32))`
+an Asset block with codes `Entities.Host | (Actions.Create << 32) | (States.Inactive << 64)`
 records an asset that was created but is inactive on that host, not a denial.
 Consumers should retain the action even when different operations produce the
 same state. Hosts choose applicable actions and must emit them truthfully.
 
 | Range | Group | Assigned codes | Reserved |
 | --- | --- | --- | --- |
-| 0-15 | Lifecycle and membership | None 0, Create 1, Update 2, Delete 3, Add 4, Remove 5, Enable 6, Disable 7 | 8-15 |
+| 0-15 | Lifecycle and membership | None 0, Create 1, Update 2, Delete 3, Add 4, Remove 5, Enable 6, Disable 7, Annotate 8, Introduce 9 | 10-15 |
 | 16-31 | Permissions and roles | Authorize 16, Revoke 17, Appoint 18, Dismiss 19, Allow 20, Deny 21 | 22-31 |
 | 32-47 | Transfers | Transfer 32, Payout 33, Deposit 34, Withdraw 35, Cashin 36, Cashout 37 | 38-47 |
 | 48-63 | Supply | Mint 48, Burn 49 | 50-63 |
-| 64-79 | Accounting and settlement | Post 64, Book 65, Realize 66, Settle 67, Fee 68, Refund 69 | 70-79 |
+| 64-79 | Accounting and settlement | Post 64, Book 65, Realize 66, Settle 67, Fee 68, Refund 69, Credit 70, Debit 71, Bootstrap 72 | 73-79 |
 | 80-95 | Trading and credit | Swap 80, Borrow 81, Repay 82, Liquidate 83 | 84-95 |
+| 96-111 | Transport | Relay 96, Dispatch 97 | 98-111 |
 
-Values 96 and above are reserved for future groups. Unassigned values must not
+Values 112 and above are reserved for future groups. Unassigned values must not
 be used as custom actions. Ranges organize the catalog and imply no permissions
 or runtime dispatch. An event's contract defines which actions apply and what
 its typed fields describe, while preserving canonical action meanings.
@@ -555,54 +632,40 @@ Mint 7, Burn 8, Swap 9, Borrow 10, Repay 11, Liquidate 12, Refund 13, Post 14,
 Cashout 15, Cashin 16, Realize 17, Book 18
 ```
 
-Joins available to an indexer: transaction grouping -> the `Rooted` invocation and sibling
-events; `(account, asset)` -> account balance and flow history, including host
+Joins available to an indexer: documented Pipeline context logs (when emitted) -> invocation account and sibling
+logs; `(account, asset)` -> account balance and flow history, including host
 accounts. Balance events have no endpoint correlation field.
-
-## Proposed Improvements
-
-The discovery layer needs nothing. The proposals below close the remaining
-gaps; none of them changes an existing event signature or topic, so all are
-non-breaking per the changelog conventions.
-
-### Proposed: Emitting Ledger Helpers
-
-Add opt-in helpers to `Balances` that combine ledger mutation with emission
-of `Balance(account, asset, balance)`. Keep the existing raw helpers for
-hosts that emit at their settlement boundary.
 
 ## Considered And Rejected
 
 These were evaluated and deliberately not proposed:
 
-- **Per-invocation input/response events.** Input payloads are already in
-  calldata and outputs in return data; logging them would roughly double the
-  byte cost of every call. `Rooted` already marks invocations, and reverted
-  calls emit no logs anyway, so such events cannot provide failure
-  observability. The protocol's position stands: emit focused semantic events
-  instead of mirroring complete input and output block streams into logs.
+- **Unconditional duplication of all inputs and outputs.** Endpoint lane codes
+  explicitly select meaningful streams for logging. Annotation and access-control
+  commands reuse their input blocks instead of constructing duplicate per-item
+  events. Reverted calls leave no persisted logs.
 - **Unconditional library-forced flow emission for hook-driven commands.** Hosts
   route hooks internally (e.g. a payout hook that calls the credit hook), so
   unconditional emission at that layer would double-count or misattribute.
   Command credit remains in the pipeline budget for the same reason, avoiding
   producer-side events and repeated intermediate settlement.
-- **Inventing an emitter for `Rooted` in the library.** `Rooted` belongs to host
-  entrypoints the library does not own.
 - **A dedicated event and command for every metadata type.** Entity metadata is
   carried by typed blocks inside `Annotation`, with the generic admin `annotate`
   command publishing later updates.
 
 ## Compatibility
 
-Replacing `Labeled` and `Schema` with block-based `Annotation` changes the
-discovery event surface and is breaking for indexers that consume the former
-events. Consumers must decode annotation block streams and recognize `#label`
-blocks for names and `#schema` blocks for block definitions.
+AnnotationEvent and its public export are removed. New metadata uses LOG0
+ANNOTATION blocks or the annotate endpoint's INPUT batch, without ABI offsets,
+topics or an Annotation EventAbi announcement. This is a breaking discovery
+change: preload the standard envelope schemas and recognize #label and #schema.
+Historical Labeled, Schema and Annotation ABI events retain their deployment's
+original formats. Trust and annotation-specific merge rules remain unchanged.
 
-The unified `Balance` event identifies an indexed account (`bytes32`) without
-`access`. Host holdings use the deterministic host account. Indexers must replace
-the former `AccountBalance` and host-indexed `Balance` subscriptions with this
-single event signature.
+Historical `AccountBalance` and `Balance` ABI events retain their original
+deployment-specific layouts. Current balance records use typed blocks with
+scoped codes and an explicit account or documented pipeline context. Host
+holdings use the deterministic host account.
 
 ## Anonymous state logs
 
@@ -633,7 +696,7 @@ Indexers should enable this decoder for known emitting contracts. For a log
 with zero topics, require both a recognized first byte and its exact length,
 then decode the corresponding layout. Preserve unknown or malformed logs as
 raw data. Zero topics alone does not identify a Rootzero state log. Ordinary
-events keep their existing ABI/EventAbi decoding. Fetch by emitter address and
+historical events retain their ABI/EventAbi decoding. Fetch by emitter address and
 block range: these state logs have no event signature or indexed account topics
 and cannot be filtered by those fields at the RPC layer. Keep transaction/log
 ordering and the normal reorg rollback behavior.
@@ -662,7 +725,7 @@ For known participating emitters, dispatch zero-topic logs by their first byte:
 `0x10`/`0x11` and `0x20`/`0x21` use the fixed state formats above; `0x00` requires
 at least 32 bytes and a well-formed block stream covering the entire remainder.
 Preserve unknown tags, malformed streams, and unknown block schemas as raw data.
-Ordinary ABI events keep their normal decoding path. No `EventAbi` is announced.
+Application-defined ABI events keep their own decoding path. The library emits no EventAbi.
 
 Scope joins by chain, emitter address, and the complete correlation ID, and apply
 normal reorg rollback. Callers decide whether an ID identifies one stream or
@@ -689,7 +752,7 @@ or another unambiguous enclosing convention. Do not guess from the first byte:
 valid codes can begin with any existing format tag. New-format emitters should
 not mix these undecorated logs with the older tagged formats without an explicit
 way to distinguish them. These helpers alone do not migrate existing events or
-establish rooted account inheritance.
+establish pipeline account inheritance.
 
 For an emitter using this format, require at least 32 bytes, decode the code word,
 and validate block framing across the entire remainder. Retain unknown codes or
@@ -729,8 +792,19 @@ supply any account-context convention separately. Input and output describe
 command data, not necessarily persisted balances. Preserve log order and
 standard reorg handling.
 
-Swap endpoints select output logging with `Actions.Swap`; other production
-endpoints currently use zero lane codes. `runCommandOnce` and `runAdmin`
+Swap endpoints select output logging with `Actions.Swap`. Withdraw selects state
+logging with `Entities.Account` followed by `Actions.Withdraw`; its Balance spec
+identifies the payload without an extra Balance code. Swap and Withdraw publish no
+duplicate action annotations. CreditAccount uses Account/Credit (70) on STATE;
+DebitAccount uses Account/Debit (71) on OUTPUT. Deposit and DepositPayable use
+Account/Deposit on OUTPUT, recording the actual amounts returned by their hooks
+without duplicate action annotations. Their Balance specs identify the payloads.
+The optimized credit adapter copies arbitrary memory state with `Logs.memCopyWrap`
+before its hooks; the debit adapter uses `Logs.memWrap` on its Encoder-owned
+output after its hooks. These emit the same ID-prefixed containers as the runners,
+including empty batches. Host access commands and the guardian revoke endpoint
+also log their scoped INPUT lanes as described above. Other production endpoints
+use zero lane codes unless listed below. `runCommandOnce` and `runAdmin`
 use the same context/output logging; `runPort` logs INPUT then OUTPUT, and
 `runGuard` logs INPUT only. Queries remain view-only and their registration
 rejects nonzero lane codes. Custom adapters must call the primitives explicitly.
@@ -743,3 +817,260 @@ logging selection and emits `[id:32][INPUT header][input stream]`. The helper
 constructs the missing container header in temporary memory; empty selected input
 still emits that header. It preserves execution fields and the free-memory pointer.
 Port and guard runners call this helper automatically.
+
+
+### Additional command operation logs
+
+Account-scoped Cashout, Settle/SettlePayable, Repay, and Burn select STATE logging.
+Repay records the original position and debt before clearing debt in returned state.
+Burn records the requested balance, not the hook's returned actual-burn quantity.
+Payout selects STATE and INPUT: one record contains both containers, with each
+balance paired with its recipient at the same index. The recipient does not
+replace the source account inherited from the deployment's account context.
+Realize selects STATE and OUTPUT, preserving the original counterparty and
+obligation alongside the hook-adjusted result. Do not count both as separate flows.
+These commands publish their action in lane codes without duplicate action annotations.
+
+AllowAsset/DenyAsset select INPUT with Host/Allow/Active or Host/Deny/Inactive.
+Allowance selects INPUT with Host/Update; a zero cap revokes the allowance.
+AddPool/RemovePool select INPUT with Host/Pool/Add or Host/Pool/Remove. Their
+published pair grouping identifies consecutive assets belonging to each pool;
+these records do not independently assert liquidity or pool activation state.
+
+Cashout and Settle's optimized Execute adapters emit the same endpoint-prefixed
+STATE container before hooks as their calldata commands, including empty batches.
+All source logs revert with a failed operation. Validation and transport commands gain no logging from these changes.
+
+### Cashin of remaining native value
+
+After crediting leftover pipeline value to the account, a host can emit
+`Logs.balance(chainAsset, value, Codes.AccountCashin)`. The codes combine
+Entities.Account and Actions.Cashin (36); account identity comes from the
+pipeline context. The BALANCE amount is the amount actually credited, not the
+resulting stored account balance. Skip the log when value is zero. Count this
+as one credit, rather than also emitting Account/Credit for the same operation.
+
+### Bootstrap accounting
+
+Bootstrap emits one `[Account/Bootstrap codes][BALANCE stream]` after all debit
+hooks complete. Every block records an actual nonzero account debit: non-native
+debits appear in request order, followed by the combined chainAsset debit if
+nonzero. Account identity comes from the deployment's pipeline context. If no
+account debit occurs, no log is emitted. The endpoint INPUT lane has no log codes.
+
+Assigned value may cover requested chainAsset balances and the budget. Only the
+uncovered amount appears in the log; requested splits, zero amounts and the
+budget itself are not logged. Indexers apply every emitted Balance as a debit;
+there is no separate Account/Debit record to combine or override. Deployments
+using the earlier INPUT-log policy must be decoded according to their version.
+
+Budget is the minimum credit remaining after balances are funded. For requests
+of 3 and 4 chainAsset, budget 5, and assigned value 4, output contains balances
+3 and 4, returned credit is 5, and the single actual chainAsset debit is 8.
+All logs revert if any funding operation fails. The former fixed Bootstrap
+payload and additive per-item budget semantics require deployment-version-aware
+decoding and must not be used for this schema.
+
+### Commander event migration benchmarks
+
+Historical measurements before adoption of the lazy hybrid below.
+Measured 2026-10-05 with solc 0.8.35, viaIR, optimizer 200, Cancun bytecode,
+and the repository's Hardhat EDR network. The reference is Commander Main.sol /
+Base.sol and its installed rootzero contracts 1.48.0. No Commander files changed.
+
+Two benchmarks separate the effects:
+
+- `commander-logs.bench.test.ts`: 44 workloads compare the exact legacy Balance,
+  Activity and Rooted event signatures against block logs, with identical current
+  funding, decoding, output allocation and ledger operations. A no-log control
+  measures incremental logging cost. Counts include 0/1/2/4/8/16 requests,
+  distinct non-native assets, repeated native assets, funded native requests,
+  cashin and the root record. The combined flow is Bootstrap -> creditAccount ->
+  cashin, including Rooted/Pipeline account context.
+- `commander-bootstrap.bench.test.ts`: 15 paired cases compare the installed 1.48
+  Bootstrap algorithm, fixed input codec, original allocator and Main debit hook
+  against the actual current ExecuteBootstrap. It includes decoding, allocation,
+  native debit aggregation and changed input encoding as well as logging.
+  A final budget contribution of 5 with no assigned value makes unfunded cases
+  equivalent. Funded cases use budget zero and assigned value 10 * count + 5.
+  These inputs produce identical outputs, credits and final ledger balances.
+
+All event payloads, event counts, outputs and affected ledger balances are
+asserted. Accounts start with nonzero balances; each call starts with fresh
+transaction access warmth. Repeated native assets become warm within a call.
+The tables report internal gasleft differences, excluding external ABI encoding,
+intrinsic transaction gas, refunds, deployment and metadata publication. Receipt
+gas is also saved in the JSON reports, including calldata cost and the network's
+transaction gas rules. These are focused harness results, not complete deployed
+Main transaction estimates: authorization, dispatch, transfers and deadline checks
+are outside this measurement. Legacy snapshots become scoped deltas; indexers need
+pipeline context and the new decoding rules to reconstruct balances.
+
+Positive numbers below are gas saved; negative numbers are extra gas.
+
+| Logging-only workload | 1 request | 4 requests | 16 requests |
+|---|---:|---:|---:|
+| Credit | 325 | 3,678 | 17,080 |
+| Debit | 339 | 3,756 | 17,424 |
+| Bootstrap / credit / cashin, non-native | 3,161 | 9,916 | 36,903 |
+
+Cashin saves 2,279 gas: one Balance block replaces Balance + Activity.
+The Pipeline record saves 285 gas versus Rooted, with no deadline field.
+Empty selected lanes cost more because the old hooks emitted nothing.
+
+| Bootstrap adapter migration | 1 request | 4 requests | 16 requests |
+|---|---:|---:|---:|
+| Non-native requests + native budget | -250 | 3,547 | 18,725 |
+| Native requests + budget, unfunded | -1,913 | 3,579 | 25,537 |
+| Native requests entirely funded by assigned value | -2,100 | -3,322 | -8,208 |
+
+For unfunded non-native requests, savings start at two requests. For repeated
+unfunded native requests, two requests still cost 81 extra gas; the tested four-item
+batch saves gas. Fully funded native requests cost more execution gas because
+Main previously emitted no debit events, while the new adapter always records
+Bootstrap input. Smaller calldata offsets part of this increase in receipt gas.
+
+Run the focused comparisons with:
+
+```sh
+npm run bench -- test/commander-logs.bench.test.ts test/commander-bootstrap.bench.test.ts
+```
+
+Full measurements are written to `.npm-cache/commander-logs-gas.json` and
+`.npm-cache/commander-bootstrap-gas.json`. Construction/discovery events are
+excluded from the measured transactions. No production event policy is changed
+by these benchmark fixtures.
+
+### Bootstrap actual-debit writer experiment
+
+Measured 2026-10-05 with the same compiler/network settings as the Commander
+comparison above. `bootstrap-debit-logs.bench.test.ts` originally compared input-logging
+Bootstrap against two test-only candidates with identical funding, checked sums,
+output allocation and ledger hooks. That input logger is now a frozen baseline.
+
+Both candidates reserve space for `request count + 1` Balance blocks before
+processing requests. They append each nonzero non-native debit and, last, the
+combined native debit if nonzero. They emit a single AccountBootstrap-prefixed
+Balance stream after hooks, and emit nothing when there are no actual debits.
+This changes the event semantics from requests plus a separate native debit to
+actual debits only; request splits, zero amounts and funding supplied by assigned
+value are deliberately absent from the candidate log.
+
+- **Writer:** Encoder.init, writeBalance, finish and Logs.mem. Upfront capacity
+  covers the worst case; no resizing is needed.
+- **Reserved:** Encoder.allocate, writeBalanceAt and Logs.mem over the written
+  range. The complete upper bound is reserved once; unused capacity is never
+  exposed or logged. No finish step is needed for this event-only buffer.
+
+Forty-two scenarios cover 0/1/2/4/8/16/32 requests: distinct non-native assets
+with/without a budget shortfall, repeated native requests, fully funded native
+requests, alternating native/non-native requests, and zero quantities. Every
+variant is checked for exact output, returned credit, affected ledger balances,
+log count and full log contents. Amounts are 10, budget is 5 except no-budget
+and zero cases, mixed cases receive value 7, and fully funded cases receive
+native requested total + budget. Storage starts nonzero and access warmth resets
+for each call. Tests capture receipt gas separately from internal gasleft totals.
+
+Positive values are execution gas saved versus the previous INPUT/native-debit logging;
+negative values are additional gas. Results include allocation and encoding.
+
+| Workload | Writer: 1 request | Writer: 4 | Writer: 16 | Reserved: 16 |
+|---|---:|---:|---:|---:|
+| Non-native + budget debit | 504 | -222 | -3,118 | -1,843 |
+| Non-native, no budget debit | -54 | -774 | -3,669 | -2,513 |
+| Native, account-funded | 1,308 | 2,998 | 9,767 | 9,565 |
+| Native, fully funded by assigned value | 1,450 | 3,143 | 9,913 | 9,613 |
+| Alternating native/non-native | 1,308 | 1,389 | 3,325 | 3,861 |
+| Zero quantities, no budget | 1,449 | 3,139 | 9,897 | 9,325 |
+
+The one-request mixed case contains only native asset. Native-heavy batches win
+because repeated requested native balances collapse into one actual debit block,
+or no block when fully funded. Mixed batches also emit fewer bytes. Non-native
+batches still emit nearly all the same quantity data and must construct another
+stream, so their per-item writer cost can exceed the saved framing/log overhead.
+The reserved writer reduces that cost, but does not remove the regression for
+large all-non-native batches. The ordinary writer can be cheaper when little is
+written: its unused capacity need not all be touched, while Encoder.allocate
+writes the trailing zero word at the reserved end.
+
+```sh
+npm run bench -- test/bootstrap-debit-logs.bench.test.ts
+```
+
+The complete results, including 32-item cases, log bytes and receipt gas, are in
+`.npm-cache/bootstrap-debit-logs-gas.json` after running the benchmark.
+
+### Bootstrap lazy hybrid writer experiment
+
+The hybrid is now the production implementation, tested through
+`CommanderCurrentBootstrap` against the frozen `CommanderInputBootstrap` and
+two eager writer candidates across 70 scenarios. It retains the
+output as the event source until the first native request or zero amount that
+must be excluded. At that point it allocates space for request count + 1 Balance
+blocks, copies only the already-written output prefix, and appends later actual
+debits. If no exclusion occurs, it logs the output directly; a final budget-only
+native debit forces allocation/copy only at the end. The output buffer itself is
+never repurposed, resized or mutated by event construction.
+
+The extension adds native-first, native-last, zero-first and zero-last batches.
+All variants still check exact output, credit, ledger balances and event bytes.
+The compiler/settings, storage setup and measurement boundaries are unchanged.
+These measurements precede the later cursor and branch cleanups. Rerunning the
+benchmark measures current production; frozen candidates retain the earlier code.
+
+Positive values are execution gas saved versus the previous direct INPUT log
+plus any separate native debit event; negative values are extra gas.
+
+| Hybrid workload | 1 request | 4 requests | 16 requests | 32 requests |
+|---|---:|---:|---:|---:|
+| Non-native + budget debit | 646 | 463 | -270 | -1,247 |
+| Non-native, no budget debit | 355 | 215 | -347 | -1,083 |
+| Native, account-funded | 1,137 | 2,706 | 8,990 | 17,369 |
+| Native, fully value-funded | 1,214 | 2,786 | 9,070 | 17,449 |
+| Alternating native/non-native | 1,137 | 1,394 | 3,742 | 6,873 |
+| One native request first | 1,137 | 738 | -850 | -2,967 |
+| One native request last | 1,137 | 951 | 218 | -759 |
+| One zero amount first | 1,180 | 26 | -1,562 | -3,679 |
+| One zero amount last | 1,180 | 239 | -494 | -1,471 |
+
+The hybrid reduces duplicate encoding but still carries per-item tracking and
+branch costs. At 16 non-native requests plus budget, it costs 270 extra gas versus
+the input logger, compared with 3,118 extra for the ordinary writer and 1,843 for the
+fully reserved writer. Without a budget debit, that penalty falls from 3,669
+(ordinary writer) to 347 (hybrid). Small all-non-native batches now save gas.
+
+Late exclusions allow a large prefix to be copied once; early exclusions still
+require writing most later entries into the separate buffer. A 16-item batch
+with native first costs 850 extra gas, while native last saves 218. Entirely
+native batches still save substantially versus the input logger, but the simpler
+ordinary writer is cheaper than the hybrid for those cases. Zero-only batches
+emit no event and also save gas. This is a workload-dependent tradeoff; the hybrid was adopted to prioritize
+small batches and avoid logging requested amounts as if they were debits.
+
+Reproduce with the same `bootstrap-debit-logs.bench.test.ts` command above. The
+JSON report now includes hybrid execution gas, receipt gas and log counts.
+
+### Bootstrap small-call optimization follow-up
+
+Before the later grouped-branch cleanup, two further test-only candidates
+were compared against production with the same compiler and ledger setup.
+`bootstrap-small-call.bench.test.ts` checks 70 scenarios for identical output,
+credit, ledger balances and complete event data.
+
+Positive numbers are gas saved relative to production; negative numbers are extra gas.
+
+| Workload | Single-request shortcut | Deferred empty-prefix allocation |
+|---|---:|---:|
+| One non-native request, no budget debit | -343 | -54 |
+| One non-native request + budget debit | -439 | -143 |
+| One native request + budget debit | 130 | 223 |
+| One fully value-funded native request | 119 | 121 |
+| Two mixed requests | -231 | -184 |
+
+Neither candidate was adopted. The shortcut adds branches and repeated decoding;
+the deferred writer needs an extra cursor state and allocation checks. Their
+native-only improvements do not justify regressions in common small non-native
+and mixed calls. Production remains the simpler hybrid implementation.
+
+Run `npm run bench -- test/bootstrap-small-call.bench.test.ts`; complete results
+are written to `.npm-cache/bootstrap-small-call-gas.json`.

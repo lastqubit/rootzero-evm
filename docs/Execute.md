@@ -16,7 +16,6 @@ absolute positions without repacking cursors or repeating bounds checks.
 | `unpackNode(abs)` | Calldata NODE, exact header plus one word |
 | `unpackAmount(abs)` | Calldata AMOUNT, exact header plus one scalar quantity |
 | `unpackAssetAmount(abs)` | Calldata ASSET_AMOUNT, exact header plus two words |
-| `unpackBootstrap(abs)` | Calldata BOOTSTRAP, exact header plus three words |
 | `unpackBalanceMemory(abs)` | Memory BALANCE, exact header plus two words |
 | `unpackPositionMemory(abs)` | Memory POSITION, exact header and an independent struct |
 | `allocateBalances(count)` | Exact BALANCE output allocation; returns absolute position and buffer |
@@ -59,7 +58,10 @@ or rewriting state. Their execute adapters are now thin calls into the library.
 
 ## Performance
 
-The following table records the decoding migration. Bootstrap and Debit now
+The following table records the historical decoding migration, before composite
+Bootstrap inputs and operation logging. Bootstrap comparisons in these frozen
+fixtures retain the old fixed schema. Current composite Bootstrap gas is measured
+in `adapter-optimizations.bench.test.ts`. Bootstrap and Debit now
 also use exact output allocation; their additional savings are recorded in
 [ExecuteOutputPreallocation.md](ExecuteOutputPreallocation.md).
 
@@ -97,7 +99,11 @@ npm test -- test/execute-blocks.test.ts
 npm run bench -- test/execute-blocks.bench.test.ts
 ```
 
-Bootstrap and Debit allocate exactly one BALANCE per validated input block
+Bootstrap unwraps exactly one composite block with `Blocks.unpackBootstrapExact`
+and validates the inner ASSET_AMOUNT stride. The exact helper rejects malformed
+framing, truncation and trailing data with `InvalidBlock`; the stream-oriented
+`Blocks.unpackBootstrap` remains available for decoding within a larger stream. Bootstrap
+and Debit allocate exactly one BALANCE per validated ASSET_AMOUNT block
 through allocateBalances, advance an absolute memory position with writeBalance,
 and return the completed buffer without finalization. Hooks may allocate between
 writes. Counts are bounded by validated source lengths; the helper rejects byte

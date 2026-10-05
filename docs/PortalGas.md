@@ -19,7 +19,7 @@ reserve  = gasReserve + 12 * words + 3 * endWords + endWords * endWords / 512
 All divisions round down. The word charge covers two calldata copies and hashing.
 The memory term includes the ABI header and trailing zero write, conservatively
 charging full memory cost even when some memory was already paid for. The fixed
-allowance covers cold account access, fresh digest storage, the event, fixed
+allowance covers cold account access, fresh digest storage, the 104-byte Resolution LOG0 record, fixed
 instructions, and margin. Value overhead assumes an existing commander contract.
 
 The gas snapshot is taken after calculating the reserve. The helper's copying and
@@ -46,13 +46,13 @@ repository's default Hardhat simulated L1 execution hardfork:
 
 | Message bytes | Required reserve, zero value | Reserved, zero value | Reserved, nonzero value |
 | ---: | ---: | ---: | ---: |
-| 0 | 27,116 | 35,027 | 44,027 |
-| 256 | 27,236 | 35,147 | 44,147 |
-| 4,096 | 29,072 | 36,983 | 45,983 |
-| 65,536 | 66,100 | 74,011 | 83,011 |
+| 0 | 26,461 | 35,027 | 44,027 |
+| 256 | 26,575 | 35,147 | 44,147 |
+| 4,096 | 28,411 | 36,983 | 45,983 |
+| 65,536 | 65,439 | 74,011 | 83,011 |
 
 These rows have no prior transport allocation, apart from the fixture's empty
-bytes array. All cases finish with at least 7,911 gas left. More transport work
+bytes array. All cases finish with at least 8,566 gas left. More transport work
 needs its own allowance; this margin does not fund arbitrary storage writes.
 Results are saved to `.npm-cache/portal-reserve-results.json`.
 
@@ -66,7 +66,7 @@ pipe, insufficient gas even for storage, and a derived constructor's extra reser
 Gas estimation may select a cheaper successful path that skips the pipe and stores
 the message. A successful transaction does not guarantee delivery: callers that
 require an attempt must provide a gas budget covering the pipe and reserve, and
-observe `Unresolved` to detect messages awaiting recovery.
+observe `Codes.HostUnresolved` Resolution block logs to detect messages awaiting recovery.
 
 Previously, forwarding all available gas left only the EIP-150 reserve after pipe
 out-of-gas: a fresh 256-byte message needed about 1.58 million transaction gas.
