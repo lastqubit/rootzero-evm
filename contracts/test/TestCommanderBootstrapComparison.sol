@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {PreviousInputBootstrap} from "./PreviousInputBootstrap.sol";
+import {BootstrapStock150} from "./BootstrapStock150.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {Balances} from "../core/Balances.sol";
 import {Runtime, ChainAsset} from "../core/Runtime.sol";
@@ -19,6 +20,25 @@ abstract contract CommanderBootstrapLedger is Balances {
 
 /// @dev Actual production adapter, with Main's ledger hook after event migration.
 contract CommanderCurrentBootstrap is ExecuteBootstrap, CommanderBootstrapLedger {
+    constructor() Runtime(0) {}
+    function enforceCaller(address caller) internal pure override returns (address) { return caller; }
+    function nativeAsset() external view returns (bytes32) { return chainAsset; }
+    function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+        if (amount != 0) debitFrom(account, asset, amount);
+    }
+    function measure(bytes32 account, bytes calldata input, uint value)
+        external returns (uint gasUsed, bytes memory output, uint remaining)
+    {
+        bytes memory empty;
+        uint cur = Cursors.wrap(input);
+        uint start = gasleft();
+        (, output, remaining) = executeBootstrap(account, empty, cur, value);
+        gasUsed = start - gasleft();
+    }
+}
+
+/// @dev Frozen 1.50.0 adapter for historical log-writer comparisons.
+contract CommanderStockBootstrap is BootstrapStock150, CommanderBootstrapLedger {
     constructor() Runtime(0) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }

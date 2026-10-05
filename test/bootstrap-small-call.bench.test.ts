@@ -11,8 +11,8 @@ const bootstrapCodes = 0x20000001n | (72n << 32n);
 
 describe("Bootstrap small-call optimizations", function () {
   this.timeout(240_000);
-  it("compares production with single-request and deferred-allocation candidates", async () => {
-    const hosts = await Promise.all(["CommanderCurrentBootstrap", "BootstrapLogSingle", "BootstrapLogDeferred"].map(name => deploy(name)));
+  it("compares frozen 1.50.0 with single-request and deferred-allocation candidates", async () => {
+    const hosts = await Promise.all(["CommanderStockBootstrap", "BootstrapLogSingle", "BootstrapLogDeferred"].map(name => deploy(name)));
     const native = await hosts[0].nativeAsset();
     const assets = [native, ...Array.from({ length: 32 }, (_, i) => ethers.id(`debit-writer-asset-${i}`))];
     const rows: any[] = [];

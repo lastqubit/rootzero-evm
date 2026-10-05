@@ -4,6 +4,9 @@ pragma solidity ^0.8.33;
 import {Keys} from "./Keys.sol";
 import {max24} from "../utils/Utils.sol";
 
+/// @dev Right-aligned Headers.AssetAmount for direct assembly use: key plus 64-byte payload.
+uint constant ASSET_AMOUNT_HEADER = 0x7010cc7000000040;
+
 /// @dev Right-aligned Headers.Balance for direct assembly use: key plus 64-byte payload.
 uint constant BALANCE_HEADER = 0x0e170e1400000040;
 

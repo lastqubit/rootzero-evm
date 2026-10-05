@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+/// @dev Right-aligned Keys.List for direct assembly use: bytes4(keccak256("#list")).
+uint constant LIST_KEY = 0x8454537f;
+
 /// @dev Right-aligned Keys.Bytes for direct assembly use: bytes4(keccak256("#bytes")).
 uint constant BYTES_KEY = 0x6911b332;
 
@@ -9,6 +12,9 @@ uint constant STATE_KEY = 0xe31b08ab;
 
 /// @dev Right-aligned Keys.Input for direct assembly use: bytes4(keccak256("#input")).
 uint constant INPUT_KEY = 0x6b2ede62;
+
+/// @dev Right-aligned Keys.Bootstrap for direct assembly use: bytes4(keccak256("#bootstrap")).
+uint constant BOOTSTRAP_KEY = 0x440f90da;
 
 /// @dev Right-aligned Keys.Step for direct assembly use: bytes4(keccak256("#step")).
 uint constant STEP_KEY = 0x53a8ad94;

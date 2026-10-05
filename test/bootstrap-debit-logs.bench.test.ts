@@ -14,7 +14,7 @@ const debitCodes = 0x20000001n | (71n << 32n);
 describe("Bootstrap actual-debit event writer", function () {
   this.timeout(240_000);
   it("compares input logging with preallocated and hybrid debit writers and verifies all emitted data", async () => {
-    const hosts = await Promise.all(["CommanderInputBootstrap", "BootstrapDebitLogWriter", "BootstrapDebitLogReserved", "CommanderCurrentBootstrap"].map(name => deploy(name)));
+    const hosts = await Promise.all(["CommanderInputBootstrap", "BootstrapDebitLogWriter", "BootstrapDebitLogReserved", "CommanderStockBootstrap"].map(name => deploy(name)));
     const native = await hosts[0].nativeAsset();
     const assets = [native, ...Array.from({ length: 32 }, (_, i) => ethers.id(`debit-writer-asset-${i}`))];
     const rows: any[] = [];

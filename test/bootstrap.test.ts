@@ -114,7 +114,8 @@ describe("Bootstrap composite input", () => {
     expect(dataLogs(funded)).deep.eq([prefixed(bootstrapCodes, encodeBalanceBlock(native, 3n))]);
     expect(await host.balances(native)).eq(7n);
     const receipt = await (await host.measureBootstrap("0x", encodeBootstrapBlock(0n, encodeAssetAmountBlock(asset, 0n)), 0n)).wait();
-    expect(receipt.logs.length).eq(0);
+    expect(receipt.logs.filter((log: any) => log.topics.length)).deep.eq([]);
+    expect(dataLogs(receipt)).deep.eq([prefixed(bootstrapCodes, encodeBalanceBlock(asset, 0n))]);
   });
 
   it("checks the native request total and rolls back when the final debit fails", async () => {
@@ -149,7 +150,7 @@ describe("Bootstrap composite input", () => {
         const input = encodeBootstrapBlock(0n, concat(...requests.map(([a, n]) => encodeAssetAmountBlock(a, n))));
         const output = concat(...requests.map(([a, n]) => encodeBalanceBlock(a, n)));
         expect((await host.measureBootstrap.staticCall("0x", input, value))[2]).eq(output);
-        const debits = requests.filter(([a, n]) => a !== native && n !== 0n);
+        const debits = requests.filter(([a]) => a !== native);
         const total = requests.filter(([a]) => a === native).reduce((sum, [, n]) => sum + n, 0n);
         if (total > value) debits.push([native, total - value]);
         const receipt = await (await host.measureBootstrap("0x", input, value)).wait();
