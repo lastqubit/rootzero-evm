@@ -12,7 +12,8 @@ async function getConnection() {
 
 export async function getProvider() {
   const conn = await getConnection();
-  return new ethers.BrowserProvider(conn.provider);
+  // Hardhat mines synchronously; cached gas estimates can outlive state changes.
+  return new ethers.BrowserProvider(conn.provider, undefined, { cacheTimeout: -1 });
 }
 
 export async function getSigner(index = 0) {
