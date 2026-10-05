@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {InputEndpointBase} from "../core/Endpoint.sol";
-import {GuardianAccess} from "../core/Access.sol";
-import {Execution, Executions} from "../execution/Execution.sol";
 import {Specs} from "../codec/Specs.sol";
+import {GuardianAccess} from "../core/Access.sol";
+import {InputEndpointBase} from "../core/Endpoint.sol";
+import {Execution, Executions} from "../execution/Execution.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
 using Executions for Execution;
@@ -24,7 +24,7 @@ abstract contract GuardBase is InputEndpointBase, GuardianAccess {
     /// match the Solidity guard function name used by the canonical ABI.
     /// @param input Input lane: upper-half spec and lower-half logging codes.
     /// @return id Guard action node ID.
-    /// @return descriptor Packed execution allocation hints and logging flags.
+    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
     function guard(
         string memory name,
         uint input

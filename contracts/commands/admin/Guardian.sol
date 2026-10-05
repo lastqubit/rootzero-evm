@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { AdminBase, Execution, Executions, Flags, Specs } from "./Base.sol";
-import { GuardianAccess } from "../../core/Access.sol";
+import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
+import {GuardianAccess} from "../../core/Access.sol";
+import {Codes} from "../../utils/Codes.sol";
 using Executions for Execution;
 
 /// @title Appoint
@@ -10,14 +11,17 @@ using Executions for Execution;
 /// Each USER ACCOUNT block in the input is assigned the guardian role on the host.
 /// Only callable by the admin account.
 abstract contract Appoint is AdminBase, GuardianAccess {
+    uint private constant INPUT = Specs.Account | Codes.HostAppointGuardianThenActive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("appoint", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("appoint", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Appoint each user ACCOUNT block in the admin input as a guardian.
+    /// @dev Logs the complete INPUT batch under the endpoint host before the hooks.
     /// @param context Admin command context carrying the ACCOUNT input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -38,14 +42,17 @@ abstract contract Appoint is AdminBase, GuardianAccess {
 /// Each USER ACCOUNT block in the input loses the guardian role on the host.
 /// Only callable by the admin account.
 abstract contract Dismiss is AdminBase, GuardianAccess {
+    uint private constant INPUT = Specs.Account | Codes.HostDismissGuardianThenInactive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("dismiss", Specs.Empty, Specs.Account, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("dismiss", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Dismiss each user ACCOUNT block in the admin input from guardian status.
+    /// @dev Logs the complete INPUT batch under the endpoint host before the hooks.
     /// @param context Admin command context carrying the ACCOUNT input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.

@@ -322,17 +322,16 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
-    /// @notice Append ROOTED to a growable writer, preserving full-width fields.
+    /// @notice Append PIPELINE to a growable writer, preserving full-width fields.
     /// @dev Inherits reserve's initialized-writer and lifecycle requirements.
-    function writeRooted(uint cur, bytes memory dst, bytes32 account, uint deadline, uint nativeValue)
+    function writePipeline(uint cur, bytes memory dst, bytes32 account, uint budget)
         internal pure returns (bytes memory value, uint nextCur)
     {
         uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, 104);
-        abs = writeHeader(abs, Keys.Rooted, 96);
+        (value, abs, nextCur) = reserve(cur, dst, 72);
+        abs = writeHeader(abs, Keys.Pipeline, 64);
         abs = write32(abs, account);
-        abs = write32(abs, bytes32(deadline));
-        write32(abs, bytes32(nativeValue));
+        write32(abs, bytes32(budget));
     }
 
     /// @notice Append BALANCE to a growable writer and return its updated state.
@@ -1409,15 +1408,57 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
-    /// @notice Create ROOTED with account, deadline and native value in that order.
-    /// @dev Preserves full-width fields; does not authorize the account, enforce the
-    /// deadline, transfer value, or emit an event. Payload is 96 bytes; total is 104.
-    function createRooted(bytes32 account, uint deadline, uint nativeValue) internal pure returns (bytes memory value) {
+    /// @notice Create ENVELOPE with routing metadata, lookup key and payload digest.
+    /// @dev Preserves full-width fields without hashing or validating them.
+    function createEnvelope(uint portal, uint resources, bytes32 key, bytes32 digest)
+        internal pure returns (bytes memory value)
+    {
+        value = allocate(136);
+        uint abs = writeHeader(pos(value, 0), Keys.Envelope, 128);
+        abs = write32(abs, bytes32(portal));
+        abs = write32(abs, bytes32(resources));
+        abs = write32(abs, key);
+        write32(abs, digest);
+    }
+
+    /// @notice Create RESOLUTION with a recovery key and its message digest.
+    /// @dev Preserves both fields without validating or changing a recovery record.
+    function createResolution(bytes32 key, bytes32 digest) internal pure returns (bytes memory value) {
+        value = allocate(72);
+        uint abs = writeHeader(pos(value, 0), Keys.Resolution, 64);
+        abs = write32(abs, key);
+        write32(abs, digest);
+    }
+
+    /// @notice Create INTRODUCTION with peer, transaction-origin account and claimed block number.
+    /// @dev Preserves full-width fields without validating identity, provenance or the claim.
+    function createIntroduction(uint peer, bytes32 origin, uint blocknum) internal pure returns (bytes memory value) {
         value = allocate(104);
-        uint abs = writeHeader(pos(value, 0), Keys.Rooted, 96);
+        uint abs = writeHeader(pos(value, 0), Keys.Introduction, 96);
+        abs = write32(abs, bytes32(peer));
+        abs = write32(abs, origin);
+        write32(abs, bytes32(blocknum));
+    }
+
+    /// @notice Create ENDPOINT with its ID and complete Spec + Codes lanes.
+    /// @dev Preserves all four uint values without interpreting or validating them.
+    function createEndpoint(uint id, uint state, uint input, uint output) internal pure returns (bytes memory value) {
+        value = allocate(136);
+        uint abs = writeHeader(pos(value, 0), Keys.Endpoint, 128);
+        abs = write32(abs, bytes32(id));
+        abs = write32(abs, bytes32(state));
+        abs = write32(abs, bytes32(input));
+        write32(abs, bytes32(output));
+    }
+
+    /// @notice Create PIPELINE with account and initial native-value budget in that order.
+    /// @dev Preserves full-width fields; does not authorize the account,
+    /// transfer value, or emit an event. Payload is 64 bytes; total is 72.
+    function createPipeline(bytes32 account, uint budget) internal pure returns (bytes memory value) {
+        value = allocate(72);
+        uint abs = writeHeader(pos(value, 0), Keys.Pipeline, 64);
         abs = write32(abs, account);
-        abs = write32(abs, bytes32(deadline));
-        write32(abs, bytes32(nativeValue));
+        write32(abs, bytes32(budget));
     }
 
     /// @notice Create a complete 72-byte BALANCE block with zero allocation padding.
@@ -1467,16 +1508,6 @@ library Encoder {
         uint abs = writeHeader(pos(value, 0), Keys.HostAsset, 64);
         abs = write32(abs, bytes32(host));
         write32(abs, asset);
-    }
-
-    /// @notice Create a complete BOOTSTRAP block with zero allocation padding.
-    /// @dev Preserves field order and full-width values; performs no semantic validation.
-    function createBootstrap(bytes32 asset, uint amount, uint budget) internal pure returns (bytes memory value) {
-        value = allocate(104);
-        uint abs = writeHeader(pos(value, 0), Keys.Bootstrap, 96);
-        abs = write32(abs, asset);
-        abs = write32(abs, bytes32(amount));
-        write32(abs, bytes32(budget));
     }
 
     /// @notice Create a complete ALLOCATION block with zero allocation padding.
@@ -1670,6 +1701,18 @@ library Encoder {
 
     // Composite creators: values and payloads, with child headers constructed here.
 
+    /// @notice Create BOOTSTRAP with a budget and a LIST wrapping ASSET_AMOUNT bytes.
+    /// @dev Copies the payload once; callers validate inner block contents.
+    function createBootstrap(uint budget, bytes memory balances) internal pure returns (bytes memory value) {
+        uint size = 48 + balances.length;
+        value = allocate(size);
+        unchecked {
+            uint abs = writeHeader(pos(value, 0), Keys.Bootstrap, size - 8);
+            abs = write32(abs, bytes32(budget));
+            wrap(abs, Keys.List, balances, balances.length);
+        }
+    }
+
     /// @notice Encode a CONTEXT by wrapping memory-backed state and input in STATE and INPUT headers.
     /// @dev Copies each stream directly to its final destination with MCOPY.
     /// Checks total size, but does not validate the nested stream contents.
@@ -1718,6 +1761,33 @@ library Encoder {
             wrap(abs, Keys.Input, uint32(inputCur), inputSize);
         }
     }
+
+    /// @notice Create ASSET_PREIMAGE around the complete preimage bytes.
+    /// @dev Preserves the asset and preimage without validating their correspondence.
+    function createAssetPreimage(bytes32 asset, bytes memory preimage) internal pure returns (bytes memory value) {
+        uint size = 48 + preimage.length;
+        value = allocate(size);
+        unchecked {
+            uint abs = writeHeader(pos(value, 0), Keys.AssetPreimage, size - 8);
+            abs = write32(abs, asset);
+            wrap(abs, Keys.Bytes, preimage, preimage.length);
+        }
+    }
+
+    /// @notice Create ANNOTATION around an existing annotation block stream.
+    /// @param entity Entity receiving the metadata claims.
+    /// @param data Encoded annotation blocks, preserved without interpreting their merge rules.
+    /// @return value Complete ANNOTATION block with zero allocation padding.
+    function createAnnotation(uint entity, bytes memory data) internal pure returns (bytes memory value) {
+        uint size = 48 + data.length;
+        value = allocate(size);
+        unchecked {
+            uint abs = writeHeader(pos(value, 0), Keys.Annotation, size - 8);
+            abs = write32(abs, bytes32(entity));
+            wrap(abs, Keys.Bytes, data, data.length);
+        }
+    }
+
     /// @notice Create LABEL by wrapping a memory payload in a STRING child header.
     /// @param namespace Label namespace.
     /// @param name Raw text bytes, excluding the STRING header.

@@ -21,8 +21,11 @@ library Headers {
     uint constant Balance = Specs.Balance >> 192;
     uint constant AssetLiability = Specs.AssetLiability >> 192;
     uint constant AccountAsset = Specs.AccountAsset >> 192;
-    uint constant Rooted = Specs.Rooted >> 192;
-    uint constant Bootstrap = Specs.Bootstrap >> 192;
+    uint constant Envelope = Specs.Envelope >> 192;
+    uint constant Resolution = Specs.Resolution >> 192;
+    uint constant Introduction = Specs.Introduction >> 192;
+    uint constant Endpoint = Specs.Endpoint >> 192;
+    uint constant Pipeline = Specs.Pipeline >> 192;
     uint constant Allocation = Specs.Allocation >> 192;
     uint constant Allowance = Specs.Allowance >> 192;
     uint constant Custody = Specs.Custody >> 192;

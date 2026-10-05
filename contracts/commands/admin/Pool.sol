@@ -2,8 +2,9 @@
 pragma solidity ^0.8.33;
 
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
-import {AssetAmount} from "../../core/Types.sol";
 import {GroupsAnnot} from "../../annotations/Groups.sol";
+import {AssetAmount} from "../../core/Types.sol";
+import {Codes} from "../../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -29,16 +30,19 @@ abstract contract RemovePoolHook {
 
 /// @notice Admin command that adds one pool per pair of ASSET_AMOUNT inputs.
 abstract contract AddPool is AdminBase, AddPoolHook, GroupsAnnot {
+    uint private constant INPUT = Specs.AssetAmount | Codes.HostAddPool;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("addPool", Specs.Empty, Specs.AssetAmount, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("addPool", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
         annotateGroups(id, "#input as (first, second)");
     }
 
     /// @notice Add pools from consecutive ASSET_AMOUNT pairs.
     /// @dev Empty batches are accepted. An incomplete pair or hook failure reverts the entire batch.
+    /// @dev Logs the complete host-scoped INPUT batch before hooks.
     /// @param context Admin context containing the ASSET_AMOUNT input pairs.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -55,16 +59,19 @@ abstract contract AddPool is AdminBase, AddPoolHook, GroupsAnnot {
 
 /// @notice Admin command that removes one pool per pair of ASSET inputs.
 abstract contract RemovePool is AdminBase, RemovePoolHook, GroupsAnnot {
+    uint private constant INPUT = Specs.Asset | Codes.HostRemovePool;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("removePool", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("removePool", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
         annotateGroups(id, "#input as (first, second)");
     }
 
     /// @notice Remove pools from consecutive ASSET pairs.
     /// @dev Empty batches are accepted. An incomplete pair or hook failure reverts the entire batch.
+    /// @dev Logs the complete host-scoped INPUT batch before hooks.
     /// @param context Admin context containing the ASSET input pairs.
     /// @return Empty output state.
     /// @return Zero native budget credit.

@@ -2,16 +2,13 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
+import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that accept account deposits.
 abstract contract DepositHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// @dev Called once per ASSET_AMOUNT block. A matching BALANCE block is appended to the
-    /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
     /// @param amount Requested deposit amount.
@@ -22,8 +19,6 @@ abstract contract DepositHook {
 /// @notice Hook implemented by hosts that accept value-funded deposits.
 abstract contract DepositPayableHook {
     /// @notice Override to receive externally sourced funds for `account`.
-    /// @dev Called once per ASSET_AMOUNT block. A matching BALANCE block is appended to the
-    /// output after each call using the amount returned by the hook.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
     /// @param amount Requested deposit amount.
@@ -41,16 +36,18 @@ abstract contract DepositPayableHook {
 /// @notice Command that receives externally sourced assets and records them as BALANCE state.
 /// Use `deposit` for assets arriving from outside the protocol (e.g. ERC-20 transfers, ETH).
 /// For internal balance deductions, use `debitAccount` instead.
-abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
+abstract contract Deposit is CommandBase, DepositHook {
+    uint private constant OUTPUT = Specs.Balance | Codes.AccountDeposit;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
-        annotateAction(id, Actions.Deposit);
+        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, OUTPUT, 0);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks into the command account and output matching BALANCE blocks.
+    /// @dev Logs the complete Output stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
@@ -68,16 +65,18 @@ abstract contract Deposit is CommandBase, DepositHook, ActionAnnot {
 /// @title DepositPayable
 /// @notice Command that receives externally sourced assets and records them as BALANCE state.
 /// Use `depositPayable` when the hook needs tracked access to `msg.value` via a mutable budget.
-abstract contract DepositPayable is CommandBase, DepositPayableHook, ActionAnnot {
+abstract contract DepositPayable is CommandBase, DepositPayableHook {
+    uint private constant OUTPUT = Specs.Balance | Codes.AccountDeposit;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, Specs.Balance, Flags.Funded);
-        annotateAction(id, Actions.Deposit);
+        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, OUTPUT, Flags.Funded);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks with access to a mutable native-value budget.
+    /// @dev Logs the complete Output stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.

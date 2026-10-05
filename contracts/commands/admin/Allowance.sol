@@ -2,6 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
+import {Codes} from "../../utils/Codes.sol";
+
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that configure peer asset allowances.
@@ -20,14 +22,17 @@ abstract contract AllowanceHook {
 /// @notice Admin command that applies cross-host allowance entries via a virtual hook.
 /// Each ALLOWANCE block grants or updates a host-scoped asset cap. Only callable by the admin account.
 abstract contract Allowance is AdminBase, AllowanceHook {
+    uint private constant INPUT = Specs.Allowance | Codes.HostUpdate;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("allowance", Specs.Empty, Specs.Allowance, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("allowance", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Apply each ALLOWANCE block in the admin input.
+    /// @dev Logs the complete host-scoped INPUT batch before hooks.
     /// @param context Admin command context carrying the ALLOWANCE input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.

@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Blocks} from "../../codec/Blocks.sol";
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
+import {Codes} from "../../utils/Codes.sol";
 using Executions for Execution;
-using Blocks for uint;
 
 /// @title Annotate
 /// @notice Admin command that attaches encoded annotation block streams to entities.
-/// Each ANNOTATION block in the input emits one `Annotation` event. Only callable
-/// by the admin account.
+/// Logs the complete ANNOTATION input batch under the publishing host scope.
+/// Only callable by the admin account.
 abstract contract Annotate is AdminBase {
+    uint private constant INPUT = Specs.Annotation | Codes.HostAnnotate;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("annotate", Specs.Empty, Specs.Annotation, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("annotate", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Publish each ANNOTATION block in the admin input.
@@ -25,11 +26,11 @@ abstract contract Annotate is AdminBase {
     function annotate(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, annotateOne);
+        return runAdminOnce(id, descriptor, context, annotateOnce);
     }
 
-    function annotateOne(Execution memory exec) private {
-        (uint entity, uint dataCur) = exec.unpackAnnotation();
-        emit Annotation(entity, dataCur.toBytes());
+    function annotateOnce(Execution memory exec) private pure {
+        // Validate each envelope; the runner logs the original batch once.
+        exec.takeAnnotations();
     }
 }

@@ -16,9 +16,6 @@ import { Cursors } from "./utils/Cursors.sol";
 import { Blocks } from "./codec/Blocks.sol";
 import { Execute } from "./codec/Execute.sol";
 import { Encoder } from "./codec/Encoder.sol";
-
-
+import { Logs } from "./codec/Logs.sol";
 
 import {InvalidBlock} from "./utils/Errors.sol";
-
-import {Logs} from "./codec/Logs.sol";

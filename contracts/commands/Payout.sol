@@ -2,9 +2,8 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
 import {Accounts} from "../utils/Accounts.sol";
+import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -22,18 +21,21 @@ abstract contract PayoutHook {
 /// @title Payout
 /// @notice Command that sinks BALANCE state blocks to matching ACCOUNT input blocks.
 /// Each BALANCE block is paired with one ACCOUNT block at the same position.
-abstract contract Payout is CommandBase, PayoutHook, ActionAnnot {
+abstract contract Payout is CommandBase, PayoutHook {
+    uint private constant STATE = Specs.Balance | Codes.AccountPayout;
+    uint private constant INPUT = Specs.Account | Codes.AccountPayout;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, 0);
-        annotateAction(id, Actions.Payout);
+        (id, descriptor) = command("payout", STATE, INPUT, Specs.Empty, 0);
     }
 
     /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.
     /// @dev Validates the destination account category before calling the hook, even
     /// for zero amounts. Authorization and payout-specific requirements remain with the host.
+    /// @dev Logs STATE and INPUT together, preserving balance-to-recipient pairing.
     /// @param context Command context carrying BALANCE state and matching ACCOUNT input.
     /// @return Empty output state.
     /// @return Zero native budget credit.

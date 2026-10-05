@@ -141,9 +141,9 @@ library Schemas {
     // Three-word payloads
 
     string constant BalanceConstraints = "bytes32 asset, uint min, uint max";
-    /// @dev Root pipeline context; value uses the emitting chain native-value unit.
-    string constant Rooted = "bytes32 account, uint deadline, uint value";
-    string constant Bootstrap = "bytes32 asset, uint amount, uint budget";
+    /// @dev Root pipeline context; budget uses the emitting chain native-value unit.
+    string constant Pipeline = "bytes32 account, uint budget";
+    string constant Bootstrap = "uint budget, many #assetAmount as balances";
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     string constant Allowance = "uint host, bytes32 asset, uint amount";
     string constant AccountAmount = "bytes32 account, bytes32 asset, uint amount";
@@ -170,6 +170,11 @@ library Schemas {
     string constant Dispatch = "uint portal, uint resources, #bytes as payload";
     string constant Context = "bytes32 account, #state, #input";
     string constant Recover = "uint handler, uint value, bytes32 key, #bytes as witness";
+    string constant AssetPreimage = "bytes32 asset, #bytes as preimage";
+    string constant Envelope = "uint portal, uint resources, bytes32 key, bytes32 digest";
+    string constant Resolution = "bytes32 key, bytes32 digest";
+    string constant Introduction = "uint peer, bytes32 origin, uint blocknum";
+    string constant Endpoint = "uint id, uint state, uint input, uint output";
     string constant Annotation = "uint entity, #bytes as data";
 
     // Annotation payloads
@@ -181,4 +186,3 @@ library Schemas {
     string constant Label = "bytes32 namespace, #string as name";
     string constant Schema = "uint spec, #string as body";
 }
-

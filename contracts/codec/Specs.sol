@@ -66,8 +66,6 @@ library Sizes {
     /// @dev QUOTE block: 8 header + four-word quantities = 136 bytes.
     uint constant Quote = B128;
 
-    /// @dev BOOTSTRAP block: 8 header + 32 asset + 32 amount + 32 budget = 104 bytes
-    uint constant Bootstrap = B96;
     /// @dev ASSET_AMOUNT block: 8 header + 32 asset + 32 amount = 72 bytes
     uint constant AssetAmount = B64;
     /// @dev AMOUNT block: 8 header + 32 amount = 40 bytes.
@@ -76,8 +74,16 @@ library Sizes {
     uint constant HostAsset = B64;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant HostAmount = B96;
-    /// @dev ROOTED block: 8-byte header plus account, deadline and value.
-    uint constant Rooted = B96;
+    /// @dev PIPELINE block: 8-byte header plus account and initial value budget.
+    uint constant Pipeline = B64;
+    /// @dev ENVELOPE block: 8-byte header plus four full-width fields.
+    uint constant Envelope = B128;
+    /// @dev RESOLUTION block: 8-byte header plus key and digest.
+    uint constant Resolution = B64;
+    /// @dev INTRODUCTION block: 8-byte header plus three full-width fields.
+    uint constant Introduction = B96;
+    /// @dev ENDPOINT block: 8-byte header plus four full-width fields.
+    uint constant Endpoint = B128;
     /// @dev TRANSACTION block: 8 header + 32 from + 32 to + 32 asset + 32 amount = 136 bytes
     uint constant Transaction = B128;
 }
@@ -132,8 +138,8 @@ library Specs {
 
     uint constant AssetAmount = uint(bytes32(Keys.AssetAmount)) | Exact64;
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact32;
-    uint constant Rooted = uint(bytes32(Keys.Rooted)) | Exact96;
-    uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | Exact96;
+    uint constant Pipeline = uint(bytes32(Keys.Pipeline)) | Exact64;
+    uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | UnboundedMin40Hint256;
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;
     uint constant Account = uint(bytes32(Keys.Account)) | Exact32;
@@ -149,8 +155,13 @@ library Specs {
     uint constant Dispatch = uint(bytes32(Keys.Dispatch)) | UnboundedMin72Hint256;
     uint constant Call = uint(bytes32(Keys.Call)) | UnboundedMin72Hint256;
     uint constant Asset = uint(bytes32(Keys.Asset)) | Exact32;
+    uint constant AssetPreimage = uint(bytes32(Keys.AssetPreimage)) | UnboundedMin40Hint256;
     uint constant Node = uint(bytes32(Keys.Node)) | Exact32;
     uint constant Entity = uint(bytes32(Keys.Entity)) | Exact32;
+    uint constant Envelope = uint(bytes32(Keys.Envelope)) | Exact128;
+    uint constant Resolution = uint(bytes32(Keys.Resolution)) | Exact64;
+    uint constant Introduction = uint(bytes32(Keys.Introduction)) | Exact96;
+    uint constant Endpoint = uint(bytes32(Keys.Endpoint)) | Exact128;
     uint constant Label = uint(bytes32(Keys.Label)) | UnboundedMin40Hint256;
     uint constant Annotation = uint(bytes32(Keys.Annotation)) | UnboundedMin40Hint256;
     uint constant Action = uint(bytes32(Keys.Action)) | Exact32;

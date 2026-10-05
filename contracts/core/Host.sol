@@ -9,11 +9,9 @@ import {Authorize} from "../commands/admin/Authorize.sol";
 import {Unauthorize} from "../commands/admin/Unauthorize.sol";
 import {ExecutePayable} from "../commands/admin/Execute.sol";
 import {Revoke} from "../guards/Revoke.sol";
-import {IntroductionEvent} from "../events/Introduction.sol";
-import {GuardianEvent} from "../events/Guardian.sol";
-import {NodeEvent} from "../events/Node.sol";
-import {Accounts} from "../utils/Accounts.sol";
+import {Logs} from "../codec/Logs.sol";
 import {Codes} from "../utils/Codes.sol";
+import {Accounts} from "../utils/Accounts.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
 /// @title IHostIntroduction
@@ -21,7 +19,7 @@ import {Nodes} from "../utils/Nodes.sol";
 interface IHostIntroduction {
     /// @notice Record a host introduction claim.
     /// @param peer Host node ID being introduced.
-    /// @param blocknum Block number at which the introduction was made.
+    /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
     function introduce(uint peer, uint blocknum) external;
 }
 
@@ -50,13 +48,13 @@ abstract contract HostAnnouncer is Runtime {
 /// @title HostIntroduction
 /// @notice Full introduction capability for hosts that both announce themselves
 /// to a commander and accept introduction claims from other hosts.
-abstract contract HostIntroduction is HostAnnouncer, IntroductionEvent, IHostIntroduction {
+abstract contract HostIntroduction is HostAnnouncer, IHostIntroduction {
     /// @notice Record a host introduction claim.
     /// @dev Validates that `peer` matches `msg.sender`; it does not authorize or trust the introduced host.
     /// @param peer Host node ID being introduced.
-    /// @param blocknum Block number at which the host was deployed.
+    /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
     function introduce(uint peer, uint blocknum) external {
-        emit Introduction(host, Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum);
+        Logs.introduction(Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum, Codes.HostIntroduce);
     }
 }
 
@@ -94,9 +92,7 @@ abstract contract Host is
     ExecutePayable,
     Appoint,
     Dismiss,
-    Revoke,
-    NodeEvent,
-    GuardianEvent
+    Revoke
 {
     /// @dev Admin account ID derived from the commander identity.
     bytes32 internal immutable admin;
@@ -114,28 +110,26 @@ abstract contract Host is
         admin = Accounts.toAdmin(commanderAddr);
     }
 
+    // Entry points log batches; direct callers of these mutation hooks must log
+    // their own operations when an indexable record is required.
     function authorizeNode(uint node) internal virtual override {
         node = Nodes.local(node);
         nodes[node] = true;
-        emit Node(host, node, Codes.AuthorizeThenActive);
     }
 
     function revokeNode(uint node) internal virtual override {
         node = Nodes.local(node);
         nodes[node] = false;
-        emit Node(host, node, Codes.RevokeThenInactive);
     }
 
     function appointGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = true;
-        emit Guardian(host, account, Codes.AppointThenActive);
     }
 
     function dismissGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = false;
-        emit Guardian(host, account, Codes.DismissThenInactive);
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.

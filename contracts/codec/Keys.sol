@@ -67,7 +67,7 @@ library Keys {
     bytes4 constant Amount = bytes4(keccak256("#amount"));
     /// @dev Asset input amount - (bytes32 asset, uint amount)
     bytes4 constant AssetAmount = bytes4(keccak256("#assetAmount"));
-    /// @dev Pipeline bootstrap request - (bytes32 asset, uint amount, uint budget)
+    /// @dev Pipeline bootstrap request - minimum budget and LIST of ASSET_AMOUNT blocks.
     bytes4 constant Bootstrap = bytes4(keccak256("#bootstrap"));
     /// @dev Host-scoped input amount - (uint host, bytes32 asset, uint amount)
     bytes4 constant Allocation = bytes4(keccak256("#allocation"));
@@ -78,8 +78,8 @@ library Keys {
     /// @dev Transfer record passed through the pipeline - (bytes32 from, bytes32 to, bytes32 asset, uint amount)
     bytes4 constant Transaction = bytes4(keccak256("#transaction"));
 
-    /// @dev Root pipeline context - (bytes32 account, uint deadline, uint value).
-    bytes4 constant Rooted = bytes4(keccak256("#rooted"));
+    /// @dev Pipeline context - (bytes32 account, uint budget).
+    bytes4 constant Pipeline = bytes4(keccak256("#pipeline"));
 
     // Composite and annotation blocks
 
@@ -99,10 +99,20 @@ library Keys {
     bytes4 constant Call = bytes4(keccak256("#call"));
     /// @dev Asset descriptor without amount - (bytes32 asset)
     bytes4 constant Asset = bytes4(keccak256("#asset"));
+    /// @dev Asset preimage publication - (bytes32 asset, #bytes as preimage)
+    bytes4 constant AssetPreimage = bytes4(keccak256("#assetPreimage"));
     /// @dev Node identifier - (uint id)
     bytes4 constant Node = bytes4(keccak256("#node"));
     /// @dev Generic entity identifier - (uint entity)
     bytes4 constant Entity = bytes4(keccak256("#entity"));
+    /// @dev Transport envelope - (uint portal, uint resources, bytes32 key, bytes32 digest)
+    bytes4 constant Envelope = bytes4(keccak256("#envelope"));
+    /// @dev Recovery record - (bytes32 key, bytes32 digest)
+    bytes4 constant Resolution = bytes4(keccak256("#resolution"));
+    /// @dev Host introduction claim - (uint peer, bytes32 origin, uint blocknum)
+    bytes4 constant Introduction = bytes4(keccak256("#introduction"));
+    /// @dev Endpoint registration - (uint id, uint state, uint input, uint output)
+    bytes4 constant Endpoint = bytes4(keccak256("#endpoint"));
     /// @dev Entity label annotation - (bytes32 namespace, #string as name)
     bytes4 constant Label = bytes4(keccak256("#label"));
     /// @dev Entity annotations - (uint entity, #bytes as data)

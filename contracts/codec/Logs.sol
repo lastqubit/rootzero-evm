@@ -10,6 +10,8 @@ library Logs {
     // Correlation stream identifier.
     uint internal constant Stream = 0x00;
 
+    // Memory streams.
+
     /// @notice Emit codes followed by an existing memory block stream using LOG0.
     /// @dev Caller owns initialized memory [abs, abs + size) containing a complete
     /// valid block stream and the writable word [abs - 32, abs). Empty streams are
@@ -54,57 +56,23 @@ library Logs {
         }
     }
 
-    /// @notice Copy a calldata block stream to temporary memory and emit codes plus it using LOG0.
-    /// @dev Caller guarantees abs <= calldatasize() and size <= calldatasize() - abs,
-    /// and that the range contains a complete valid block stream; empty streams are
-    /// allowed. No bounds, block-framing or code validation is performed. Out-of-range
-    /// calldata would be zero-filled by CALLDATACOPY rather than rejected.
-    /// Uses temporary memory [F, F + 32 + size), where F is the free-memory pointer
-    /// on entry. size + 32 and F + 32 + size must not overflow; that memory must be
-    /// available for temporary use. Preserves allocated memory and free-memory pointer;
-    /// temporary contents are unspecified afterward. No persistent allocation or padding.
-    /// @param codes Full uint256 code word, emitted unchanged without a format tag.
-    /// @param abs Absolute calldata byte offset of the first block header (or empty
-    /// range start), not a packed calldata cursor, relative offset or memory address.
-    /// @param size Stream length in bytes, including block headers but excluding any
-    /// ABI offset/length wrapper, the codes prefix and calldata outside the selected range.
-    function copy(uint codes, uint abs, uint size) internal {
-        assembly ("memory-safe") {
-            let start := mload(0x40)
-            mstore(start, codes)
-            calldatacopy(add(start, 32), abs, size)
-            log0(start, add(size, 32))
-        }
-    }
-
-    /// @notice Wrap a calldata range in one block and emit prefix plus block using LOG0.
-    /// @dev Requires a valid calldata range and size <= uint32.max. Caller supplies
-    /// the correct key and validates the payload. Uses temporary memory
-    /// [F, F + 40 + size); preserves allocated memory and the free-memory pointer.
-    /// As with copy, no bounds or framing checks are performed. Empty payloads
-    /// still emit the eight-byte block header. The prefix is emitted unchanged.
-    function copyWrap(uint prefix, bytes4 key, uint abs, uint size) internal {
+    /// @notice Copy a memory stream into one block and emit prefix plus block using LOG0.
+    /// @dev Accepts any live Solidity bytes allocation; no writable prefix is required.
+    /// Caller validates the payload and supplies its key; length must fit uint32.
+    /// Uses temporary memory [F, F + 40 + length), where F is the free-memory pointer.
+    /// The range must be available without overflow. Preserves the source, other
+    /// allocated memory and free-memory pointer; scratch contents are unspecified.
+    /// No bounds or framing checks. Empty streams still emit the block header.
+    function memCopyWrap(uint prefix, bytes4 key, bytes memory value) internal {
         uint keyValue = uint32(key);
         assembly ("memory-safe") {
             let start := mload(0x40)
-            // Write the right-aligned header first, then overwrite its leading
-            // scratch bytes with the prefix. No trailing scratch word is needed.
+            let size := mload(value)
             mstore(add(start, 8), or(shl(32, keyValue), size))
             mstore(start, prefix)
-            calldatacopy(add(start, 40), abs, size)
+            mcopy(add(start, 40), add(value, 32), size)
             log0(start, add(size, 40))
         }
-    }
-
-    /// @notice Copy a calldata cursor's unread block stream and emit codes plus it using LOG0.
-    /// @dev Requires a valid calldata range containing complete blocks, with position <= end.
-    /// The absolute-range overload's temporary-memory requirements apply. No bounds or
-    /// block validation is performed. Preserves the cursor and free-memory pointer.
-    /// @param codes Full uint256 code word, emitted unchanged without a format tag.
-    /// @param cur Packed calldata cursor: position in bits 0-31, exclusive end in
-    /// bits 32-63; higher metadata bits are ignored. Zero emits codes alone.
-    function copy(uint codes, uint cur) internal {
-        copy(codes, Cursors.position(cur), Cursors.length(cur));
     }
 
     /// @notice Emit a tagged correlation ID followed by an existing block stream using LOG0.
@@ -129,17 +97,135 @@ library Logs {
         mem(uint(correlationId), abs, size);
     }
 
-    /// @notice Create and emit a ROOTED block preceded by codes using LOG0.
+    // Calldata streams.
+
+    /// @notice Copy a calldata block stream to temporary memory and emit codes plus it using LOG0.
+    /// @dev Caller guarantees abs <= calldatasize() and size <= calldatasize() - abs,
+    /// and that the range contains a complete valid block stream; empty streams are
+    /// allowed. No bounds, block-framing or code validation is performed. Out-of-range
+    /// calldata would be zero-filled by CALLDATACOPY rather than rejected.
+    /// Uses temporary memory [F, F + 32 + size), where F is the free-memory pointer
+    /// on entry. size + 32 and F + 32 + size must not overflow; that memory must be
+    /// available for temporary use. Preserves allocated memory and free-memory pointer;
+    /// temporary contents are unspecified afterward. No persistent allocation or padding.
+    /// @param codes Full uint256 code word, emitted unchanged without a format tag.
+    /// @param abs Absolute calldata byte offset of the first block header (or empty
+    /// range start), not a packed calldata cursor, relative offset or memory address.
+    /// @param size Stream length in bytes, including block headers but excluding any
+    /// ABI offset/length wrapper, the codes prefix and calldata outside the selected range.
+    function copy(uint codes, uint abs, uint size) internal {
+        assembly ("memory-safe") {
+            let start := mload(0x40)
+            mstore(start, codes)
+            calldatacopy(add(start, 32), abs, size)
+            log0(start, add(size, 32))
+        }
+    }
+
+    /// @notice Copy a calldata cursor's unread block stream and emit codes plus it using LOG0.
+    /// @dev Requires a valid calldata range containing complete blocks, with position <= end.
+    /// The absolute-range overload's temporary-memory requirements apply. No bounds or
+    /// block validation is performed. Preserves the cursor and free-memory pointer.
+    /// @param codes Full uint256 code word, emitted unchanged without a format tag.
+    /// @param cur Packed calldata cursor: position in bits 0-31, exclusive end in
+    /// bits 32-63; higher metadata bits are ignored. Zero emits codes alone.
+    function copy(uint codes, uint cur) internal {
+        copy(codes, Cursors.position(cur), Cursors.length(cur));
+    }
+
+    /// @notice Wrap a calldata range in one block and emit prefix plus block using LOG0.
+    /// @dev Requires a valid calldata range and size <= uint32.max. Caller supplies
+    /// the correct key and validates the payload. Uses temporary memory
+    /// [F, F + 40 + size); preserves allocated memory and the free-memory pointer.
+    /// As with copy, no bounds or framing checks are performed. Empty payloads
+    /// still emit the eight-byte block header. The prefix is emitted unchanged.
+    function copyWrap(uint prefix, bytes4 key, uint abs, uint size) internal {
+        uint keyValue = uint32(key);
+        assembly ("memory-safe") {
+            let start := mload(0x40)
+            // Write the right-aligned header first, then overwrite its leading
+            // scratch bytes with the prefix. No trailing scratch word is needed.
+            mstore(add(start, 8), or(shl(32, keyValue), size))
+            mstore(start, prefix)
+            calldatacopy(add(start, 40), abs, size)
+            log0(start, add(size, 40))
+        }
+    }
+
+    /// @notice Wrap a calldata cursor's unread payload and emit prefix plus block using LOG0.
+    /// @dev Requires a valid calldata range with position <= end. Inherits the
+    /// absolute-range overload's payload and temporary-memory requirements.
+    /// No bounds or framing checks. Higher cursor metadata bits are ignored.
+    /// Preserves the cursor and free-memory pointer. Zero emits an empty block.
+    function copyWrap(uint prefix, bytes4 key, uint cur) internal {
+        copyWrap(prefix, key, Cursors.position(cur), Cursors.length(cur));
+    }
+
+    // Scalar values.
+
+    /// @notice Emit codes followed by one ENVELOPE block using LOG0.
+    /// @dev Allocates through Encoder and emits exactly 168 bytes without topics.
+    /// Caller supplies scope and Relay/Dispatch action codes and establishes the
+    /// corresponding host/account identity. Does not send a message or verify fields.
+    /// @param portal Destination portal host ID.
+    /// @param resources Chain-specific resources assigned to the operation.
+    /// @param key Transport correlation or recovery lookup key, independent of digest.
+    /// @param digest Keccak256 of the exact forwarded payload bytes, not the envelope.
+    /// @param codes Full-width scope/action codes, emitted unchanged.
+    function envelope(uint portal, uint resources, bytes32 key, bytes32 digest, uint codes) internal {
+        bytes memory data = Encoder.createEnvelope(portal, resources, key, digest);
+        mem(codes, Encoder.pos(data, 0), data.length);
+    }
+
+    /// @notice Emit codes followed by one RESOLUTION block using LOG0.
+    /// @dev Allocates through Encoder and emits exactly 104 bytes without topics.
+    /// The emitter identifies the host; key and digest identify the recovery record.
+    /// This helper performs no storage mutation, witness validation or recovery.
+    function resolution(bytes32 key, bytes32 digest, uint codes) internal {
+        bytes memory data = Encoder.createResolution(key, digest);
+        mem(codes, Encoder.pos(data, 0), data.length);
+    }
+
+    /// @notice Emit codes followed by one INTRODUCTION block using LOG0.
+    /// @dev Allocates through Encoder and emits 136 bytes without topics. The emitter
+    /// identifies the receiving host. Caller validates peer identity; origin and
+    /// blocknum are provenance and a claim, not authorization or verified deployment data.
+    function introduction(uint peer, bytes32 origin, uint blocknum, uint codes) internal {
+        bytes memory data = Encoder.createIntroduction(peer, origin, blocknum);
+        mem(codes, Encoder.pos(data, 0), data.length);
+    }
+
+    /// @notice Emit codes followed by one ENDPOINT block using LOG0.
+    /// @dev Allocates through Encoder; preserves the ID and all three complete lanes.
+    /// Emits 168 bytes with no topics. The emitter identifies the publishing host.
+    function endpoint(uint id, uint state, uint input, uint output, uint codes) internal {
+        bytes memory data = Encoder.createEndpoint(id, state, input, output);
+        mem(codes, Encoder.pos(data, 0), data.length);
+    }
+
+    /// @notice Create and emit an ANNOTATION block preceded by codes using LOG0.
+    /// @dev Accepts ordinary memory bytes; allocates the complete block through Encoder.
+    /// The caller supplies an encoded annotation stream and its scope codes. This
+    /// helper preserves entity and data without interpreting or validating claims.
+    /// Each annotation type defines its own identity, merge and revocation rules.
+    function annotation(uint entity, bytes memory data, uint codes) internal {
+        bytes memory value = Encoder.createAnnotation(entity, data);
+        mem(codes, Encoder.pos(value, 0), value.length);
+    }
+
+    /// @notice Create and emit a PIPELINE block preceded by codes using LOG0.
     /// @dev Allocates through Encoder and logs through mem; no existing writer or
-    /// caller-managed memory is required. Emits 136 bytes: codes plus a ROOTED block.
+    /// caller-managed memory is required. Emits 104 bytes: codes plus a PIPELINE block.
     /// No extra format tag or topics. The caller defines pipeline scope and emission
     /// timing; this helper does not authorize the account, enforce expiry or move value.
-    /// @param account Account establishing the root pipeline context.
-    /// @param deadline Full-width expiry timestamp, encoded unchanged.
-    /// @param value Full-width native value in the emitting chain's native unit.
+    /// @dev Convention: nested pipelines preserve the account. Implementations that
+    /// change it must log switches and restoration explicitly. Pipeline.pipe calls this
+    /// helper at entry. The initial budget is not additive across nested calls.
+    /// @param account Account used by this pipeline and its nested pipelines.
+    /// @param budget Initial native-value budget for this invocation, in the chain's native unit.
     /// @param codes Full uint256 descriptive code word, emitted unchanged.
-    function rooted(bytes32 account, uint deadline, uint value, uint codes) internal {
-        bytes memory data = Encoder.createRooted(account, deadline, value);
+    function pipeline(bytes32 account, uint budget, uint codes) internal {
+        bytes memory data = Encoder.createPipeline(account, budget);
         mem(codes, Encoder.pos(data, 0), data.length);
     }
 

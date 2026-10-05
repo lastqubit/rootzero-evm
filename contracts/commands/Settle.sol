@@ -2,13 +2,14 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
-import {Position} from "../core/Types.sol";
-import {SettleHook} from "../core/Settlement.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
-import {Cursors} from "../utils/Cursors.sol";
 import {Execute} from "../codec/Execute.sol";
+import {Keys} from "../codec/Keys.sol";
+import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
+import {SettleHook} from "../core/Settlement.sol";
+import {Position} from "../core/Types.sol";
+import {Codes} from "../utils/Codes.sol";
+import {Cursors} from "../utils/Cursors.sol";
 import {UnexpectedInput} from "../utils/Errors.sol";
 
 using Executions for Execution;
@@ -29,13 +30,14 @@ abstract contract SettlePayableHook {
 
 /// @title Settle
 /// @notice Command that consumes POSITION state blocks through a virtual hook.
-abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
+abstract contract Settle is CommandBase, SettleHook {
+    uint private constant STATE = Specs.Position | Codes.AccountSettle;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("settle", Specs.Position, Specs.Empty, Specs.Empty, 0);
-        annotateAction(id, Actions.Settle);
+        (id, descriptor) = command("settle", STATE, Specs.Empty, Specs.Empty, 0);
     }
 
     /// @notice Return the registered SETTLE command ID.
@@ -45,6 +47,7 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
 
     /// @notice Settle each POSITION block from the command state.
     /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
+    /// @dev Logs the consumed State stream before hooks, including empty batches.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -60,17 +63,19 @@ abstract contract Settle is CommandBase, SettleHook, ActionAnnot {
 
 /// @title SettlePayable
 /// @notice Funded command that consumes POSITION state blocks through a virtual hook.
-abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
+abstract contract SettlePayable is CommandBase, SettlePayableHook {
+    uint private constant STATE = Specs.Position | Codes.AccountSettle;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("settlePayable", Specs.Position, Specs.Empty, Specs.Empty, Flags.Funded);
-        annotateAction(id, Actions.Settle);
+        (id, descriptor) = command("settlePayable", STATE, Specs.Empty, Specs.Empty, Flags.Funded);
     }
 
     /// @notice Settle each POSITION block with access to a shared native-value budget.
     /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
+    /// @dev Logs the consumed State stream before hooks, including empty batches.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return Empty output state.
     /// @return Native value to add to the caller's budget.
@@ -91,6 +96,7 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook, ActionAnnot {
 abstract contract ExecuteSettle is Settle {
     /// @notice Execute the inherited settle command from an internal pipeline.
     /// @dev Account format is trusted from the producer; the hook applies exchange authorization.
+    /// @dev Logs STATE before hooks, matching the calldata command.
     /// @param account Account for which each position is settled.
     /// @param state POSITION block stream held in pipeline memory.
     /// @param inputCur Cursor over empty command input.
@@ -107,6 +113,8 @@ abstract contract ExecuteSettle is Settle {
         if (!Cursors.done(inputCur)) revert UnexpectedInput();
         (uint abs, uint end) = Execute.bounds(state, Sizes.Position);
 
+        Logs.memCopyWrap(settleId(), Keys.State, state);
+
         while (abs < end) {
             settle(account, Execute.unpackPositionMemory(abs));
             unchecked {
@@ -114,6 +122,7 @@ abstract contract ExecuteSettle is Settle {
             }
         }
 
-        return (true, "", value);
+        // The default output is the shared empty bytes value; no allocation is needed.
+        return (true, output, value);
     }
 }

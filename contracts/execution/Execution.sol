@@ -68,11 +68,7 @@ library Executions {
     uint internal constant LogInput = 1 << 2;
     uint internal constant LogOutput = 1 << 3;
 
-    uint private constant SourceKeyShift = 224;
-    uint private constant SourceSizeShift = 192;
-    uint private constant OutputSizeShift = 160;
-
-    /// @notice Precompute allocation hints and logging flags for execution.
+    /// @notice Precompute allocation hints and lane-derived logging selections for execution.
     /// @dev Layout: [source key:4][source block size:4][output block size:4]
     /// [reserved:19][flags:1]. Sizes include headers and require 25 bits at maximum hint.
     /// Declared state takes precedence over input, even when supplied state is empty.
@@ -82,9 +78,9 @@ library Executions {
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
-        descriptor = (uint(uint32(Specs.key(source))) << SourceKeyShift)
-            | (Specs.blockSize(source) << SourceSizeShift)
-            | (Specs.blockSize(output) << OutputSizeShift)
+        descriptor = (uint(uint32(Specs.key(source))) << 224)
+            | (Specs.blockSize(source) << 192)
+            | (Specs.blockSize(output) << 160)
             | (stateSource ? StateSource : 0)
             | (Lanes.codes(state) != 0 ? LogState : 0)
             | (Lanes.codes(input) != 0 ? LogInput : 0)
@@ -122,23 +118,19 @@ library Executions {
     /// temporary memory; preserves all execution fields and the free-memory pointer.
     function logInput(Execution memory exec, uint id, uint descriptor) internal {
         if (descriptor & LogInput == 0) return;
-        uint cur = exec.input;
-        uint abs = uint32(cur);
-        unchecked {
-            Logs.copyWrap(id, bytes4(uint32(INPUT_KEY)), abs, uint32(cur >> 32) - abs);
-        }
+        Logs.copyWrap(id, bytes4(uint32(INPUT_KEY)), exec.input);
     }
 
     /// @dev Capacity is only a hint; decoding validates the stream and buffers can grow.
     function outputCapacity(uint input, uint state, uint descriptor) private pure returns (uint capacity) {
-        if (uint32(descriptor >> OutputSizeShift) == 0) return 0;
+        if (uint32(descriptor >> 160) == 0) return 0;
         uint count = 1;
-        bytes4 key = bytes4(uint32(descriptor >> SourceKeyShift));
+        bytes4 key = bytes4(uint32(descriptor >> 224));
         if (key != bytes4(0)) {
             uint source = (descriptor & StateSource) != 0 ? state : input;
             uint abs = uint32(source);
             uint end = uint32(source >> 32);
-            uint blockSize = uint32(descriptor >> SourceSizeShift);
+            uint blockSize = uint32(descriptor >> 192);
             if (blockSize != 0 && (end - abs) % blockSize == 0) {
                 count = (end - abs) / blockSize;
             } else {
@@ -149,7 +141,7 @@ library Executions {
         // produce at most uint32.max blocks, so the product fits uint64.
         // Encoder.init enforces the uint32 capacity limit.
         unchecked {
-            capacity = count * uint32(descriptor >> OutputSizeShift);
+            capacity = count * uint32(descriptor >> 160);
         }
     }
 
@@ -420,6 +412,19 @@ library Executions {
         exec.input = Cursors.exhaust(inputCur);
     }
 
+    /// @notice Validate and consume the remaining input as ANNOTATION blocks.
+    /// @dev Empty streams pass. Checks every parent and its exact final BYTES child;
+    /// annotation payloads remain opaque. Returns the original stream cursor.
+    /// Descriptor declarations do not affect validation; state remains unconsumed.
+    function takeAnnotations(Execution memory exec) internal pure returns (uint inputCur) {
+        inputCur = exec.input;
+        uint cur = inputCur;
+        while (Cursors.more(cur)) {
+            (,, cur) = cur.unpackAnnotation();
+        }
+        exec.input = cur;
+    }
+
     /// @notice Validate and consume all remaining state blocks with key.
     /// @dev Empty streams pass. Validates the requested key regardless of descriptor
     /// declarations; close still rejects any source bytes left unread.
@@ -657,18 +662,17 @@ library Executions {
         (value.host, value.asset) = unpackHostAsset(exec);
     }
 
-    /// @notice Decode one ROOTED block from input and advance the input cursor.
-    function unpackRooted(Execution memory exec) internal pure returns (bytes32 account, uint deadline, uint value) {
-        (account, deadline, value, exec.input) = exec.input.unpackRooted();
+    /// @notice Decode one PIPELINE block from input and advance the input cursor.
+    function unpackPipeline(Execution memory exec) internal pure returns (bytes32 account, uint budget) {
+        (account, budget, exec.input) = exec.input.unpackPipeline();
     }
 
     /// @notice Decode and consume one BOOTSTRAP block from input.
     /// @param exec Execution whose input cursor is advanced.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded balance amount.
-    /// @return budget Decoded native-value budget contribution.
-    function unpackBootstrap(Execution memory exec) internal pure returns (bytes32 asset, uint amount, uint budget) {
-        (asset, amount, budget, exec.input) = exec.input.unpackBootstrap();
+    /// @return budget Minimum native credit to retain after funding requested balances.
+    /// @return balancesCur Cursor over the ASSET_AMOUNT blocks inside the balances list.
+    function unpackBootstrap(Execution memory exec) internal pure returns (uint budget, uint balancesCur) {
+        (budget, balancesCur, exec.input) = exec.input.unpackBootstrap();
     }
 
     /// @notice Decode and consume one ALLOCATION block from input.
@@ -989,9 +993,9 @@ library Executions {
         outputAssetAmount(exec, value.asset, value.amount);
     }
 
-    /// @notice Append ROOTED to output without emitting a log or changing execution context.
-    function outputRooted(Execution memory exec, bytes32 account, uint deadline, uint value) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeRooted(exec.buffer, account, deadline, value);
+    /// @notice Append PIPELINE to output without emitting a log or changing execution context.
+    function outputPipeline(Execution memory exec, bytes32 account, uint budget) internal pure {
+        (exec.buffer, exec.output) = exec.output.writePipeline(exec.buffer, account, budget);
     }
 
     /// @notice Append a BALANCE block to execution output.

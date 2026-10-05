@@ -44,7 +44,7 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     /// @param output Output lane: upper-half spec and lower-half codes.
     /// @param flags Packed port behavior flags.
     /// @return id Port node ID.
-    /// @return descriptor Packed execution allocation hints and logging flags.
+    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
     function port(
         string memory name,
         uint input,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {CommandBase, Execution, Executions, Flags, Specs} from "../Base.sol";
 import {NodeAccess} from "../../core/Access.sol";
+import {CommandBase, Execution, Executions, Flags, Specs} from "../Base.sol";
 
 using Executions for Execution;
 
@@ -47,5 +47,27 @@ abstract contract AdminBase is NodeAccess, CommandBase {
 
         output = exec.finish(id, descriptor);
         credit = exec.drainBudget();
+    }
+
+    /// @notice Run an authorized admin context through a callback exactly once.
+    /// @dev Authorizes even empty batches before logging or processing. The callback
+    /// defines source shapes and must consume both bounded sources completely.
+    /// Logs selected context before processing and output on close.
+    /// @param id Registered endpoint ID used as the log prefix.
+    /// @param descriptor Packed admin endpoint descriptor.
+    /// @param context Exactly one CONTEXT block carrying account, state, and input.
+    /// @param process Internal callback that processes the complete execution.
+    /// @return output Final encoded output block stream.
+    /// @return credit Remaining native-value budget.
+    function runAdminOnce(
+        uint id,
+        uint descriptor,
+        bytes calldata context,
+        function(Execution memory) internal process
+    ) internal returns (bytes memory output, uint credit) {
+        Execution memory exec = openAdminCommand(context, descriptor);
+        exec.logContext(id, descriptor);
+        process(exec);
+        return exec.close(id, descriptor);
     }
 }

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {GuardBase} from "./Base.sol";
+import {Specs} from "../Codec.sol";
 import {AllowanceHook} from "../commands/admin/Allowance.sol";
 import {DenyAssetHook} from "../commands/admin/Asset.sol";
 import {NodeAccess} from "../core/Access.sol";
-import {GuardBase} from "./Base.sol";
-import {Specs} from "../Codec.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
+import {Codes} from "../utils/Codes.sol";
 using Executions for Execution;
 
 /// @title Revoke
@@ -14,14 +15,17 @@ using Executions for Execution;
 /// Each NODE block in the input is deauthorized on the host.
 /// Only callable by active guardian addresses.
 abstract contract Revoke is NodeAccess, GuardBase {
+    uint private constant INPUT = Specs.Node | Codes.HostRevokeThenInactive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revoke", Specs.Node);
+        (id, descriptor) = guard("revoke", INPUT);
     }
 
     /// @notice Revoke every NODE block in `input` as the active guardian.
+    /// @dev Logs the complete INPUT batch under the endpoint host before the hooks.
     function revoke(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeOne);
     }

@@ -12,7 +12,6 @@ import {BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook} fr
 
 // Commands
 import {CommandBase} from "./commands/Base.sol";
-import {Allocate, AllocateHook} from "./commands/Allocate.sol";
 import {CheckBalance, ExecuteCheckBalance} from "./commands/Balance.sol";
 import {Burn, BurnHook} from "./commands/Burn.sol";
 import {ExecuteBootstrap} from "./commands/Bootstrap.sol";
@@ -22,7 +21,6 @@ import {DebitAccount, ExecuteDebitAccount} from "./commands/Debit.sol";
 import {Deposit, DepositHook, DepositPayable, DepositPayableHook} from "./commands/Deposit.sol";
 import {Payout, PayoutHook} from "./commands/Payout.sol";
 import {CheckPosition, ExecuteCheckPosition} from "./commands/Position.sol";
-import {Provision, ProvisionHook, ProvisionPayable, ProvisionPayableHook} from "./commands/Provision.sol";
 import {RecoverPayable, RecoverPayableHook} from "./commands/Recover.sol";
 import {Realize, RealizeHook} from "./commands/Realize.sol";
 import {Repay} from "./commands/Repay.sol";

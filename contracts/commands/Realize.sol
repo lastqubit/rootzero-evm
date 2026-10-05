@@ -3,8 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Position} from "../core/Types.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
+import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -26,16 +25,19 @@ abstract contract RealizeHook {
 }
 
 /// @notice Realize each POSITION and return the hook's fulfilled result.
-abstract contract Realize is CommandBase, RealizeHook, ActionAnnot {
+abstract contract Realize is CommandBase, RealizeHook {
+    uint private constant STATE = Specs.Position | Codes.AccountRealize;
+    uint private constant OUTPUT = Specs.Position | Codes.AccountRealize;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, 0);
-        annotateAction(id, Actions.Realize);
+        (id, descriptor) = command("realize", STATE, Specs.Empty, OUTPUT, 0);
     }
 
     /// @notice Realize POSITION state blocks without caller-supplied outcome constraints.
+    /// @dev Logs original POSITION state before hooks and fulfilled OUTPUT afterward.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.

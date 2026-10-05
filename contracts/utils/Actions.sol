@@ -15,7 +15,7 @@ pragma solidity ^0.8.33;
 /// None denotes an empty list; identifiers are not bit flags.
 /// @dev Constants use uint for composition; each identifier must still fit one uint32 slot.
 library Actions {
-    // Lifecycle and membership: 0-15. Values 8-15 are reserved.
+    // Lifecycle and membership: 0-15. Values 10-15 are reserved.
     uint constant None = 0;
     uint constant Create = 1;
     uint constant Update = 2;
@@ -26,6 +26,10 @@ library Actions {
     uint constant Remove = 5;
     uint constant Enable = 6;
     uint constant Disable = 7;
+    /// @dev Publish metadata claims about an entity.
+    uint constant Annotate = 8;
+    /// @dev Record a host introduction claim without granting trust.
+    uint constant Introduce = 9;
 
     // Permissions and roles: 16-31. Values 22-31 are reserved.
     uint constant Authorize = 16;
@@ -47,7 +51,7 @@ library Actions {
     uint constant Mint = 48;
     uint constant Burn = 49;
 
-    // Accounting and settlement: 64-79. Values 70-79 are reserved.
+    // Accounting and settlement: 64-79. Values 73-79 are reserved.
     uint constant Post = 64;
     /// @dev Legacy book-command meaning; historical deployments used code 18.
     uint constant Book = 65;
@@ -55,6 +59,12 @@ library Actions {
     uint constant Settle = 67;
     uint constant Fee = 68;
     uint constant Refund = 69;
+    /// @dev Record an internal account credit.
+    uint constant Credit = 70;
+    /// @dev Record an internal account debit.
+    uint constant Debit = 71;
+    /// @dev Fund requested pipeline balances and a minimum remaining native budget.
+    uint constant Bootstrap = 72;
 
     // Trading and credit: 80-95. Values 84-95 are reserved.
     uint constant Swap = 80;
@@ -62,5 +72,11 @@ library Actions {
     uint constant Repay = 82;
     uint constant Liquidate = 83;
 
-    // Values 96-0x1fffffff are reserved for future action groups.
+    // Transport: 96-111. Values 98-111 are reserved.
+    /// @dev Forward execution to another destination.
+    uint constant Relay = 96;
+    /// @dev Send a message through a portal or transport.
+    uint constant Dispatch = 97;
+
+    // Values 112-0x1fffffff are reserved for future action groups.
 }

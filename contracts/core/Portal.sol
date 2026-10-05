@@ -4,8 +4,8 @@ pragma solidity ^0.8.33;
 import {Blocks} from "../codec/Blocks.sol";
 import {Calls} from "./Calls.sol";
 import {Runtime} from "./Runtime.sol";
-import {ResolvedEvent} from "../events/Resolved.sol";
-import {UnresolvedEvent} from "../events/Unresolved.sol";
+import {Logs} from "../codec/Logs.sol";
+import {Codes} from "../utils/Codes.sol";
 import {PortPipePayableSelector} from "../ports/Pipe.sol";
 
 /// @notice Hook for forwarding a recoverable message through a transport boundary.
@@ -20,7 +20,7 @@ abstract contract ForwardHook {
 
 /// @title Portal
 /// @notice Base contract that forwards incoming contexts to its commander's pipeline.
-abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent {
+abstract contract Portal is ForwardHook, Runtime {
     /// @dev Fixed recovery allowance; derived constructors may increase it for transport work.
     uint internal immutable gasReserve = 35_000;
 
@@ -64,19 +64,22 @@ abstract contract Portal is ForwardHook, Runtime, UnresolvedEvent, ResolvedEvent
 
         miss = Blocks.hash(messageCur);
         unresolved[key] = miss;
-        emit Unresolved(host, key, miss);
+        Logs.resolution(key, miss, Codes.HostUnresolved);
     }
 
     /// @notice Validate and consume a previously unresolved witness.
     /// @dev The witness must hash to the digest stored under `key`.
-    /// If a later recovery operation reverts, this deletion is rolled back with it.
+    /// Logs consumption of the key/digest record, not downstream delivery success.
+    /// If a later recovery operation reverts, deletion and the log roll back together.
     /// @param key Recovery lookup key.
     /// @param witnessCur Cursor over the witness payload used to prove and replay recovery.
     /// @return resolvedCur The validated witness payload cursor.
     function resolve(bytes32 key, uint witnessCur) internal returns (uint resolvedCur) {
-        if (unresolved[key] != Blocks.hash(witnessCur)) revert BadWitness();
+        bytes32 digest = unresolved[key];
+        if (digest != Blocks.hash(witnessCur)) revert BadWitness();
 
         delete unresolved[key];
+        Logs.resolution(key, digest, Codes.HostResolved);
         return witnessCur;
     }
 }

@@ -78,19 +78,6 @@ library Execute {
         if (header != Headers.AssetAmount) revert InvalidBlock();
     }
 
-    /// @notice Decode a BOOTSTRAP at an in-bounds absolute calldata position.
-    /// @dev Checks the exact header; caller establishes containment for 104 bytes.
-    function unpackBootstrap(uint abs) internal pure returns (bytes32 asset, uint amount, uint budget) {
-        uint header;
-        assembly ("memory-safe") {
-            header := shr(192, calldataload(abs))
-            asset := calldataload(add(abs, 8))
-            amount := calldataload(add(abs, 40))
-            budget := calldataload(add(abs, 72))
-        }
-        if (header != Headers.Bootstrap) revert InvalidBlock();
-    }
-
     // Fixed memory blocks. abs points at the header within a validated stream.
 
     /// @notice Decode a BALANCE at an in-bounds absolute memory position.

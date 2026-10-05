@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {BalanceEvent} from "../events/Balance.sol";
-
 /// @dev Thrown when a debit would reduce a balance below zero.
 error InsufficientFunds();
 
@@ -12,7 +10,7 @@ error InsufficientFunds();
 /// Callers validate untrusted account input at entry; this ledger does not repeat
 /// account-format checks. Authorization remains the caller's responsibility;
 /// debitFrom still enforces sufficient balance.
-abstract contract Balances is BalanceEvent {
+abstract contract Balances {
     /// @dev account -> asset -> balance.
     mapping(bytes32 account => mapping(bytes32 asset => uint amount)) internal balances;
 

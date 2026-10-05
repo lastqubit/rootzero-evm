@@ -4,6 +4,7 @@ pragma solidity ^0.8.33;
 import {Cursors} from "../utils/Cursors.sol";
 import {Keys} from "./Keys.sol";
 import {Headers} from "./Headers.sol";
+import {Specs} from "./Specs.sol";
 import {Position, BalanceConstraints, PositionConstraints} from "../core/Types.sol";
 import {INVALID_BLOCK, InvalidBlock, OutOfBounds, UnexpectedValue, OutOfRange} from "../utils/Errors.sol";
 
@@ -1102,30 +1103,37 @@ library Blocks {
         host = uint(a);
     }
 
-    /// @notice Decode ROOTED and return the advanced bounded calldata cursor.
-    /// @dev Validates the exact key, 96-byte payload and containment; performs no
-    /// account authorization, deadline enforcement or value validation.
-    function unpackRooted(uint cur) internal pure returns (bytes32 account, uint deadline, uint value, uint nextCur) {
+    /// @notice Decode PIPELINE and return the advanced bounded calldata cursor.
+    /// @dev Validates the exact key, 64-byte payload and containment; performs no
+    /// account authorization or budget validation.
+    function unpackPipeline(uint cur) internal pure returns (bytes32 account, uint budget, uint nextCur) {
         bytes32 a;
-        bytes32 b;
-        (account, a, b, nextCur) = unpack96(cur, Keys.Rooted);
-        deadline = uint(a);
-        value = uint(b);
+        (account, a, nextCur) = unpack64(cur, Keys.Pipeline);
+        budget = uint(a);
     }
 
-    /// @notice Decode BOOTSTRAP and return the advanced source cursor.
-    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
-    /// @param cur Bounded source cursor at the block header.
-    /// @return asset Decoded payload value.
-    /// @return amount Decoded payload value.
-    /// @return budget Decoded payload value.
-    /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackBootstrap(uint cur) internal pure returns (bytes32 asset, uint amount, uint budget, uint nextCur) {
-        bytes32 a;
-        bytes32 b;
-        (asset, a, b, nextCur) = unpack96(cur, Keys.Bootstrap);
-        amount = uint(a);
-        budget = uint(b);
+    /// @notice Decode BOOTSTRAP's budget and final LIST payload.
+    /// @dev Validates parent containment and exact final child framing. Consumers
+    /// validate ASSET_AMOUNT contents and any exactly-one-outer-block requirement.
+    function unpackBootstrap(uint cur) internal pure returns (uint budget, uint balancesCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Bootstrap));
+            abs += 8;
+            balancesCur = tail(abs + 32, uint32(nextCur), Keys.List);
+            budget = uint(read32(abs));
+        }
+    }
+
+    /// @notice Decode exactly one BOOTSTRAP into its budget and final LIST payload.
+    /// @dev Requires the block to fill the source range. Invalid outer framing,
+    /// truncation, trailing data and invalid LIST framing revert InvalidBlock.
+    /// Returns a clean child cursor; consumers validate ASSET_AMOUNT contents.
+    function unpackBootstrapExact(uint cur) internal pure returns (uint budget, uint balancesCur) {
+        uint payloadCur = unpackExact(cur, Specs.Bootstrap);
+        uint abs = uint32(payloadCur);
+        unchecked { balancesCur = tail(abs + 32, uint32(payloadCur >> 32), Keys.List); }
+        budget = uint(read32(abs));
     }
 
     /// @notice Decode ALLOCATION and return the advanced source cursor.
@@ -1319,7 +1327,7 @@ library Blocks {
     /// @dev Validates the parent once. The final child proves both children fit
     /// and consume the parent exactly; malformed children revert InvalidBlock.
     /// @param cur Bounded source cursor positioned at the RELAY header.
-    /// @return inputCur Clean cursor over the first BYTES payload.
+    /// @return inputCur Clean cursor over the first INPUT payload.
     /// @return stepsCur Clean cursor over the final BYTES payload; its end is RELAY's end.
     /// @return nextCur Advanced source cursor preserving its original end and metadata.
     function unpackRelay(uint cur) internal pure returns (uint inputCur, uint stepsCur, uint nextCur) {
@@ -1374,8 +1382,8 @@ library Blocks {
     /// fit before the account is loaded. Child shape failures revert InvalidBlock.
     /// @param cur Bounded source cursor positioned at the CONTEXT header.
     /// @return account Encoded account identifier; no account semantics are checked.
-    /// @return stateCur Clean cursor over the first BYTES payload.
-    /// @return inputCur Clean cursor over the final BYTES payload; its end is CONTEXT's end.
+    /// @return stateCur Clean cursor over the STATE payload.
+    /// @return inputCur Clean cursor over the final INPUT payload; its end is CONTEXT's end.
     /// @return nextCur Advanced source cursor preserving its original end and metadata.
     function unpackContext(
         uint cur
@@ -1397,7 +1405,7 @@ library Blocks {
     /// @param cur Bounded source cursor positioned at the STEP header.
     /// @return cmd Encoded command identifier.
     /// @return value Unsigned native value.
-    /// @return inputCur Clean cursor over the final BYTES payload only.
+    /// @return inputCur Clean cursor over the final INPUT payload only.
     /// @return nextCur Source cursor after STEP, retaining its original end and metadata.
     function unpackStep(uint cur) internal pure returns (uint cmd, uint value, uint inputCur, uint nextCur) {
         uint abs = uint32(cur);

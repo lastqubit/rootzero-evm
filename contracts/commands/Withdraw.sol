@@ -2,8 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
-import {Actions} from "../utils/Actions.sol";
+import {Codes} from "../utils/Codes.sol";
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that withdraw account balances.
@@ -20,16 +19,18 @@ abstract contract WithdrawHook {
 /// @notice Command that delivers BALANCE state blocks to an external destination.
 /// Use `withdraw` for assets being sent outside the protocol (e.g. ERC-20 transfers, ETH sends).
 /// For internal balance credits, use `creditAccount` instead.
-abstract contract Withdraw is CommandBase, WithdrawHook, ActionAnnot {
+abstract contract Withdraw is CommandBase, WithdrawHook {
+    uint private constant STATE = Specs.Balance | Codes.AccountWithdraw;
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, 0);
-        annotateAction(id, Actions.Withdraw);
+        (id, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, 0);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.
+    /// @dev Logs the complete STATE before processing, including an empty batch.
+    /// The state lane codes identify Account followed by Withdraw; the spec identifies Balance.
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.

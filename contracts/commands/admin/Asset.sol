@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import { AdminBase, Execution, Executions, Flags, Specs } from "./Base.sol";
+import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
+import {Codes} from "../../utils/Codes.sol";
+
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that allow assets.
@@ -24,14 +26,17 @@ abstract contract DenyAssetHook {
 /// @notice Admin command that permits a list of assets via a virtual hook.
 /// Each ASSET block in the input calls `allowAsset`. Only callable by the admin account.
 abstract contract AllowAsset is AdminBase, AllowAssetHook {
+    uint private constant INPUT = Specs.Asset | Codes.HostAllowThenActive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("allowAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("allowAsset", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Allow each ASSET block in the admin input.
+    /// @dev Logs the complete host-scoped INPUT batch before hooks.
     /// @param context Admin command context carrying the ASSET input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -51,14 +56,17 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
 /// @notice Admin command that blocks a list of assets via a virtual hook.
 /// Each ASSET block in the input calls `denyAsset`. Only callable by the admin account.
 abstract contract DenyAsset is AdminBase, DenyAssetHook {
+    uint private constant INPUT = Specs.Asset | Codes.HostDenyThenInactive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("denyAsset", Specs.Empty, Specs.Asset, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("denyAsset", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Deny each ASSET block in the admin input.
+    /// @dev Logs the complete host-scoped INPUT batch before hooks.
     /// @param context Admin command context carrying the ASSET input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.

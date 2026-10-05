@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Specs} from "../codec/Specs.sol";
 import {CallerAccess} from "../core/Access.sol";
 import {EndpointBase} from "../core/Endpoint.sol";
-import {Specs} from "../codec/Specs.sol";
 import {HostAmount} from "../core/Types.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Flags} from "../utils/Flags.sol";
@@ -42,7 +42,7 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @param output Output lane: upper-half spec and lower-half codes.
     /// @param flags Packed command behavior flags.
     /// @return id Command node ID.
-    /// @return descriptor Packed execution allocation hints and logging flags.
+    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
     function command(
         string memory name,
         uint state,

@@ -2,10 +2,13 @@
 pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {CreditAccountHook} from "../core/Settlement.sol";
-import {Cursors} from "../utils/Cursors.sol";
 import {Execute} from "../codec/Execute.sol";
+import {Keys} from "../codec/Keys.sol";
+import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
+import {CreditAccountHook} from "../core/Settlement.sol";
+import {Codes} from "../utils/Codes.sol";
+import {Cursors} from "../utils/Cursors.sol";
 import {UnexpectedInput} from "../utils/Errors.sol";
 
 using Executions for Execution;
@@ -14,11 +17,13 @@ using Executions for Execution;
 /// @notice Command that delivers BALANCE state blocks to an account via a virtual hook.
 /// Use for internally recording credits that have already been posted externally.
 abstract contract CreditAccount is CommandBase, CreditAccountHook {
+    uint private constant STATE = Specs.Balance | Codes.AccountCredit;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("creditAccount", Specs.Balance, Specs.Empty, Specs.Empty, 0);
+        (id, descriptor) = command("creditAccount", STATE, Specs.Empty, Specs.Empty, 0);
     }
 
     /// @notice Return the registered CREDIT_ACCOUNT command ID.
@@ -27,6 +32,7 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
     }
 
     /// @notice Credit each BALANCE block from the command state to the command account.
+    /// @dev Logs the complete State stream before the account hooks.
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -46,6 +52,7 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
 /// inherited from `CreditAccount` while accepting the state location used by `Pipeline`.
 abstract contract ExecuteCreditAccount is CreditAccount {
     /// @notice Execute the inherited credit-account command from an internal pipeline.
+    /// @dev Logs the complete State stream before the hooks, matching the command runner.
     /// @param account Account credited by each balance.
     /// @param state BALANCE block stream held in pipeline memory.
     /// @param inputCur Cursor over empty input required by the command schema.
@@ -62,6 +69,8 @@ abstract contract ExecuteCreditAccount is CreditAccount {
         if (!Cursors.done(inputCur)) revert UnexpectedInput();
         (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
+        Logs.memCopyWrap(creditAccountId(), Keys.State, state);
+
         while (abs < end) {
             (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
             creditAccount(account, asset, amount);
@@ -70,6 +79,7 @@ abstract contract ExecuteCreditAccount is CreditAccount {
             }
         }
 
-        return (true, "", value);
+        // The default output is the shared empty bytes value; no allocation is needed.
+        return (true, output, value);
     }
 }

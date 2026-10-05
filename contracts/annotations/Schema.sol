@@ -3,7 +3,8 @@ pragma solidity ^0.8.33;
 
 import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
-import {AnnotationEvent} from "../events/Annotation.sol";
+import {Logs} from "../codec/Logs.sol";
+import {Codes} from "../utils/Codes.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 /// @title SchemaAnnot
@@ -12,7 +13,7 @@ import {Runtime} from "../core/Runtime.sol";
 /// emitter, the latest schema for the same block key replaces the earlier claim.
 /// Bodies may start with `name:`. Without it, standard keys use their canonical
 /// alias and nonstandard keys remain unnamed. The DSL is interpreted offchain.
-abstract contract SchemaAnnot is Runtime, AnnotationEvent {
+abstract contract SchemaAnnot is Runtime {
     /// @notice Construct and publish a context-local block specification.
     /// @param body Schema DSL string, optionally prefixed with `name:`.
     /// @param key Context-local key value.
@@ -44,7 +45,7 @@ abstract contract SchemaAnnot is Runtime, AnnotationEvent {
     /// @param spec Packed block specification.
     /// @return The published block specification.
     function schema(string memory body, uint spec) internal returns (uint) {
-        emit Annotation(host, Encoder.createSchema(spec, bytes(body)));
+        Logs.annotation(host, Encoder.createSchema(spec, bytes(body)), Codes.HostAnnotate);
         return spec;
     }
 }
