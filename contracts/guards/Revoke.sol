@@ -40,14 +40,17 @@ abstract contract Revoke is NodeAccess, GuardBase {
 /// @notice Guardian action that revokes host-scoped asset allowances.
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing AllowanceHook.
 abstract contract RevokeAllowance is GuardBase, AllowanceHook {
+    uint private constant INPUT = Specs.HostAsset | Codes.HostUpdate;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAllowance", Specs.HostAsset);
+        (id, descriptor) = guard("revokeAllowance", INPUT);
     }
 
     /// @notice Revoke every HOST_ASSET allowance in `input` as the active guardian.
+    /// @dev Logs INPUT with Host/Update codes before hooks; each allowance is set to zero.
     function revokeAllowance(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAllowanceOne);
     }
@@ -62,14 +65,17 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 /// @notice Guardian action that denies assets through the host's existing asset hook.
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
 abstract contract RevokeAsset is GuardBase, DenyAssetHook {
+    uint private constant INPUT = Specs.Asset | Codes.HostDenyThenInactive;
+
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAsset", Specs.Asset);
+        (id, descriptor) = guard("revokeAsset", INPUT);
     }
 
     /// @notice Deny every ASSET block in `input` as the active guardian.
+    /// @dev Logs INPUT with Host/Deny/Inactive codes before hooks.
     function revokeAsset(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAssetOne);
     }

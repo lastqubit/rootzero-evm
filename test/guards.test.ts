@@ -9,6 +9,7 @@ import {
   encodeAssetBlock,
   encodeContextBlock,
   encodeHostAssetBlock,
+  encodeInputBlock,
   encodeLabelBlock,
   encodeNodeBlock,
   endpointSpecs,
@@ -51,7 +52,7 @@ describe("Guard Actions", () => {
     return guardId(target.interface.getFunction(method)!.selector, target);
   }
 
-  it("emits Endpoint discovery for revoke on deployment", async () => {
+  it("emits Endpoint discovery with input logging codes for every revoke guard", async () => {
     const signer = await getSigner(0);
     const artifact = await hre.artifacts.readArtifact("TestHost");
     const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
@@ -67,7 +68,7 @@ describe("Guard Actions", () => {
       .withArgs(await guard("revoke", deployed), encodeLabelBlock(ethers.ZeroHash, "revoke"));
     await expect(deploymentTx)
       .to.emitEndpoint(deployed).withArgs(await guard("revokeAllowance", deployed),
-        ...endpointSpecs({ input: Keys.HostAsset, inputHint: 64 }),
+        ...endpointSpecs({ input: Keys.HostAsset, inputHint: 64, inputCodes: 0x20000002n | (2n << 32n) }),
       );
     await expect(deploymentTx)
       .to.emitAnnotation(deployed)
@@ -77,7 +78,7 @@ describe("Guard Actions", () => {
       );
     await expect(deploymentTx)
       .to.emitEndpoint(deployed).withArgs(await guard("revokeAsset", deployed),
-        ...endpointSpecs({ input: Keys.Asset, inputHint: 32 }),
+        ...endpointSpecs({ input: Keys.Asset, inputHint: 32, inputCodes: 0x20000002n | (21n << 32n) | (0xa0000000n << 64n) }),
       );
     await expect(deploymentTx)
       .to.emitAnnotation(deployed)
@@ -91,10 +92,12 @@ describe("Guard Actions", () => {
     const asset1 = ethers.id("asset-1");
     const asset2 = ethers.id("asset-2");
 
-    const tx = host.connect(guardianSigner).revokeAsset(ethers.concat([
-      encodeAssetBlock(asset1),
-      encodeAssetBlock(asset2),
-    ]));
+    const input = ethers.concat([encodeAssetBlock(asset1), encodeAssetBlock(asset2)]);
+    const tx = host.connect(guardianSigner).revokeAsset(input);
+    const receipt = await (await tx).wait();
+    const expected = ethers.concat([ethers.toBeHex(await guard("revokeAsset"), 32), encodeInputBlock(input)]);
+    expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([expected]);
+    expect(receipt.logs[0].data).eq(expected);
     await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset1);
     await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset2);
   });
@@ -105,7 +108,7 @@ describe("Guard Actions", () => {
   });
 
   it("revokeAsset accepts an empty batch", async () => {
-    await host.connect(guardianSigner).revokeAsset("0x");
+    await expectInputLog(host.connect(guardianSigner).revokeAsset("0x"), host, "revokeAsset", "0x", true);
   });
 
   it("guardian can revoke host asset allowances", async () => {
@@ -114,10 +117,12 @@ describe("Guard Actions", () => {
     const asset1 = ethers.id("asset-1");
     const asset2 = ethers.id("asset-2");
 
-    const tx = host.connect(guardianSigner).revokeAllowance(ethers.concat([
-      encodeHostAssetBlock(peer1, asset1),
-      encodeHostAssetBlock(peer2, asset2),
-    ]));
+    const input = ethers.concat([encodeHostAssetBlock(peer1, asset1), encodeHostAssetBlock(peer2, asset2)]);
+    const tx = host.connect(guardianSigner).revokeAllowance(input);
+    const receipt = await (await tx).wait();
+    const expected = ethers.concat([ethers.toBeHex(await guard("revokeAllowance"), 32), encodeInputBlock(input)]);
+    expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([expected]);
+    expect(receipt.logs[0].data).eq(expected);
     await expect(tx).to.emit(host, "AllowanceCalled").withArgs(peer1, asset1, 0n);
     await expect(tx).to.emit(host, "AllowanceCalled").withArgs(peer2, asset2, 0n);
   });
@@ -128,7 +133,7 @@ describe("Guard Actions", () => {
   });
 
   it("revokeAllowance accepts an empty batch", async () => {
-    await host.connect(guardianSigner).revokeAllowance("0x");
+    await expectInputLog(host.connect(guardianSigner).revokeAllowance("0x"), host, "revokeAllowance", "0x", true);
   });
 
   it("revokeAllowance rejects allowance blocks carrying an amount", async () => {

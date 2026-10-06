@@ -1,7 +1,7 @@
 import {expect} from "chai";
 import {ethers} from "ethers";
 import {commandId, deploy, getSigner, hostId, portId} from "./helpers/setup.js";
-import {concat, encodeAssetBlock, endpointSpecs, Keys} from "./helpers/blocks.js";
+import {concat, encodeAssetBlock, encodeInputBlock, endpointSpecs, Keys} from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Singular asset endpoints", () => {
@@ -15,9 +15,9 @@ describe("Singular asset endpoints", () => {
     for (const method of ["allowAsset", "denyAsset", "portAllowAsset", "portDenyAsset"]) {
       const admin = !method.startsWith("port");
       const id = admin ? await commandId(`${method}(bytes)`, host, 2n) : await portId(`${method}(bytes)`, host);
-      const allow = method === "allowAsset";
-      const inputCodes = admin ? 0x20000002n | ((allow ? 20n : 21n) << 32n)
-        | ((allow ? 0xa0000001n : 0xa0000000n) << 64n) : 0n;
+      const allow = method === "allowAsset" || method === "portAllowAsset";
+      const inputCodes = 0x20000002n | ((allow ? 20n : 21n) << 32n)
+        | ((allow ? 0xa0000001n : 0xa0000000n) << 64n);
       const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, inputCodes, admin});
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...specs);
     }
@@ -28,12 +28,18 @@ describe("Singular asset endpoints", () => {
     const assets = [ethers.toBeHex(1n, 32), ethers.toBeHex(2n, 32)];
     const input = concat(...assets.map(encodeAssetBlock));
     const peer = host.connect(await getSigner(1)) as any;
-    await peer.portAllowAsset(input);
+    const allowed = await (await peer.portAllowAsset(input)).wait();
+    expect(allowed.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
+      concat(ethers.toBeHex(await portId("portAllowAsset(bytes)", host), 32), encodeInputBlock(input)),
+    ]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(true);
     const stranger = host.connect(await getSigner(2)) as any;
     await expect(stranger.portAllowAsset(input)).to.be.revertedWithCustomError(host, "AccessDenied");
     await expect(stranger.portDenyAsset(input)).to.be.revertedWithCustomError(host, "AccessDenied");
-    await peer.portDenyAsset(input);
+    const denied = await (await peer.portDenyAsset(input)).wait();
+    expect(denied.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
+      concat(ethers.toBeHex(await portId("portDenyAsset(bytes)", host), 32), encodeInputBlock(input)),
+    ]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(false);
     for (const method of ["portAllowAsset", "portDenyAsset"]) {
       expect(Array.from(await peer[method].staticCall("0x"))).to.deep.equal(["0x", 0n]);
