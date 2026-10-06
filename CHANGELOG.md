@@ -8,6 +8,37 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.52.0
+
+- Enable INPUT logging for revokeAllowance and revokeAsset, completing logging
+  for all revoke guards. Use Host/Update for zeroing allowances and
+  Host/Deny/Inactive for asset denial.
+
+- **Breaking: balance logging.** Add ACCOUNT_BALANCE (account, asset, actual
+  updated balance), codec helpers, and `Logs.accountBalance` with fixed
+  Account/Update codes. Hook implementers own emission after creditAccount and
+  debitAccount mutations; the ledger itself does not log. Keep ACCOUNT_AMOUNT
+  for requested amounts. getBalance now returns ACCOUNT_BALANCE blocks.
+- Remove redundant credit/debit command and port lane logs, Bootstrap debit
+  streams, Repay and Settle/SettlePayable state logs, and portBook input logs.
+  Cashout, Authorize, and position production logs remain. Bootstrap allocates
+  only its returned balances, retaining exact decoding and native funding behavior.
+  Indexers replace balances from hook logs; operation records are not additional
+  balance deltas. Historical Bootstrap benchmarks retain frozen logging fixtures.
+
+- **Breaking:** Replace portBook input pairs with a reusable 200-byte BOOKING
+  block. Add struct-based codec and execution helpers; change BookHook to
+  `book(Booking memory value)`. Custom callers and hook overrides must migrate.
+  Booking fields and scalar settlement arguments use from/to, liability/debt, asset/amount order. Remove the port
+  grouping annotation.
+
+- Enable input-batch logging for asset allow/deny ports using the same codes as
+  their command counterparts. Remove the inactive input-log check from portPipePayable.
+
+- Keep unlogged-runner experiments test-only; retain the measured matrix without
+  changing production runner APIs. Document focused development checks and full
+  release verification in the repository instructions.
+
 ## 1.51.0
 
 - Optimize Bootstrap with direct exact framing validation, inline fixed-size item
