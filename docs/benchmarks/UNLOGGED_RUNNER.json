@@ -1,0 +1,836 @@
+{
+  "compiler": "0.8.35",
+  "viaIR": true,
+  "optimizerRuns": 200,
+  "evmVersion": "cancun",
+  "names": [
+    "RunnerCurrent",
+    "RunnerSharedLogged",
+    "RunnerSharedUnlogged",
+    "RunnerDirectUnlogged",
+    "RunnerMixedCurrent",
+    "RunnerMixedShared",
+    "RunnerMixedDirect"
+  ],
+  "rows": [
+    {
+      "mode": 0,
+      "count": 0,
+      "gas": [
+        23381,
+        23381,
+        23286,
+        23286,
+        23510,
+        23383,
+        23399
+      ],
+      "execution": [
+        1154,
+        1154,
+        1062,
+        1062,
+        1191,
+        1079,
+        1089
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 127,
+      "mixedExecutionSaved": 112,
+      "mixedDirectSaved": 111
+    },
+    {
+      "mode": 0,
+      "count": 1,
+      "gas": [
+        24087,
+        24087,
+        23993,
+        23993,
+        24216,
+        24128,
+        24194
+      ],
+      "execution": [
+        1508,
+        1508,
+        1417,
+        1417,
+        1545,
+        1472,
+        1532
+      ],
+      "saved": 94,
+      "executionSaved": 91,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 88,
+      "mixedExecutionSaved": 73,
+      "mixedDirectSaved": 22
+    },
+    {
+      "mode": 0,
+      "count": 4,
+      "gas": [
+        26760,
+        26760,
+        26760,
+        26760,
+        26760,
+        26760,
+        26760
+      ],
+      "execution": [
+        2570,
+        2570,
+        2482,
+        2482,
+        2607,
+        2651,
+        2861
+      ],
+      "saved": 0,
+      "executionSaved": 88,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -44,
+      "mixedDirectSaved": 0
+    },
+    {
+      "mode": 0,
+      "count": 16,
+      "gas": [
+        37920,
+        37920,
+        37920,
+        37920,
+        37920,
+        37920,
+        37920
+      ],
+      "execution": [
+        6818,
+        6818,
+        6742,
+        6742,
+        6855,
+        7367,
+        8177
+      ],
+      "saved": 0,
+      "executionSaved": 76,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -512,
+      "mixedDirectSaved": 0
+    },
+    {
+      "mode": 0,
+      "count": 64,
+      "gas": [
+        82530,
+        82530,
+        82530,
+        82530,
+        82530,
+        82530,
+        82530
+      ],
+      "execution": [
+        23810,
+        23810,
+        23782,
+        23782,
+        23847,
+        26231,
+        29441
+      ],
+      "saved": 0,
+      "executionSaved": 28,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -2384,
+      "mixedDirectSaved": 0
+    },
+    {
+      "mode": 1,
+      "count": 0,
+      "gas": [
+        23778,
+        23778,
+        23683,
+        23683,
+        23907,
+        23780,
+        23796
+      ],
+      "execution": [
+        1551,
+        1551,
+        1459,
+        1459,
+        1588,
+        1476,
+        1486
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 127,
+      "mixedExecutionSaved": 112,
+      "mixedDirectSaved": 111
+    },
+    {
+      "mode": 1,
+      "count": 1,
+      "gas": [
+        24697,
+        24697,
+        24603,
+        24603,
+        24825,
+        24735,
+        24805
+      ],
+      "execution": [
+        2099,
+        2099,
+        2008,
+        2008,
+        2135,
+        2060,
+        2124
+      ],
+      "saved": 94,
+      "executionSaved": 91,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 90,
+      "mixedExecutionSaved": 75,
+      "mixedDirectSaved": 20
+    },
+    {
+      "mode": 1,
+      "count": 4,
+      "gas": [
+        27553,
+        27553,
+        27462,
+        27462,
+        27678,
+        27699,
+        27931
+      ],
+      "execution": [
+        3734,
+        3734,
+        3646,
+        3646,
+        3767,
+        3803,
+        4029
+      ],
+      "saved": 91,
+      "executionSaved": 88,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -21,
+      "mixedExecutionSaved": -36,
+      "mixedDirectSaved": -253
+    },
+    {
+      "mode": 1,
+      "count": 16,
+      "gas": [
+        38741,
+        38741,
+        38662,
+        38662,
+        38854,
+        39319,
+        40199
+      ],
+      "execution": [
+        10287,
+        10287,
+        10211,
+        10211,
+        10308,
+        10788,
+        11662
+      ],
+      "saved": 79,
+      "executionSaved": 76,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -465,
+      "mixedExecutionSaved": -480,
+      "mixedDirectSaved": -1345
+    },
+    {
+      "mode": 1,
+      "count": 64,
+      "gas": [
+        83596,
+        83596,
+        83565,
+        83565,
+        83661,
+        85902,
+        89374
+      ],
+      "execution": [
+        36527,
+        36527,
+        36499,
+        36499,
+        36500,
+        38756,
+        42222
+      ],
+      "saved": 31,
+      "executionSaved": 28,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -2241,
+      "mixedExecutionSaved": -2256,
+      "mixedDirectSaved": -5713
+    },
+    {
+      "mode": 2,
+      "count": 0,
+      "gas": [
+        23793,
+        23793,
+        23698,
+        23698,
+        23922,
+        23795,
+        23811
+      ],
+      "execution": [
+        1566,
+        1566,
+        1474,
+        1474,
+        1603,
+        1491,
+        1501
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 127,
+      "mixedExecutionSaved": 112,
+      "mixedDirectSaved": 111
+    },
+    {
+      "mode": 2,
+      "count": 1,
+      "gas": [
+        24727,
+        24727,
+        24632,
+        24632,
+        24855,
+        24785,
+        24846
+      ],
+      "execution": [
+        2129,
+        2129,
+        2037,
+        2037,
+        2165,
+        2110,
+        2165
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 70,
+      "mixedExecutionSaved": 55,
+      "mixedDirectSaved": 9
+    },
+    {
+      "mode": 2,
+      "count": 4,
+      "gas": [
+        27628,
+        27628,
+        27533,
+        27533,
+        27753,
+        27854,
+        28050
+      ],
+      "execution": [
+        3809,
+        3809,
+        3717,
+        3717,
+        3842,
+        3958,
+        4148
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -101,
+      "mixedExecutionSaved": -116,
+      "mixedDirectSaved": -297
+    },
+    {
+      "mode": 2,
+      "count": 16,
+      "gas": [
+        38996,
+        38996,
+        38901,
+        38901,
+        39109,
+        39894,
+        40630
+      ],
+      "execution": [
+        10542,
+        10542,
+        10450,
+        10450,
+        10563,
+        11363,
+        12093
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -785,
+      "mixedExecutionSaved": -800,
+      "mixedDirectSaved": -1521
+    },
+    {
+      "mode": 2,
+      "count": 64,
+      "gas": [
+        84571,
+        84571,
+        84476,
+        84476,
+        84636,
+        88157,
+        91053
+      ],
+      "execution": [
+        37502,
+        37502,
+        37410,
+        37410,
+        37475,
+        41011,
+        43901
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": -3521,
+      "mixedExecutionSaved": -3536,
+      "mixedDirectSaved": -6417
+    },
+    {
+      "mode": 3,
+      "count": 0,
+      "gas": [
+        23778,
+        23778,
+        23683,
+        23683,
+        23907,
+        23780,
+        23796
+      ],
+      "execution": [
+        1551,
+        1551,
+        1459,
+        1459,
+        1588,
+        1476,
+        1486
+      ],
+      "saved": 95,
+      "executionSaved": 92,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 127,
+      "mixedExecutionSaved": 112,
+      "mixedDirectSaved": 111
+    },
+    {
+      "mode": 3,
+      "count": 1,
+      "gas": [
+        25381,
+        25381,
+        25288,
+        25288,
+        25509,
+        25496,
+        25512
+      ],
+      "execution": [
+        2303,
+        2303,
+        2213,
+        2213,
+        2339,
+        2341,
+        2351
+      ],
+      "saved": 93,
+      "executionSaved": 90,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 13,
+      "mixedExecutionSaved": -2,
+      "mixedDirectSaved": -3
+    },
+    {
+      "mode": 3,
+      "count": 4,
+      "gas": [
+        30540,
+        30540,
+        30540,
+        30540,
+        30540,
+        30540,
+        30540
+      ],
+      "execution": [
+        4550,
+        4550,
+        4466,
+        4466,
+        4583,
+        4927,
+        4937
+      ],
+      "saved": 0,
+      "executionSaved": 84,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -344,
+      "mixedDirectSaved": 0
+    },
+    {
+      "mode": 3,
+      "count": 16,
+      "gas": [
+        52860,
+        52860,
+        52860,
+        52860,
+        52860,
+        52860,
+        52860
+      ],
+      "execution": [
+        13551,
+        13551,
+        13491,
+        13491,
+        13572,
+        15284,
+        15294
+      ],
+      "saved": 0,
+      "executionSaved": 60,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -1712,
+      "mixedDirectSaved": 0
+    },
+    {
+      "mode": 3,
+      "count": 64,
+      "gas": [
+        142080,
+        142080,
+        142080,
+        142080,
+        142080,
+        142080,
+        142080
+      ],
+      "execution": [
+        49583,
+        49583,
+        49619,
+        49619,
+        49556,
+        56740,
+        56750
+      ],
+      "saved": 0,
+      "executionSaved": -36,
+      "loggedDelta": 0,
+      "directDelta": 0,
+      "mixedSaved": 0,
+      "mixedExecutionSaved": -7184,
+      "mixedDirectSaved": 0
+    }
+  ],
+  "sizes": [
+    {
+      "mode": 0,
+      "RunnerCurrent": 1798,
+      "RunnerSharedLogged": 1798,
+      "RunnerSharedUnlogged": 1645,
+      "RunnerDirectUnlogged": 1645,
+      "RunnerMixedCurrent": 1908,
+      "RunnerMixedShared": 2692,
+      "RunnerMixedDirect": 2017
+    },
+    {
+      "mode": 1,
+      "RunnerCurrent": 1798,
+      "RunnerSharedLogged": 1798,
+      "RunnerSharedUnlogged": 1645,
+      "RunnerDirectUnlogged": 1645,
+      "RunnerMixedCurrent": 1908,
+      "RunnerMixedShared": 2692,
+      "RunnerMixedDirect": 2017
+    },
+    {
+      "mode": 2,
+      "RunnerCurrent": 1798,
+      "RunnerSharedLogged": 1798,
+      "RunnerSharedUnlogged": 1645,
+      "RunnerDirectUnlogged": 1645,
+      "RunnerMixedCurrent": 1908,
+      "RunnerMixedShared": 2692,
+      "RunnerMixedDirect": 2017
+    },
+    {
+      "mode": 3,
+      "RunnerCurrent": 1798,
+      "RunnerSharedLogged": 1798,
+      "RunnerSharedUnlogged": 1645,
+      "RunnerDirectUnlogged": 1645,
+      "RunnerMixedCurrent": 1908,
+      "RunnerMixedShared": 2692,
+      "RunnerMixedDirect": 2017
+    }
+  ],
+  "loggedRows": [
+    {
+      "mask": 1,
+      "count": 0,
+      "gas": [
+        24627,
+        24627,
+        24680,
+        24648,
+        24670
+      ],
+      "mixedSharedDelta": -32,
+      "mixedDirectDelta": -10
+    },
+    {
+      "mask": 1,
+      "count": 1,
+      "gas": [
+        26812,
+        26812,
+        26864,
+        26946,
+        26968
+      ],
+      "mixedSharedDelta": 82,
+      "mixedDirectDelta": 104
+    },
+    {
+      "mask": 1,
+      "count": 4,
+      "gas": [
+        33061,
+        33061,
+        33110,
+        33534,
+        33556
+      ],
+      "mixedSharedDelta": 424,
+      "mixedDirectDelta": 446
+    },
+    {
+      "mask": 2,
+      "count": 0,
+      "gas": [
+        24627,
+        24627,
+        24680,
+        24648,
+        24670
+      ],
+      "mixedSharedDelta": -32,
+      "mixedDirectDelta": -10
+    },
+    {
+      "mask": 2,
+      "count": 1,
+      "gas": [
+        26812,
+        26812,
+        26864,
+        26946,
+        26968
+      ],
+      "mixedSharedDelta": 82,
+      "mixedDirectDelta": 104
+    },
+    {
+      "mask": 2,
+      "count": 4,
+      "gas": [
+        33061,
+        33061,
+        33110,
+        33534,
+        33556
+      ],
+      "mixedSharedDelta": 424,
+      "mixedDirectDelta": 446
+    },
+    {
+      "mask": 3,
+      "count": 0,
+      "gas": [
+        24691,
+        24691,
+        24744,
+        24712,
+        24734
+      ],
+      "mixedSharedDelta": -32,
+      "mixedDirectDelta": -10
+    },
+    {
+      "mask": 3,
+      "count": 1,
+      "gas": [
+        27458,
+        27458,
+        27510,
+        27592,
+        27614
+      ],
+      "mixedSharedDelta": 82,
+      "mixedDirectDelta": 104
+    },
+    {
+      "mask": 3,
+      "count": 4,
+      "gas": [
+        35475,
+        35475,
+        35527,
+        35951,
+        35973
+      ],
+      "mixedSharedDelta": 424,
+      "mixedDirectDelta": 446
+    },
+    {
+      "mask": 4,
+      "count": 0,
+      "gas": [
+        24569,
+        24569,
+        24622,
+        24590,
+        24612
+      ],
+      "mixedSharedDelta": -32,
+      "mixedDirectDelta": -10
+    },
+    {
+      "mask": 4,
+      "count": 1,
+      "gas": [
+        26748,
+        26748,
+        26800,
+        26882,
+        26904
+      ],
+      "mixedSharedDelta": 82,
+      "mixedDirectDelta": 104
+    },
+    {
+      "mask": 4,
+      "count": 4,
+      "gas": [
+        32976,
+        32976,
+        33025,
+        33449,
+        33471
+      ],
+      "mixedSharedDelta": 424,
+      "mixedDirectDelta": 446
+    },
+    {
+      "mask": 7,
+      "count": 0,
+      "gas": [
+        25482,
+        25482,
+        25535,
+        25503,
+        25525
+      ],
+      "mixedSharedDelta": -32,
+      "mixedDirectDelta": -10
+    },
+    {
+      "mask": 7,
+      "count": 1,
+      "gas": [
+        28825,
+        28825,
+        28877,
+        28959,
+        28981
+      ],
+      "mixedSharedDelta": 82,
+      "mixedDirectDelta": 104
+    },
+    {
+      "mask": 7,
+      "count": 4,
+      "gas": [
+        38570,
+        38570,
+        38622,
+        39046,
+        39068
+      ],
+      "mixedSharedDelta": 424,
+      "mixedDirectDelta": 446
+    }
+  ]
+}
