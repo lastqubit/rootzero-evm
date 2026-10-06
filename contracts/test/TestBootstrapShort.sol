@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {BootstrapLogged151} from "./BootstrapLogged151.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {BootstrapStock150} from "./BootstrapStock150.sol";
 import {BootstrapZero150} from "./BootstrapZero150.sol";
@@ -115,6 +116,15 @@ contract BootstrapShortStock is BootstrapStock150, BootstrapShortHarness {
 }
 
 contract BootstrapShortZero is BootstrapZero150, BootstrapShortHarness {
+    constructor() Runtime(0) {}
+    function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
+        (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
+    }
+    function logPipeline(uint value) internal override { Logs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
+    function logBalance(uint value) internal override { Logs.balance(chainAsset, value, Codes.AccountCashin); }
+}
+
+contract BootstrapShortLogged151 is BootstrapLogged151, BootstrapShortHarness {
     constructor() Runtime(0) {}
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);

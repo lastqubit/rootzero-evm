@@ -20,17 +20,17 @@ abstract contract GetBalanceHook {
 /// @title GetBalance
 /// @notice Rootzero query that resolves balances for one or more `(account, asset)` tuples.
 /// The input is a run of `ACCOUNT_ASSET` form blocks.
-/// The response returns one `ACCOUNT_AMOUNT` form block per requested position, preserving input order.
+/// The response returns one `ACCOUNT_BALANCE` form block per requested position, preserving input order.
 abstract contract GetBalance is QueryBase, GetBalanceHook {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = query("getBalance", Specs.AccountAsset, Specs.AccountAmount);
+        (, descriptor) = query("getBalance", Specs.AccountAsset, Specs.AccountBalance);
     }
 
     /// @notice Resolve balances for a run of requested `(account, asset)` tuples.
     /// @param input Block-stream input consisting of `accountAsset(account, asset)*`.
-    /// @return Block-stream response containing one `accountAmount(account, asset, amount)` block per input block.
+    /// @return Block-stream response containing one `accountBalance(account, asset, amount)` block per input block.
     function getBalance(bytes calldata input) external view returns (bytes memory) {
         return runQuery(descriptor, input, getBalanceOne);
     }
@@ -38,6 +38,6 @@ abstract contract GetBalance is QueryBase, GetBalanceHook {
     function getBalanceOne(Execution memory exec) private view {
         (bytes32 account, bytes32 asset) = exec.unpackAccountAsset();
         uint amount = getBalance(account, asset);
-        exec.outputAccountAmount(account, asset, amount);
+        exec.outputAccountBalance(account, asset, amount);
     }
 }

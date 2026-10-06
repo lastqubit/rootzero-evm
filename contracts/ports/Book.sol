@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 
 import {PortBase} from "./Base.sol";
-import {GroupsAnnot} from "../annotations/Groups.sol";
 import {BookHook} from "../core/Settlement.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
@@ -11,22 +10,21 @@ using Executions for Execution;
 
 /// @title BookPort
 /// @notice Apply peer-supplied debit/credit pairs through the book hook.
-/// @dev Each input group contains two consecutive ACCOUNT_AMOUNT blocks: liability debit first,
-/// asset credit second. Accounts may differ. Any failure reverts the entire call.
-abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
+/// @dev Each BOOKING identifies both accounts and asset quantities. Accounts may
+/// differ. Any failure reverts the entire call, including hook-emitted logs.
+abstract contract BookPort is PortBase, BookHook {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portBook", Specs.AccountAmount, Specs.Empty, 0);
-        annotateGroups(id, "#input as (debit, credit)");
+        (id, descriptor) = port("portBook", Specs.Booking, Specs.Empty, 0);
     }
 
-    /// @notice Debit then credit each consecutive ACCOUNT_AMOUNT pair.
-    /// @dev Both blocks are decoded before calling book. Zero amounts skip their
+    /// @notice Debit then credit each BOOKING in the input stream.
+    /// @dev Both legs are decoded before calling book. Zero amounts skip their
     /// respective legs; supplied account validity belongs to the trusted peer.
     /// The receiving port need not repeat format checks. Empty batches are accepted.
-    /// @param data Flat pairs: debit account/liability/debt then credit account/asset/amount.
+    /// @param data BOOKING stream: from, to, liability, debt, asset, amount.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portBook(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
@@ -34,8 +32,6 @@ abstract contract BookPort is PortBase, BookHook, GroupsAnnot {
     }
 
     function portBookOne(Execution memory exec) private {
-        (bytes32 from, bytes32 liability, uint debt) = exec.unpackAccountAmount();
-        (bytes32 to, bytes32 asset, uint amount) = exec.unpackAccountAmount();
-        book(from, to, asset, amount, liability, debt);
+        book(exec.unpackBooking());
     }
 }

@@ -3,11 +3,8 @@ pragma solidity ^0.8.33;
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Execute} from "../codec/Execute.sol";
-import {Keys} from "../codec/Keys.sol";
-import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {Codes} from "../utils/Codes.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
 using Executions for Execution;
@@ -17,13 +14,11 @@ using Executions for Execution;
 /// Use for internally recording debits. The virtual `debitAccount` hook is called once per
 /// ASSET_AMOUNT block.
 abstract contract DebitAccount is CommandBase, DebitAccountHook {
-    uint private constant OUTPUT = Specs.Balance | Codes.AccountDebit;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.AssetAmount, OUTPUT, 0);
+        (id, descriptor) = command("debitAccount", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     /// @notice Return the registered DEBIT_ACCOUNT command ID.
@@ -32,7 +27,6 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
     }
 
     /// @notice Debit ASSET_AMOUNT input blocks from the command account and output matching BALANCE blocks.
-    /// @dev Logs the complete Output stream after the account hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the debited amounts.
     /// @return Zero native budget credit.
@@ -53,7 +47,6 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
 /// inherited from `DebitAccount` while decoding its fixed-stride input directly from calldata.
 abstract contract ExecuteDebitAccount is DebitAccount {
     /// @notice Execute the inherited debit-account command from an internal pipeline.
-    /// @dev Logs the complete Output stream after the hooks, matching the command runner.
     /// @param account Account whose funds are debited.
     /// @param state Empty pipeline state required by the command schema.
     /// @param inputCur ASSET_AMOUNT block stream.
@@ -83,7 +76,6 @@ abstract contract ExecuteDebitAccount is DebitAccount {
             }
         }
 
-        Logs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }

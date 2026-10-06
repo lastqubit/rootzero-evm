@@ -96,6 +96,7 @@ contract TestStreamLogs {
         }
         Logs.pipeline(subject, amount, codes);
         Logs.balance(subject, amount, codes);
+        Logs.accountBalance(subject, subject, amount);
         Logs.pipeline(subject, amount, codes);
         uint afterFree;
         uint zero;

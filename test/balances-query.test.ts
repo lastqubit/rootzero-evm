@@ -4,7 +4,7 @@ import "./helpers/matchers.js";
 import {
   concat,
   encodeAccountAssetBlock,
-  encodeAccountAmountBlock,
+  encodeAccountBalanceBlock,
   encodeUserAccount,
 } from "./helpers/blocks.js";
 
@@ -32,8 +32,8 @@ describe("BalancesQuery", () => {
     const result: string = await query.getBalance.staticCall(input);
 
     expect(result).to.equal(concat(
-      encodeAccountAmountBlock(account, tokenAsset, 789n),
-      encodeAccountAmountBlock(account, chainAsset, 37n),
+      encodeAccountBalanceBlock(account, tokenAsset, 789n),
+      encodeAccountBalanceBlock(account, chainAsset, 37n),
     ));
   });
 
@@ -48,7 +48,7 @@ describe("BalancesQuery", () => {
     const input = encodeAccountAssetBlock(accountId, tokenAsset);
     const result: string = await query.getBalance.staticCall(input);
 
-    expect(result).to.equal(encodeAccountAmountBlock(accountId, tokenAsset, 123n));
+    expect(result).to.equal(encodeAccountBalanceBlock(accountId, tokenAsset, 123n));
   });
 
   it("maps multiple position blocks into matching entry blocks in order", async () => {
@@ -71,8 +71,8 @@ describe("BalancesQuery", () => {
     const result: string = await query.getBalance.staticCall(input);
 
     expect(result).to.equal(concat(
-      encodeAccountAmountBlock(accountId, tokenAsset, 456n),
-      encodeAccountAmountBlock(accountId, chainAsset, nativeBalance),
+      encodeAccountBalanceBlock(accountId, tokenAsset, 456n),
+      encodeAccountBalanceBlock(accountId, chainAsset, nativeBalance),
     ));
   });
 });

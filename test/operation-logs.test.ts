@@ -69,7 +69,7 @@ describe("Command operation logs", () => {
   });
 
   for (const method of ["cashout", "settle", "settlePayable"]) {
-    it(`${method} logs consumed state, with identical logs through its optimized adapter when available`, async () => {
+    it(`${method} preserves its logging policy through direct and optimized execution`, async () => {
       const id = await commandId(`${method}(bytes)`, host, method === "settlePayable" ? 1n : 0n);
       const native = await (await deploy("TestUtils")).testToChain();
       await host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x", encodeNodeBlock(id)));
@@ -78,8 +78,8 @@ describe("Command operation logs", () => {
         const state = concat(...Array(count).fill(item));
         const receipt = await (await host[method](encodeContextBlock(account, state, "0x"),
           { value: method === "settlePayable" ? BigInt(count * 18) : 0n })).wait();
-        expect(dataLogs(receipt)).deep.eq([prefixed(id, encodeStateBlock(state))]);
-        expect(receipt.logs[0].topics).deep.eq([]);
+        expect(dataLogs(receipt)).deep.eq(method === "cashout" ? [prefixed(id, encodeStateBlock(state))] : []);
+        if (method === "cashout") expect(receipt.logs[0].topics).deep.eq([]);
         if (method !== "settlePayable") {
           const pipeline = await (await host.testPipe(account, state, encodeStepBlock(id, 0n, "0x"))).wait();
           const records = (r: any) => r.logs.map((log: any) => ({ topics: log.topics, data: log.data }));
@@ -92,13 +92,12 @@ describe("Command operation logs", () => {
     });
   }
 
-  it("repay logs original debt instead of the cleared output debt", async () => {
+  it("repay leaves logging to the account hooks", async () => {
     const repay = await deploy("TestRepayCommand");
     await repay.seed(account, liability, 17n);
     const state = encodePositionBlock(asset, 12n, liability, 17n);
     const receipt = await (await repay.repay(encodeContextBlock(account, state, "0x"))).wait();
-    expect(dataLogs(receipt)).deep.eq([prefixed(await commandId("repay(bytes)", repay), encodeStateBlock(state))]);
-    expect(receipt.logs[0].topics).deep.eq([]);
+    expect(dataLogs(receipt)).deep.eq([]);
   });
 
   it("burn logs requested balances, including an empty batch", async () => {

@@ -9,6 +9,8 @@ import {Logs} from "../codec/Logs.sol";
 import {Specs, Sizes} from "../codec/Specs.sol";
 import {Lanes} from "../codec/Lanes.sol";
 import {Cursors} from "../utils/Cursors.sol";
+import {Budget} from "../core/Budget.sol";
+import {Calls} from "../core/Calls.sol";
 import {
     InsufficientValue,
     OutOfBounds,
@@ -17,13 +19,12 @@ import {
     ZeroAmount,
     INVALID_BLOCK
 } from "../utils/Errors.sol";
-import {Budget} from "../core/Budget.sol";
-import {Calls} from "../core/Calls.sol";
 import {
     AssetAmount,
     AssetLiability,
     AccountAsset,
     HostAsset,
+    AccountBalance,
     AccountAmount,
     HostAmount,
     HostAccountAsset,
@@ -31,6 +32,7 @@ import {
     PositionConstraints,
     Quote,
     Position,
+    Booking,
     Tx
 } from "../core/Types.sol";
 
@@ -78,13 +80,14 @@ library Executions {
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
-        descriptor = (uint(uint32(Specs.key(source))) << 224)
-            | (Specs.blockSize(source) << 192)
-            | (Specs.blockSize(output) << 160)
-            | (stateSource ? StateSource : 0)
-            | (Lanes.codes(state) != 0 ? LogState : 0)
-            | (Lanes.codes(input) != 0 ? LogInput : 0)
-            | (Lanes.codes(output) != 0 ? LogOutput : 0);
+        descriptor =
+            (uint(uint32(Specs.key(source))) << 224) |
+            (Specs.blockSize(source) << 192) |
+            (Specs.blockSize(output) << 160) |
+            (stateSource ? StateSource : 0) |
+            (Lanes.codes(state) != 0 ? LogState : 0) |
+            (Lanes.codes(input) != 0 ? LogInput : 0) |
+            (Lanes.codes(output) != 0 ? LogOutput : 0);
     }
 
     /// @notice Log selected STATE/INPUT blocks from a freshly opened context.
@@ -420,7 +423,7 @@ library Executions {
         inputCur = exec.input;
         uint cur = inputCur;
         while (Cursors.more(cur)) {
-            (,, cur) = cur.unpackAnnotation();
+            (, , cur) = cur.unpackAnnotation();
         }
         exec.input = cur;
     }
@@ -723,6 +726,24 @@ library Executions {
         (value.host, value.asset, value.amount) = unpackCustody(exec);
     }
 
+    /// @notice Decode and consume one ACCOUNT_BALANCE block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return account Decoded account identifier.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded amount.
+    function unpackAccountBalance(
+        Execution memory exec
+    ) internal pure returns (bytes32 account, bytes32 asset, uint amount) {
+        (account, asset, amount, exec.input) = exec.input.unpackAccountBalance();
+    }
+
+    /// @notice Decode one ACCOUNT_BALANCE block into its structured value.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return value Decoded account, asset, and amount.
+    function unpackAccountBalanceValue(Execution memory exec) internal pure returns (AccountBalance memory value) {
+        (value.account, value.asset, value.amount) = unpackAccountBalance(exec);
+    }
+
     /// @notice Decode and consume one ACCOUNT_AMOUNT block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return account Decoded account identifier.
@@ -820,7 +841,11 @@ library Executions {
         (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(exec);
     }
 
-    // Remaining fixed-width input decoding
+    /// @notice Decode and consume one BOOKING input block into independent memory.
+    /// @dev Validates both legs before advancing input; accounts follow caller policy.
+    function unpackBooking(Execution memory exec) internal pure returns (Booking memory value) {
+        (value, exec.input) = exec.input.unpackBooking();
+    }
 
     // -------------------------------------------------------------------------
     // Dynamic block decoding
@@ -1059,6 +1084,11 @@ library Executions {
         Encoder.writePositionAt(reserve(exec, Sizes.Position), value);
     }
 
+    /// @notice Append one structured BOOKING output block.
+    function outputBooking(Execution memory exec, Booking memory value) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeBooking(exec.buffer, value);
+    }
+
     /// @notice Append an ACCOUNT_ASSET block to execution output.
     /// @param exec Execution receiving the block.
     /// @param account Account identifier to encode.
@@ -1128,6 +1158,22 @@ library Executions {
     /// @param value Structured host asset amount to encode.
     function outputCustody(Execution memory exec, HostAmount memory value) internal pure {
         outputCustody(exec, value.host, value.asset, value.amount);
+    }
+
+    /// @notice Append an ACCOUNT_BALANCE block to execution output.
+    /// @param exec Execution receiving the block.
+    /// @param account Account identifier to encode.
+    /// @param asset Asset identifier to encode.
+    /// @param amount Account amount to encode.
+    function outputAccountBalance(Execution memory exec, bytes32 account, bytes32 asset, uint amount) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeAccountBalance(exec.buffer, account, asset, amount);
+    }
+
+    /// @notice Append a structured ACCOUNT_BALANCE value to execution output.
+    /// @param exec Execution receiving the block.
+    /// @param value Structured account asset amount to encode.
+    function outputAccountBalance(Execution memory exec, AccountBalance memory value) internal pure {
+        outputAccountBalance(exec, value.account, value.asset, value.amount);
     }
 
     /// @notice Append an ACCOUNT_AMOUNT block to execution output.
@@ -1631,7 +1677,11 @@ library Executions {
     }
 
     /// @notice Checked close with descriptor-selected output logging.
-    function close(Execution memory exec, uint id, uint descriptor) internal returns (bytes memory output, uint credit) {
+    function close(
+        Execution memory exec,
+        uint id,
+        uint descriptor
+    ) internal returns (bytes memory output, uint credit) {
         expectEnd(exec);
         output = finish(exec, id, descriptor);
         credit = drainBudget(exec);

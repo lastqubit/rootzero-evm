@@ -1,11 +1,12 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
+import { encodeStateBlock } from "./helpers/blocks.js";
 import { executeStreams } from "./helpers/execute-blocks.js";
 
 describe("Credit optimization", function () {
   this.timeout(120_000);
-  it("saves gas with identical credit results and logs", async () => {
+  it("preserves credit results while removing the adapter log", async () => {
     const before = await deploy("CreditBefore");
     const current = await deploy("CreditCurrent");
     const rows: Record<string, number>[] = [];
@@ -17,9 +18,11 @@ describe("Credit optimization", function () {
       expect(b.used < a.used).eq(true);
       const oldReceipt = await (await before.measure(state, 0, 100)).wait();
       const receipt = await (await current.measure(state, 0, 100)).wait();
-      // Endpoint IDs include the deployment address; compare the wrapped streams.
-      expect(receipt.logs.map((log: any) => [log.topics, ethers.dataSlice(log.data, 32)]))
-        .deep.eq(oldReceipt.logs.map((log: any) => [log.topics, ethers.dataSlice(log.data, 32)]));
+      // The frozen adapter logged STATE; current logging belongs to credit hooks.
+      // Reported savings include this deliberate event-policy change.
+      expect(oldReceipt.logs.map((log: any) => [log.topics, ethers.dataSlice(log.data, 32)]))
+        .deep.eq([[[], encodeStateBlock(state)]]);
+      expect(receipt.logs).deep.eq([]);
       expect(receipt.gasUsed < oldReceipt.gasUsed).eq(true);
       rows.push({ count, before: Number(a.used), after: Number(b.used), saved: Number(a.used - b.used),
         transactionSaved: Number(oldReceipt.gasUsed - receipt.gasUsed) });

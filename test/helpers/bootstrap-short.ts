@@ -11,14 +11,14 @@ export const inputFor = (s: Scenario) => encodeBootstrapBlock(s.budget, concat(.
 export const outputFor = (s: Scenario) => concat(...s.requests.map(([a, n]) => encodeBalanceBlock(a, n)));
 const record = (prefix: bigint, data: string) => ({ topics: [], data: concat(ethers.toBeHex(prefix, 32), data) });
 
-export function expected(s: Scenario, native: string, account: string, stock = false) {
+export function expected(s: Scenario, native: string, account: string, stock = false, logged = true) {
   const total = s.requests.reduce((n, [a, q]) => n + (a === native ? q : 0n), 0n);
   const credit = s.value - total > s.budget ? s.value - total : s.budget;
   const debit = total + credit - s.value;
   const entries = s.requests.filter(([a, q]) => a !== native && (!stock || q !== 0n));
   if (debit) entries.push([native, debit]);
   const logs = [record(0x20000001n, encodePipelineBlock(account, s.value))];
-  if (entries.length) logs.push(record((72n << 32n) | 0x20000001n, concat(...entries.map(([a, q]) => encodeBalanceBlock(a, q)))));
+  if (logged && entries.length) logs.push(record((72n << 32n) | 0x20000001n, concat(...entries.map(([a, q]) => encodeBalanceBlock(a, q)))));
   logs.push(record(1n, encodeStateBlock(outputFor(s))));
   if (credit) logs.push(record((36n << 32n) | 0x20000001n, encodeBalanceBlock(native, credit)));
   const hooks = s.requests.filter(([a, q]) => a !== native && q !== 0n).length + (debit ? 1 : 0);
@@ -41,17 +41,17 @@ export function scenarios(native: string, tokens: string[]): Scenario[] {
   return result;
 }
 
-export async function fixture() {
+export async function fixture(frozen = false) {
   const provider = await getProvider(), signer = await getSigner();
   const account = ethers.zeroPadValue(await signer.getAddress(), 32);
-  const hosts = await Promise.all(names.map(name => deploy(name)));
+  const hosts = await Promise.all(names.map(name => deploy(frozen && name === "BootstrapShortCurrent" ? "BootstrapShortLogged151" : name)));
   const native = await hosts[0].nativeAsset();
   const tokens = Array.from({ length: 4 }, (_, i) => ethers.id(`short-token-${i}`));
   for (const host of hosts) {
     await (await host.fund(account, { value: initial })).wait();
     await (await host.seed(account, tokens, initial)).wait();
   }
-  return { provider, signer, account, hosts, native, tokens };
+  return { provider, signer, account, hosts, native, tokens, frozen };
 }
 
 export async function checkScenario(f: Awaited<ReturnType<typeof fixture>>, s: Scenario) {
@@ -59,7 +59,7 @@ export async function checkScenario(f: Awaited<ReturnType<typeof fixture>>, s: S
   for (const [index, host] of f.hosts.entries()) {
     const snapshot = await f.provider.send("evm_snapshot", []);
     try {
-      const want = expected(s, f.native, f.account, index === 0);
+      const want = expected(s, f.native, f.account, index === 0, index < 2 || f.frozen);
       const result = await host.run.staticCall(inputFor(s), { value: s.value });
       expect(result[1], s.name).eq(outputFor(s));
       expect(result[2], s.name).eq(want.credit);

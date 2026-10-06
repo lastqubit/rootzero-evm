@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {AssetAmount, Position} from "../core/Types.sol";
+import {AssetAmount, Position, Booking} from "../core/Types.sol";
 import {Keys} from "./Keys.sol";
 import {ValueOverflow} from "../utils/Errors.sol";
 
@@ -461,6 +461,23 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Append ACCOUNT_BALANCE, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements.
+    function writeAccountBalance(
+        uint cur,
+        bytes memory dst,
+        bytes32 account,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 104);
+        abs = writeHeader(abs, Keys.AccountBalance, 96);
+        abs = write32(abs, account);
+        abs = write32(abs, asset);
+        write32(abs, bytes32(amount));
+    }
+
     /// @notice Append ACCOUNTAMOUNT, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeAccountAmount(
@@ -611,6 +628,24 @@ library Encoder {
             mcopy(payload, value, 160)
         }
         return abs + 168;
+    }
+
+    /// @notice Append one BOOKING from a structured value.
+    /// @dev Inherits reserve's initialized-writer and lifecycle requirements.
+    function writeBooking(uint cur, bytes memory dst, Booking memory booking)
+        internal pure returns (bytes memory value, uint nextCur)
+    {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 200);
+        writeBookingAt(abs, booking);
+    }
+
+    /// @notice Write one BOOKING at an already reserved absolute memory position.
+    /// @dev Caller owns 200 writable bytes. Does not allocate or advance a writer.
+    function writeBookingAt(uint abs, Booking memory booking) internal pure returns (uint) {
+        uint payload = writeHeader(abs, Keys.Booking, 192);
+        assembly ("memory-safe") { mcopy(payload, booking, 192) }
+        return payload + 192;
     }
 
     // Payload blocks: generic key followed by named wrappers.
@@ -1540,6 +1575,20 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Create a complete ACCOUNT_BALANCE block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    function createAccountBalance(
+        bytes32 account,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value) {
+        value = allocate(104);
+        uint abs = writeHeader(pos(value, 0), Keys.AccountBalance, 96);
+        abs = write32(abs, account);
+        abs = write32(abs, asset);
+        write32(abs, bytes32(amount));
+    }
+
     /// @notice Create a complete ACCOUNTAMOUNT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     function createAccountAmount(
@@ -1642,6 +1691,13 @@ library Encoder {
         abs = write32(abs, liability);
         abs = write32(abs, bytes32(debt));
         write32(abs, counterparty);
+    }
+
+    /// @notice Create one BOOKING with full-width fields and zero allocation padding.
+    /// @dev Copies the structured value; performs no semantic validation.
+    function createBooking(Booking memory booking) internal pure returns (bytes memory value) {
+        value = allocate(200);
+        writeBookingAt(pos(value, 0), booking);
     }
 
     // Payload creators: generic key followed by named wrappers.

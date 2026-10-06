@@ -11,11 +11,11 @@ contract TestSettlement is Settlement, Balances {
     event AccountOperation(bool debit, bytes32 account, bytes32 asset, uint amount);
     event Applied(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt);
 
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
+    function book(bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount)
         internal override
     {
         emit Applied(from, to, asset, amount, liability, debt);
-        Settlement.book(from, to, asset, amount, liability, debt);
+        Settlement.book(from, to, liability, debt, asset, amount);
     }
 
     function seed(bytes32 account, bytes32 asset, uint amount) external {

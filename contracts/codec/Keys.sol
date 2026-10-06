@@ -13,6 +13,9 @@ uint constant STATE_KEY = 0xe31b08ab;
 /// @dev Right-aligned Keys.Input for direct assembly use: bytes4(keccak256("#input")).
 uint constant INPUT_KEY = 0x6b2ede62;
 
+/// @dev Right-aligned Keys.AccountBalance for direct assembly use: bytes4(keccak256("#accountBalance")).
+uint constant ACCOUNT_BALANCE_KEY = 0x2da7f737;
+
 /// @dev Right-aligned Keys.Bootstrap for direct assembly use: bytes4(keccak256("#bootstrap")).
 uint constant BOOTSTRAP_KEY = 0x440f90da;
 
@@ -57,6 +60,8 @@ library Keys {
     bytes4 constant Custody = bytes4(keccak256("#custody"));
     /// @dev Asset-liability position state - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
     bytes4 constant Position = bytes4(keccak256("#position"));
+    /// @dev Account debit/credit booking - (bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount).
+    bytes4 constant Booking = bytes4(keccak256("#booking"));
 
     // Input and value blocks
 
@@ -144,6 +149,8 @@ library Keys {
     bytes4 constant AccountAsset = bytes4(keccak256("#accountAsset"));
     /// @dev Structural host asset form - (uint host, bytes32 asset)
     bytes4 constant HostAsset = bytes4(keccak256("#hostAsset"));
+    /// @dev Actual account balance - (bytes32 account, bytes32 asset, uint amount).
+    bytes4 constant AccountBalance = bytes4(keccak256("#accountBalance"));
     /// @dev Structural account amount form - (bytes32 account, bytes32 asset, uint amount)
     bytes4 constant AccountAmount = bytes4(keccak256("#accountAmount"));
     /// @dev Structural host amount form - (uint host, bytes32 asset, uint amount)

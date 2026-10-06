@@ -25,6 +25,16 @@ struct AccountAsset {
     bytes32 asset;
 }
 
+/// @notice Actual account balance for queries and authoritative update logs.
+struct AccountBalance {
+    /// @dev Account identifier whose balance is reported.
+    bytes32 account;
+    /// @dev Asset identifier.
+    bytes32 asset;
+    /// @dev Actual updated balance in the asset's native units, not a delta.
+    uint amount;
+}
+
 /// @notice Account-scoped amount shape for inputs, responses, and reporting.
 struct AccountAmount {
     /// @dev Account identifier.
@@ -77,16 +87,21 @@ struct HostAccountAmount {
 
 /// @notice Exact balance asset and inclusive full-width amount bounds.
 struct BalanceConstraints {
+    /// @dev Asset identifier required by the constraint.
     bytes32 asset;
+    /// @dev Inclusive minimum amount in the asset's native units.
     uint min;
+    /// @dev Inclusive maximum amount in the asset's native units.
     uint max;
 }
 
 /// @notice Exact position identifiers and inclusive full-width quantity bounds.
 struct PositionConstraints {
+    /// @dev Identifier required for the asset side.
     bytes32 asset;
     /// @dev Inclusive minimum asset receipt.
     uint amount;
+    /// @dev Identifier required for the liability side.
     bytes32 liability;
     /// @dev Inclusive maximum liability payment.
     uint debt;
@@ -118,6 +133,23 @@ struct Position {
     uint debt;
     /// @dev Settlement counterparty: Rootzero (zero) or an account ID, including a host account.
     bytes32 counterparty;
+}
+
+/// @notice One account debit followed by one account credit.
+/// @dev Debit from/liability/debt; credit to/asset/amount. Accounts may differ.
+struct Booking {
+    /// @dev Account identifier debited for the liability.
+    bytes32 from;
+    /// @dev Account identifier credited with the asset.
+    bytes32 to;
+    /// @dev Identifier for the liability side debited from `from`.
+    bytes32 liability;
+    /// @dev Exact debit quantity in the liability's native units.
+    uint debt;
+    /// @dev Identifier for the asset side credited to `to`.
+    bytes32 asset;
+    /// @dev Exact credit quantity in the asset's native units.
+    uint amount;
 }
 
 /// @notice Transfer payload used by transaction blocks and peer posting.

@@ -15,12 +15,12 @@ describe("Repay command", () => {
     await host.seed(account, liability, 40n);
   });
 
-  it("advertises POSITION to POSITION, empty input, and the Repay action", async () => {
+  it("advertises POSITION to POSITION and empty input without lane logging", async () => {
     const id = await commandId("repay(bytes)", host);
 
     const positionSpec = exactSpec(Keys.Position, 160);
     await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
-      ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (82n << 32n), output: positionSpec }));
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160, output: positionSpec }));
   });
 
   describe("calldata command", () => {

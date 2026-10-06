@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 
 describe("Execute output preallocation", function () {
   this.timeout(120_000);
+  // Current Debit also omits its former operation log; its saving includes that policy change.
   it("compares reserved, unchecked cursor, and exact output allocation", async () => {
     const baseline = await deploy("ExecuteOutputBaseline");
     const candidates = await Promise.all(["Reserved", "Unchecked", "Exact", "Current"].map(async name => ({ name, helper: await deploy("ExecuteOutput" + name) })));

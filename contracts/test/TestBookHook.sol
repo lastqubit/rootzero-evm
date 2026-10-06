@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Settle} from "../commands/Settle.sol";
 import {Settlement, SettleHook, BookHook} from "../core/Settlement.sol";
-import {Position} from "../core/Types.sol";
+import {Booking, Position} from "../core/Types.sol";
 import {BookPort} from "../ports/Book.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {AccessDenied} from "../core/Access.sol";
@@ -35,8 +35,12 @@ contract TestBookHook is Settle, BookPort, Settlement {
     function debitAccount(bytes32, bytes32, uint) internal pure override { revert AccessDenied(); }
     function creditAccount(bytes32, bytes32, uint) internal pure override { revert AccessDenied(); }
 
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
-        internal override(Settlement, BookHook)
+    function book(Booking memory value) internal override(Settlement, BookHook) {
+        Settlement.book(value);
+    }
+
+    function book(bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount)
+        internal override
     {
         emit Applied(from, to, asset, amount, liability, debt);
     }

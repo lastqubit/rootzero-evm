@@ -7,7 +7,7 @@ import { decodeBlockLog } from "./helpers/log-blocks.js";
 
 describe("Commander Bootstrap migration", function () {
   this.timeout(120_000);
-  it("compares installed 1.48 funding and events against the current production adapter", async () => {
+  it("compares installed 1.48 funding and events against the frozen v1.51 adapter", async () => {
     const old = await deploy("CommanderHistoricalBootstrap"), current = await deploy("CommanderCurrentBootstrap");
     const native = await current.nativeAsset(), account = ethers.id("commander-bootstrap-account");
     const initial = 1_000_000n;

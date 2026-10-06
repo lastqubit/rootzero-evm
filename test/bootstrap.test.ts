@@ -6,8 +6,6 @@ import "./helpers/matchers.js";
 
 const asset = ethers.id("bootstrap-asset");
 const dataLogs = (receipt: any) => receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data);
-const prefixed = (prefix: bigint, stream: string) => concat(ethers.toBeHex(prefix, 32), stream);
-const bootstrapCodes = 0x20000001n | (72n << 32n);
 
 async function expectRevert(call: Promise<unknown>) {
   let failed = false;
@@ -80,7 +78,7 @@ describe("Bootstrap composite input", () => {
   });
 
   for (const value of [0n, 4n, 10n, 12n, 20n]) {
-    it(`funds repeated chainAsset requests and logs one actual debit with assigned value ${value}`, async () => {
+    it(`funds repeated chainAsset requests and calls one actual native debit with assigned value ${value}`, async () => {
       const host = await deploy("TestAdapterOptimizations");
       const native = await host.nativeAsset();
       await host.seed(native, 100n);
@@ -96,11 +94,7 @@ describe("Bootstrap composite input", () => {
       expect(await host.balances(asset)).eq(98n);
       const hooks = receipt.logs.filter((log: any) => log.topics.length).map((log: any) => host.interface.parseLog(log).args.toArray());
       expect(hooks).deep.eq(debit ? [[asset, 2n], [native, debit]] : [[asset, 2n]]);
-      expect(dataLogs(receipt)).deep.eq([prefixed(bootstrapCodes, concat(
-        encodeBalanceBlock(asset, 2n),
-        ...(debit ? [encodeBalanceBlock(native, debit)] : []),
-      ))]);
-      expect(receipt.logs[receipt.logs.length - 1].topics).deep.eq([]);
+      expect(dataLogs(receipt)).deep.eq([]);
     });
   }
 
@@ -111,11 +105,11 @@ describe("Bootstrap composite input", () => {
     const input = encodeBootstrapBlock(5n);
     expect(Array.from(await host.measureBootstrap.staticCall("0x", input, 2n)).slice(1)).deep.eq([true, "0x", 5n]);
     const funded = await (await host.measureBootstrap("0x", input, 2n)).wait();
-    expect(dataLogs(funded)).deep.eq([prefixed(bootstrapCodes, encodeBalanceBlock(native, 3n))]);
+    expect(dataLogs(funded)).deep.eq([]);
     expect(await host.balances(native)).eq(7n);
     const receipt = await (await host.measureBootstrap("0x", encodeBootstrapBlock(0n, encodeAssetAmountBlock(asset, 0n)), 0n)).wait();
     expect(receipt.logs.filter((log: any) => log.topics.length)).deep.eq([]);
-    expect(dataLogs(receipt)).deep.eq([prefixed(bootstrapCodes, encodeBalanceBlock(asset, 0n))]);
+    expect(dataLogs(receipt)).deep.eq([]);
   });
 
   it("checks the native request total and rolls back when the final debit fails", async () => {
@@ -137,7 +131,7 @@ describe("Bootstrap composite input", () => {
     expect(await host.balances(asset)).eq(10n);
   });
 
-  it("preserves output and debit logs across early and late exclusions and allocating hooks", async () => {
+  it("preserves output across native requests, zero amounts, and allocating hooks", async () => {
     const host = await deploy("ExecuteOutputCurrent");
     await host.setAllocate(true);
     const native = await host.nativeAsset();
@@ -150,12 +144,8 @@ describe("Bootstrap composite input", () => {
         const input = encodeBootstrapBlock(0n, concat(...requests.map(([a, n]) => encodeAssetAmountBlock(a, n))));
         const output = concat(...requests.map(([a, n]) => encodeBalanceBlock(a, n)));
         expect((await host.measureBootstrap.staticCall("0x", input, value))[2]).eq(output);
-        const debits = requests.filter(([a]) => a !== native);
-        const total = requests.filter(([a]) => a === native).reduce((sum, [, n]) => sum + n, 0n);
-        if (total > value) debits.push([native, total - value]);
         const receipt = await (await host.measureBootstrap("0x", input, value)).wait();
-        expect(dataLogs(receipt)).deep.eq(debits.length ? [prefixed(bootstrapCodes,
-          concat(...debits.map(([a, n]) => encodeBalanceBlock(a, n))))] : []);
+        expect(dataLogs(receipt)).deep.eq([]);
       }
     }
   });

@@ -29,6 +29,7 @@ library Headers {
     uint constant Allocation = Specs.Allocation >> 192;
     uint constant Allowance = Specs.Allowance >> 192;
     uint constant Custody = Specs.Custody >> 192;
+    uint constant AccountBalance = Specs.AccountBalance >> 192;
     uint constant AccountAmount = Specs.AccountAmount >> 192;
     uint constant HostAmount = Specs.HostAmount >> 192;
     uint constant HostAccountAsset = Specs.HostAccountAsset >> 192;
@@ -37,6 +38,7 @@ library Headers {
     uint constant PositionConstraints = Specs.PositionConstraints >> 192;
     uint constant Quote = Specs.Quote >> 192;
     uint constant Position = Specs.Position >> 192;
+    uint constant Booking = Specs.Booking >> 192;
     uint constant HostAsset = Specs.HostAsset >> 192;
     uint constant Transaction = Specs.Transaction >> 192;
     uint constant HostAccountAmount = Specs.HostAccountAmount >> 192;

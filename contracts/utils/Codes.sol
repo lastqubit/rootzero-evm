@@ -42,10 +42,15 @@ library Codes {
     uint constant HostAddPool = Entities.Host | (Entities.Pool << 32) | (Actions.Add << 64);
     uint constant HostRemovePool = Entities.Host | (Entities.Pool << 32) | (Actions.Remove << 64);
 
+    /// @dev Host-scoped booking; BOOKING identifies debit and credit accounts.
+    uint constant HostBook = Entities.Host | (Actions.Book << 32);
+
     // Asset-scoped metadata claims. ASSET_PREIMAGE supplies the asset and preimage.
     uint constant AssetAnnotate = Entities.Asset | (Actions.Annotate << 32);
 
     // Account operations: account entity followed by the action.
+    /// @dev ACCOUNT_BALANCE replaces the known balance for its explicit account and asset.
+    uint constant AccountUpdate = Entities.Account | (Actions.Update << 32);
     uint constant AccountPayout = Entities.Account | (Actions.Payout << 32);
     uint constant AccountDeposit = Entities.Account | (Actions.Deposit << 32);
     uint constant AccountWithdraw = Entities.Account | (Actions.Withdraw << 32);

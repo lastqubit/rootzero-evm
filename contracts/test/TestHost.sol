@@ -243,7 +243,7 @@ contract TestHost is
         exec.budget = pipe(account, state, Cursors.wrap(steps), budget);
         uint credit;
         (, credit) = exec.close();
-        book(bytes32(0), account, chainAsset, credit, bytes32(0), 0);
+        book(bytes32(0), account, bytes32(0), 0, chainAsset, credit);
     }
 
     function getAdminAccount() external view returns (bytes32) {

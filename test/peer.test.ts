@@ -10,7 +10,7 @@ import {
   encodeBalanceBlock,
   encodeNodeBlock,
   encodeStepBlock,
-  encodeBookPortPair,
+  encodeBookingBlock,
   encodeDispatchBlock,
   encodeLabelBlock,
   encodeUserAccount,
@@ -392,10 +392,8 @@ describe("Port Entrypoints", () => {
 
   describe("portBook", () => {
     function encodeTransfer(from: string, to: string, asset: string, amount: bigint) {
-      return encodeBookPortPair(
-        encodeAccountAmountBlock(from, asset, from === ethers.ZeroHash ? 0n : amount),
-        encodeAccountAmountBlock(to, asset, to === ethers.ZeroHash ? 0n : amount),
-      );
+      return encodeBookingBlock({ from, to, asset, amount: to === ethers.ZeroHash ? 0n : amount,
+        liability: asset, debt: from === ethers.ZeroHash ? 0n : amount });
     }
     const method = "portBook(bytes)";
     const from_ = encodeUserAccount("0x11");

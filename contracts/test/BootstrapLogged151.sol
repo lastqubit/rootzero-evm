@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {CommandBase, Specs} from "./Base.sol";
+import {CommandBase, Specs} from "../commands/Base.sol";
 import {Encoder} from "../codec/Encoder.sol";
 import {BOOTSTRAP_KEY, LIST_KEY} from "../codec/Keys.sol";
+import {Logs} from "../codec/Logs.sol";
 import {Sizes, ASSET_AMOUNT_HEADER, BALANCE_HEADER} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
+import {Codes} from "../utils/Codes.sol";
 import {UnexpectedState, INVALID_BLOCK} from "../utils/Errors.sol";
 
 /// @notice Pipeline-local balance funding with a minimum remaining native budget.
-abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
+/// @dev Frozen v1.51.0 event policy for historical benchmarks.
+abstract contract BootstrapLogged151 is CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {
@@ -26,7 +29,10 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     /// BALANCE per inner item before hooks run. Assigned value funds chainAsset
     /// balances first. Non-chain assets debit during the loop; uncovered chainAsset
     /// balances and the remaining budget shortfall debit once after the loop.
-    /// Zero amounts skip debit hooks. Balance-update logging belongs to those hooks.
+    /// Logs every non-native request, including zero, then the actual native debit.
+    /// Zero amounts still skip debit hooks. Reserves output and log space together;
+    /// shares output with the log until the first native request or budget debit.
+    /// Account identity comes from pipeline context; empty logs are omitted.
     /// The sum of requested chainAsset amounts must fit uint256.
     /// @param account Account funding balances and any native shortfall.
     /// @param state Must be empty.
@@ -72,11 +78,20 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
         }
         uint i;
         unchecked {
-            // Reserve the complete output before hooks can allocate memory.
-            output = Encoder.allocate(end - abs);
+            // All sizes derive from uint32 cursors. Reserve the entire extent
+            // before hooks: [output:size][log prefix:32][log:size + 72].
+            uint size = end - abs;
+            output = Encoder.allocate(size * 2 + Sizes.Balance + 32);
+            assembly ("memory-safe") {
+                mstore(output, size)
+                // Allocation cleared its physical tail, not this logical tail.
+                mstore(add(add(output, 32), size), 0)
+            }
             i = Encoder.pos(output, 0);
         }
 
+        uint logStart = i;
+        uint logCur; // Zero while the log still shares the output buffer.
         uint nativeAmount;
         while (abs < end) {
             bytes32 asset;
@@ -91,8 +106,17 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
             }
             if (asset != chainAsset) {
                 if (amount != 0) debitAccount(account, asset, amount);
+                if (logCur != 0) {
+                    assembly ("memory-safe") {
+                        mstore(logCur, shl(192, BALANCE_HEADER))
+                        mstore(add(logCur, 8), asset)
+                        mstore(add(logCur, 40), amount)
+                        logCur := add(logCur, 72)
+                    }
+                }
             } else {
                 nativeAmount += amount;
+                if (logCur == 0) (logStart, logCur) = forkLog(output, i - logStart);
             }
             assembly ("memory-safe") {
                 mstore(i, shl(192, BALANCE_HEADER))
@@ -112,8 +136,32 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
             nativeAmount += budget - credit;
             credit = budget;
         }
-        if (nativeAmount != 0) debitAccount(account, chainAsset, nativeAmount);
+        if (nativeAmount != 0) {
+            debitAccount(account, chainAsset, nativeAmount);
+            if (logCur == 0) (logStart, logCur) = forkLog(output, output.length);
+            bytes32 nativeAsset = chainAsset;
+            assembly ("memory-safe") {
+                mstore(logCur, shl(192, BALANCE_HEADER))
+                mstore(add(logCur, 8), nativeAsset)
+                mstore(add(logCur, 40), nativeAmount)
+                logCur := add(logCur, 72)
+            }
+        }
+
+        uint logSize = logCur == 0 ? output.length : logCur - logStart;
+        if (logSize != 0) {
+            Logs.mem(Codes.AccountBootstrap, logStart, logSize);
+        }
 
         return (true, output, credit);
+    }
+
+    /// @dev Only accepts the dedicated allocation in executeBootstrap, with
+    /// prefixSize <= output.length initialized bytes. The log starts after output
+    /// and its writable 32-byte prefix, with output.length + 72 reserved bytes.
+    /// No allocation: later hook allocations cannot overlap this owned region.
+    function forkLog(bytes memory output, uint prefixSize) private pure returns (uint start, uint cur) {
+        start = Encoder.pos(output, output.length + 32);
+        cur = Encoder.copy(start, output, prefixSize);
     }
 }

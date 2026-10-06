@@ -3,7 +3,7 @@ pragma solidity ^0.8.33;
 
 import {PreviousInputBootstrap} from "./PreviousInputBootstrap.sol";
 import {BootstrapStock150} from "./BootstrapStock150.sol";
-import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
+import {BootstrapLogged151} from "./BootstrapLogged151.sol";
 import {Balances} from "../core/Balances.sol";
 import {Runtime, ChainAsset} from "../core/Runtime.sol";
 import {Cursors, Execute, Keys} from "../Codec.sol";
@@ -18,8 +18,8 @@ abstract contract CommanderBootstrapLedger is Balances {
     }
 }
 
-/// @dev Actual production adapter, with Main's ledger hook after event migration.
-contract CommanderCurrentBootstrap is ExecuteBootstrap, CommanderBootstrapLedger {
+/// @dev Frozen v1.51 adapter and logging policy for historical comparisons.
+contract CommanderCurrentBootstrap is BootstrapLogged151, CommanderBootstrapLedger {
     constructor() Runtime(0) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }

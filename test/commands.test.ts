@@ -142,9 +142,10 @@ describe("Commands", () => {
       ["deposit", 34n, false], ["depositPayable", 34n, false],
       ["creditAccount", 70n, true], ["debitAccount", 71n, false],
     ] as const) {
-      it(`${method} publishes lane codes without duplicate annotations`, async () => {
+      it(`${method} publishes its logging selection without duplicate annotations`, async () => {
         const id = await cmd(method);
-        const lane = exactSpec(Keys.Balance, 64) | 0x20000001n | (action << 32n);
+        const logged = method.startsWith("deposit");
+        const lane = exactSpec(Keys.Balance, 64) | (logged ? 0x20000001n | (action << 32n) : 0n);
         await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, stateLane ? lane : 0n,
           stateLane ? 0n : exactSpec(Keys.AssetAmount, 64), stateLane ? 0n : lane);
         const receipt = await host.deploymentTransaction().wait();
@@ -152,7 +153,7 @@ describe("Commands", () => {
         expect(annotations.some((log: any) => log.data === encodeActionBlock(action))).eq(false);
       });
 
-      it(`${method} logs one wrapped batch in hook order`, async () => {
+      it(`${method} respects its lane logging selection`, async () => {
         const asset = ethers.id("account-log-asset");
         for (const count of [0, 1, 3]) {
           const amount = method === "depositPayable" ? 100n : ethers.MaxUint256;
@@ -162,8 +163,8 @@ describe("Commands", () => {
             { value: method === "depositPayable" ? BigInt(count) * amount : 0n })).wait();
           const expected = concat(ethers.toBeHex(await cmd(method), 32),
             stateLane ? encodeStateBlock(balances) : encodeOutputBlock(balances));
-          expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq([expected]);
-          expect(receipt.logs[stateLane ? 0 : receipt.logs.length - 1].data).eq(expected);
+          expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq(method.startsWith("deposit") ? [expected] : []);
+          if (method.startsWith("deposit")) expect(receipt.logs[receipt.logs.length - 1].data).eq(expected);
         }
       });
     }
@@ -604,7 +605,7 @@ describe("Commands", () => {
       expect(deployment).to.not.equal(null);
 
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("settle"),
-          ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (67n << 32n) }),
+          ...endpointSpecs({ state: Keys.Position, stateHint: 160 }),
         );
     });
 
@@ -670,7 +671,7 @@ describe("Commands", () => {
       expect(deployment).to.not.equal(null);
 
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("settlePayable"),
-          ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (67n << 32n), funded: true }),
+          ...endpointSpecs({ state: Keys.Position, stateHint: 160, funded: true }),
         );
     });
 

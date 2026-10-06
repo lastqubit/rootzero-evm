@@ -5,8 +5,8 @@ import { fixture, scenarios, checkScenario, names, Scenario } from "./helpers/bo
 
 describe("Bootstrap short shared allocation matrix", function () {
   this.timeout(900_000);
-  it("compares stock, zero-inclusive reference and production with exact outcomes", async () => {
-    const f = await fixture();
+  it("compares stock, zero-inclusive reference and frozen v1.51 with exact outcomes", async () => {
+    const f = await fixture(true);
     const matrix = scenarios(f.native, f.tokens);
     expect(matrix.length).eq(642);
     const rows: any[] = [];
@@ -29,9 +29,9 @@ describe("Bootstrap short shared allocation matrix", function () {
         stockPositiveMin: Math.min(...positive.map(r => r.savedStock)), stockPositiveMax: Math.max(...positive.map(r => r.savedStock)),
         stockRegressions: sample.filter(r => r.savedStock < 0).length, stockWorst: Math.min(...sample.map(r => r.savedStock)) };
     });
-    const runtime = await Promise.all(f.hosts.map(async (host, i) => ({ name: names[i], bytes: ethers.dataLength(await f.provider.getCode(await host.getAddress())) })));
+    const runtime = await Promise.all(f.hosts.map(async (host, i) => ({ name: i === 2 ? "BootstrapShortLogged151" : names[i], bytes: ethers.dataLength(await f.provider.getCode(await host.getAddress())) })));
     writeFileSync(".npm-cache/bootstrap-short-matrix.json", JSON.stringify({ compiler: "0.8.35", viaIR: true, optimizerRuns: 200, evmVersion: "cancun",
-      scope: "Identical ledger roundtrip harnesses; includes pipeline, Bootstrap, state and cashin logs; no token transfers. Zero hooks skipped in every variant.", runtime, summary, rows }, null, 2) + "\n");
+      scope: "Historical v1.51 logging policy. Identical ledger roundtrip harnesses; includes pipeline, Bootstrap, state and cashin logs; no token transfers. Zero hooks skipped in every variant.", runtime, summary, rows }, null, 2) + "\n");
     console.table(summary); console.table(runtime);
     console.table(rows.filter(r => r.zeros === "larger").map(({ name, savedStock, savedZero }) => ({ name, savedStock, savedZero })));
   });

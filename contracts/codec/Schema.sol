@@ -146,6 +146,8 @@ library Schemas {
     string constant Bootstrap = "uint budget, many #assetAmount as balances";
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     string constant Allowance = "uint host, bytes32 asset, uint amount";
+    /// @dev Absolute balance, never a credit/debit delta.
+    string constant AccountBalance = "bytes32 account, bytes32 asset, uint amount";
     string constant AccountAmount = "bytes32 account, bytes32 asset, uint amount";
     string constant HostAmount = "uint host, bytes32 asset, uint amount";
     string constant HostAccountAsset = "uint host, bytes32 account, bytes32 asset";
@@ -160,6 +162,11 @@ library Schemas {
     /// @dev Exact identifiers and full-width inclusive quantity bounds.
     string constant PositionConstraints = "bytes32 asset, uint amount, bytes32 liability, uint debt";
     string constant Quote = "bytes32 asset, uint amount, bytes32 liability, uint debt";
+
+    // Six-word payloads
+
+    /// @dev Debit from/liability/debt, then credit to/asset/amount; quantities are full width.
+    string constant Booking = "bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount";
 
     // Composite payloads
 

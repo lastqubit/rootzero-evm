@@ -1,8 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { encodeLimitsBlock, encodeContextBlock, encodePositionBlock, encodeBookPortPair,
-  encodeAccountAmountBlock, encodeUserAccount } from "./helpers/blocks.js";
+import { encodeLimitsBlock, encodeContextBlock, encodePositionBlock, encodeBookingBlock, encodeUserAccount } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("BookHook entrypoints", () => {
@@ -21,20 +20,17 @@ describe("BookHook entrypoints", () => {
   it("books transfers and single-sided entries with explicit zero quantities", async () => {
     for (const source of [from, ethers.ZeroHash]) {
       for (const destination of [to, ethers.ZeroHash]) {
-        await expect(host.portBook(encodeBookPortPair(
-          encodeAccountAmountBlock(source, asset, source === ethers.ZeroHash ? 0n : 7n),
-          encodeAccountAmountBlock(destination, asset, destination === ethers.ZeroHash ? 0n : 7n),
-        )))
+        await expect(host.portBook(encodeBookingBlock({ from: source, to: destination, asset,
+          amount: destination === ethers.ZeroHash ? 0n : 7n, liability: asset,
+          debt: source === ethers.ZeroHash ? 0n : 7n })))
           .to.emit(host, "Applied").withArgs(source, destination, asset,
             destination === ethers.ZeroHash ? 0n : 7n, asset, source === ethers.ZeroHash ? 0n : 7n);
       }
     }
   });
 
-  it("maps port booking debit and credit blocks to liability and asset legs", async () => {
-    await expect(host.portBook(encodeBookPortPair(
-      encodeAccountAmountBlock(from, liability, 40n), encodeAccountAmountBlock(to, asset, 100n),
-    ))).to.emit(host, "Applied").withArgs(from, to, asset, 100n, liability, 40n);
+  it("maps port booking debit and credit fields to liability and asset legs", async () => {
+    await expect(host.portBook(encodeBookingBlock({ from, to, asset, amount: 100n, liability, debt: 40n }))).to.emit(host, "Applied").withArgs(from, to, asset, 100n, liability, 40n);
   });
 
   it("passes opaque account identifiers to the custom book hook", async () => {

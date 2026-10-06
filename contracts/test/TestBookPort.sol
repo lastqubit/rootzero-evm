@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {Booking} from "../core/Types.sol";
+
 import {BookPort} from "../ports/Book.sol";
 import {Balances} from "../core/Balances.sol";
 import {Runtime} from "../core/Runtime.sol";
@@ -21,9 +23,9 @@ contract TestBookPort is BookPort, Balances {
         return caller;
     }
 
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt) internal override {
-        if (debt != 0) debitAccount(from, liability, debt);
-        if (amount != 0) creditAccount(to, asset, amount);
+    function book(Booking memory value) internal override {
+        if (value.debt != 0) debitAccount(value.from, value.liability, value.debt);
+        if (value.amount != 0) creditAccount(value.to, value.asset, value.amount);
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal {

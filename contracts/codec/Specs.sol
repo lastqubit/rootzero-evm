@@ -36,6 +36,8 @@ library Sizes {
     uint constant B128 = Header + 4 * Word;
     /// @dev 8 header + 160 payload = 168 bytes total.
     uint constant B160 = Header + 5 * Word;
+    /// @dev 8 header + 192 payload = 200 bytes total.
+    uint constant B192 = Header + 6 * Word;
     /// @dev Minimum STEP size: 8 header + 32 command + 32 value + 8 nested INPUT header.
     uint constant Step = 2 * Header + 2 * Word;
     /// @dev Minimum SWAP size: header + asset + amount + LIST header, before hops.
@@ -55,6 +57,8 @@ library Sizes {
     uint constant Custody = B96;
     /// @dev POSITION block: 8 header + five-word position = 168 bytes
     uint constant Position = B160;
+    /// @dev BOOKING block: header plus debit/credit accounts and both asset quantities.
+    uint constant Booking = B192;
 
     // Input and structural blocks
 
@@ -75,6 +79,8 @@ library Sizes {
     uint constant Amount = B32;
     /// @dev HOST_ASSET block: 8 header + 32 host + 32 asset = 72 bytes
     uint constant HostAsset = B64;
+    /// @dev ACCOUNT_BALANCE block: header plus account, asset and actual balance.
+    uint constant AccountBalance = B96;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant HostAmount = B96;
     /// @dev PIPELINE block: 8-byte header plus account and initial value budget.
@@ -109,6 +115,7 @@ library Specs {
     uint private constant Exact96 = 96 * SizeFields;
     uint private constant Exact128 = 128 * SizeFields;
     uint private constant Exact160 = 160 * SizeFields;
+    uint private constant Exact192 = 192 * SizeFields;
     uint private constant UnboundedHint128 = uint(128) << 136;
     uint private constant UnboundedMin16Hint256 = (uint(16) << 192) | (uint(256) << 136);
     uint private constant UnboundedMin40Hint256 = (uint(40) << 192) | (uint(256) << 136);
@@ -131,6 +138,7 @@ library Specs {
     uint constant Balance = uint(bytes32(Keys.Balance)) | Exact64;
     uint constant Custody = uint(bytes32(Keys.Custody)) | Exact96;
     uint constant Position = uint(bytes32(Keys.Position)) | Exact160;
+    uint constant Booking = uint(bytes32(Keys.Booking)) | Exact192;
 
     // Input and value blocks
 
@@ -178,6 +186,7 @@ library Specs {
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;
     uint constant AccountAsset = uint(bytes32(Keys.AccountAsset)) | Exact64;
     uint constant HostAsset = uint(bytes32(Keys.HostAsset)) | Exact64;
+    uint constant AccountBalance = uint(bytes32(Keys.AccountBalance)) | Exact96;
     uint constant AccountAmount = uint(bytes32(Keys.AccountAmount)) | Exact96;
     uint constant HostAmount = uint(bytes32(Keys.HostAmount)) | Exact96;
     uint constant HostAccountAsset = uint(bytes32(Keys.HostAccountAsset)) | Exact96;

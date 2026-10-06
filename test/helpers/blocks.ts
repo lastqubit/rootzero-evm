@@ -87,6 +87,7 @@ export const Keys = {
   Allowance: blockKey("#allowance"),
   Account: blockKey("#account"),
   Transaction: blockKey("#transaction"),
+  Booking: blockKey("#booking"),
 
   // Composite and annotation blocks
   Node: blockKey("#node"),
@@ -114,6 +115,7 @@ export const Keys = {
   AssetLiability: blockKey("#assetLiability"),
   AccountAsset: blockKey("#accountAsset"),
   HostAsset: blockKey("#hostAsset"),
+  AccountBalance: blockKey("#accountBalance"),
   AccountAmount: blockKey("#accountAmount"),
   HostAmount: blockKey("#hostAmount"),
   HostAccountAsset: blockKey("#hostAccountAsset"),
@@ -181,6 +183,10 @@ export function encodeAssetLiabilityBlock(asset: string, liability: string): str
 
 export function encodeHostAssetBlock(host: bigint, asset: string): string {
   return encodeBlock(Keys.HostAsset, ethers.concat([pad32(host), pad32(asset)]));
+}
+
+export function encodeAccountBalanceBlock(account: string, asset: string, amount: bigint): string {
+  return encodeBlock(Keys.AccountBalance, ethers.concat([pad32(account), pad32(asset), pad32(amount)]));
 }
 
 export function encodeAccountAmountBlock(account: string, asset: string, amount: bigint): string {
@@ -374,9 +380,13 @@ export function encodeHostAccount(host: bigint): string {
     | (host & ((1n << 160n) - 1n)), 32);
 }
 
-// Flat debit/credit pair consumed by BookPort.
-export function encodeBookPortPair(debit: string, credit: string): string {
-  return concat(debit, credit);
+export interface Booking {
+  from: string; to: string; liability: string; debt: bigint; asset: string; amount: bigint;
+}
+
+export function encodeBookingBlock(value: Booking): string {
+  return encodeBlock(Keys.Booking, concat(pad32(value.from), pad32(value.to), pad32(value.liability),
+    pad32(value.debt), pad32(value.asset), pad32(value.amount)));
 }
 
 export function encodePipelineBlock(account: string, budget: bigint): string {

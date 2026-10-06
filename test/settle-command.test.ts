@@ -14,12 +14,12 @@ describe("Settle command", () => {
     await host.seed(account, liability, 40n);
   });
 
-  it("advertises POSITION state, empty input and output, and the Settle action", async () => {
+  it("advertises POSITION state and empty input/output without redundant lane logging", async () => {
     const id = await commandId("settle(bytes)", host);
     expect(await host.commandId()).to.equal(id);
     const tx = host.deploymentTransaction();
     await expect(tx).to.emitEndpoint(host).withArgs(id,
-      ...endpointSpecs({ state: Keys.Position, stateHint: 160, stateCodes: 0x20000001n | (67n << 32n) }));
+      ...endpointSpecs({ state: Keys.Position, stateHint: 160 }));
   });
 
   it("does not expose or authorize the removed book command", async () => {

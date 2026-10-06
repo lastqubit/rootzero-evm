@@ -5,12 +5,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 
 describe("Execute adapter optimization", function () {
   this.timeout(120_000);
-  it("compares actual adapters against frozen decoder/writer bodies with matching logs", async () => {
+  it("compares actual adapters against frozen decoder/writer bodies with documented logging differences", async () => {
     const baseline = await deploy("ExecuteAdaptersBaseline");
     const current = await deploy("ExecuteAdaptersCurrent");
     const native = BigInt(await current.nativeAsset());
     const rows: any[] = [];
     for (const name of executeCases) {
+      // Credit, Debit and Settle now omit adapter logs; their gas includes that policy change.
       // Bootstrap now has a different schema and funding model; measured separately.
       if (name === "Bootstrap") continue;
       for (const count of [0, 1, 2, 4, 8, 16]) {

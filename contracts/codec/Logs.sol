@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Keys} from "./Keys.sol";
+import {Keys, ACCOUNT_BALANCE_KEY} from "./Keys.sol";
 import {Encoder} from "./Encoder.sol";
 import {Cursors} from "../utils/Cursors.sol";
 
@@ -10,6 +10,9 @@ import {Cursors} from "../utils/Cursors.sol";
 library Logs {
     // Correlation stream identifier.
     uint internal constant Stream = 0x00;
+
+    /// @dev Direct assembly form of Codes.AccountUpdate: Account followed by Update.
+    uint private constant ACCOUNT_UPDATE_CODES = 0x0000000220000001;
 
     // Memory streams.
 
@@ -259,4 +262,24 @@ library Logs {
         }
     }
 
+    /// @notice Emit an authoritative actual account balance using fixed Account/Update codes.
+    /// @dev Emits [AccountUpdate:32][ACCOUNT_BALANCE:104] through LOG0. Uses 136
+    /// temporary bytes at the free-memory pointer without advancing it or touching
+    /// live allocations. Call after a successful nonzero credit/debit, including
+    /// a resulting zero balance. Implementers own emission; this helper does not
+    /// mutate storage. Indexers replace the balance, never apply it as a delta.
+    /// @param account Account whose balance changed.
+    /// @param asset Asset identifier.
+    /// @param amount Actual updated balance, preferably the mutation's computed result.
+    function accountBalance(bytes32 account, bytes32 asset, uint amount) internal {
+        assembly ("memory-safe") {
+            let start := mload(0x40)
+            mstore(start, ACCOUNT_UPDATE_CODES)
+            mstore(add(start, 32), or(shl(224, ACCOUNT_BALANCE_KEY), shl(192, 96)))
+            mstore(add(start, 40), account)
+            mstore(add(start, 72), asset)
+            mstore(add(start, 104), amount)
+            log0(start, 136)
+        }
+    }
 }

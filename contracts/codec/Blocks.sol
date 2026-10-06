@@ -5,7 +5,7 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Keys} from "./Keys.sol";
 import {Headers} from "./Headers.sol";
 import {Specs} from "./Specs.sol";
-import {Position, BalanceConstraints, PositionConstraints} from "../core/Types.sol";
+import {BalanceConstraints, PositionConstraints, Position, Booking} from "../core/Types.sol";
 import {INVALID_BLOCK, InvalidBlock, OutOfBounds, UnexpectedValue, OutOfRange} from "../utils/Errors.sol";
 
 /// @title Blocks
@@ -1181,6 +1181,19 @@ library Blocks {
         amount = uint(b);
     }
 
+    /// @notice Decode ACCOUNT_BALANCE and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return account Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackAccountBalance(uint cur) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (account, asset, a, nextCur) = unpack96(cur, Keys.AccountBalance);
+        amount = uint(a);
+    }
+
     /// @notice Decode ACCOUNTAMOUNT and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
@@ -1305,6 +1318,18 @@ library Blocks {
         (asset, a, liability, b, counterparty, nextCur) = unpack160(cur, Keys.Position);
         amount = uint(a);
         debt = uint(b);
+    }
+
+    /// @notice Decode BOOKING and return the advanced source cursor.
+    /// @dev Validates the exact header and full containment before copying both legs.
+    /// Preserves source end/metadata; the returned struct owns independent memory.
+    /// Account policy and debit/credit semantics belong to the caller.
+    function unpackBooking(uint cur) internal pure returns (Booking memory value, uint nextCur) {
+        uint payloadCur;
+        (payloadCur, nextCur) = unpackFixed(cur, Headers.Booking);
+        assembly ("memory-safe") {
+            calldatacopy(value, and(payloadCur, 0xffffffff), 192)
+        }
     }
 
     // Composite blocks: fixed fields followed by validated child cursors.

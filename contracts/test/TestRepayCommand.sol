@@ -43,11 +43,11 @@ contract TestRepayCommand is Repay, ExecuteSettle, Settlement, Balances, Pipelin
     function settle(bytes32 account, Position memory position) internal override(Settlement, SettleHook) {
         Settlement.settle(account, position);
     }
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
+    function book(bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount)
         internal override
     {
         emit BookCalled(from, to, amount, debt);
-        Settlement.book(from, to, asset, amount, liability, debt);
+        Settlement.book(from, to, liability, debt, asset, amount);
     }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override { debitFrom(account, asset, amount); }
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override { creditTo(account, asset, amount); }

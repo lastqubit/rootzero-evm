@@ -23,7 +23,7 @@ import { ExecuteHook, PipeHook, Pipeline } from "./core/Pipeline.sol";
 import { Budget, Budgets } from "./core/Budget.sol";
 import { BookHook, CreditAccountHook, DebitAccountHook, RepayHook, SettleHook, Settlement } from "./core/Settlement.sol";
 import { ForwardHook, Portal } from "./core/Portal.sol";
-import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, BalanceConstraints, PositionConstraints, Quote, Position, Tx } from "./core/Types.sol";
+import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountBalance, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, BalanceConstraints, PositionConstraints, Quote, Position, Booking, Tx } from "./core/Types.sol";
 import { Validator } from "./core/Validator.sol";
 
 // Shared protocol errors.

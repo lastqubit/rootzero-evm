@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Position} from "./Types.sol";
+import {Booking, Position} from "./Types.sol";
 import {HostAccount} from "./Runtime.sol";
 
 /// @title DebitAccountHook
@@ -13,6 +13,10 @@ abstract contract DebitAccountHook {
     /// must not reduce the amount made available to the consuming operation.
     /// May assume account format satisfies the caller's policy without repeated
     /// format validation. Applicable authorization and balance checks remain.
+    /// Emit Logs.accountBalance(account, asset, updatedBalance) after a successful
+    /// nonzero debit, including an updated balance of zero. Emission is the
+    /// implementer's responsibility; reuse the mutation's result without rereading
+    /// storage. Zero-amount calls should not emit unchanged balances.
     /// @param account Source account identifier.
     /// @param asset Asset identifier.
     /// @param amount Exact amount to debit.
@@ -27,6 +31,10 @@ abstract contract CreditAccountHook {
     /// The hook must revert if it cannot credit the complete amount.
     /// May assume account format satisfies the caller's policy without repeated
     /// format validation. Applicable authorization and accounting requirements remain.
+    /// Emit Logs.accountBalance(account, asset, updatedBalance) after a successful
+    /// nonzero credit. Emission is the implementer's responsibility; reuse the
+    /// mutation's result without rereading storage. Zero-amount calls should not
+    /// emit unchanged balances.
     /// @param account Destination account identifier.
     /// @param asset Asset identifier.
     /// @param amount Exact amount to credit.
@@ -42,13 +50,8 @@ abstract contract BookHook {
     /// enforce limits and fees, and validate untrusted accounts at entry. Internal
     /// hooks may assume accounts satisfy that policy. Preserve debit-first
     /// funding requirements even when accounts or assets match; do not net the legs.
-    /// @param from Account debited for the liability.
-    /// @param to Account credited with the asset.
-    /// @param asset Asset identifier for the credit.
-    /// @param amount Exact quantity to credit.
-    /// @param liability Asset identifier for the debit.
-    /// @param debt Exact quantity to debit.
-    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt) internal virtual;
+    /// @param value Exact debit and credit legs; hooks must not mutate this value.
+    function book(Booking memory value) internal virtual;
 }
 
 /// @title RepayHook
@@ -90,14 +93,22 @@ abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook
     /// @notice Apply exact legs through the account hooks, debiting before crediting.
     /// @dev Zero amounts skip their hooks. Matching accounts or assets are not
     /// netted: the full debit must succeed before the credit. Failure reverts both.
+    /// Override the scalar overload to customize both scalar and struct callers.
+    function book(Booking memory value) internal virtual override {
+        book(value.from, value.to, value.liability, value.debt, value.asset, value.amount);
+    }
+
+    /// @notice Apply exact scalar legs without constructing a temporary Booking.
+    /// @dev Shared customization point for Settlement's scalar callers and struct wrapper.
+    /// Overriding only book(Booking) does not intercept direct scalar calls.
     function book(
         bytes32 from,
         bytes32 to,
-        bytes32 asset,
-        uint amount,
         bytes32 liability,
-        uint debt
-    ) internal virtual override {
+        uint debt,
+        bytes32 asset,
+        uint amount
+    ) internal virtual {
         if (debt != 0) debitAccount(from, liability, debt);
         if (amount != 0) creditAccount(to, asset, amount);
     }
@@ -108,7 +119,7 @@ abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook
     function repay(bytes32 account, Position memory position) internal virtual override {
         if (position.debt == 0) return;
         uint amount = position.counterparty == bytes32(0) ? 0 : position.debt;
-        book(account, position.counterparty, position.liability, amount, position.liability, position.debt);
+        book(account, position.counterparty, position.liability, position.debt, position.liability, amount);
     }
 
     /// @notice Apply the final position quantities exactly; producers enforce limits.
@@ -120,7 +131,7 @@ abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook
     /// accounts from faulty trusted integrations are not guaranteed to be rejected.
     function settle(bytes32 account, Position memory position) internal virtual override {
         if (position.counterparty == bytes32(0)) {
-            book(account, account, position.asset, position.amount, position.liability, position.debt);
+            book(account, account, position.liability, position.debt, position.asset, position.amount);
             return;
         }
         if (position.debt != 0) {
