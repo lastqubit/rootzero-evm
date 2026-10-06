@@ -67,7 +67,9 @@ also use exact output allocation; their additional savings are recorded in
 
 Measured with solc 0.8.35, viaIR, optimizer 200, Cancun, using actual inherited
 adapters versus frozen preceding adapters with identical observable hooks.
-Tests compare output, budget, hook effects and source-state hashes.
+Tests compare output, budget, hook effects and source-state hashes. Rerunning
+the benchmark now also includes the removal of Credit, Debit, and Settle adapter
+logs; those new savings are not solely decoder improvements.
 
 | Adapter | Gas change |
 |---|---:|
@@ -102,11 +104,23 @@ npm run bench -- test/execute-blocks.bench.test.ts
 Bootstrap directly validates one BOOTSTRAP and its final LIST, including exact
 lengths and ASSET_AMOUNT stride, then checks every item header during processing.
 `Blocks.unpackBootstrapExact` and the stream-oriented `Blocks.unpackBootstrap`
-remain available to other callers. Bootstrap reserves returned balances, a
-writable log prefix and worst-case log space in one allocation before hooks run.
-Only the returned balances count toward output.length; logical padding is cleared.
-The private forkLog helper accepts only this reserved layout and copies the
-initialized prefix when native funding requires a separate log. Debit continues
+remain available to other callers. Bootstrap reserves exactly the returned
+balances in one allocation before hooks run, with inline fixed-size writes and
+zeroed output padding. Account hooks own updated-balance logging; Bootstrap,
+Credit, Debit, and Settle adapters emit no redundant operation records. Cashout
+and Authorize retain their logs. Debit continues
 to use allocateBalances and writeBalance for an exactly sized output stream. Hooks may allocate between
 writes. Counts are bounded by validated source lengths; the helper rejects byte
 sizes exceeding uint32.max. See the [output benchmark](ExecuteOutputPreallocation.md).
+
+## Unlogged runner experiment
+
+The test-only shared and direct unlogged runners save 93?95 receipt gas for a
+single item and 153 runtime bytes when each runner is deployed alone. In the
+mixed-entrypoint harness, the shared variant adds 784 bytes and regresses by up
+to 3,521 gas in larger batches. Production keeps the existing runner API.
+
+The capture in [UNLOGGED_RUNNER.json](benchmarks/UNLOGGED_RUNNER.json) uses
+Solidity 0.8.35, viaIR, optimizer 200, Cancun. It checks exact output, budget,
+logs, and malformed-input errors for all candidates. Reproduce with
+`npm run bench -- test/unlogged-runner.bench.test.ts`.

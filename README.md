@@ -793,7 +793,7 @@ deterministic host account:
 
 ```txt
 input:  accountAsset { bytes32 account, bytes32 asset }
-response: accountAmount { bytes32 account, bytes32 asset, uint amount }
+response: accountBalance { bytes32 account, bytes32 asset, uint amount }
 ```
 
 Like commands, every query announces its input and output specs at deployment;
@@ -815,7 +815,8 @@ exactly one Active or Inactive state. Both query mixins and their matching
 ## Ports
 
 Settlement and the book port share `BookHook` from `core/Settlement.sol`:
-`book(from, to, asset, amount, liability, debt)`. `Settlement` implements it by
+`book(Booking memory value)`. `Settlement` forwards it to its virtual scalar
+`book(from, to, liability, debt, asset, amount)` overload, which implements it by
 debiting `debt` from `from` before crediting `amount` to `to`, skipping zero
 amounts. Matching accounts or assets are not netted. Hosts may implement the
 hook directly while preserving those exact-leg and funding requirements.
@@ -874,20 +875,22 @@ The central ports are batches all the way down:
 - `portRequestAllowance` consumes the same assetAmount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
-- `portBook` consumes a flat stream of paired `accountAmount` blocks: debit
-  account/liability/debt first, then credit account/asset/amount. Its published spec
-  declares ACCOUNT_AMOUNT input and it publishes `#input as (debit, credit)`
-  through `GroupsAnnot` on the port ID, without a custom parent block.
-  Both accounts may be the same for booking. It returns empty bytes and zero credit, and any
-  incomplete pair, malformed block, or account-hook failure reverts the entire batch.
-  Both legs are decoded before calling `BookHook`; zero amounts skip their legs.
+- `portBook` consumes BOOKING blocks with fields `from, to, liability, debt, asset, amount`.
+  Each 200-byte block describes one debit from `from` and one credit to `to`.
+  Its input lane uses `Specs.Booking` without operation logging. Account hooks
+  own updated-balance logging.
+  Both accounts may be the same. It returns empty bytes and zero credit, and any
+  malformed block or account-hook failure reverts the entire batch and any hook logs.
+  The complete struct is decoded before `book(value)`; zero quantities skip their legs.
   For transfers, use the same asset and amount on both sides. For a single-sided
   entry, explicitly set the omitted leg to zero debt or amount; a zero account
   alone does not omit a leg. The `Tx` struct and transaction helpers
-  remain available, but this port consumes paired `accountAmount` blocks.
+  remain available, but this port consumes a single `booking` block per operation.
 - `portCreditAccount` and `portDebitAccount` consume `accountAmount` blocks
   and apply the operation to the specified account. To credit or debit a host,
   pass `Accounts.toHost(host)` as that account. The same account hooks handle both.
+  Hook implementers emit `Logs.accountBalance(account, asset, updatedBalance)`
+  after mutations; these ports do not also log the requested amounts.
 - `portPipePayable` consumes `context` blocks, each carrying an account, an
   initial state, and a run of steps — a complete pipeline delivered by another
   host, executed locally against the port call's shared value budget.

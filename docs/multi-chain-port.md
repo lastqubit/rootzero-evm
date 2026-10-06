@@ -658,10 +658,9 @@ This means the bridge does not need a special "execute remote command" API. It o
 
 `ports/Book.sol` implements `portBook` with portable bookkeeping logic:
 
-1. Iterate a flat stream of paired ACCOUNT_AMOUNT blocks, debit then credit;
-   publish `#input as (debit, credit)` in a `#groups` annotation on the port ID.
-2. Decode both legs and call `BookHook.book` with their accounts, assets, and amounts.
-3. The default implementation debits the source before crediting the destination, skipping zero amounts.
+1. Decode one complete Booking and pass it to `BookHook.book`.
+2. The default implementation debits the source before crediting the destination, skipping zero amounts.
+3. Account hooks own updated-balance logging; the port emits no separate input log.
 4. Let chain-specific hooks perform actual asset movement where needed.
 
 For transfers, use the same asset and amount on both legs. Set an omitted leg's amount to zero for single-sided entries. The booking logic is portable because account and asset values are protocol IDs. Do not resolve account IDs just to update balances. Asset custody and transfer hooks are local, and those hooks may resolve IDs when native asset movement requires it.

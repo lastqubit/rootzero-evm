@@ -362,9 +362,9 @@ delegating to the returning writer added 38 gas per creation in the tested harne
 Debit pipeline writers migrated to `Encoder`. At that stage Bootstrap and Debit
 allocated the final output through `Execute.allocateBalances` and wrote within it
 directly, without growth or finalization. Bootstrap now uses a single allocation
-for output plus reserved log space, with inline fixed-size writes. Its exact output
-count still comes from the inner AssetAmount list; reserved log bytes do not count
-toward the returned length.
+for exactly the output, with inline fixed-size writes. Its output count comes
+from the inner AssetAmount list. Updated-balance logging belongs to the account
+hooks; Bootstrap no longer reserves separate log space.
 At that intermediate stage, Writers also initialized and finalized through Encoder;
 its remaining formats still used the old helpers. Writers has since been removed. `Codec.sol` exports the library.
 

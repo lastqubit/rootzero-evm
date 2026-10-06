@@ -20,7 +20,9 @@ Execute decoding, hook order, funding and error logic:
   memory position, and return it without growable-buffer finalization.
 
 The baseline inherits frozen adapters in PreviousExecuteOutput.sol. The Current
-variant inherits actual production adapters. Candidate adapter copies remain
+variant inherits actual production adapters. Current Debit now omits its former
+operation log, so fresh gas comparisons also include that policy change.
+Candidate adapter copies remain
 in TestExecuteOutputPreallocation.sol. Identical hooks update observable
 storage; an additional mode allocates memory inside every debit hook. The measured
 region includes output allocation, all decoding/hooks/writes, and finalization.

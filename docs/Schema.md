@@ -381,11 +381,30 @@ wire:        [0x00000001][208][ACCOUNT_AMOUNT debit][ACCOUNT_AMOUNT credit]
 ```
 
 The parent schema identifies one complete operation; batching repeats that parent.
-This remains available for custom compositions, but `portBook` uses a flat stream
-instead: its published spec declares ACCOUNT_AMOUNT input and its `#groups` annotation
-on the port ID is `#input as (debit, credit)`. Each pair occupies 208 bytes with no
-parent header. Two bounded reads enforce complete pairs before calling the hook;
-a missing second block or malformed header reverts the whole batch.
+This remains available for custom compositions. `portBook` instead uses the canonical
+`#booking` schema:
+
+```text
+bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount
+```
+
+Its payload is 192 bytes and its complete block is 200 bytes. Each block debits
+`debt` of `liability` from `from`, then credits `amount` of `asset` to `to`.
+The accounts and assets may differ; zero quantities omit their respective legs.
+`Booking` is the matching Solidity struct. Codec and execution helpers accept
+or return that struct, and `BookHook.book(Booking memory value)` applies it.
+Hooks must not mutate the supplied value. `Settlement.book(Booking)` forwards to
+the virtual scalar `book(from, to, liability, debt, asset, amount)` implementation.
+Settlement extensions override the scalar version to customize both paths. Direct
+scalar callers allocate no temporary Booking; overriding only the struct version
+affects struct callers only.
+
+The input lane is `Specs.Booking` without operation logging. Account hooks own
+updated-balance logging with explicit account and asset IDs; no active Pipeline
+account is needed. A reverted booking removes the entire batch's effects and logs.
+
+This replaces the former pair of ACCOUNT_AMOUNT blocks (208 bytes). Callers must
+migrate to BOOKING; old pairs are rejected. The grouping annotation is no longer needed.
 
 ## Asset Preimages
 
@@ -713,7 +732,7 @@ the host's separate hook with the same exact-quantity requirements.
 `settle` consumes POSITION state with empty input and output. `ExecuteSettle`
 provides the same settlement hook for memory-backed
 pipeline state. For zero counterparties it calls
-`book(account, account, asset, amount, liability, debt)`. `BookHook` remains
+`book(account, account, liability, debt, asset, amount)`. `BookHook` remains
 defined in `core/Settlement.sol`; its default implementation debits the exact
 liability amount and then credits the exact asset amount. Zero amounts skip
 account hooks, and any failure reverts the whole operation.
@@ -727,13 +746,12 @@ realization hook must return counterparty zero before handing the result onward.
 
 The same `BookHook` is used directly by `portBook` and settlement for its
 exact transfers. The `BookHook` signature is
-`book(from, to, asset, amount, liability, debt)`. It must apply both exact legs
+`book(Booking memory value)`. It must apply both exact legs
 or revert, skip zero-amount legs, and preserve debit-first funding requirements
 even when accounts or assets match. It does not net legs or interpret a zero
 account as an absent side. Callers encode zero debt or amount to omit a leg.
-`portBook` decodes both input legs
-before calling the hook, so a malformed credit block structure is rejected before
-debiting. This structural check does not validate the encoded account's format.
+`portBook` validates the complete BOOKING before calling the hook, so a malformed
+block is rejected before debiting. This structural check does not validate the encoded account's format.
 
 `realize` passes the complete position to its hook, which matches the intended host
 account counterparty and fulfills the obligation before returning counterparty zero.
@@ -1269,6 +1287,7 @@ bootstrap            uint budget, many #assetAmount as balances
 allocation           uint host, bytes32 asset, uint amount
 allowance            uint host, bytes32 asset, uint amount
 custody              uint host, bytes32 asset, uint amount
+accountBalance       bytes32 account, bytes32 asset, uint amount
 accountAmount        bytes32 account, bytes32 asset, uint amount
 hostAmount           uint host, bytes32 asset, uint amount
 hostAccountAsset     uint host, bytes32 account, bytes32 asset
@@ -1277,6 +1296,7 @@ balanceConstraints   bytes32 asset, uint min, uint max
 positionConstraints  bytes32 asset, uint amount, bytes32 liability, uint debt
 quote                bytes32 asset, uint amount, bytes32 liability, uint debt
 position             bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
+booking              bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount
 transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
 step                 uint cmd, uint value, #input
@@ -1404,6 +1424,18 @@ to emit a wrapper without copying, then restores both. It requires a finished
 Encoder-owned buffer, not arbitrary Solidity bytes. Resolve addresses after any
 growth. This prefix space wraps the whole buffer; nested streams still need
 explicit header reservations within their logical output.
+
+### Account balances and requested amounts
+
+`#accountBalance { bytes32 account, bytes32 asset, uint amount }` reports an actual
+balance, including zero. getBalance returns this schema and Logs.accountBalance
+uses it for hook-owned authoritative balance updates. Its payload is 96 bytes;
+the complete block is 104 bytes.
+
+`#accountAmount` retains the same field layout with a different key and meaning:
+it carries requested amounts, including credit/debit port inputs. Do not interpret
+these requests as resulting balances. Existing getBalance consumers must migrate
+to the AccountBalance key.
 
 ### Bootstrap funding request
 

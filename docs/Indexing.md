@@ -478,14 +478,14 @@ its chain context. A root host labels itself with an
 `Annotation` containing a `#label` block. Child hosts are discovered through
 `Introduction` on their commander.
 
-**Balances.** Use Balance blocks with documented account context, or AccountAmount
-blocks carrying the account explicitly. The built-in Balances ledger keys every
-balance by (account, asset), including host holdings under Accounts.toHost(host).
-Its mutation helpers emit no logs; commands or custom callers provide logging.
+**Balances.** AccountBalance reports the actual updated balance with an explicit
+account. The built-in Balances ledger keys holdings by (account, asset), including
+host holdings under Accounts.toHost(host). Its mutation helpers emit no logs;
+creditAccount/debitAccount hook implementers own authoritative update logging.
 
-The endpoint's codes and documented semantics distinguish deltas from resulting
-totals. Credit/debit flows can reconstruct balances by ordered deltas; a resulting
-total supplies a checkpoint. Do not treat every Balance block as a resulting total.
+Replace indexed balances from these records; do not apply operation amounts as
+additional deltas. AccountAmount carries requested amounts and Balance commonly
+carries pipeline state. Neither automatically represents a stored account balance.
 An unknown starting balance is not implicitly zero. All amounts retain uint256 width.
 
 The old BalanceEvent and its ABI announcement are removed. Decode historical
@@ -795,15 +795,14 @@ standard reorg handling.
 Swap endpoints select output logging with `Actions.Swap`. Withdraw selects state
 logging with `Entities.Account` followed by `Actions.Withdraw`; its Balance spec
 identifies the payload without an extra Balance code. Swap and Withdraw publish no
-duplicate action annotations. CreditAccount uses Account/Credit (70) on STATE;
-DebitAccount uses Account/Debit (71) on OUTPUT. Deposit and DepositPayable use
-Account/Deposit on OUTPUT, recording the actual amounts returned by their hooks
-without duplicate action annotations. Their Balance specs identify the payloads.
-The optimized credit adapter copies arbitrary memory state with `Logs.memCopyWrap`
-before its hooks; the debit adapter uses `Logs.memWrap` on its Encoder-owned
-output after its hooks. These emit the same ID-prefixed containers as the runners,
-including empty batches. Host access commands and the guardian revoke endpoint
-also log their scoped INPUT lanes as described above. Other production endpoints
+duplicate action annotations. Deposit and DepositPayable use Account/Deposit on
+OUTPUT, recording the actual amounts returned by their hooks. CreditAccount and
+DebitAccount declare no logging lanes; their execute adapters also leave balance
+logging to the account hooks. Host access commands and all three revoke guards
+also log their scoped INPUT lanes. The guards use Host/Revoke/Inactive for revoke,
+Host/Update for revokeAllowance, and Host/Deny/Inactive for revokeAsset.
+revokeAllowance logs HOST_ASSET requests with an implicit resulting allowance of
+zero; unlike the admin allowance command, its input contains no amount. Other production endpoints
 use zero lane codes unless listed below. `runCommandOnce` and `runAdmin`
 use the same context/output logging; `runPort` logs INPUT then OUTPUT, and
 `runGuard` logs INPUT only. Queries remain view-only and their registration
@@ -821,8 +820,9 @@ Port and guard runners call this helper automatically.
 
 ### Additional command operation logs
 
-Account-scoped Cashout, Settle/SettlePayable, Repay, and Burn select STATE logging.
-Repay records the original position and debt before clearing debt in returned state.
+Account-scoped Cashout and Burn select STATE logging.
+Repay, Settle/SettlePayable, and ExecuteSettle leave balance logging to the account hooks;
+position-producing commands retain their operation output logs.
 Burn records the requested balance, not the hook's returned actual-burn quantity.
 Payout selects STATE and INPUT: one record contains both containers, with each
 balance paired with its recipient at the same index. The recipient does not
@@ -837,8 +837,8 @@ AddPool/RemovePool select INPUT with Host/Pool/Add or Host/Pool/Remove. Their
 published pair grouping identifies consecutive assets belonging to each pool;
 these records do not independently assert liquidity or pool activation state.
 
-Cashout and Settle's optimized Execute adapters emit the same endpoint-prefixed
-STATE container before hooks as their calldata commands, including empty batches.
+Cashout's optimized Execute adapter emits the same endpoint-prefixed STATE
+container before hooks as its calldata command, including empty batches.
 All source logs revert with a failed operation. Validation and transport commands gain no logging from these changes.
 
 ### Cashin of remaining native value
@@ -848,39 +848,72 @@ After crediting leftover pipeline value to the account, a host can emit
 Entities.Account and Actions.Cashin (36); account identity comes from the
 pipeline context. The BALANCE amount is the amount actually credited, not the
 resulting stored account balance. Skip the log when value is zero. Count this
-as one credit, rather than also emitting Account/Credit for the same operation.
+as operation context only when AccountBalance hook logs are present; do not apply
+it as a second balance change.
+
+### Port bookings
+
+`portBook` declares `Specs.Booking` without lane codes. Each Booking identifies
+`from, to, liability, debt, asset, amount`: debit `from` by `debt` of `liability`,
+then credit `to` by `amount` of `asset`. The port emits no operation log; account
+hooks own updated-balance logging. Zero quantities skip their hooks, and the
+whole call and its hook logs revert on failure.
+
+### Authoritative account balances
+
+`Logs.accountBalance(account, asset, amount)` emits one topic-free record:
+`[Codes.AccountUpdate:32][ACCOUNT_BALANCE header:8][account:32][asset:32][amount:32]`.
+The fixed codes are `Entities.Account | (Actions.Update << 32)`. The helper takes
+no codes argument. `amount` is the actual balance after mutation, never a delta.
+ACCOUNT_AMOUNT remains the request/delta schema; getBalance returns ACCOUNT_BALANCE.
+
+Emission belongs to the host's creditAccount and debitAccount implementations.
+RootZero's abstract hooks and low-level Balances ledger do not emit automatically.
+For a Balances-based host, reuse the mutation result without another storage read:
+
+```solidity
+function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+    if (amount != 0) Logs.accountBalance(account, asset, creditTo(account, asset, amount));
+}
+
+function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
+    if (amount != 0) Logs.accountBalance(account, asset, debitFrom(account, asset, amount));
+}
+```
+
+Skip unchanged zero-amount calls, but emit zero when a real debit empties a balance.
+Every successful mutation emits its resulting balance in execution order. Failed
+transactions revert all records. The helper uses temporary free memory and leaves
+the allocator unchanged; no preallocated block or Pipeline account context is needed.
+
+Index by chain, emitting host, account, and asset. Replace the stored balance with
+`amount`, respecting transaction/log order and reorgs. Do not add or subtract it.
+Position, cashout, authorization, and other operation logs describe intent
+or effects; they are not additional balance changes. A host bypassing these hooks
+must supply equivalent logging itself if it promises complete balance indexing.
+Older deployments retain their earlier event policy; use deployment-aware decoding.
 
 ### Bootstrap accounting
 
-Bootstrap emits one `[Account/Bootstrap codes][BALANCE stream]` after all debit
-hooks complete. Non-native requests appear in request order, including zero
-amounts, followed by the combined actual chainAsset debit if nonzero. Zero
-non-native entries describe a zero delta and do not invoke debit hooks. Account
-identity comes from the deployment's pipeline context. A log is omitted only
-when there are no non-native requests and no native debit. The endpoint INPUT
-lane has no log codes.
+Bootstrap itself emits no debit stream or input log. Non-native nonzero requests
+call debitAccount during processing. Requested native amounts accumulate; assigned
+value funds those requests first, then the remaining budget shortfall contributes
+to one native debit. That hook emits the actual updated native balance when enabled
+by the implementer. Zero amounts do not call debit hooks.
 
-This zero-inclusive policy differs from v1.50.0, which omitted zero entries.
-Consumers must accept zero deltas and must not infer that a Bootstrap log implies
-a nonzero debit or one hook call per block. Output count, order and requested
-amounts are unchanged; native requests still aggregate into one actual debit.
+For native requests 3 and 4, budget 5, and assigned value 4, output still contains
+balances 3 and 4, returned credit is 5, and the single actual native debit is 8.
+The logged AccountBalance contains the balance remaining after that debit, not 8.
+Output count, order, exact validation, and checked arithmetic are unchanged.
+Bootstrap allocates exactly the returned balance stream before hooks can allocate;
+there is no reserved log region or forkLog helper in the production adapter.
 
-Assigned value may cover requested chainAsset balances and the budget. Only the
-uncovered native amount appears in the log; native request splits, zero native
-amounts and the budget itself are not logged. Indexers apply every emitted Balance as a debit;
-there is no separate Account/Debit record to combine or override. Deployments
-using the earlier INPUT-log policy must be decoded according to their version.
+### Historical v1.51 Bootstrap shared output and reserved log space
 
-Budget is the minimum credit remaining after balances are funded. For requests
-of 3 and 4 chainAsset, budget 5, and assigned value 4, output contains balances
-3 and 4, returned credit is 5, and the single actual chainAsset debit is 8.
-All logs revert if any funding operation fails. The former fixed Bootstrap
-payload and additive per-item budget semantics require deployment-version-aware
-decoding and must not be used for this schema.
+These measurements describe v1.51, preserved in the test-only BootstrapLogged151
+fixture. Production Bootstrap now relies on hook-owned AccountBalance logging.
 
-### Bootstrap shared output and reserved log space
-
-The current implementation validates the outer BOOTSTRAP and final LIST together,
+The v1.51 implementation validates the outer BOOTSTRAP and final LIST together,
 then validates each exact ASSET_AMOUNT header in one processing pass. It reserves
 `[output:size][writable log prefix:32][log capacity:size + 72]` before hooks run.
 The output retains its own bytes-length word and Encoder leading word. Its logical
@@ -967,7 +1000,7 @@ Two benchmarks separate the effects:
   cashin, including Rooted/Pipeline account context.
 - `commander-bootstrap.bench.test.ts`: 15 paired cases compare the installed 1.48
   Bootstrap algorithm, fixed input codec, original allocator and Main debit hook
-  against the actual current ExecuteBootstrap. It includes decoding, allocation,
+  against the frozen v1.51 BootstrapLogged151 adapter. It includes decoding, allocation,
   native debit aggregation and changed input encoding as well as logging.
   A final budget contribution of 5 with no assigned value makes unfunded cases
   equivalent. Funded cases use budget zero and assigned value 10 * count + 5.
@@ -1082,7 +1115,7 @@ The complete results, including 32-item cases, log bytes and receipt gas, are in
 
 ### Bootstrap lazy hybrid writer experiment
 
-The hybrid is now the production implementation, tested through
+The hybrid was adopted before the v1.51 shared-allocation optimization, tested through
 `CommanderCurrentBootstrap` against the frozen `CommanderInputBootstrap` and
 two eager writer candidates across 70 scenarios. It retains the
 output as the event source until the first native request or zero amount that
@@ -1096,7 +1129,9 @@ The extension adds native-first, native-last, zero-first and zero-last batches.
 All variants still check exact output, credit, ledger balances and event bytes.
 The compiler/settings, storage setup and measurement boundaries are unchanged.
 These measurements precede the later cursor and branch cleanups. Rerunning the
-benchmark measures current production; frozen candidates retain the earlier code.
+benchmark now uses the frozen v1.51 adapter for CommanderCurrentBootstrap; the
+other frozen candidates retain their earlier code. Production Bootstrap no longer
+emits this debit stream.
 
 Positive values are execution gas saved versus the previous direct INPUT log
 plus any separate native debit event; negative values are extra gas.
