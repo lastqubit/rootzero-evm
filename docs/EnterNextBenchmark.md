@@ -1,5 +1,9 @@
 # enterNext benchmark
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Historical measurements: `Executions.enterNext` has been removed. Production
 callers now use `while (exec.more()) { exec.enter(spec); ... }`. The benchmark
 fixtures retain frozen combined-entry implementations for comparison; the

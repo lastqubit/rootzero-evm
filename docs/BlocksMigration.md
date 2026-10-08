@@ -1,4 +1,13 @@
+> Action and execution-cost APIs have been removed from production. Their measurements below are historical; action encoding survives only in frozen test fixtures.
+
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 # Historical Blocks caller migration benchmark
+
+The ExecutionCost measurements below are historical. That block and its production
+creator have been removed; the benchmark retains a frozen test-only creator.
 
 Current execution cursors no longer carry lane flags. Whole-stream selectors trust
 calldata bounds established during opening and validate block structure without

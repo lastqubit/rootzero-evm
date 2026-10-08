@@ -9,6 +9,9 @@ in the schema string or the protocol's standard key catalog. The prefix names th
 
 ## Wire Format
 
+This section describes blocks. Event category headers have separate fixed layouts;
+see [Indexing](Indexing.md#event-categories) and the header of `Logs.sol`.
+
 Every block uses the same header:
 
 ```txt
@@ -40,23 +43,18 @@ are opaque `bytes4` tags and only need to be unique in the context where they ar
 used. A host can publish the meaning of a custom key as an annotation:
 
 ```txt
-[codes:32][#annotation { uint entity, #bytes as data }]
-#schema { uint spec, #string as body }
+[Metadata category:1][subject:32][#schema { uint spec, #string as body }]
 ```
 
-Standard helpers emit LOG0 with Host/Annotate codes. The admin annotate command
-logs its complete INPUT stream of Annotation blocks instead. See Indexing.md for
+Standard helpers emit a Metadata category header followed by standard blocks.
+General labeling and the admin annotation command are removed; see Indexing.md for
 publisher scope, endpoint resolution and historical ABI compatibility.
 
 Annotation merge behavior is defined by the annotation block type rather than
-by the `#annotation` envelope. A `#schema` annotation is identified by its entity
+by the event header. A `#schema` annotation is identified by its entity
 and the block key encoded in `spec`: distinct keys accumulate, while the latest
 trusted claim for the same key replaces the earlier one. Other annotation types
 may define additive, historical, or explicitly revocable behavior instead.
-
-The standard `#action { uint action }` annotation assigns one primary semantic
-action to an entity. The latest trusted value replaces the previous value, and
-`Actions.None` clears the classification.
 
 The standard `#counterparty { bytes32 account }` annotation assigns a counterparty
 account to an entity such as a command or asset. The latest trusted value replaces
@@ -65,14 +63,8 @@ representation as in POSITION. The annotation identifies the counterparty, not
 whether to settle or realize it. Like other annotation helpers, it encodes the
 claim without validating either ID; consumers apply type and trust policy.
 
-The standard `#executionCost { uint base, uint batch }` annotation describes a
-command's estimated execution cost in destination-local execution units. Its
-payload is exactly 64 bytes. Estimate cost as `base + batch * batchCount`, where
-a batch is one logical group processed by the command, including all constituent
-blocks. Pipeline and transport overhead are separate. Estimates are advisory;
-missing annotations or unknown batch counts mean unknown cost. The latest
-trusted annotation replaces both fields; zero values are valid estimates.
-`ExecutionCost.executionCost(entity, base, batch)` publishes the annotation.
+Execution-cost estimates are maintained off-chain per command. The execution-cost
+annotation helper, block key, spec and schema have been removed.
 
 For example, a host-specific payment block can use a small literal, the command
 selector, or any other chosen `bytes4` value as long as that key is not
@@ -415,15 +407,15 @@ plus that length. The BYTES child must occupy the remainder of the parent exactl
 define the layout; the spec has minimum 40, unbounded maximum and hint 256.
 `Encoder.createAssetPreimage` preserves the complete preimage without validating
 its hash or implying host support. Emit existing blocks through endpoint lane
-logging or the generic Logs.mem/Logs.copy primitives.
+logging or `Logs.metadata(uint(asset), data)`.
 
 For opaque keccak asset IDs, require at least three preimage bytes, hash-format
 byte 0x01 and the Asset category byte. Verify
 `asset == 0x02 || preimage[1:3] || bytes29(keccak256(preimage))`.
 Unknown hash formats require their own rules. Keep the emitting publisher with
 the claim; malformed or mismatched claims must not become verified preimages.
-Asset lifecycle logs continue to use the existing `#asset` block and separate
-scope/action/state codes.
+Asset operation meaning comes from the endpoint policy; its execution lanes
+can contain standard `#asset` blocks.
 
 ## Transport envelopes
 
@@ -438,12 +430,11 @@ digest is keccak256 of the exact forwarded payload bytes, excluding Envelope
 routing fields and block headers unless those bytes are themselves part of the
 forwarded payload. This matches Portal's witness hashing convention.
 
-Logs.envelope(portal, resources, key, digest, codes) emits codes plus the block:
-168 bytes using LOG0, without topics. The caller establishes host/account scope
-and supplies Relay or Dispatch action codes. The helper neither computes the
-digest nor sends a message. Account scope requires documented pipeline context
-or explicit account-bearing blocks; host scope normally resolves from the emitter.
-A separately published payload must match the digest to be accepted.
+`Logs.envelope(portal, resources, key, digest)` emits a fixed Envelope
+category record: category byte followed by four full-width fields.
+It is 129 bytes, has no topics, and contains no ENVELOPE block header. The block
+codec remains available separately. The helper neither computes the digest nor
+sends a message. A separately published payload must match the digest.
 
 Relay/Dispatch input schemas and runners are unchanged. The legacy Relay and
 Dispatch ABI-event mixins have been removed; applications choose where to emit envelopes.
@@ -452,10 +443,11 @@ Dispatch ABI-event mixins have been removed; applications choose where to emit e
 
 `#resolution` has schema `bytes32 key, bytes32 digest`: exactly 64 payload bytes,
 72 bytes including the header. Keys/Specs/Sizes/Headers/Schemas.Resolution define
-the canonical layout. Encoder.createResolution constructs it; Logs.resolution
-emits codes plus the block (104 bytes, no topics).
-The key and digest identify a recovery record on the emitting host. Codes select
-Unresolved or Resolved; the codec does not mutate storage or verify witnesses.
+the canonical block layout. Encoder.createResolution constructs it.
+`Logs.resolution(key, digest, resolved)` emits a separate 66-byte category record:
+category, key, digest, and one boolean byte (0 unresolved, 1 resolved).
+The key and digest identify a recovery record on the emitting host. The helper
+does not mutate storage or verify witnesses.
 Resolved denotes consumption of a matching record. It does not certify downstream
 delivery separately, and subsequent transaction reverts discard the log.
 
@@ -465,30 +457,37 @@ The canonical `#introduction` schema is `uint peer, bytes32 origin, uint blocknu
 Its payload is exactly 96 bytes (104 including the header).
 `Keys.Introduction`, `Specs.Introduction`, `Sizes.Introduction`,
 `Headers.Introduction` and `Schemas.Introduction` define the layout.
-`Encoder.createIntroduction` constructs it and `Logs.introduction` emits it.
-HostIntroduce codes scope the log to the receiving host identified by the emitter.
+`Encoder.createIntroduction` constructs the block. `Logs.introduction` emits a
+category record containing the three fields followed by raw UTF-8 name bytes,
+without a block wrapper or a name length field (97 + name byte length).
+The receiving host is identified by the emitter.
 The host validates the peer against the caller; origin is transaction provenance,
 and blocknum is an unverified caller-supplied claim. Introduction grants no trust.
-Indexers preload this schema for discovery.
+The name is a nonunique discovery hint, not an identifier. Hosts without an
+introduction remain identifiable by host ID. Indexers preload the event layout
+for discovery; the standard block schema above describes only the fixed fields.
 
 ## Endpoint Registration
 
 The canonical `#endpoint` schema is `uint id, uint state, uint input, uint output`.
-Its payload is exactly 128 bytes (136 including the header). Each lane retains
-its complete Spec + Codes word. `Keys.Endpoint`, `Specs.Endpoint`,
-`Sizes.Endpoint`, `Headers.Endpoint` and `Schemas.Endpoint` define this layout;
-`Encoder.createEndpoint` constructs it and `Logs.endpoint` emits it.
-Registration uses HostAdd codes and the emitter identifies the publishing host.
-Indexers preload this layout and codes to decode discovery without an ABI event
-or a prior endpoint registration.
+Its payload is exactly 128 bytes (136 including the block header). Specs are pure;
+flags select logged lanes. `Keys.Endpoint`, `Specs.Endpoint`, `Sizes.Endpoint`,
+`Headers.Endpoint` and `Schemas.Endpoint` define this layout. `Encoder.createEndpoint`
+constructs the block; `Logs.endpoint` emits category 0x05, those four fields, and
+the registration name as trailing raw UTF-8 bytes (129 + name byte length).
+There is no block wrapper, name length field or padding. Indexers preload this
+layout to decode discovery. Endpoint names no longer require LABEL metadata.
 
 ## Endpoint Lanes
 
-Endpoint blocks publish `[spec:16][codes:16]` for each state, input, and output lane.
-The upper half retains the spec fields; the lower half holds four uint32 codes.
-`Lanes.create(spec, codes)` rejects overflow and overlap; `Lanes.spec` and
-`Lanes.codes` extract each component. Zero codes disable logging. Plain Specs
-constants are valid silent lanes. Keep Specs constants unchanged for block APIs.
+Logging policy is encoded in the endpoint ID flags byte alongside behavior flags.
+Bits 2/3/4/5 mean Execution/State/Input/Output; lane flags include Execution:
+`Logs.Execution=4`, `Logs.State=12`, `Logs.Input=20`, `Logs.Output=36`.
+Bit 0 is Funded, bit 1 Admin, bit 6 endpoint-defined and bit 7 Handoff.
+Registration takes one flags argument; lane bits without Execution are rejected.
+Endpoint identity and logging policy are fixed at deployment. Tags and custom effects are
+maintained offchain; see [Indexing](Indexing.md#offchain-interpretation).
+Specs with nonzero lower halves are rejected by endpoint registration.
 Each spec identifies its top-level block key and retains bounds and hints. Each block
 represents one operation; fixed compositions use a custom parent block.
 Solidity endpoint helpers accept specs such as `Specs.AssetAmount`, while
@@ -537,11 +536,12 @@ supplied state is empty. Block sizes include the header; 32-bit fields preserve
 the full 24-bit payload hint plus that header. Zero output size disables initial
 allocation. With no source key, opening reserves one output block.
 
-Internal flag bits are `StateSource = 1`, `LogState = 2`, `LogInput = 4`, and
-`LogOutput = 8`. `Executions.describe(state, input, output)` derives logging bits
-from nonzero codes in each lane. Public behavior flags remain in endpoint IDs
-and are omitted from descriptors. Reserved bits are zero.
-Descriptors carry allocation and logging instructions, not complete schema metadata.
+Internal flags are `StateSource = 1`, `LogState = 2`, `LogInput = 4`,
+`LogOutput = 8`, `LogEnabled = 16`, and `ByteCapacity = 32`.
+`Executions.describe(state, input, output, flags)` derives enabled
+logging from its packed flags and precomputes equal-fixed-stride capacity hints. The
+three-spec overload is silent. Public endpoint behavior flags stay in the ID.
+Descriptors carry allocation and logging instructions, not complete schemas.
 
 Solidity code constructs this metadata with `Executions.describe`. The same
 library initializes an `Execution` through `exec.openContext` or `exec.openInput`;
@@ -552,11 +552,13 @@ and the output writer. Input-only endpoints use `exec.openInput`, which accepts
 an explicit budget but no command account. Passing the budget explicitly keeps
 both opening helpers pure and supports callers that forward an existing budget.
 Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
-`exec.logInput(id, descriptor)` logs raw input from a freshly opened input-only
-execution, before consumption, when that lane has nonzero codes. It creates an
-INPUT header around the stream instead of reading preceding calldata. The ID,
-header, and payload are emitted in one LOG0; no execution fields are changed.
-
+When logging is enabled, opening snapshots selected sources into a prefix of the
+output buffer. Commands reserve ID and account, input-only endpoints only ID.
+Selected empty lanes retain their container headers. `finish(id, descriptor)`
+emits one completion event and returns an alias to output after replacing part
+of the prefix with a bytes length word. `finish()` is silent. Both finalize once;
+the old event prefix must not be reused. No log prefix is allocated when disabled.
+The output cursor retains its payload-start offset in bits 64-95 across growth.
 
 `Cursors` supplies shared range primitives: `create(abs, endAbs)` validates bounds,
 while `pack(abs, endAbs)` packs already validated positions without repeating checks.
@@ -578,7 +580,7 @@ are absolute. Encoder continues to use its separate relative offset/capacity mod
 
 Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
 the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
-behavior, and bits 2 through 5 are unassigned. Logging is selected by lane codes.
+behavior, and bits 2 through 5 select logging as part of the same endpoint identity.
 
 Execution stores input and state in independent uint cursors, each using bits
 0-63 for current/end. Source selection belongs to the descriptor, not
@@ -885,7 +887,7 @@ Settlement rejects all nonempty input.
 
 `repay` accepts POSITION state and empty input and returns one POSITION per
 source position, preserving every field except `debt`, which becomes zero.
-It publishes `Actions.Repay` (82). The unfunded `RepayHook` must satisfy the
+The unfunded `RepayHook` must satisfy the
 complete exact debt or revert and must not mutate its position argument; the
 command clears debt only after the hook succeeds. `Settlement.repay` routes
 payment through `BookHook`: zero counterparty debits the active account only,
@@ -1275,7 +1277,6 @@ entity               uint entity
 account              bytes32 account
 asset                bytes32 asset
 status               uint code
-codes                uint codes
 amount               uint amount
 assetAmount          bytes32 asset, uint amount
 balance              bytes32 asset, uint amount
@@ -1307,10 +1308,8 @@ dispatch             uint portal, uint resources, #bytes as payload
 context              bytes32 account, #state, #input
 recover              uint handler, uint value, bytes32 key, #bytes as witness
 annotation           uint entity, #bytes as data
-action               uint action
 counterparty         bytes32 account
 groups               #string as description
-label                bytes32 namespace, #string as name
 schema               uint spec, #string as body
 ```
 
@@ -1339,22 +1338,12 @@ with its immutable Counterparty; position constraints remain separate commands.
 Empty routes invoke no hook and return a Position with equal asset/liability and
 amount/debt. The position is logged normally; settlement may still book both legs.
 
-`#codes` carries one packed word using the event-code convention: up to eight
-nonzero uint32 IDs, lowest slot first, followed by zero padding. Zero represents
-an empty list. Categories are Actions (0), Entities (1), Effects (4), and States (5). The codec
-checks the block shape, not code semantics. Consumers define which codes apply;
-`assetCodes` requires one Active or Inactive state and describes current conditions,
-not historical actions or effects. See [Indexing](Indexing.md#codes-and-correlation).
-
 `#entity` carries one full-width identifier, matching the `uint entity` field in
 annotations. It is distinct from `#node` and `#asset`; the codec validates the
 exact 32-byte payload without restricting the identifier's kind or rejecting zero.
-`entityCodes` consumes these blocks and returns one `#codes` per input in order,
-including repeated or unknown entities. Empty input produces empty output. Its
-hook defines entity kinds, applicable current conditions, and code packing, without requiring
-Active/Inactive for every entity kind. Zero codes means unknown or no condition
-reported; it is distinct from an explicit `States.Inactive`. Historical actions
-and effects do not belong in this query response.
+
+`GetBalance` is the only built-in query. Custom queries can use `QueryBase` for
+specific direct-read requirements; normal application reads come from the indexer.
 
 ### Host Accounts
 
@@ -1394,15 +1383,10 @@ There is no deadline; expiry enforcement belongs to the invoking entrypoint.
 encode it; `Blocks.unpackPipeline` validates and decodes it. Executions provides
 `outputPipeline` and `unpackPipeline`.
 
-`Logs.pipeline(account, budget, codes)` emits codes plus one PIPELINE block using
-LOG0. These helpers do not authorize accounts, transfer funds, start pipelines,
-or change the execution account. `Pipeline.pipe` emits this log before processing
-any steps, using `Entities.Account` codes, including when the step stream is empty.
-
-The convention is to emit context when a pipeline starts; nested pipelines retain
-the same account. Special implementations that change accounts must explicitly
-log the switch and restoration and document their interpretation for indexers.
-Ordinary pipelines need no end marker to restore account context.
+Pipeline execution emits no entry event. The former Pipeline category (6) is
+reserved and is not reused. Execution records carry their own account context;
+Balance records carry actual balances. The standard block codecs above remain
+available for explicit block data, independently of the removed event.
 
 This replaces the Rooted schema and helper APIs and removes RootedEvent and its
 public export. The new key prevents confusing the two-word Pipeline layout with
@@ -1419,18 +1403,17 @@ Encoder reserves one owned 32-byte word before the bytes length on allocation
 and every growth. It is separate from logical capacity, length, cursor offsets,
 and trailing scratch. Descriptor allocation hints and growth thresholds are
 unchanged: filling an exact initial capacity does not resize the buffer.
-`Logs.memWrap(prefix, key, value)` temporarily uses that word and the bytes length
-to emit a wrapper without copying, then restores both. It requires a finished
-Encoder-owned buffer, not arbitrary Solidity bytes. Resolve addresses after any
-growth. This prefix space wraps the whole buffer; nested streams still need
-explicit header reservations within their logical output.
+Execution logging reserves its category, endpoint, account and selected lane
+headers inside the shared writer. `Logs.execution` emits that initialized range
+without copying. `finish` then exposes only the output region as returned bytes.
+Resolve addresses after growth; the output-start offset survives buffer resizing.
 
 ### Account balances and requested amounts
 
 `#accountBalance { bytes32 account, bytes32 asset, uint amount }` reports an actual
-balance, including zero. getBalance returns this schema and Logs.accountBalance
-uses it for hook-owned authoritative balance updates. Its payload is 96 bytes;
-the complete block is 104 bytes.
+balance, including zero. getBalance returns this schema. Its payload is 96 bytes;
+the complete block is 104 bytes. `Logs.balance` instead emits a fixed 97-byte
+Balance category record with account, asset and actual amount, without a block wrapper.
 
 `#accountAmount` retains the same field layout with a different key and meaning:
 it carries requested amounts, including credit/debit port inputs. Do not interpret

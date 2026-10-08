@@ -14,6 +14,12 @@
   `npm test` excludes `*.bench.test.ts` suites.
 - Run `npm run test:all` for full verification, including benchmarks, before a release.
 - New benchmark suites must use the `*.bench.test.ts` filename convention.
+- Keep permanent benchmarks limited to the core production workloads listed in
+  README.md. Prefer extending those suites over adding another benchmark file.
+  Remove one-off comparison suites and unused candidate fixtures after an
+  experiment; preserve useful production correctness cases as regular tests.
+- Keep gas-only comparisons in benchmarks. Regular tests may still assert
+  functional gas-limit behavior, such as successful recovery after an out-of-gas call.
 
 ## Releases
 

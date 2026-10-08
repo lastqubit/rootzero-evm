@@ -1,5 +1,9 @@
 # Execute
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 `Execute` provides specialized decoding and output writing for local execute adapters, exported
 from `Codec.sol`. It replaces the experimental `MemoryBlocks` API. The old
 memory-cursor experiment survives only as `test/PreviousMemoryBlocks.sol` for

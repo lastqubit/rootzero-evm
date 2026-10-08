@@ -1,5 +1,9 @@
 # Burn execution runner benchmark
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 `Burn` uses `CommandBase.runCommand(id, descriptor, context, burnOne)` to process its state.
 The benchmark retains the previous `openCommand` / `more` / `close` implementation
 in `TestBurnLoopHost` and compares it with `TestBurnHost`, which inherits the

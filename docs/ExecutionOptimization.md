@@ -1,5 +1,9 @@
 # Execution and buffer optimizations
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Raw accessors have since been removed from Executions. Their measurements below
 are historical; current whole-stream selectors validate blocks and return cursors.
 

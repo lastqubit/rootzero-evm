@@ -1,5 +1,9 @@
 # Execute output preallocation experiment
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 These measurements predate composite Bootstrap. Its historical comparisons retain
 the fixed Bootstrap layout; current behavior and gas are covered by
 `bootstrap.test.ts` and `adapter-optimizations.bench.test.ts`.

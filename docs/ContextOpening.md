@@ -1,5 +1,9 @@
 # CONTEXT opening comparison
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 `test/context-opening.bench.test.ts` compares the existing specialized
 `Executions.openContext` decoder with `Blocks.unpackContext(Cursors.wrap(context))`
 followed by `Cursors.expectEnd(nextCur)`. Both use the same output-capacity

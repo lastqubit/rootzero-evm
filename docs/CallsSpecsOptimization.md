@@ -1,5 +1,9 @@
 # Calls returndata and specification sizes
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 The measurements below are historical. Current Calls.raw and Calls.tryRaw use
 uint cursor overloads instead of the former calldata Copy variants, and the
 default compiler configuration enables viaIR. See [HookCursors.md](HookCursors.md)

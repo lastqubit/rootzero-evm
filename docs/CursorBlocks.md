@@ -1,5 +1,9 @@
 # Blocks (formerly CursorBlocks)
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Header constants now live in `codec/Headers.sol` as `Headers`, using `uint`.
 Import through Codec/Commands or directly; `Specs.sol` no longer exports Headers.
 The former uint64 constants are isolated in the test-only `LegacyHeaders`.

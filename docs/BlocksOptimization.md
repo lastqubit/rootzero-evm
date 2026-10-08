@@ -1,5 +1,9 @@
 # Blocks allocation and scanning
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Historical benchmark record: dedicated empty-block helpers mentioned below have
 since been removed. Their measurements describe the earlier API; current
 benchmarks omit those operations. Empty dynamic payloads remain supported.

@@ -1,5 +1,9 @@
 # Writers, Decoders, and Budgets
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Historical measurements. The Decoders and Writers libraries and their dedicated
 comparison fixtures have been removed. Use CursorBlocks and Encoder for new code.
 

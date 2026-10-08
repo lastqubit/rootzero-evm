@@ -1,5 +1,9 @@
 # Encoder
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 `Buffers` has been removed from the production API. Use Encoder for buffer
 initialization, reservation, growth, and finalization. `LegacyBuffers` is retained
 only under contracts/test for historical comparisons, outside the package.
@@ -123,9 +127,9 @@ writer helpers meets the cursor writer backing-memory requirements.
 
 `test/encoder-buffer.test.ts` covers every cursor writer, growth, metadata,
 capacity boundaries, dirty memory, padding, and retained scratch allocations.
-`test/encoder-buffer.bench.test.ts` compares against `Buffers.reserve` plus the
-frozen test-only offset writer, including finalization. Warm tests preallocate and touch
-both buffers before timing; allocation and growth tests include those costs.
+`test/encoder-buffer.bench.test.ts` measures the current BALANCE and CONTEXT
+writers from allocation through finalization, with exact hints and growth from
+zero capacity. It covers memory and calldata payloads without frozen candidates.
 Outputs are checked against independent encodings for every benchmark row.
 Results are recorded in `.npm-cache/encoder-buffer-results.json`.
 
@@ -270,7 +274,7 @@ been removed. Cursor sources must already be valid calldata ranges.
 
 Default cursor overloads copy complete blocks, preserving their headers.
 For composites, each supplied source is a complete BYTES child (STRING for
-LABEL/SCHEMA). Cursor Wrap helpers take payloads and create those headers.
+SCHEMA). Cursor Wrap helpers take payloads and create those headers.
 Neither variant advances or revalidates its sources. The custom payload adapter
 outputBlockWrap(exec, spec, dataCur) retains Specs.validate against the selected
 payload length; outputBlock(exec, dataCur) copies a complete validated block.
@@ -281,7 +285,7 @@ payload length; outputBlock(exec, dataCur) copies a complete validated block.
 | outputList / outputBytes / outputString | outputListWrap / outputBytesWrap / outputStringWrap |
 | outputStep / outputCall / outputDispatch | outputStepWrap / outputCallWrap / outputDispatchWrap |
 | outputRelay / outputContext / outputRecover | outputRelayWrap / outputContextWrap / outputRecoverWrap |
-| outputLabel / outputSchema | outputLabelWrap / outputSchemaWrap |
+| outputSchema | outputSchemaWrap |
 
 For example, take returns a complete block for outputBlock; unpack returns
 a payload for outputBlockWrap. outputContext(exec, account, stateCur, inputCur)
@@ -314,9 +318,9 @@ and writes full-width fields in schema order.
 `writeList`, `writeBytes`, and `writeString` are thin named wrappers. Memory
 strings are passed as `bytes(text)`. These leaf inputs exclude the outer header.
 Composite payload writers use `writeStepWrap`, `writeCallWrap`,
-`writeDispatchWrap`, `writeRelayWrap`, `writeRecoverWrap`, `writeLabelWrap`,
+`writeDispatchWrap`, `writeRelayWrap`, `writeRecoverWrap`,
 `writeSchemaWrap`, and `writeContextWrap`, each with memory and source-cursor
-overloads. Label and Schema add STRING children; the other composites add BYTES
+overloads. Schema adds a STRING child; the other composites add BYTES
 children. The corresponding default cursor writers copy complete child blocks
 using the same size/reserve/header/word/copy sequence. The three-argument
 writeBlock(cur, dst, dataCur) reserves once and copies a complete block verbatim;
@@ -601,143 +605,41 @@ memory footprint with solc 0.8.35, viaIR, optimizer 200, and Cancun. Cases cover
 input/context opening, fixed/scanned counts, 0/1/2/4/16 blocks, and output hints
 present/absent. This result applies to those benchmark consumers.
 
-## Reserved state blocks and logging
+## Event buffers and logging
 
-`Encoder.writeBalanceAt(abs, asset, amount)` and
-`Encoder.writePositionAt(abs, asset, amount, liability, debt, counterparty)`
-write a complete block into an already reserved memory range and return its
-end address. Struct overloads accept `AssetAmount` and `Position` and copy their
-payload directly. The caller owns 72 or 168 writable bytes respectively; struct
-sources must not overlap the destination block. These primitives do not allocate,
-validate, reserve, or advance a writer. Growable scalar writers share these
-primitives. Structured execution outputs reserve once and use the struct writer.
+The category layouts and emission rules are defined at the top of
+[`Logs.sol`](../contracts/codec/Logs.sol) and in [Indexing](Indexing.md).
+Event headers are not standard block headers.
 
-`exec.outputBalance(...)` and `exec.outputPosition(...)` only append blocks.
-Select output lane codes to log the complete output through the endpoint runner,
-or use `exec.finish(id, descriptor)` / `exec.close(id, descriptor)` in custom loops.
-See [output finalization](#output-finalization-and-logging).
+Execution opening reserves 65 bytes for category, endpoint and account, followed
+by selected STATE/INPUT snapshots and an optional OUTPUT header. The output cursor
+tracks its payload offset through buffer growth. `finish(id, descriptor)` seals
+the output header and calls `Logs.execution` on the same buffer, then returns a
+bytes view of output without copying. The external ABI encoder still applies.
+With no logging bits in the endpoint ID, opening reserves no event prefix and finish emits nothing.
 
-### Correlated streams
+Ports initialize the account to zero unless their implementation explicitly
+supplies an account. Guards set the authorized caller account before opening.
 
-`Logs.stream(correlationId, abs, size)` emits a tagged correlation ID
-followed by an existing block stream using `LOG0`. The ID's highest byte MUST be
-`Logs.Stream` (`0x00`). The helper emits the full ID unchanged and performs no
-validation, packing, allocation, or copying.
+`Logs.metadata(subject, data)` accepts ordinary bytes, including shared empty
+values, and copies the block stream into temporary memory for a subject-prefixed
+Metadata event. It preserves the source and allocator. Multiple blocks can share
+one metadata event. It does not validate or interpret their claims.
 
-The caller owns an initialized valid block stream at the absolute position and
-**32 writable bytes immediately before it**. The helper saves that preceding
-word, overwrites it with the ID, logs, and restores it exactly. Payload and
-free-memory pointer remain unchanged. Standard bytes payloads have their length
-word immediately before them, so finalized bytes can be used directly:
-
-```solidity
-Logs.stream(correlationId, Encoder.pos(output, 0), output.length);
-```
-
-An active Encoder buffer can also be logged using its written length (not capacity),
-or a subrange can be selected when the preceding-word requirement is satisfied.
-The pointer and size are trusted; no bounds or block-framing checks are performed.
-See the [wire format](Indexing.md#correlated-block-stream-logs) for indexer rules.
-
-### Codes and block-stream primitives
-
-`Logs.mem(codes, abs, size)` and `Logs.copy(codes, abs, size)` both emit exactly
-`uint256 codes | block stream` using `LOG0`, without topics, a format tag, ABI
-wrapper, or padding. All 256 bits of codes are emitted unchanged. The caller
-establishes block validity and code semantics; neither primitive validates them.
-
-`mem` takes an absolute memory address and initialized byte length. The caller
-owns the stream and the 32 writable bytes immediately before it. The helper saves
-that word, writes codes, logs, and restores it exactly. It performs no copying or
-allocation. Address subtraction/addition and `size + 32` must not wrap. For bytes:
+Access, Endpoint, Balance, Introduction, Envelope and Resolution use fixed
+category-specific headers in temporary free memory. No standard block wrapper
+or persistent allocation is required. Balance emits actual replacement values;
+Resolution takes a boolean status. Pipeline execution emits no entry event.
+Endpoint carries the ID, three specs and trailing raw name bytes; Introduction
+also appends its peer name. Logging is encoded in the endpoint ID. Envelope carries no codes; action
+classification and custom effect interpretation are maintained offchain.
 
 ```solidity
-Logs.mem(codes, Encoder.pos(output, 0), output.length);
+Logs.balance(account, asset, updatedBalance);
+Logs.metadata(subject, Encoder.createSchema(spec, bytes(body)));
+Logs.envelope(portal, resources, key, digest);
+Logs.resolution(key, digest, true);
 ```
 
-For active Encoder buffers, use the written length rather than capacity and
-reacquire the address after growth. Empty streams still need the preceding word.
-
-`copy` takes an absolute calldata offset and byte length. The caller proves
-`abs <= calldatasize()` and `size <= calldatasize() - abs`; a packed cursor must
-be unpacked first. It stores codes at the free-memory pointer, copies the selected
-bytes immediately afterward, and logs them. It leaves the free-memory pointer
-unchanged and preserves allocated memory. The temporary range of `32 + size`
-bytes must be available and its address arithmetic must not wrap. Its contents
-are unspecified afterward; no pointer to it escapes. Out-of-bounds calldata is
-zero-filled by the EVM, so valid source bounds are a caller requirement.
-
-```solidity
-// input is bytes calldata containing the complete block stream.
-uint abs;
-assembly ("memory-safe") { abs := input.offset }
-Logs.copy(codes, abs, input.length);
-```
-
-These primitives coexist with the correlation-stream helper. Their wire formats
-are not automatically distinguishable; see [Indexing](Indexing.md#codes-and-block-stream-logs).
-
-### Single balance helper
-
-`Logs.balance(bytes32 asset, uint amount, uint codes)` creates a BALANCE block
-through `Encoder.createBalance` and emits it through `Logs.mem`. It requires no
-existing writer or caller-managed scratch memory:
-
-```solidity
-Logs.balance(asset, amount, codes);
-```
-
-It emits exactly `codes | BALANCE block` (104 bytes), with full-width values and
-no account, extra tag, or topics. Codes and the emitter's protocol define whether
-the quantity is a credit/debit amount or an updated balance.
-
-### Output finalization and logging
-
-`exec.finish()` finalizes output without checking source consumption or changing
-the budget. `exec.expectEnd()` requires both cursors to equal their exclusive ends,
-rejecting pending data and overshot cursors. `exec.close()` combines that check,
-finalization, and returning and clearing the remaining budget. Both no-argument
-finalizers are pure and silent.
-
-`exec.finish(id, descriptor)` also logs the finalized output when the descriptor
-selects output logging. `exec.close(id, descriptor)` adds the consumption check
-and budget drain. Logs contain `[id:32][OUTPUT header][output stream]`; returned
-bytes remain the original stream. The ID must match the registered descriptor.
-
-Batch runners finish after a complete loop over valid bounded cursors, then call
-`drainBudget()`. One-shot runners use checked close. Custom loops that can exit
-early must use `expectEnd()` or checked close when complete consumption is required.
-Do not append after finalization. Low-level logging remains available through
-`Logs.memWrap(id, Keys.Output, output)` for finished Encoder-owned buffers.
-
-### Pipeline context logging
-
-```solidity
-Logs.pipeline(account, budget, codes);
-```
-
-This encodes `Encoder.createPipeline(account, budget)` and emits it through
-`Logs.mem`: 32 bytes of codes plus a 72-byte PIPELINE block, without topics.
-budget is the invocation's initial native-value budget. Nested pipelines preserve
-the account; special implementations must explicitly log account switches and
-restoration. The helper performs no authorization or execution. `Pipeline.pipe`
-calls it at entry, including empty pipelines. See [Pipeline context](Schema.md#pipeline-context).
-
-
-### Envelope logging
-
-```solidity
-Logs.envelope(portal, resources, key, digest, codes);
-```
-
-The helper constructs Encoder.createEnvelope and emits it through Logs.mem:
-32 bytes of codes plus a 136-byte Envelope block. digest is keccak256 of the
-exact forwarded payload; key remains an independent transport lookup key.
-The caller defines scope and action codes. No hashing or transport occurs here.
-See [Transport envelopes](Schema.md#transport-envelopes).
-
-`Encoder.createBootstrap(uint budget, bytes memory balances)` creates one
-composite BOOTSTRAP containing the budget and a LIST wrapping the supplied
-ASSET_AMOUNT stream. It allocates the final 48 + balances.length bytes once.
-The former three-scalar Bootstrap creator and fixed Bootstrap size/header
-constants are removed.
+The old correlated stream and untagged prefix helpers are retained only in
+historical test fixtures. They are not part of the current Logs API.

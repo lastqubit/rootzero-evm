@@ -1,5 +1,9 @@
 # Named unpacker composition
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Solidity 0.8.35, viaIR, optimizer 200, Cancun. The composed BALANCE implementation
 is now adopted in Blocks; named fixed-word wrappers use a/b temporaries for casts.
 

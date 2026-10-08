@@ -1,5 +1,9 @@
 # Portal forwarding gas reserve
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 `Portal.forward` uses `forwardGas` to keep gas for recovery before attempting
 the commander's pipe. The helper returns the call budget, or zero to skip delivery.
 If there is no pipe budget left, it skips delivery and
@@ -29,10 +33,11 @@ must be included in the reserve, alongside the fallback after CALL.
 ## Verification
 
 ```sh
-npx hardhat test test/portal-gas.bench.test.ts test/portal-reserve.bench.test.ts test/portal.test.ts
+npm run bench -- test/portal-reserve.bench.test.ts
+npm test -- test/portal.test.ts
 ```
 
-Both benchmarks now call production `Portal.forward`. The pipe attempts to return
+The retained reserve benchmark calls production `Portal.forward`. The pipe attempts to return
 4 GiB of memory, causing a real out-of-gas halt. Traces verify the explicit gas
 budget reaches the child, including the value stipend, so successful recovery
 does not accidentally depend on a larger EIP-150 reserve.
@@ -56,7 +61,7 @@ bytes array. All cases finish with at least 8,566 gas left. More transport work
 needs its own allowance; this margin does not fund arbitrary storage writes.
 Results are saved to `.npm-cache/portal-reserve-results.json`.
 
-The boundary benchmark writes `.npm-cache/portal-gas-results.json`. It checks
+The retired boundary benchmark wrote `.npm-cache/portal-gas-results.json`. It checked
 fresh, overwritten, and unchanged digests and records whether the pipe was
 attempted. Separate tests cover retained ETH, direct storage without calling the
 pipe, insufficient gas even for storage, and a derived constructor's extra reserve.
@@ -66,7 +71,7 @@ pipe, insufficient gas even for storage, and a derived constructor's extra reser
 Gas estimation may select a cheaper successful path that skips the pipe and stores
 the message. A successful transaction does not guarantee delivery: callers that
 require an attempt must provide a gas budget covering the pipe and reserve, and
-observe `Codes.HostUnresolved` Resolution block logs to detect messages awaiting recovery.
+observe Resolution category logs with status 0 (unresolved) to detect messages awaiting recovery.
 
 Previously, forwarding all available gas left only the EIP-150 reserve after pipe
 out-of-gas: a fresh 256-byte message needed about 1.58 million transaction gas.

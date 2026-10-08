@@ -1,5 +1,9 @@
 # Internal hook cursors
 
+> Historical experiment suites referenced below have been retired. Recorded
+> measurements are retained; see [the current core benchmarks](../README.md#development)
+> for the supported benchmark commands.
+
 Pass calldata-backed payloads through internal hooks as uint cursors. The low
 32 bits hold the absolute position and the next 32 bits hold the exclusive end.
 The caller establishes provenance and logical bounds; the hook decodes or forwards
