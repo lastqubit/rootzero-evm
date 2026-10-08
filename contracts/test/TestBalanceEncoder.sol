@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {LegacyBlocks} from "./LegacyBlocks.sol";
 
 import {ReservedBlockEncoder} from "./ReservedBlockEncoder.sol";
 import {Encoder} from "../codec/Encoder.sol";
@@ -31,16 +30,6 @@ abstract contract BalanceEncoderHarness {
         }
         used = initialGas - gasleft();
         assembly ("memory-safe") { allocated := sub(mload(0x40), initialMemory) }
-    }
-}
-
-contract TestBalanceEncoderPrevious is BalanceEncoderHarness {
-    function write(bytes memory dst, uint i, bytes32 asset, uint amount) internal pure override returns (uint) {
-        LegacyBlocks.writeBalance(dst, i, asset, amount);
-        unchecked { return i + 72; }
-    }
-    function create(bytes32 asset, uint amount) internal pure override returns (bytes memory) {
-        return LegacyBlocks.createBalance(asset, amount);
     }
 }
 

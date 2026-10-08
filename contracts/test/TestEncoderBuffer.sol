@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {ReservedBlockEncoder} from "./ReservedBlockEncoder.sol";
 import {Encoder} from "../codec/Encoder.sol";
-import {LegacyBuffers} from "./LegacyBuffers.sol";
 
 abstract contract EncoderBufferHarness {
     function init(uint capacity) internal pure virtual returns (uint, bytes memory);
@@ -57,42 +55,6 @@ abstract contract EncoderBufferHarness {
         output = finish(cur, dst);
         used = beforeGas - gasleft();
         assembly ("memory-safe") { allocated := sub(mload(0x40), beforeMemory) }
-    }
-}
-
-contract TestEncoderBufferPrevious is EncoderBufferHarness {
-    function init(uint capacity) internal pure override returns (uint cur, bytes memory dst) {
-        cur = LegacyBuffers.cursor(capacity);
-    }
-    function balance(uint cur, bytes memory dst, bytes32 asset, uint amount) internal pure override returns (uint nextCur, bytes memory value) {
-        uint i;
-        (nextCur, value, i) = LegacyBuffers.reserve(cur, dst, 72, 72);
-        ReservedBlockEncoder.writeBalance(value, i, asset, amount);
-    }
-    function reserve(uint cur, bytes memory dst, uint size, uint scratch) internal pure override returns (uint, bytes memory, uint) {
-        return LegacyBuffers.reserve(cur, dst, size, size + scratch);
-    }
-    function finish(uint cur, bytes memory dst) internal pure override returns (bytes memory) {
-        return LegacyBuffers.finish(cur, dst);
-    }
-    function append(uint cur, bytes memory dst, bytes32 account, bytes memory state, bytes memory input, uint stateCur, uint inputCur, uint mode) internal pure override returns (uint nextCur, bytes memory value) {
-        uint i;
-        if (mode == 0) {
-            (nextCur, value, i) = reserve(cur, dst, 72, 0);
-            ReservedBlockEncoder.writeBalance(value, i, account, 123);
-        } else if (mode == 1) {
-            (nextCur, value, i) = reserve(cur, dst, 40 + state.length + input.length, 0);
-            ReservedBlockEncoder.writeContext(value, i, account, state, input);
-        } else if (mode == 2) {
-            (nextCur, value, i) = reserve(cur, dst, 40 + Encoder.length(stateCur) + Encoder.length(inputCur), 0);
-            ReservedBlockEncoder.writeContext(value, i, account, stateCur, inputCur);
-        } else if (mode == 3) {
-            (nextCur, value, i) = reserve(cur, dst, 56 + state.length + input.length, 24);
-            ReservedBlockEncoder.writeContextWrap(value, i, account, state, input);
-        } else {
-            (nextCur, value, i) = reserve(cur, dst, 56 + Encoder.length(stateCur) + Encoder.length(inputCur), 24);
-            ReservedBlockEncoder.writeContextWrap(value, i, account, stateCur, inputCur);
-        }
     }
 }
 

@@ -1,4 +1,4 @@
-import { decodeResolutionLog, HostUnresolved } from "./helpers/resolution-logs.js";
+import { decodeResolutionLog } from "./helpers/resolution-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -41,7 +41,7 @@ describe("Portal explicit reserve benchmark", function () {
           const saved = snapshot - requested;
           expect(remaining).to.be.greaterThan(5000);
           const event = receipt.logs.map(decodeResolutionLog)
-            .find((log: any) => log?.codes === HostUnresolved);
+            .find((log: any) => log?.resolved === false);
           expect(event?.digest).to.equal(ethers.keccak256(message));
           results.push({ bytes, priorMemory, value: Number(value), reserve: saved,
             requiredReserve: saved - remaining, gasAfterPipe: Number(after.gas),

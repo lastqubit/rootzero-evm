@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import { concat, encodeBalanceBlock, encodeBytesBlock } from "./helpers/blocks.js";
 
-describe("BALANCE encoder migration", () => {
+describe("BALANCE encoding", () => {
   it("mixes cursor BALANCE writes with existing writers while preserving growth and metadata", async () => {
     const helper = await deploy("TestBalanceEncoder");
     const a = encodeBalanceBlock(ethers.toBeHex(1, 32), 123n);
@@ -15,13 +15,13 @@ describe("BALANCE encoder migration", () => {
       expect(metadata).eq(0xabcdefn);
     }
   });
-  it("matches the old encoding at unaligned offsets without trailing scratch", async () => {
-    const old = await deploy("TestBalanceEncoderPrevious"), current = await deploy("TestBalanceEncoder");
+  it("encodes full-width values at unaligned offsets without trailing scratch", async () => {
+    const current = await deploy("TestBalanceEncoder");
     for (const asset of [ethers.ZeroHash, ethers.toBeHex(17, 32), ethers.toBeHex(ethers.MaxUint256, 32)]) {
       for (const amount of [0n, 1n, 1n << 255n, ethers.MaxUint256]) for (const offset of [0, 1, 31, 32]) {
         const expected = encodeBalanceBlock(asset, amount);
-        for (const helper of [old, current]) {
-          const [created, written] = await helper.inspect(asset, amount, offset);
+        {
+          const [created, written] = await current.inspect(asset, amount, offset);
           expect(created).eq(expected);
           expect(written).eq(concat("0x" + "ef".repeat(offset), expected, "0x" + "ef".repeat(32)));
         }
