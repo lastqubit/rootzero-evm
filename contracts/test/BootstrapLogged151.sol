@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
+import {Entities} from "./PreviousEntities.sol";
+import {Actions} from "./PreviousActions.sol";
 
 import {CommandBase, Specs} from "../commands/Base.sol";
 import {Encoder} from "../codec/Encoder.sol";
@@ -7,7 +10,6 @@ import {BOOTSTRAP_KEY, LIST_KEY} from "../codec/Keys.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Sizes, ASSET_AMOUNT_HEADER, BALANCE_HEADER} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {Codes} from "../utils/Codes.sol";
 import {UnexpectedState, INVALID_BLOCK} from "../utils/Errors.sol";
 
 /// @notice Pipeline-local balance funding with a minimum remaining native budget.
@@ -150,7 +152,7 @@ abstract contract BootstrapLogged151 is CommandBase, DebitAccountHook {
 
         uint logSize = logCur == 0 ? output.length : logCur - logStart;
         if (logSize != 0) {
-            Logs.mem(Codes.AccountBootstrap, logStart, logSize);
+            PreviousLogs.mem((Entities.Account | (Actions.Bootstrap << 32)), logStart, logSize);
         }
 
         return (true, output, credit);

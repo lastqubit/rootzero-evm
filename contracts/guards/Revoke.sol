@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {GuardBase} from "./Base.sol";
 import {Specs} from "../Codec.sol";
@@ -7,7 +8,6 @@ import {AllowanceHook} from "../commands/admin/Allowance.sol";
 import {DenyAssetHook} from "../commands/admin/Asset.sol";
 import {NodeAccess} from "../core/Access.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
-import {Codes} from "../utils/Codes.sol";
 using Executions for Execution;
 
 /// @title Revoke
@@ -15,24 +15,22 @@ using Executions for Execution;
 /// Each NODE block in the input is deauthorized on the host.
 /// Only callable by active guardian addresses.
 abstract contract Revoke is NodeAccess, GuardBase {
-    uint private constant INPUT = Specs.Node | Codes.HostRevokeThenInactive;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revoke", INPUT);
+        (id, descriptor) = guard("revoke", Specs.Node, 0);
     }
 
     /// @notice Revoke every NODE block in `input` as the active guardian.
-    /// @dev Logs the complete INPUT batch under the endpoint host before the hooks.
+    /// @dev Node mutation hooks publish Access events for authorization changes.
     function revoke(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeOne);
     }
 
     function revokeOne(Execution memory exec) private {
         uint node = exec.unpackNode();
-        revokeNode(node);
+        setAccess(node, false);
     }
 }
 
@@ -40,17 +38,15 @@ abstract contract Revoke is NodeAccess, GuardBase {
 /// @notice Guardian action that revokes host-scoped asset allowances.
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing AllowanceHook.
 abstract contract RevokeAllowance is GuardBase, AllowanceHook {
-    uint private constant INPUT = Specs.HostAsset | Codes.HostUpdate;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAllowance", INPUT);
+        (id, descriptor) = guard("revokeAllowance", Specs.HostAsset, Logs.Input);
     }
 
     /// @notice Revoke every HOST_ASSET allowance in `input` as the active guardian.
-    /// @dev Logs INPUT with Host/Update codes before hooks; each allowance is set to zero.
+    /// @dev Logs INPUT after hooks; each allowance is set to zero.
     function revokeAllowance(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAllowanceOne);
     }
@@ -65,17 +61,15 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 /// @notice Guardian action that denies assets through the host's existing asset hook.
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
 abstract contract RevokeAsset is GuardBase, DenyAssetHook {
-    uint private constant INPUT = Specs.Asset | Codes.HostDenyThenInactive;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAsset", INPUT);
+        (id, descriptor) = guard("revokeAsset", Specs.Asset, Logs.Input);
     }
 
     /// @notice Deny every ASSET block in `input` as the active guardian.
-    /// @dev Logs INPUT with Host/Deny/Inactive codes before hooks.
+    /// @dev Logs INPUT after the asset hooks.
     function revokeAsset(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAssetOne);
     }

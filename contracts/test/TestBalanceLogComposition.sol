@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 
 import {Encoder, Logs, Execution, Executions} from "../Codec.sol";
 
@@ -36,7 +37,7 @@ abstract contract BalanceLogCompositionHarness {
 contract BalanceLogCreate is BalanceLogCompositionHarness {
     function one(Execution memory, uint codes, bytes32 asset, uint amount) internal override {
         bytes memory data = Encoder.createBalance(asset, amount);
-        Logs.mem(codes, Encoder.pos(data, 0), data.length);
+        PreviousLogs.mem(codes, Encoder.pos(data, 0), data.length);
     }
 }
 
@@ -51,7 +52,7 @@ contract BalanceLogTemporary is BalanceLogCompositionHarness {
             mstore(start, 0)
         }
         Encoder.writeBalanceAt(start + 32, asset, amount);
-        Logs.mem(codes, start + 32, 72);
+        PreviousLogs.mem(codes, start + 32, 72);
         assembly ("memory-safe") { mstore(0x40, start) }
     }
 }
@@ -80,7 +81,7 @@ contract BalanceLogOutput is BalanceLogCompositionHarness {
     function one(Execution memory exec, uint codes, bytes32 asset, uint amount) internal override {
         uint abs = exec.reserve(72);
         Encoder.writeBalanceAt(abs, asset, amount);
-        Logs.mem(codes, abs, 72);
+        PreviousLogs.mem(codes, abs, 72);
     }
     function output(Execution memory exec) internal pure override returns (bytes memory) {
         return exec.finish();
@@ -94,7 +95,7 @@ contract BalanceLogExisting is BalanceLogCompositionHarness {
         exec.outputBalance(asset, amount);
     }
     function one(Execution memory exec, uint codes, bytes32, uint) internal override {
-        Logs.mem(codes, Encoder.pos(exec.buffer, 0), 72);
+        PreviousLogs.mem(codes, Encoder.pos(exec.buffer, 0), 72);
     }
     function output(Execution memory exec) internal pure override returns (bytes memory) {
         return exec.finish();

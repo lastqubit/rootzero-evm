@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Keys} from "../codec/Keys.sol";
@@ -125,7 +126,7 @@ abstract contract PreviousExecuteDebitAccount is DebitAccount {
         }
 
         output = Encoder.finish(cur, output);
-        Logs.memWrap(debitAccountId(), Keys.Output, output);
+        PreviousLogs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }
@@ -147,7 +148,7 @@ abstract contract PreviousExecuteCreditAccount is CreditAccount {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Balance);
-        Logs.memCopyWrap(creditAccountId(), Keys.State, state);
+        PreviousLogs.memCopyWrap(creditAccountId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = LegacyMemory.unpackBalance(abs);
@@ -178,7 +179,7 @@ abstract contract PreviousExecuteCashout is Cashout {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Balance);
-        Logs.memCopyWrap(cashoutId(), Keys.State, state);
+        PreviousLogs.memCopyWrap(cashoutId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = LegacyMemory.unpackBalance(abs);
@@ -211,7 +212,7 @@ abstract contract PreviousExecuteSettle is Settle {
     ) internal returns (bool handled, bytes memory output, uint credit) {
         if (uint32(inputCur) != uint32(inputCur >> 32)) revert UnexpectedInput();
         (uint abs, uint end) = LegacyMemory.bounds(state, Sizes.Position);
-        Logs.memCopyWrap(settleId(), Keys.State, state);
+        PreviousLogs.memCopyWrap(settleId(), Keys.State, state);
 
         while (abs < end) {
             settle(account, LegacyMemory.unpackPositionValue(abs));
@@ -243,9 +244,9 @@ abstract contract PreviousExecuteAuthorize is Authorize {
         if (state.length != 0) revert UnexpectedState();
 
         (uint abs, uint end) = Cursors.bounds(inputCur, Sizes.B32);
-        Logs.copyWrap(authorizeId(), Keys.Input, abs, end - abs);
+        PreviousLogs.copyWrap(authorizeId(), Keys.Input, abs, end - abs);
         while (abs < end) {
-            authorizeNode(LegacyBlocks.unpackNode(abs));
+            setAccess(LegacyBlocks.unpackNode(abs), true);
             unchecked {
                 abs += Sizes.B32;
             }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Blocks} from "../codec/Blocks.sol";
 import {Encoder} from "../codec/Encoder.sol";
@@ -32,6 +33,6 @@ contract TestOutputCapacity {
         bytes memory current = exec.buffer;
         assembly ("memory-safe") { sameBuffer := eq(initial, current) }
         output = Executions.finish(exec);
-        Logs.memWrap(123, Keys.Output, output);
+        PreviousLogs.memWrap(123, Keys.Output, output);
     }
 }

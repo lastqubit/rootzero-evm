@@ -22,8 +22,7 @@ contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDeb
     function enforceAdmin(bytes32 account, address) internal pure override returns (bytes32) { require(account == bytes32(uint(9))); return account; }
     function enforceCommand(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
     function enforcePort(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
-    function authorizeNode(uint node) internal override { unchecked { checksum += node; } }
-    function revokeNode(uint) internal pure override {}
+    function setAccess(uint node, bool enabled) internal override { if (enabled) { unchecked { checksum += node; } } }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         require(amount != type(uint).max, "hook");
         unchecked { checksum += uint(account) ^ uint(asset) ^ amount; }
@@ -134,8 +133,7 @@ contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, Execut
     function enforceAdmin(bytes32 account, address) internal pure override returns (bytes32) { require(account == bytes32(uint(9))); return account; }
     function enforceCommand(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
     function enforcePort(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
-    function authorizeNode(uint node) internal override { unchecked { checksum += node; } }
-    function revokeNode(uint) internal pure override {}
+    function setAccess(uint node, bool enabled) internal override { if (enabled) { unchecked { checksum += node; } } }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         require(amount != type(uint).max, "hook");
         unchecked { checksum += uint(account) ^ uint(asset) ^ amount; }

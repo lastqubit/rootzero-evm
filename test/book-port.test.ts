@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, portId } from "./helpers/setup.js";
-import { concat, encodeBlock, encodeBookingBlock, localKey, encodeAccountAmountBlock, encodeLabelBlock, encodeUserAccount, endpointSpecs, Keys } from "./helpers/blocks.js";
+import { concat, encodeBlock, encodeBookingBlock, localKey, encodeAccountAmountBlock, encodeUserAccount, endpointSpecs, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("BookPort", () => {
@@ -28,8 +28,8 @@ describe("BookPort", () => {
     const id = await portId(host.interface.getFunction("portBook")!.selector, host, 0n);
     await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
       ...endpointSpecs({ input: Keys.Booking, inputHint: 192 }));
-    await expect(host.deploymentTransaction()).to.emitAnnotation(host)
-      .withArgs(id, encodeLabelBlock(ethers.ZeroHash, "portBook"));
+    await expect(host.deploymentTransaction()).to.emitEndpoint(host)
+      .withArgs(id, undefined, undefined, undefined, "portBook");
     expect(ethers.dataLength(booking)).to.equal(200);
     expect(await peer.portBook.staticCall(booking)).to.deep.equal(["0x", 0n]);
   });

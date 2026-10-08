@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 import {Cursors} from "../utils/Cursors.sol";
+import {Logs} from "../codec/Logs.sol";
 
 import {Realize} from "../commands/Realize.sol";
 import {ExecuteCheckPosition} from "../commands/Position.sol";
@@ -45,7 +46,8 @@ contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettl
     }
 
     function enforceCommand(uint cmd) internal view override returns (bytes4, address) {
-        if (cmd != checkPositionId() && cmd != settleId() && cmd != Nodes.toCommand("realize", address(this))) revert AccessDenied();
+        if (cmd != checkPositionId() && cmd != settleId()
+            && cmd != Nodes.toCommand("realize", address(this), uint8(Logs.State | Logs.Output))) revert AccessDenied();
         return Nodes.decode(cmd);
     }
 

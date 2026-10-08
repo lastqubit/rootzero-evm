@@ -1,4 +1,4 @@
-import { expectInputLog } from "./helpers/scoped-logs.js";
+import { expectAccessLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
@@ -75,14 +75,14 @@ describe("Access Control", () => {
       .to.be.revertedWithCustomError(utils, "AccessDenied");
   });
 
-  it("authorize logs authorization input", async () => {
+  it("authorize logs authorization changes", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(3);
     const nodeBlock = encodeNodeBlock(dummyNode);
     const ctx = [encodeContextBlock(adminAccount, "0x", nodeBlock)] as const;
 
-    await expectInputLog(host.connect(signers[0]).authorize(...ctx), host, "authorize", encodeNodeBlock(dummyNode));
+    await expectAccessLogs(host.connect(signers[0]).authorize(...ctx), [dummyNode], true);
   });
 
   it("node is authorized after authorize call", async () => {
@@ -95,14 +95,14 @@ describe("Access Control", () => {
     expect(await host.isAuthorized(dummyNode)).to.be.true;
   });
 
-  it("unauthorize logs revocation input", async () => {
+  it("unauthorize logs revocation changes", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(5);
     // First authorize
     await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)));
     // Then unauthorize
-    await expectInputLog(host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode))), host, "unauthorize", encodeNodeBlock(dummyNode));
+    await expectAccessLogs(host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode))), [dummyNode], false);
   });
 
   it("node is not authorized after unauthorize call", async () => {
@@ -227,7 +227,6 @@ describe("Commander Access", () => {
     const host = await deploy("TestMinimalCommandHost", await hostId(await signers[0].getAddress()));
 
     for (const name of [
-      "annotate",
       "authorize",
       "unauthorize",
       "appoint",

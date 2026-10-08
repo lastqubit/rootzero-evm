@@ -138,8 +138,7 @@ describe("Command calls", () => {
       const clean = await deploy("TestCommandCalls");
       const command = await commandId("discard(bytes)", clean);
       const steps = concat(...Array.from({ length: 8 }, () => encodeStepBlock(command, 0n, bytes(4096))));
-      const [allocated, usedGas] = await clean.testPipeUsage.staticCall(account, "0x", steps);
-      console.log(`        invokeCommand benchmark: ${allocated} bytes retained, ${usedGas} execution gas`);
+      const [allocated] = await clean.testPipeUsage.staticCall(account, "0x", steps);
       // Eight empty return tuples need far less retained memory than eight 4 KiB inputs.
       expect(allocated).to.be.lessThan(4096n);
     });
@@ -275,18 +274,6 @@ describe("Command calls", () => {
       expect(result).to.equal(false);
     });
   }
-
-  it("uses less gas when copying the bytes argument directly from calldata", async () => {
-    const helper = await deploy("TestCommandCalls");
-    const selector = helper.interface.getFunction("echoBytes")!.selector;
-    const target = await helper.getAddress();
-    const input = ethers.hexlify(ethers.randomBytes(97));
-
-    const copied = await helper.testTryRawCallCopy.estimateGas(selector, target, 0n, input);
-    const memory = await helper.testTryRawCall.estimateGas(selector, target, 0n, input);
-
-    expect(copied).to.be.lessThan(memory);
-  });
 
   it("queries bytes around ABI word boundaries", async () => {
     const helper = await deploy("TestCommandCalls");

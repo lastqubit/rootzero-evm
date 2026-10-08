@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousNamingEncoder} from "./PreviousNaming.sol";
 
 import {Encoder} from "../codec/Encoder.sol";
 import {Cursors} from "../utils/Cursors.sol";
@@ -199,7 +200,13 @@ library LogsStock150 {
     /// @dev Allocates through Encoder; preserves the ID and all three complete lanes.
     /// Emits 168 bytes with no topics. The emitter identifies the publishing host.
     function endpoint(uint id, uint state, uint input, uint output, uint codes) internal {
-        bytes memory data = Encoder.createEndpoint(id, state, input, output);
+        bytes memory data = Encoder.allocate(168);
+        uint abs = Encoder.writeHeader(Encoder.pos(data, 0), bytes4(keccak256("#endpoint")), 160);
+        abs = Encoder.write32(abs, bytes32(id));
+        abs = Encoder.write32(abs, bytes32(state));
+        abs = Encoder.write32(abs, bytes32(input));
+        abs = Encoder.write32(abs, bytes32(output));
+        Encoder.write32(abs, bytes32(0));
         mem(codes, Encoder.pos(data, 0), data.length);
     }
 
@@ -209,7 +216,7 @@ library LogsStock150 {
     /// helper preserves entity and data without interpreting or validating claims.
     /// Each annotation type defines its own identity, merge and revocation rules.
     function annotation(uint entity, bytes memory data, uint codes) internal {
-        bytes memory value = Encoder.createAnnotation(entity, data);
+        bytes memory value = PreviousNamingEncoder.createAnnotation(entity, data);
         mem(codes, Encoder.pos(value, 0), value.length);
     }
 

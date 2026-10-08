@@ -2,16 +2,15 @@
 pragma solidity ^0.8.33;
 
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 
 contract TestAnnotationLogs {
     function publish(uint entity, bytes memory data) external returns (bytes memory) {
-        Logs.annotation(entity, data, Codes.HostAnnotate);
+        Logs.metadata(entity, data);
         return data;
     }
     function measure(uint entity, bytes memory data) external returns (uint used) {
         uint initial = gasleft();
-        Logs.annotation(entity, data, Codes.HostAnnotate);
+        Logs.metadata(entity, data);
         used = initial - gasleft();
     }
 }

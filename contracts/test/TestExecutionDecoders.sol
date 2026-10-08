@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousNamingExecutions} from "./PreviousNaming.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 
 import {Keys} from "../codec/Keys.sol";
@@ -259,10 +260,10 @@ contract TestExecutionCompositeDecoders {
         if (kind == 0) firstCur = exec.unpackBytes();
         else if (kind == 1) firstCur = exec.unpackString();
         else if (kind == 2) (firstCur, secondCur) = exec.unpackRelay();
-        else if (kind == 3) (values[0], firstCur) = exec.unpackAnnotation();
+        else if (kind == 3) (values[0], firstCur) = PreviousNamingExecutions.unpackAnnotation(exec);
         else if (kind == 4) {
             bytes32 namespace;
-            (namespace, firstCur) = exec.unpackLabel();
+            (namespace, firstCur) = PreviousNamingExecutions.unpackLabel(exec);
             values[0] = uint(namespace);
         } else if (kind == 5) (values[0], firstCur) = exec.unpackSchema();
         else if (kind == 6) {

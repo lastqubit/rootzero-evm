@@ -11,5 +11,5 @@ abstract contract TestPingCommand is CommandBase {
 }
 
 contract TestMinimalCommandHost is CommandHost, TestPingCommand {
-    constructor(uint cmdr) CommandHost(cmdr) {}
+    constructor(uint cmdr) CommandHost(cmdr, "TestMinimalCommandHost") {}
 }

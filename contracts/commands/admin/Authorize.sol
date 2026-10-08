@@ -3,10 +3,7 @@ pragma solidity ^0.8.33;
 
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
 import {Execute} from "../../codec/Execute.sol";
-import {Keys} from "../../codec/Keys.sol";
-import {Logs} from "../../codec/Logs.sol";
 import {Sizes} from "../../codec/Specs.sol";
-import {Codes} from "../../utils/Codes.sol";
 import {UnexpectedState} from "../../utils/Errors.sol";
 using Executions for Execution;
 
@@ -15,13 +12,11 @@ using Executions for Execution;
 /// Each NODE block in the input is authorized on the host.
 /// Only callable by the admin account.
 abstract contract Authorize is AdminBase {
-    uint private constant INPUT = Specs.Node | Codes.HostAuthorizeThenActive;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("authorize", Specs.Empty, INPUT, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("authorize", Specs.Empty, Specs.Node, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Return the registered AUTHORIZE command ID.
@@ -30,7 +25,7 @@ abstract contract Authorize is AdminBase {
     }
 
     /// @notice Authorize each NODE block in the admin input.
-    /// @dev Logs the complete INPUT batch under the endpoint host before the hooks.
+    /// @dev Node mutation hooks publish Access events for authorization changes.
     /// @param context Admin command context carrying the NODE input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -42,7 +37,7 @@ abstract contract Authorize is AdminBase {
 
     function authorizeOne(Execution memory exec) private {
         uint node = exec.unpackNode();
-        authorizeNode(node);
+        setAccess(node, true);
     }
 }
 
@@ -70,9 +65,8 @@ abstract contract ExecuteAuthorize is Authorize {
         if (state.length != 0) revert UnexpectedState();
 
         (uint abs, uint end) = Execute.bounds(inputCur, Sizes.B32);
-        Logs.copyWrap(authorizeId(), Keys.Input, abs, end - abs);
         while (abs < end) {
-            authorizeNode(Execute.unpackNode(abs));
+            setAccess(Execute.unpackNode(abs), true);
             unchecked {
                 abs += Sizes.B32;
             }

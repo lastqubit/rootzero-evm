@@ -46,7 +46,6 @@ error UnauthorizedAsset();
 /// @dev Thrown when a required nonzero amount is zero.
 error ZeroAmount();
 
-
 /// @dev Thrown when a value falls outside its allowed range.
 error OutOfRange();
 

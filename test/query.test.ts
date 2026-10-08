@@ -6,7 +6,6 @@ import {
   concat,
   encodeBlock,
   endpointSpecs,
-  encodeLabelBlock,
   encodeSchemaBlock,
   exactSpec,
   localKey,
@@ -42,11 +41,11 @@ describe("Queries", () => {
         ...endpointSpecs({ input: Value, inputHint: 32, output: ValueSpec }),
       );
     await expect(tx!)
-      .to.emitAnnotation(query)
+      .to.emitMetadata(query)
       .withArgs(await query.host(), encodeSchemaBlock(ValueSpec, "uint value"));
     await expect(tx!)
-      .to.emitAnnotation(query)
-      .withArgs(await qry("incrementQuery"), encodeLabelBlock(ethers.ZeroHash, "incrementQuery"));
+      .to.emitEndpoint(query)
+      .withArgs(await qry("incrementQuery"), undefined, undefined, undefined, "incrementQuery");
   });
 
   describe("incrementQuery", () => {
@@ -87,7 +86,7 @@ describe("Queries", () => {
           ...endpointSpecs({ input: KeyedValue, inputHint: 32, output: KeyedValueSpec }),
         );
       await expect(tx!)
-        .to.emitAnnotation(keyedQuery)
+        .to.emitMetadata(keyedQuery)
         .withArgs(await keyedQuery.host(), encodeSchemaBlock(KeyedValueSpec, "{ uint value }"));
     });
 
@@ -108,7 +107,7 @@ describe("Qualified schemas", () => {
     expect(tx).to.not.equal(null);
 
     await expect(tx!)
-      .to.emitAnnotation(schema)
+      .to.emitMetadata(schema)
       .withArgs(
         await schema.host(),
         encodeSchemaBlock(

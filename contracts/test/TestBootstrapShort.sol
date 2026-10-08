@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
+import {Actions} from "./PreviousActions.sol";
+
+import {LogsBalance151} from "./LogsBalance151.sol";
 
 import {BootstrapLogged151} from "./BootstrapLogged151.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
@@ -11,8 +15,7 @@ import {CommanderBootstrapLedger} from "./TestCommanderBootstrapComparison.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {Cursors, Logs, Keys} from "../Codec.sol";
-import {Codes} from "../utils/Codes.sol";
-import {Entities} from "../utils/Entities.sol";
+import {Entities} from "./PreviousEntities.sol";
 
 /// @dev Identical ledger and transport harness for all candidates. Frozen variants
 /// differ only in Bootstrap and scalar logging. No external token transfers.
@@ -70,7 +73,7 @@ abstract contract BootstrapShortHarness is CommandBase, DebitAccountHook, Comman
         }
         require(padding == 0, "output padding");
         require(keccak256(sentinel) == digest, "sentinel");
-        Logs.memCopyWrap(1, Keys.State, output);
+        PreviousLogs.memCopyWrap(1, Keys.State, output);
         for (uint i; i < output.length; i += 72) {
             bytes32 asset;
             uint amount;
@@ -102,8 +105,8 @@ contract BootstrapShortCurrent is ExecuteBootstrap, BootstrapShortHarness {
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
-    function logPipeline(uint value) internal override { Logs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
-    function logBalance(uint value) internal override { Logs.balance(chainAsset, value, Codes.AccountCashin); }
+    function logPipeline(uint value) internal override { PreviousLogs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
+    function logBalance(uint value) internal override { LogsBalance151.balance(chainAsset, value, (Entities.Account | (Actions.Cashin << 32))); }
 }
 
 contract BootstrapShortStock is BootstrapStock150, BootstrapShortHarness {
@@ -112,7 +115,7 @@ contract BootstrapShortStock is BootstrapStock150, BootstrapShortHarness {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
     function logPipeline(uint value) internal override { LogsStock150.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
-    function logBalance(uint value) internal override { LogsStock150.balance(chainAsset, value, Codes.AccountCashin); }
+    function logBalance(uint value) internal override { LogsStock150.balance(chainAsset, value, (Entities.Account | (Actions.Cashin << 32))); }
 }
 
 contract BootstrapShortZero is BootstrapZero150, BootstrapShortHarness {
@@ -120,8 +123,8 @@ contract BootstrapShortZero is BootstrapZero150, BootstrapShortHarness {
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
-    function logPipeline(uint value) internal override { Logs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
-    function logBalance(uint value) internal override { Logs.balance(chainAsset, value, Codes.AccountCashin); }
+    function logPipeline(uint value) internal override { PreviousLogs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
+    function logBalance(uint value) internal override { LogsBalance151.balance(chainAsset, value, (Entities.Account | (Actions.Cashin << 32))); }
 }
 
 contract BootstrapShortLogged151 is BootstrapLogged151, BootstrapShortHarness {
@@ -129,6 +132,6 @@ contract BootstrapShortLogged151 is BootstrapLogged151, BootstrapShortHarness {
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
-    function logPipeline(uint value) internal override { Logs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
-    function logBalance(uint value) internal override { Logs.balance(chainAsset, value, Codes.AccountCashin); }
+    function logPipeline(uint value) internal override { PreviousLogs.pipeline(bytes32(uint(uint160(msg.sender))), value, Entities.Account); }
+    function logBalance(uint value) internal override { LogsBalance151.balance(chainAsset, value, (Entities.Account | (Actions.Cashin << 32))); }
 }

@@ -101,7 +101,7 @@ contract TestHost is
     uint public realizeFee;
     uint public realizeDebtFee;
 
-    constructor(uint rootzero) Host(rootzero) Deposit() {
+    constructor(uint rootzero) Host(rootzero, "TestHost") Deposit() {
         schema("relay.input: uint portal, uint resources", 3, 64);
     }
 

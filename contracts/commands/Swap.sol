@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {CommandBase, Execution, Executions, Specs} from "./Base.sol";
 import {Blocks} from "../codec/Blocks.sol";
 import {Counterparty} from "../core/Counterparty.sol";
-import {Actions} from "../utils/Actions.sol";
 import {Cursors} from "../utils/Cursors.sol";
 
 using Executions for Execution;
@@ -43,13 +43,11 @@ abstract contract SwapExactOutHook {
 
 /// @notice Swap each SWAP input's exact input amount and return one POSITION per item.
 abstract contract SwapExactIn is CommandBase, SwapExactInHook, Counterparty {
-    uint private constant OUTPUT = Specs.Position | Actions.Swap;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapExactIn", Specs.Empty, Specs.Swap, OUTPUT, 0);
+        (id, descriptor) = command("swapExactIn", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
     }
 
     /// @notice Process a SWAP batch with empty state; empty input is a valid empty batch.
@@ -57,7 +55,7 @@ abstract contract SwapExactIn is CommandBase, SwapExactInHook, Counterparty {
     /// calls no hook and returns equal asset/liability and amount/debt.
     /// Produces one aggregate position using the immutable settlement counterparty;
     /// intermediate assets must be settled internally by the hook implementation.
-    /// The runner logs the batch in an endpoint-prefixed OUTPUT with Actions.Swap.
+    /// The runner logs the batch in an endpoint-prefixed OUTPUT with output logging enabled.
     /// Subsequent position-constraint commands enforce limits.
     /// @return Aggregate POSITION blocks, one per SWAP in input order.
     /// @return Zero native budget credit.
@@ -83,13 +81,11 @@ abstract contract SwapExactIn is CommandBase, SwapExactInHook, Counterparty {
 
 /// @notice Swap for each SWAP input's exact output amount and return one POSITION per item.
 abstract contract SwapExactOut is CommandBase, SwapExactOutHook, Counterparty {
-    uint private constant OUTPUT = Specs.Position | Actions.Swap;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapExactOut", Specs.Empty, Specs.Swap, OUTPUT, 0);
+        (id, descriptor) = command("swapExactOut", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
     }
 
     /// @notice Process a SWAP batch with empty state; hops run from output toward input.
@@ -97,7 +93,7 @@ abstract contract SwapExactOut is CommandBase, SwapExactOutHook, Counterparty {
     /// calls no hook and returns equal asset/liability and amount/debt.
     /// Produces one aggregate position using the immutable settlement counterparty;
     /// intermediate assets must be settled internally by the hook implementation.
-    /// The runner logs the batch in an endpoint-prefixed OUTPUT with Actions.Swap.
+    /// The runner logs the batch in an endpoint-prefixed OUTPUT with output logging enabled.
     /// Subsequent position-constraint commands enforce limits.
     /// @return Aggregate POSITION blocks, one per SWAP in input order.
     /// @return Zero native budget credit.

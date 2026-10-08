@@ -38,11 +38,11 @@ contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPor
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
 
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
-        if (amount != 0) Logs.accountBalance(account, asset, creditTo(account, asset, amount));
+        if (amount != 0) Logs.balance(account, asset, creditTo(account, asset, amount));
     }
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
-        if (amount != 0) Logs.accountBalance(account, asset, debitFrom(account, asset, amount));
+        if (amount != 0) Logs.balance(account, asset, debitFrom(account, asset, amount));
     }
 
     function getBalance(bytes32 account, bytes32 asset) internal view override returns (uint) {

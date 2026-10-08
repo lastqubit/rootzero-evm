@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {PreviousSpecs as HistoricalSpecs} from "./PreviousSpecs.sol";
 import {Logs} from "../codec/Logs.sol";
@@ -175,7 +176,7 @@ abstract contract PreallocatedDebitAccount is PreallocatedWriter, DebitAccount {
         }
 
         output = finishOutput(cur, output);
-        Logs.memWrap(debitAccountId(), Keys.Output, output);
+        PreviousLogs.memWrap(debitAccountId(), Keys.Output, output);
         return (true, output, value);
     }
 }

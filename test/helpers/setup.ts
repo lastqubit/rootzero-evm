@@ -62,6 +62,14 @@ async function nodeId(
   target: { getAddress(): Promise<string> } | string,
   flags = 0n,
 ) {
+  // Canonical built-in policies are part of expected endpoint identities.
+  const policies: [string, bigint][] = prefix === CommandPrefix ? [
+    ["deposit", 36n], ["depositPayable", 36n], ["withdraw", 12n], ["cashout", 12n],
+    ["burn", 12n], ["realize", 44n], ["payout", 28n], ["swapExactIn", 36n], ["swapExactOut", 36n],
+    ...["appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "addPool", "removePool"].map(name => [name, 20n] as [string, bigint]),
+  ] : prefix === PortPrefix ? [["portAllowAsset", 20n], ["portDenyAsset", 20n]]
+    : prefix === GuardPrefix ? [["revokeAsset", 20n], ["revokeAllowance", 20n]] : [];
+  for (const [name, logging] of policies) if (selector(name + "(bytes)") === selector(signature)) flags |= logging;
   const addr = typeof target === "string" ? target : await target.getAddress();
   const provider = await getProvider();
   const network = await provider.getNetwork();

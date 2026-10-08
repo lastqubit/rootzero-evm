@@ -3,14 +3,12 @@ pragma solidity ^0.8.33;
 
 import {AccessDenied, CallerAccess} from "./Access.sol";
 import {Runtime} from "./Runtime.sol";
-import {Annotate} from "../commands/admin/Annotate.sol";
 import {Appoint, Dismiss} from "../commands/admin/Guardian.sol";
 import {Authorize} from "../commands/admin/Authorize.sol";
 import {Unauthorize} from "../commands/admin/Unauthorize.sol";
 import {ExecutePayable} from "../commands/admin/Execute.sol";
 import {Revoke} from "../guards/Revoke.sol";
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Accounts} from "../utils/Accounts.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
@@ -20,7 +18,8 @@ interface IHostIntroduction {
     /// @notice Record a host introduction claim.
     /// @param peer Host node ID being introduced.
     /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
-    function introduce(uint peer, uint blocknum) external;
+    /// @param name Self-declared discovery name; the peer ID remains the identifier.
+    function introduce(uint peer, uint blocknum, string calldata name) external;
 }
 
 /// @title HostAnnouncer
@@ -28,20 +27,21 @@ interface IHostIntroduction {
 /// Calls a deployed commander during construction without adding an inbound
 /// introduction endpoint to the inheriting host.
 abstract contract HostAnnouncer is Runtime {
-    /// @dev Deployment reverts if a contract commander does not accept `introduce(uint,uint)`.
-    constructor() {
+    /// @dev Deployment reverts if a contract commander does not accept `introduce(uint,uint,string)`.
+    constructor(string memory name) {
         if (commander == host) return;
         address target = commanderAddr;
         if (target.code.length == 0) return;
-        IHostIntroduction(target).introduce(host, block.number);
+        IHostIntroduction(target).introduce(host, block.number, name);
     }
 
     /// @notice Introduce this host to the contract address embedded in a local EVM node ID.
     /// @dev Accepts host and endpoint IDs such as commands, ports, queries, and guards.
     /// Reverts when `node` is not local or embeds the zero address.
     /// @param node Local EVM node ID whose underlying contract receives the introduction.
-    function introduceTo(uint node) internal {
-        IHostIntroduction(Nodes.addr(node)).introduce(host, block.number);
+    /// @param name Discovery name for this introduction; no name is stored onchain.
+    function introduceTo(uint node, string memory name) internal {
+        IHostIntroduction(Nodes.addr(node)).introduce(host, block.number, name);
     }
 }
 
@@ -53,8 +53,9 @@ abstract contract HostIntroduction is HostAnnouncer, IHostIntroduction {
     /// @dev Validates that `peer` matches `msg.sender`; it does not authorize or trust the introduced host.
     /// @param peer Host node ID being introduced.
     /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
-    function introduce(uint peer, uint blocknum) external {
-        Logs.introduction(Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum, Codes.HostIntroduce);
+    /// @param name Self-declared discovery name; the peer ID remains the identifier.
+    function introduce(uint peer, uint blocknum, string calldata name) external {
+        Logs.introduction(Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum, name);
     }
 }
 
@@ -68,7 +69,8 @@ abstract contract CommandHost is CallerAccess, HostAnnouncer {
     error InvalidCommander();
 
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
-    constructor(uint cmdr) Runtime(cmdr) {
+    /// @param name Discovery hint emitted only when introducing this host.
+    constructor(uint cmdr, string memory name) Runtime(cmdr) HostAnnouncer(name) {
         if (cmdr == 0) revert InvalidCommander();
     }
 
@@ -80,13 +82,12 @@ abstract contract CommandHost is CallerAccess, HostAnnouncer {
 
 /// @title Host
 /// @notice Abstract base contract for rootzero host implementations.
-/// Inherits admin command support (authorize, unauthorize, label, executePayable),
+/// Inherits admin command support (authorize, unauthorize, executePayable),
 /// guardian management, the default guardian revoke action, and
 /// optionally introduces itself to a commander host at deployment.
 /// Accepts native ETH payments via the `receive` function.
 abstract contract Host is
     HostIntroduction,
-    Annotate,
     Authorize,
     Unauthorize,
     ExecutePayable,
@@ -106,20 +107,17 @@ abstract contract Host is
     /// @param cmdr Commander host ID; used by the composed access capabilities.
     ///        If the encoded native target is a deployed contract, the host
     ///        calls `introduce` on it during construction.
-    constructor(uint cmdr) Runtime(cmdr) {
+    /// @param name Discovery hint emitted only when introducing this host.
+    constructor(uint cmdr, string memory name) Runtime(cmdr) HostAnnouncer(name) {
         admin = Accounts.toAdmin(commanderAddr);
     }
 
-    // Entry points log batches; direct callers of these mutation hooks must log
-    // their own operations when an indexable record is required.
-    function authorizeNode(uint node) internal virtual override {
+    // Publish explicit node authorization transitions, including internal calls.
+    function setAccess(uint node, bool enabled) internal virtual override {
         node = Nodes.local(node);
-        nodes[node] = true;
-    }
-
-    function revokeNode(uint node) internal virtual override {
-        node = Nodes.local(node);
-        nodes[node] = false;
+        if (nodes[node] == enabled) return;
+        nodes[node] = enabled;
+        Logs.access(node, enabled);
     }
 
     function appointGuardian(bytes32 account) internal virtual override {

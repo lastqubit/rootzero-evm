@@ -33,7 +33,6 @@ import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";
 import {AdminBase} from "./commands/admin/Base.sol";
 import {AllowAsset, AllowAssetHook, DenyAsset, DenyAssetHook} from "./commands/admin/Asset.sol";
 import {Allowance, AllowanceHook} from "./commands/admin/Allowance.sol";
-import {Annotate} from "./commands/admin/Annotate.sol";
 import {Appoint, Dismiss} from "./commands/admin/Guardian.sol";
 import {Authorize, ExecuteAuthorize} from "./commands/admin/Authorize.sol";
 import {ExecutePayable} from "./commands/admin/Execute.sol";
@@ -56,8 +55,6 @@ import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
 
 // Query endpoints
 import {QueryBase} from "./queries/Base.sol";
-import {GetAssetCodes, GetAssetCodesHook} from "./queries/Asset.sol";
-import {GetEntityCodes, GetEntityCodesHook} from "./queries/Entity.sol";
 import {GetBalance, GetBalanceHook} from "./queries/Balance.sol";
 
 // Shared protocol errors.

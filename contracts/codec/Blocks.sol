@@ -403,7 +403,12 @@ library Blocks {
     /// @param lastKey Required key for the last child.
     /// @return firstCur Clean cursor over the first child's payload.
     /// @return lastCur Clean cursor over the final child's payload, ending at endAbs.
-    function pair(uint abs, uint endAbs, bytes4 firstKey, bytes4 lastKey) private pure returns (uint firstCur, uint lastCur) {
+    function pair(
+        uint abs,
+        uint endAbs,
+        bytes4 firstKey,
+        bytes4 lastKey
+    ) private pure returns (uint firstCur, uint lastCur) {
         uint len = expectKey(abs, firstKey);
         unchecked {
             uint body = abs + 8;
@@ -659,7 +664,9 @@ library Blocks {
         payloadCur = unpackExact(cur, spec);
         abs = uint32(payloadCur);
         if (amount > length(payloadCur)) revert InvalidBlock();
-        unchecked { payloadCur += amount; }
+        unchecked {
+            payloadCur += amount;
+        }
     }
 
     /// @notice Select the complete next block, including its eight-byte header.
@@ -815,7 +822,9 @@ library Blocks {
     /// @param spec Packed key/minimum/maximum specification, as accepted by take.
     /// @return payloadCur Clean payload cursor excluding the header; no remainder is returned.
     function unpackExact(uint cur, uint spec) internal pure returns (uint payloadCur) {
-        unchecked { payloadCur = takeExact(cur, spec) + 8; }
+        unchecked {
+            payloadCur = takeExact(cur, spec) + 8;
+        }
     }
 
     /// @notice Select the payload of an exact-header block occupying the entire range.
@@ -826,7 +835,9 @@ library Blocks {
     /// @param header Right-aligned key/length header; nonzero upper bits fail validation.
     /// @return payloadCur Clean payload cursor excluding the header; no remainder is returned.
     function unpackFixedExact(uint cur, uint header) internal pure returns (uint payloadCur) {
-        unchecked { payloadCur = takeFixedExact(cur, header) + 8; }
+        unchecked {
+            payloadCur = takeFixedExact(cur, header) + 8;
+        }
     }
 
     // Named payload wrappers: delegate validation and advancement to unpack.
@@ -922,7 +933,10 @@ library Blocks {
     /// @return c Decoded payload value.
     /// @return d Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpack128(uint cur, bytes4 key) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, uint nextCur) {
+    function unpack128(
+        uint cur,
+        bytes4 key
+    ) internal pure returns (bytes32 a, bytes32 b, bytes32 c, bytes32 d, uint nextCur) {
         uint abs = uint32(cur);
         expectHeader(abs, key, 128);
         nextCur = advance(cur, 136);
@@ -1011,17 +1025,6 @@ library Blocks {
         bytes32 a;
         (a, nextCur) = unpack32(cur, Keys.Status);
         code = uint(a);
-    }
-
-    /// @notice Consume one CODES block containing packed identifiers.
-    /// @dev Validates the exact header and containment through unpack32, not code semantics.
-    /// @param cur Bounded source cursor at the block header.
-    /// @return codes Full-width packed identifiers.
-    /// @return nextCur Advanced source cursor preserving its end.
-    function unpackCodes(uint cur) internal pure returns (uint codes, uint nextCur) {
-        bytes32 a;
-        (a, nextCur) = unpack32(cur, Keys.Codes);
-        codes = uint(a);
     }
 
     /// @notice Decode LIMITS and return the advanced source cursor.
@@ -1132,7 +1135,9 @@ library Blocks {
     function unpackBootstrapExact(uint cur) internal pure returns (uint budget, uint balancesCur) {
         uint payloadCur = unpackExact(cur, Specs.Bootstrap);
         uint abs = uint32(payloadCur);
-        unchecked { balancesCur = tail(abs + 32, uint32(payloadCur >> 32), Keys.List); }
+        unchecked {
+            balancesCur = tail(abs + 32, uint32(payloadCur >> 32), Keys.List);
+        }
         budget = uint(read32(abs));
     }
 
@@ -1188,7 +1193,9 @@ library Blocks {
     /// @return asset Decoded payload value.
     /// @return amount Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackAccountBalance(uint cur) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+    function unpackAccountBalance(
+        uint cur
+    ) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
         bytes32 a;
         (account, asset, a, nextCur) = unpack96(cur, Keys.AccountBalance);
         amount = uint(a);
@@ -1201,7 +1208,9 @@ library Blocks {
     /// @return asset Decoded payload value.
     /// @return amount Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackAccountAmount(uint cur) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+    function unpackAccountAmount(
+        uint cur
+    ) internal pure returns (bytes32 account, bytes32 asset, uint amount, uint nextCur) {
         bytes32 a;
         (account, asset, a, nextCur) = unpack96(cur, Keys.AccountAmount);
         amount = uint(a);
@@ -1229,7 +1238,9 @@ library Blocks {
     /// @return account Decoded payload value.
     /// @return asset Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackHostAccountAsset(uint cur) internal pure returns (uint host, bytes32 account, bytes32 asset, uint nextCur) {
+    function unpackHostAccountAsset(
+        uint cur
+    ) internal pure returns (uint host, bytes32 account, bytes32 asset, uint nextCur) {
         bytes32 a;
         (a, account, asset, nextCur) = unpack96(cur, Keys.HostAccountAsset);
         host = uint(a);
@@ -1254,7 +1265,9 @@ library Blocks {
     /// @return liability Decoded payload value.
     /// @return debt Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackQuote(uint cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, uint nextCur) {
+    function unpackQuote(
+        uint cur
+    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, uint nextCur) {
         bytes32 a;
         bytes32 b;
         (asset, a, liability, b, nextCur) = unpack128(cur, Keys.Quote);
@@ -1270,7 +1283,9 @@ library Blocks {
     /// @return asset Decoded payload value.
     /// @return amount Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackTransaction(uint cur) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint nextCur) {
+    function unpackTransaction(
+        uint cur
+    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint nextCur) {
         bytes32 a;
         (from, to, asset, a, nextCur) = unpack128(cur, Keys.Transaction);
         amount = uint(a);
@@ -1284,7 +1299,9 @@ library Blocks {
     /// @return asset Encoded asset identifier.
     /// @return amount Full-width amount.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackHostAccountAmount(uint cur) internal pure returns (uint host, bytes32 account, bytes32 asset, uint amount, uint nextCur) {
+    function unpackHostAccountAmount(
+        uint cur
+    ) internal pure returns (uint host, bytes32 account, bytes32 asset, uint amount, uint nextCur) {
         bytes32 a;
         bytes32 b;
         (a, account, asset, b, nextCur) = unpack128(cur, Keys.HostAccountAmount);
@@ -1294,7 +1311,9 @@ library Blocks {
 
     /// @notice Decode POSITIONCONSTRAINTS without enforcing its quantity constraints.
     /// @dev Validates header and containment once, then copies the full-width fields into the struct.
-    function unpackPositionConstraints(uint cur) internal pure returns (PositionConstraints memory value, uint nextCur) {
+    function unpackPositionConstraints(
+        uint cur
+    ) internal pure returns (PositionConstraints memory value, uint nextCur) {
         uint abs = uint32(cur);
         expectHeader(abs, Headers.PositionConstraints);
         nextCur = advance(cur, 8 + 128);
@@ -1312,7 +1331,13 @@ library Blocks {
     /// @return debt Decoded payload value.
     /// @return counterparty Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackPosition(uint cur) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint nextCur) {
+    function unpackPosition(
+        uint cur
+    )
+        internal
+        pure
+        returns (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty, uint nextCur)
+    {
         bytes32 a;
         bytes32 b;
         (asset, a, liability, b, counterparty, nextCur) = unpack160(cur, Keys.Position);
@@ -1363,32 +1388,6 @@ library Blocks {
         }
     }
 
-    /// @notice Decode ANNOTATION and retain its final BYTES payload as a cursor.
-    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
-    /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackAnnotation(uint cur) internal pure returns (uint entity, uint dataCur, uint nextCur) {
-        uint abs = uint32(cur);
-        unchecked {
-            nextCur = advance(cur, 8 + expectKey(abs, Keys.Annotation));
-            abs += 8;
-            entity = uint(read32(abs));
-            dataCur = tail(abs + 32, uint32(nextCur), Keys.Bytes);
-        }
-    }
-
-    /// @notice Decode LABEL and retain its final STRING payload as a cursor.
-    /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
-    /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackLabel(uint cur) internal pure returns (bytes32 namespace, uint nameCur, uint nextCur) {
-        uint abs = uint32(cur);
-        unchecked {
-            nextCur = advance(cur, 8 + expectKey(abs, Keys.Label));
-            abs += 8;
-            namespace = read32(abs);
-            nameCur = tail(abs + 32, uint32(nextCur), Keys.String);
-        }
-    }
-
     /// @notice Decode SCHEMA and retain its final STRING payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
@@ -1416,9 +1415,27 @@ library Blocks {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Context));
-            // Children first saves 9 gas/block in the viaIR consuming-loop benchmark.
-            (stateCur, inputCur) = pair(abs + 40, uint32(nextCur), Keys.State, Keys.Input);
         }
+        (account, stateCur, inputCur) = contextPayload(abs, uint32(nextCur));
+    }
+
+    /// @notice Decode exactly one CONTEXT occupying the supplied calldata range.
+    /// @dev Requires calldata provenance. Rejects malformed children, truncation,
+    /// and trailing bytes with InvalidBlock. Child cursors have no metadata;
+    /// account semantics and the contents of the STATE/INPUT lanes are not checked.
+    function unpackContextExact(uint cur) internal pure returns (bytes32 account, uint stateCur, uint inputCur) {
+        uint abs = uint32(cur);
+        uint endAbs = uint32(cur >> 32);
+        if (abs + 8 + expectKey(abs, Keys.Context) != endAbs) revert InvalidBlock();
+        return contextPayload(abs, endAbs);
+    }
+
+    /// @dev Decode children within a validated CONTEXT boundary before reading account.
+    function contextPayload(
+        uint abs,
+        uint endAbs
+    ) private pure returns (bytes32 account, uint stateCur, uint inputCur) {
+        (stateCur, inputCur) = pair(abs + 40, endAbs, Keys.State, Keys.Input);
         assembly ("memory-safe") {
             account := calldataload(add(abs, 8))
         }
@@ -1461,7 +1478,9 @@ library Blocks {
     /// @notice Decode DISPATCH and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackDispatch(uint cur) internal pure returns (uint portal, uint resources, uint payloadCur, uint nextCur) {
+    function unpackDispatch(
+        uint cur
+    ) internal pure returns (uint portal, uint resources, uint payloadCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Dispatch));
@@ -1475,7 +1494,9 @@ library Blocks {
     /// @notice Decode RECOVER and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
-    function unpackRecover(uint cur) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur, uint nextCur) {
+    function unpackRecover(
+        uint cur
+    ) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
             nextCur = advance(cur, 8 + expectKey(abs, Keys.Recover));

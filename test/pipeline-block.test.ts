@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBlock, encodePipelineBlock, encodeCodesBlock, exactSpec, Keys } from "./helpers/blocks.js";
+import { concat, encodeBlock, encodePipelineBlock, encodeAmountBlock, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Pipeline schema", () => {
@@ -20,7 +20,7 @@ describe("Pipeline schema", () => {
         for (const capacity of [0, 40, 72, 512])
           expect(Array.from(await helper.encode(account, value, capacity))).deep.eq([block, block, block]);
         for (const execution of [false, true])
-          expect(Array.from(await helper.decode(concat(block, encodeCodesBlock(1n)), 112, execution)))
+          expect(Array.from(await helper.decode(concat(block, encodeAmountBlock(1n)), 112, execution)))
             .deep.eq([account, value, 72n, 40n]);
       }
   });
@@ -35,17 +35,5 @@ describe("Pipeline schema", () => {
         await expect(helper.decode(bad, ethers.dataLength(bad), execution)).revertedWithCustomError(helper, "InvalidBlock");
       await expect(helper.decode(block, 71, execution)).revertedWithCustomError(helper, "OutOfBounds");
     }
-  });
-  it("Logs.pipeline emits full-width codes and a single Pipeline block", async () => {
-    const helper = await deploy("TestPipelineBlock");
-    const account = ethers.id("root-account");
-    for (const value of [0n, 456n, ethers.MaxUint256])
-      for (const codes of [0n, 80n, ethers.MaxUint256]) {
-        const receipt = await (await helper.emitPipeline(codes, account, value)).wait();
-        expect(receipt.logs).to.have.length(1);
-        expect(receipt.logs[0].topics).deep.eq([]);
-        expect(receipt.logs[0].data).eq(concat(ethers.toBeHex(codes, 32), encodePipelineBlock(account, value)));
-        expect(ethers.dataLength(receipt.logs[0].data)).eq(104);
-      }
   });
 });

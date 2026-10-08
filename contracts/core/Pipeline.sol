@@ -4,8 +4,6 @@ pragma solidity ^0.8.33;
 import {CommandAccess} from "./Access.sol";
 import {STEP_KEY, STATE_KEY, INPUT_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
 import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
-import {Logs} from "../codec/Logs.sol";
-import {Entities} from "../utils/Entities.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 
@@ -226,7 +224,6 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
 
     /// @notice Execute a STEP block stream through the pipeline.
     /// @dev Reverts with `UnexpectedState` if the final threaded state is non-empty.
-    /// Emits account context and initial budget before any step, including empty pipelines.
     /// Callers remain responsible for settling the returned unspent value.
     /// @param account Account identifier used for each dispatched step.
     /// @param state Initial state block stream passed to the first step.
@@ -239,7 +236,6 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         uint stepsCur,
         uint budget
     ) internal virtual override returns (uint remaining) {
-        Logs.pipeline(account, budget, Entities.Account);
         while (Cursors.more(stepsCur)) {
             uint cmd;
             uint value;

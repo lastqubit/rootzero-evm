@@ -1,8 +1,9 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeInputBlock, encodeNodeBlock, encodePipelineBlock, encodeStepBlock } from "./helpers/blocks.js";
+import { concat, encodeNodeBlock, encodeStepBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
+import { Category, eventRecord } from "./helpers/event-records.js";
 
 describe("ExecuteAuthorize", () => {
   let host: Awaited<ReturnType<typeof deploy>>;
@@ -17,11 +18,10 @@ describe("ExecuteAuthorize", () => {
     node = await hostId(await (await getSigner(4)).getAddress());
   });
 
-  async function expectPipelineInput(input: string) {
+  async function expectPipelineAccess(input: string) {
     const receipt = await (await host.testPipe(admin, "0x", encodeStepBlock(command, 0n, input))).wait();
     expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-      { topics: [], data: ethers.concat([ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(admin, 0n)]) },
-      { topics: [], data: ethers.concat([ethers.toBeHex(command, 32), encodeInputBlock(input)]) },
+      ...Array.from({ length: ethers.dataLength(input) / 40 }, (_, i) => ({ topics: [], data: eventRecord(Category.Access, ethers.dataSlice(input, i * 40 + 8, i * 40 + 40), "0x01") })),
     ]);
   }
 
@@ -29,13 +29,13 @@ describe("ExecuteAuthorize", () => {
     const second = await hostId(await (await getSigner(5)).getAddress());
     expect(await host.isAuthorized(command)).to.equal(false);
     const input = concat(encodeNodeBlock(node), encodeNodeBlock(second));
-    await expectPipelineInput(input);
+    await expectPipelineAccess(input);
     expect(await host.isAuthorized(node)).to.equal(true);
     expect(await host.isAuthorized(second)).to.equal(true);
   });
 
   it("accepts an empty node stream", async () => {
-    await expectPipelineInput("0x");
+    await expectPipelineAccess("0x");
   });
 
   it("rejects non-admin accounts", async () => {

@@ -16,8 +16,8 @@ contract ExampleHost is CommandHost, DebitAccount {
     mapping(bytes32 account => mapping(bytes32 asset => uint amount)) internal balances;
 
     // commander must be nonzero and identifies the only native caller allowed to invoke debitAccount.
-    // If it is a contract, it must accept introduce(uint,uint) during deployment.
-    constructor(uint commander) CommandHost(commander) {}
+    // If it is a contract, it must accept introduce(uint,uint,string) during deployment.
+    constructor(uint commander) CommandHost(commander, "1-Host") {}
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         balances[account][asset] -= amount;

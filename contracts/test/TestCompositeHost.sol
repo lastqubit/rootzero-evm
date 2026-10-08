@@ -7,11 +7,11 @@ import {GetBalance} from "../queries/Balance.sol";
 
 contract TestCompositeHost is Host, Deposit, GetBalance {
     constructor(uint cmdr)
-        Host(0)
+        Host(0, "TestCompositeHost")
         Deposit()
         GetBalance()
     {
-        if (cmdr != 0) authorizeNode(cmdr);
+        if (cmdr != 0) setAccess(cmdr, true);
     }
 
     function deposit(bytes32 account, bytes32 asset, uint amount) internal pure override returns (uint) {

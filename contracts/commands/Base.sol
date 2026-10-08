@@ -37,20 +37,21 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @notice Publish command metadata and a default label.
     /// @param name Command entrypoint name and default label. It must exactly
     /// match the Solidity command function name used by the canonical ABI.
-    /// @param state State lane: upper-half spec and lower-half codes.
-    /// @param input Input lane: upper-half spec and lower-half codes.
-    /// @param output Output lane: upper-half spec and lower-half codes.
-    /// @param flags Packed command behavior flags.
+    /// @param state State block specification.
+    /// @param input Input block specification.
+    /// @param output Output block specification.
+    /// @param flags Combined behavior and logging identity flags.
     /// @return id Command node ID.
-    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
+    /// @return descriptor Packed execution allocation hints and explicit logging selections.
     function command(
         string memory name,
         uint state,
         uint input,
         uint output,
-        uint8 flags
+        uint flags
     ) internal returns (uint id, uint descriptor) {
-        id = Nodes.toCommand(name, address(this), flags);
+        if (flags > 255) revert Specs.InvalidSpec();
+        id = Nodes.toCommand(name, address(this), uint8(flags));
         descriptor = endpoint(id, name, state, input, output);
     }
 
@@ -75,10 +76,9 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// without a separate consumption check.
     /// Source pairing, parent boundaries, and access control remain the caller's
     /// responsibility.
-    /// Nonzero lane codes select logging. Before processing, emits one LOG0 record
-    /// [id:32][STATE block and/or INPUT block], including container headers.
-    /// After processing, emits [id:32][OUTPUT block] when output codes are nonzero.
-    /// Nested executions and callback events occur between these records.
+    /// Logging bits in the endpoint ID select one completion record:
+    /// [category:1][id:32][account:32][STATE?][INPUT?][OUTPUT?]. Opening snapshots selected
+    /// sources; output shares the same buffer. Nested/hook logs precede this record.
     /// @param id Registered command endpoint ID used as the log prefix.
     /// @param descriptor Packed endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
@@ -92,12 +92,9 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openCommand(context, descriptor);
-        exec.logContext(id, descriptor);
-
         while (exec.more()) {
             process(exec);
         }
-
         output = exec.finish(id, descriptor);
         credit = exec.drainBudget();
     }
@@ -107,7 +104,7 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// Invokes the callback even when both sources are empty, then requires both
     /// sources to be fully consumed. The callback defines required input and
     /// state shapes; parent boundaries and access control remain the caller's
-    /// responsibility. Logs selected context before processing and output on close.
+    /// responsibility. Emits one selected execution record on close.
     /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
@@ -121,7 +118,6 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openCommand(context, descriptor);
-        exec.logContext(id, descriptor);
         process(exec);
         return exec.close(id, descriptor);
     }

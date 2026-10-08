@@ -1,12 +1,9 @@
-import { decodeBlockLog, decodeFixedBlock, type RawLog } from "./log-blocks.js";
 import { ethers } from "ethers";
-import { Keys } from "./blocks.js";
-
-export const HostIntroduce = 0x20000002n | (9n << 32n);
-
+import type { RawLog } from "./log-blocks.js";
+import { categoryPayload, Category } from "./event-records.js";
 export function decodeIntroductionLog(log: RawLog) {
-  const record = decodeBlockLog(log);
-  if (!record || (record.prefix !== HostIntroduce)) return null;
-  const payload = decodeFixedBlock(record.stream, Keys.Introduction, 96);
-  return { peer: BigInt(ethers.dataSlice(payload, 0, 32)), origin: ethers.dataSlice(payload, 32, 64), blocknum: BigInt(ethers.dataSlice(payload, 64, 96)) };
+  const payload = categoryPayload(log, Category.Introduction);
+  if (payload === null) return null;
+  if (ethers.dataLength(payload) < 96) throw new Error("Invalid introduction record length");
+  return { peer: BigInt(ethers.dataSlice(payload, 0, 32)), origin: ethers.dataSlice(payload, 32, 64), blocknum: BigInt(ethers.dataSlice(payload, 64, 96)), name: ethers.toUtf8String(ethers.dataSlice(payload, 96)) };
 }

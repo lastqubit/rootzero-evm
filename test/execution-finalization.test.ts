@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeCodesBlock, encodeOutputBlock } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeAmountBlock, encodeOutputBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Execution finalization", () => {
@@ -22,13 +22,13 @@ describe("Execution finalization", () => {
           expect(result.credit).eq(close ? budget : 0n);
           expect(result.remaining).eq(close ? 0n : budget);
           const receipt = await (await helper.finalize(...args)).wait();
-          expect(receipt.logs.map((l: any) => l.data)).deep.eq(logging ? [concat(ethers.toBeHex(123, 32), encodeOutputBlock(expected))] : []);
+          expect(receipt.logs.map((l: any) => l.data)).deep.eq(logging ? [concat("0x04", ethers.toBeHex(123, 32), ethers.ZeroHash, encodeOutputBlock(expected))] : []);
         }
   });
 
   it("checks consumption on close while finish permits pending sources", async () => {
     const helper = await deploy("TestExecutionFinalization");
-    const pending = encodeCodesBlock(1n);
+    const pending = encodeAmountBlock(1n);
     for (const flags of [5, 7]) for (const [input, state] of [[pending, "0x"], ["0x", pending], [pending, pending]]) {
       expect((await helper.finalize.staticCall(flags & ~1, 123n, 0, 1, input, state)).remaining).eq(123n);
       await expect(helper.finalize(flags, 123n, 0, 1, input, state))

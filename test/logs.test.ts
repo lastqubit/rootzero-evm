@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeBytesBlock, encodeCodesBlock, encodePositionBlock } from "./helpers/blocks.js";
+import { concat, encodeAccountBalanceBlock, encodeBytesBlock, encodeAmountBlock, encodePositionBlock } from "./helpers/blocks.js";
 
 const codes = [0n, 80n, ethers.MaxUint256, BigInt("0x21" + "00".repeat(31))];
-const streams = ["0x", encodeCodesBlock(0n), concat(encodeBytesBlock("0xabcdef"),
+const streams = ["0x", encodeAmountBlock(0n), concat(encodeBytesBlock("0xabcdef"),
   encodePositionBlock(ethers.id("asset"), ethers.MaxUint256, ethers.id("liability"), 5n, ethers.id("counterparty")))];
 function checkLogs(logs: any[], stream: string) {
   expect(logs).to.have.length(codes.length);
@@ -14,17 +14,17 @@ function checkLogs(logs: any[], stream: string) {
   });
 }
 
-describe("Codes and block stream Logs primitives", () => {
-  it("balance creates one full-width block with unmodified codes and no account or tag", async () => {
+describe("Balance events and historical stream primitives", () => {
+  it("balance emits a fixed category header with the actual account balance", async () => {
     const helper = await deploy("TestLogs");
     for (const asset of [ethers.ZeroHash, ethers.id("asset")])
       for (const amount of [0n, (1n << 96n) - 1n, 1n << 96n, ethers.MaxUint256])
-        for (const code of codes) {
-          const receipt = await (await helper.emitBalance(asset, amount, code)).wait();
+        for (const account of [ethers.ZeroHash, ethers.id("account")]) {
+          const receipt = await (await helper.emitBalance(account, asset, amount)).wait();
           expect(receipt.logs).to.have.length(1);
           expect(receipt.logs[0].topics).deep.eq([]);
-          expect(receipt.logs[0].data).eq(concat(ethers.toBeHex(code, 32), encodeBalanceBlock(asset, amount)));
-          expect(ethers.dataLength(receipt.logs[0].data)).eq(104);
+          expect(receipt.logs[0].data).eq(concat("0x07", account, asset, ethers.toBeHex(amount, 32)));
+          expect(ethers.dataLength(receipt.logs[0].data)).eq(97);
         }
   });
 

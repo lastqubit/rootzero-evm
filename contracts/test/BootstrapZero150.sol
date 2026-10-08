@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
+import {Entities} from "./PreviousEntities.sol";
+import {Actions} from "./PreviousActions.sol";
 
 import {CommandBase, Specs} from "../commands/Base.sol";
 import {Blocks} from "../codec/Blocks.sol";
@@ -8,7 +11,6 @@ import {Execute} from "../codec/Execute.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {Codes} from "../utils/Codes.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
 /// @notice Pipeline-local balance funding with a minimum remaining native budget.
@@ -91,7 +93,7 @@ abstract contract BootstrapZero150 is CommandBase, DebitAccountHook {
 
         uint logSize = logCur == 0 ? output.length : logCur - logStart;
         if (logSize != 0) {
-            Logs.mem(Codes.AccountBootstrap, logStart, logSize);
+            PreviousLogs.mem((Entities.Account | (Actions.Bootstrap << 32)), logStart, logSize);
         }
 
         return (true, output, credit);

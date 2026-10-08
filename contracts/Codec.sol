@@ -8,7 +8,6 @@ import { AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountBalance, A
 import { Keys, STATE_KEY, INPUT_KEY, BYTES_KEY, STEP_KEY, CONTEXT_KEY, RELAY_KEY } from "./codec/Keys.sol";
 import {Sizes, Specs, BALANCE_HEADER, BALANCE_CONSTRAINTS_HEADER, POSITION_HEADER, POSITION_CONSTRAINTS_HEADER} from "./codec/Specs.sol";
 import {Headers} from "./codec/Headers.sol";
-import {Lanes} from "./codec/Lanes.sol";
 import { Execution, Executions } from "./execution/Execution.sol";
 import { Flags } from "./utils/Flags.sol";
 import { Schemas } from "./codec/Schema.sol";

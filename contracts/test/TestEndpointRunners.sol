@@ -13,15 +13,15 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     event Processed(uint amount);
     error Rejected();
     constructor(uint mask) Runtime(0) {
-        uint st = Specs.Balance | (mask & 1);
-        uint inp = Specs.AssetAmount | (mask & 2);
-        uint out = Specs.AssetAmount | (mask & 4);
-        (ids[0], descriptors[0]) = command("batch", st, inp, out, 0);
-        (ids[1], descriptors[1]) = command("once", st, inp, out, 0);
-        (ids[2], descriptors[2]) = command("admin", st, inp, out, 0);
-        (ids[6], descriptors[6]) = command("adminOnce", st, inp, out, 0);
-        (ids[3], descriptors[3]) = port("peer", inp, out, 0);
-        (ids[4], descriptors[4]) = guard("protect", inp);
+        uint st = Specs.Balance;
+        uint inp = Specs.AssetAmount;
+        uint out = Specs.AssetAmount;
+        (ids[0], descriptors[0]) = command("batch", st, inp, out, 4 | (mask << 3));
+        (ids[1], descriptors[1]) = command("once", st, inp, out, 4 | (mask << 3));
+        (ids[2], descriptors[2]) = command("admin", st, inp, out, 4 | (mask << 3));
+        (ids[6], descriptors[6]) = command("adminOnce", st, inp, out, 4 | (mask << 3));
+        (ids[3], descriptors[3]) = port("peer", inp, out, 4 | ((mask & 6) << 3));
+        (ids[4], descriptors[4]) = guard("protect", inp, 4 | ((mask & 2) << 3));
         (ids[5], descriptors[5]) = query("read", Specs.AssetAmount, Specs.AssetAmount);
     }
     function batch(bytes calldata context) external payable returns(bytes memory,uint) {
@@ -38,6 +38,9 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     }
     function peer(bytes calldata input) external payable onlyPeer returns(bytes memory,uint) {
         return runPort(ids[3], descriptors[3], input, inputOne);
+    }
+    function attributedPeer(bytes32 account, bytes calldata input) external payable onlyPeer returns(bytes memory,uint) {
+        return runPort(ids[3], descriptors[3], account, input, inputOne);
     }
     function protect(bytes calldata input) external onlyGuardian {
         runGuard(ids[4], descriptors[4], input, guardOne);
@@ -72,8 +75,7 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     }
     function enforceCommand(uint) internal pure override returns(bytes4,address) { revert Rejected(); }
     function enforcePort(uint) internal pure override returns(bytes4,address) { revert Rejected(); }
-    function authorizeNode(uint) internal pure override {}
-    function revokeNode(uint) internal pure override {}
+    function setAccess(uint, bool) internal pure override {}
     function appointGuardian(bytes32) internal pure override {}
     function dismissGuardian(bytes32) internal pure override {}
     function enforceGuardian(address who) internal pure override returns(address) { return who; }

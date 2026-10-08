@@ -26,7 +26,7 @@ describe("Host Introduction", () => {
     expect(logs).deep.eq([{
       peer: await (contract as any).host(),
       origin: encodeUserAccount(await (await getSigner(0)).getAddress()),
-      blocknum: BigInt(receipt!.blockNumber),
+      blocknum: BigInt(receipt!.blockNumber), name: "TestHost",
     }]);
   });
 
@@ -42,6 +42,7 @@ describe("Host Introduction", () => {
       .map(decodeIntroductionLog).find(value => value !== null);
     expect(introduced).to.not.equal(undefined);
     expect(introduced!.peer).to.equal(await (contract as any).host());
+    expect(introduced!.name).eq("TestMinimalCommandHost");
   });
 
   it("rejects deployment when a contract commander cannot accept introductions", async () => {
@@ -61,6 +62,8 @@ describe("Host Introduction", () => {
   it("does NOT introduce when the commander host ID is zero", async () => {
     const host = await deploy("TestHost", 0n);
     expect(await host.getAddress()).to.not.equal(ethers.ZeroAddress);
+    const receipt = await host.deploymentTransaction().wait();
+    expect(receipt.logs.map(decodeIntroductionLog).filter(Boolean)).deep.eq([]);
   });
 
   it("introduce rejects claims that do not match the caller address", async () => {
@@ -68,7 +71,7 @@ describe("Host Introduction", () => {
     const claimedHostId = 12345n;
 
     await expect(
-      rootzero.connect(signer).introduce(claimedHostId, 0n)
+      rootzero.connect(signer).introduce(claimedHostId, 0n, "claimed")
     ).to.be.revertedWithCustomError(rootzero, "InvalidId");
   });
 
@@ -80,9 +83,9 @@ describe("Host Introduction", () => {
     const HOST_PREFIX = 0x03020200n;
     const correctHostId = (HOST_PREFIX << 224n) | (CHAIN_ID << 192n) | BigInt(callerAddr);
 
-    const receipt = await (await rootzero.connect(signer).introduce(correctHostId, 1n)).wait();
+    const receipt = await (await rootzero.connect(signer).introduce(correctHostId, 1n, "peer")).wait();
     expect(receipt.logs.map(decodeIntroductionLog)).deep.eq([{
-      peer: correctHostId, origin: encodeUserAccount(callerAddr), blocknum: 1n,
+      peer: correctHostId, origin: encodeUserAccount(callerAddr), blocknum: 1n, name: "peer",
     }]);
     expect(receipt.logs[0].address.toLowerCase()).eq((await rootzero.getAddress()).toLowerCase());
   });
@@ -95,9 +98,9 @@ describe("Host Introduction", () => {
     const hostId = (HOST_PREFIX << 224n) | (CHAIN_ID << 192n) | BigInt(callerAddr);
 
     for (const blocknum of [0n, ethers.MaxUint256]) {
-      const receipt = await (await rootzero.connect(signer).introduce(hostId, blocknum)).wait();
+      const receipt = await (await rootzero.connect(signer).introduce(hostId, blocknum, "peer")).wait();
       expect(receipt.logs.map(decodeIntroductionLog)).deep.eq([{
-        peer: hostId, origin: encodeUserAccount(callerAddr), blocknum,
+        peer: hostId, origin: encodeUserAccount(callerAddr), blocknum, name: "peer",
       }]);
     }
     expect(rootzero.interface.getEvent("Introduction")).eq(null);

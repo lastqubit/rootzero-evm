@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock, encodeOutputBlock } from "./helpers/blocks.js";
+import { concat, encodeUserAccount, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock, encodeOutputBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Endpoint runner lifecycle", () => {
@@ -22,14 +22,13 @@ describe("Endpoint runner lifecycle", () => {
           if(i !== 4) expect(Array.from(await helper.getFunction(name).staticCall(arg, opts))).deep.eq([out, 9n - BigInt(count)]);
           const receipt = await (await helper.getFunction(name)(arg, opts)).wait();
           const prefix = ethers.toBeHex(await helper.ids(i), 32);
-          const expected: string[] = [];
-          if(i < 3 && (mask & 3)) expected.push(concat(prefix, mask & 1 ? encodeStateBlock(st) : "0x", mask & 2 ? encodeInputBlock(inp) : "0x"));
-          if(i >= 3 && (mask & 2)) expected.push(concat(prefix, encodeInputBlock(inp)));
-          if(i < 4 && (mask & 4)) expected.push(concat(prefix, encodeOutputBlock(out)));
+          const expected = [concat("0x04", prefix, i < 3 ? account : i === 4 ? encodeUserAccount(receipt.from) : ethers.ZeroHash,
+            i < 3 && (mask & 1) ? encodeStateBlock(st) : "0x",
+            mask & 2 ? encodeInputBlock(inp) : "0x",
+            i < 4 && (mask & 4) ? encodeOutputBlock(out) : "0x")];
           expect(receipt.logs.filter((l: any) => !l.topics.length).map((l: any) => l.data)).deep.eq(expected);
-          expect(receipt.logs.length).eq(count + expected.length);
-          if(expected.length && ((i < 3 && (mask & 3)) || (i >= 3 && (mask & 2)))) expect(receipt.logs[0].data).eq(expected[0]);
-          if(i < 4 && (mask & 4)) expect(receipt.logs.at(-1).data).eq(expected.at(-1));
+          expect(receipt.logs.length).eq(count + 1);
+          expect(receipt.logs.at(-1).data).eq(expected[0]);
         }
       }
       expect(await helper.read(concat(input, input))).eq(concat(output, output));
@@ -51,9 +50,8 @@ describe("Endpoint runner lifecycle", () => {
     expect(Array.from(await helper.adminOnce.staticCall(context, { value: 9n }))).deep.eq([output, 8n]);
     const receipt = await (await helper.adminOnce(context, { value: 9n })).wait();
     const prefix = ethers.toBeHex(await helper.ids(6), 32);
-    expect(receipt.logs.length).eq(3);
-    expect(receipt.logs[0].data).eq(concat(prefix, encodeStateBlock(state), encodeInputBlock(input)));
-    expect(receipt.logs[2].data).eq(concat(prefix, encodeOutputBlock(output)));
+    expect(receipt.logs.length).eq(2);
+    expect(receipt.logs[1].data).eq(concat("0x04", prefix, account, encodeStateBlock(state), encodeInputBlock(input), encodeOutputBlock(output)));
     await expect(helper.adminOnce(encodeContextBlock(ethers.ZeroHash, "0x", "0x")))
       .revertedWithCustomError(helper, "Rejected");
     // An authorized empty context still invokes the callback, which requires a balance.
@@ -63,6 +61,11 @@ describe("Endpoint runner lifecycle", () => {
       .revertedWithCustomError(helper, "UnconsumedData");
     await expect(helper.adminOnce(encodeContextBlock(account, state, encodeAssetAmountBlock(asset, 13n)), { value: 9n }))
       .revertedWithCustomError(helper, "Rejected");
+  });
+  it("allows explicit port attribution without inferring it from the peer", async () => {
+    const helper = await deploy("TestEndpointRunners", 6);
+    const receipt = await (await helper.attributedPeer(account, input, {value: 1n})).wait();
+    expect(receipt.logs.at(-1).data).eq(concat("0x04", ethers.toBeHex(await helper.ids(3),32), account, encodeInputBlock(input), encodeOutputBlock(output)));
   });
   it("rejects logging codes on view query registration", async () => {
     const helper = await deploy("TestQueryCodes", 0, 0);

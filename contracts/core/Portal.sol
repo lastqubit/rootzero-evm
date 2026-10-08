@@ -5,7 +5,6 @@ import {Blocks} from "../codec/Blocks.sol";
 import {Calls} from "./Calls.sol";
 import {Runtime} from "./Runtime.sol";
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {PortPipePayableSelector} from "../ports/Pipe.sol";
 
 /// @notice Hook for forwarding a recoverable message through a transport boundary.
@@ -64,7 +63,7 @@ abstract contract Portal is ForwardHook, Runtime {
 
         miss = Blocks.hash(messageCur);
         unresolved[key] = miss;
-        Logs.resolution(key, miss, Codes.HostUnresolved);
+        Logs.resolution(key, miss, false);
     }
 
     /// @notice Validate and consume a previously unresolved witness.
@@ -79,7 +78,7 @@ abstract contract Portal is ForwardHook, Runtime {
         if (digest != Blocks.hash(witnessCur)) revert BadWitness();
 
         delete unresolved[key];
-        Logs.resolution(key, digest, Codes.HostResolved);
+        Logs.resolution(key, digest, true);
         return witnessCur;
     }
 }

@@ -44,8 +44,6 @@ library Sizes {
     uint constant Swap = 2 * Header + 2 * Word;
     /// @dev STATUS block: 8 header + 32 status code = 40 bytes
     uint constant Status = B32;
-    /// @dev CODES block: 8 header + 32 packed identifiers = 40 bytes.
-    uint constant Codes = B32;
     /// @dev ENTITY block: 8 header + 32 entity identifier = 40 bytes.
     uint constant Entity = B32;
 
@@ -91,7 +89,7 @@ library Sizes {
     uint constant Resolution = B64;
     /// @dev INTRODUCTION block: 8-byte header plus three full-width fields.
     uint constant Introduction = B96;
-    /// @dev ENDPOINT block: 8-byte header plus four full-width fields.
+    /// @dev ENDPOINT block: 8-byte header, four full-width fields; flags are encoded in the endpoint ID.
     uint constant Endpoint = B128;
     /// @dev TRANSACTION block: 8 header + 32 from + 32 to + 32 asset + 32 amount = 136 bytes
     uint constant Transaction = B128;
@@ -173,16 +171,11 @@ library Specs {
     uint constant Resolution = uint(bytes32(Keys.Resolution)) | Exact64;
     uint constant Introduction = uint(bytes32(Keys.Introduction)) | Exact96;
     uint constant Endpoint = uint(bytes32(Keys.Endpoint)) | Exact128;
-    uint constant Label = uint(bytes32(Keys.Label)) | UnboundedMin40Hint256;
-    uint constant Annotation = uint(bytes32(Keys.Annotation)) | UnboundedMin40Hint256;
-    uint constant Action = uint(bytes32(Keys.Action)) | Exact32;
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
-    uint constant ExecutionCost = uint(bytes32(Keys.ExecutionCost)) | Exact64;
     uint constant Groups = uint(bytes32(Keys.Groups)) | (uint(8) << 192) | UnboundedHint128;
     uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
-    uint constant Codes = uint(bytes32(Keys.Codes)) | Exact32;
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;
     uint constant AccountAsset = uint(bytes32(Keys.AccountAsset)) | Exact64;
     uint constant HostAsset = uint(bytes32(Keys.HostAsset)) | Exact64;

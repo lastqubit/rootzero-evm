@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Encoder} from "../codec/Encoder.sol";
 
 /// @title GroupsAnnot
@@ -16,6 +15,6 @@ abstract contract GroupsAnnot {
     /// Only #state, #input, and #output are lane references in this annotation.
     /// Omitted lanes have no grouping hint; descriptor schemas take precedence over hints.
     function annotateGroups(uint endpoint, string memory description) internal virtual {
-        Logs.annotation(endpoint, Encoder.createGroups(bytes(description)), Codes.HostAnnotate);
+        Logs.metadata(endpoint, Encoder.createGroups(bytes(description)));
     }
 }

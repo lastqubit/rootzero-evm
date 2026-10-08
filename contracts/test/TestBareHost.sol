@@ -4,5 +4,5 @@ pragma solidity ^0.8.33;
 import {Host} from "../core/Host.sol";
 
 contract TestBareHost is Host {
-    constructor(uint cmdr) Host(cmdr) {}
+    constructor(uint cmdr) Host(cmdr, "TestBareHost") {}
 }

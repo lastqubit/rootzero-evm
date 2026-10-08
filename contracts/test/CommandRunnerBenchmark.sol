@@ -17,7 +17,7 @@ contract CommandRunnerBenchmark is CommandHost, CommandBase {
     uint private immutable pairedDescriptor;
     uint private immutable pairedId;
 
-    constructor() CommandHost(Nodes.toHost(msg.sender)) {
+    constructor() CommandHost(Nodes.toHost(msg.sender), "CommandRunnerBenchmark") {
         (sinkId, sinkDescriptor) = command("sinkBatch", Specs.Balance, Specs.Empty, Specs.Empty, 0);
         (stateId, stateDescriptor) = command("stateBatch", Specs.Balance, Specs.Empty, Specs.Balance, 0);
         (inputId, inputDescriptor) = command("inputBatch", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Accounts} from "../utils/Accounts.sol";
-import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -22,14 +22,13 @@ abstract contract PayoutHook {
 /// @notice Command that sinks BALANCE state blocks to matching ACCOUNT input blocks.
 /// Each BALANCE block is paired with one ACCOUNT block at the same position.
 abstract contract Payout is CommandBase, PayoutHook {
-    uint private constant STATE = Specs.Balance | Codes.AccountPayout;
-    uint private constant INPUT = Specs.Account | Codes.AccountPayout;
+    uint private constant LOGS = Logs.State | Logs.Input;
 
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("payout", STATE, INPUT, Specs.Empty, 0);
+        (id, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, LOGS);
     }
 
     /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.

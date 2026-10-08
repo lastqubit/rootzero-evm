@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousNamingBlocks} from "./PreviousNaming.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 
 import {Blocks} from "../codec/Blocks.sol";
@@ -31,7 +32,7 @@ contract TestStringCursorHelper {
     ) external pure returns (bytes32 namespace, string memory name, uint i) {
         uint cur = Cursors.wrap(source);
         uint textCur;
-        (namespace, textCur, cur) = Blocks.unpackLabel(cur);
+        (namespace, textCur, cur) = PreviousNamingBlocks.unpackLabel(cur);
         name = Blocks.toString(textCur);
         i = Cursors.position(cur) - Cursors.base(source);
     }

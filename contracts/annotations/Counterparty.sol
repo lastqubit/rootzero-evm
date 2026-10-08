@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Encoder} from "../codec/Encoder.sol";
 
 /// @title CounterpartyAnnot
@@ -14,6 +13,6 @@ abstract contract CounterpartyAnnot {
     /// @param entity Entity receiving the annotation.
     /// @param account Counterparty account ID, or zero for Rootzero.
     function annotateCounterparty(uint entity, bytes32 account) internal virtual {
-        Logs.annotation(entity, Encoder.createCounterparty(account), Codes.HostAnnotate);
+        Logs.metadata(entity, Encoder.createCounterparty(account));
     }
 }

@@ -21,15 +21,13 @@ describe("Pipeline parser and credit security", function () {
     external = await host.externalId();
   });
 
-  it("logs account and initial budget first, including empty pipelines and independently of msg.value", async () => {
+  it("emits only step effects and preserves the budget, including empty pipelines", async () => {
     for (const budget of [0n, 42n, ethers.MaxUint256]) {
       for (const steps of ["0x", encodeStepBlock(local, 0n, ethers.toBeHex(0n, 32))]) {
         const receipt = await (await host.measure(steps, budget, "0x")).wait();
-        expect(receipt.logs[0].topics).deep.eq([]);
-        expect(receipt.logs[0].data).eq(concat(
-          ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(ethers.ZeroHash, budget),
-        ));
-        expect(receipt.logs.length).eq(steps === "0x" ? 1 : 2);
+        expect(receipt.logs.length).eq(steps === "0x" ? 0 : 1);
+        expect(receipt.logs.every((log: any) => log.topics.length > 0)).eq(true);
+        expect((await host.measure.staticCall(steps, budget, "0x"))[1]).eq(budget);
       }
     }
   });

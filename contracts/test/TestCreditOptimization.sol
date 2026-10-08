@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 
 import {ExecuteCreditAccount} from "../commands/Credit.sol";
 import {Execute} from "../codec/Execute.sol";
@@ -45,7 +46,7 @@ contract CreditBefore is CreditMeasure {
         if (!Cursors.done(inputCur)) revert UnexpectedInput();
         (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
-        Logs.memCopyWrap(creditAccountId(), Keys.State, state);
+        PreviousLogs.memCopyWrap(creditAccountId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
@@ -71,7 +72,7 @@ contract CreditLogMeasure {
         bytes memory state = Encoder.allocate(source.length);
         Encoder.copy(Encoder.pos(state, 0), source, source.length);
         uint initial = gasleft();
-        if (mode == 0) Logs.memCopyWrap(123, Keys.State, state);
+        if (mode == 0) PreviousLogs.memCopyWrap(123, Keys.State, state);
         else if (mode == 1) {
             uint key = uint32(Keys.State);
             assembly ("memory-safe") {
@@ -80,7 +81,7 @@ contract CreditLogMeasure {
                 log1(add(state, 24), add(size, 8), 123)
                 mstore(state, size)
             }
-        } else Logs.memWrap(123, Keys.State, state);
+        } else PreviousLogs.memWrap(123, Keys.State, state);
         used = initial - gasleft();
         hash = keccak256(state);
     }

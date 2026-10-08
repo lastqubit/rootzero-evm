@@ -17,7 +17,7 @@ describe("Groups annotation", () => {
     expect(await host.descriptor()).to.equal(descriptor);
     expect(host.interface.getEvent("Endpoint")).eq(null);
     await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, exactSpec(Keys.Balance, 64), 0n, exactSpec(Keys.Position, 160));
-    await expect(host.deploymentTransaction()).to.emitAnnotation(host).withArgs(id, encoded(description));
+    await expect(host.deploymentTransaction()).to.emitMetadata(host).withArgs(id, encoded(description));
     const [spec, body] = await host.catalog();
     expect(ethers.toBeHex(spec >> 224n, 4)).to.equal(groupsKey);
     expect((spec >> 192n) & 0xffffffffn).to.equal(8n);
@@ -27,7 +27,7 @@ describe("Groups annotation", () => {
   it("emits replacements and an empty description to clear hints", async () => {
     const host = await deploy("TestGroupsAnnotation", "#state as (debit, credit)");
     for (const description of ["#output as (receipt, change)", ""]) {
-      await expect(host.publish(description)).to.emitAnnotation(host)
+      await expect(host.publish(description)).to.emitMetadata(host)
         .withArgs(await host.commandId(), encoded(description));
     }
   });
@@ -35,7 +35,7 @@ describe("Groups annotation", () => {
   it("preserves annotation strings without on-chain DSL validation", async () => {
     const host = await deploy("TestGroupsAnnotation", "");
     for (const description of ["#input as (left, right)", "invalid syntax", "?".repeat(200)]) {
-      await expect(host.publish(description)).to.emitAnnotation(host)
+      await expect(host.publish(description)).to.emitMetadata(host)
         .withArgs(await host.commandId(), encoded(description));
     }
   });

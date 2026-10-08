@@ -25,7 +25,7 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     /// iteration until both sources are consumed. No progress guard is enforced.
     /// Callbacks must preserve bounded cursors; finalization does not recheck them.
     /// Source pairing and parent boundaries remain the callback's responsibility.
-    /// Logs selected context after authorization and output after processing.
+    /// Emits one selected execution record after processing.
     /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed admin endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
@@ -40,7 +40,6 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openAdminCommand(context, descriptor);
 
-        exec.logContext(id, descriptor);
         while (exec.more()) {
             process(exec);
         }
@@ -52,7 +51,7 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     /// @notice Run an authorized admin context through a callback exactly once.
     /// @dev Authorizes even empty batches before logging or processing. The callback
     /// defines source shapes and must consume both bounded sources completely.
-    /// Logs selected context before processing and output on close.
+    /// Emits one selected execution record on close.
     /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed admin endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
@@ -66,7 +65,6 @@ abstract contract AdminBase is NodeAccess, CommandBase {
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openAdminCommand(context, descriptor);
-        exec.logContext(id, descriptor);
         process(exec);
         return exec.close(id, descriptor);
     }

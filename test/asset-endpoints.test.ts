@@ -16,9 +16,7 @@ describe("Singular asset endpoints", () => {
       const admin = !method.startsWith("port");
       const id = admin ? await commandId(`${method}(bytes)`, host, 2n) : await portId(`${method}(bytes)`, host);
       const allow = method === "allowAsset" || method === "portAllowAsset";
-      const inputCodes = 0x20000002n | ((allow ? 20n : 21n) << 32n)
-        | ((allow ? 0xa0000001n : 0xa0000000n) << 64n);
-      const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, inputCodes, admin});
+      const specs = endpointSpecs({input: Keys.Asset, inputHint: 32, admin});
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...specs);
     }
   });
@@ -30,7 +28,7 @@ describe("Singular asset endpoints", () => {
     const peer = host.connect(await getSigner(1)) as any;
     const allowed = await (await peer.portAllowAsset(input)).wait();
     expect(allowed.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-      concat(ethers.toBeHex(await portId("portAllowAsset(bytes)", host), 32), encodeInputBlock(input)),
+      concat("0x04", ethers.toBeHex(await portId("portAllowAsset(bytes)", host), 32), ethers.ZeroHash, encodeInputBlock(input)),
     ]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(true);
     const stranger = host.connect(await getSigner(2)) as any;
@@ -38,7 +36,7 @@ describe("Singular asset endpoints", () => {
     await expect(stranger.portDenyAsset(input)).to.be.revertedWithCustomError(host, "AccessDenied");
     const denied = await (await peer.portDenyAsset(input)).wait();
     expect(denied.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-      concat(ethers.toBeHex(await portId("portDenyAsset(bytes)", host), 32), encodeInputBlock(input)),
+      concat("0x04", ethers.toBeHex(await portId("portDenyAsset(bytes)", host), 32), ethers.ZeroHash, encodeInputBlock(input)),
     ]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(false);
     for (const method of ["portAllowAsset", "portDenyAsset"]) {

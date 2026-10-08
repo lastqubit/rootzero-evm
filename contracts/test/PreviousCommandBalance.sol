@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {Execution, Executions, CommandBase, Specs} from "../commands/Base.sol";
 
 import {Sizes} from "../codec/Specs.sol";
 import {OutOfBounds} from "../utils/Errors.sol";
-import {Actions} from "../utils/Actions.sol";
-import {Entities} from "../utils/Entities.sol";
+import {Actions} from "./PreviousActions.sol";
+import {Entities} from "./PreviousEntities.sol";
 
 /// @dev Previous production balance decoder; all other execution helpers stay shared.
 library PreviousCommandBalance {
@@ -65,12 +66,12 @@ abstract contract PreviousCommandWithdrawHook {
 /// Use `withdraw` for assets being sent outside the protocol (e.g. ERC-20 transfers, ETH sends).
 /// For internal balance credits, use `creditAccount` instead.
 abstract contract PreviousCommandWithdraw is CommandBase, PreviousCommandWithdrawHook {
-    uint private constant STATE = Specs.Balance | Entities.Account | (Actions.Withdraw << 32);
+    uint private constant STATE = Specs.Balance;
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, 0);
+        (id, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.

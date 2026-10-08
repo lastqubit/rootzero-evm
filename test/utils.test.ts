@@ -43,6 +43,25 @@ describe("Utils", () => {
 
   // ── IDs ───────────────────────────────────────────────────────────────────
 
+  describe("Math.scale", () => {
+    it("rounds down and supports zero and full-width values without a capacity limit", async () => {
+      for (const [value, numerator, denominator] of [
+        [145n, 3n, 2n], [1n, 1n, 2n], [0n, ethers.MaxUint256, 1n],
+        [ethers.MaxUint256, 0n, 1n], [ethers.MaxUint256, 1n, 1n],
+        [1n, ethers.MaxUint256, ethers.MaxUint256], [1n << 32n, 2n, 1n],
+      ]) {
+        expect(await utils.testScale(value, numerator, denominator)).eq(value * numerator / denominator);
+      }
+    });
+
+    it("rejects zero denominators before overflow and checks the intermediate product", async () => {
+      for (const value of [0n, 1n, ethers.MaxUint256]) {
+        await expectCustomError(utils.testScale(value, ethers.MaxUint256, 0n), "ZeroAmount");
+      }
+      await expectCustomError(utils.testScale(2n, ethers.MaxUint256, ethers.MaxUint256), "ValueOverflow");
+    });
+  });
+
   describe("Ids", () => {
     it("assigns the Rootzero, opaque, and EVM representation bytes", async () => {
       expect(await utils.testRepresentations()).to.deep.equal([0x01n, 0x02n, 0x03n]);

@@ -13,7 +13,7 @@ abstract contract DebitAccountHook {
     /// must not reduce the amount made available to the consuming operation.
     /// May assume account format satisfies the caller's policy without repeated
     /// format validation. Applicable authorization and balance checks remain.
-    /// Emit Logs.accountBalance(account, asset, updatedBalance) after a successful
+    /// Emit Logs.balance(account, asset, updatedBalance) after a successful
     /// nonzero debit, including an updated balance of zero. Emission is the
     /// implementer's responsibility; reuse the mutation's result without rereading
     /// storage. Zero-amount calls should not emit unchanged balances.
@@ -31,7 +31,7 @@ abstract contract CreditAccountHook {
     /// The hook must revert if it cannot credit the complete amount.
     /// May assume account format satisfies the caller's policy without repeated
     /// format validation. Applicable authorization and accounting requirements remain.
-    /// Emit Logs.accountBalance(account, asset, updatedBalance) after a successful
+    /// Emit Logs.balance(account, asset, updatedBalance) after a successful
     /// nonzero credit. Emission is the implementer's responsibility; reuse the
     /// mutation's result without rereading storage. Zero-amount calls should not
     /// emit unchanged balances.

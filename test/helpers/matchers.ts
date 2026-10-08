@@ -1,6 +1,5 @@
 import { decodeEndpointLog } from "./endpoint-logs.js";
-import { decodeAnnotationLog } from "./annotation-logs.js";
-import { commandId } from "./setup.js";
+import { decodeMetadataLog } from "./metadata-logs.js";
 import * as chai from "chai";
 import type { BaseContract, ContractTransactionResponse, Log } from "ethers";
 import { id } from "ethers";
@@ -128,11 +127,10 @@ chai.use((chaiLib, utils) => {
   );
 
   chaiLib.Assertion.addMethod(
-    "emitAnnotation",
+    "emitMetadata",
     function (this: object, contract: BaseContract) {
-      return makeLogPromise(utils.flag(this, "object"), contract, "ANNOTATION", async () => {
-        const endpoint = await commandId("annotate(bytes)", contract, 2n);
-        return log => decodeAnnotationLog(log, endpoint).map(value => [value.entity, value.data]);
+      return makeLogPromise(utils.flag(this, "object"), contract, "METADATA", () => {
+        return log => decodeMetadataLog(log).map(value => [value.entity, value.data]);
       });
     }
   );

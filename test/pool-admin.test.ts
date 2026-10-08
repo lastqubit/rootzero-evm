@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   blockKey, concat, encodeAssetAmountBlock, encodeAssetBlock, encodeBlock,
-  encodeContextBlock, encodeLabelBlock, encodeStringBlock, endpointSpecs, Keys,
+  encodeContextBlock, encodeStringBlock, endpointSpecs, Keys,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -24,12 +24,12 @@ describe("Pool admin commands", () => {
     const block = (asset: string, amount: bigint) => add ? encodeAssetAmountBlock(asset, amount) : encodeAssetBlock(asset);
     const pair = concat(block(first, 0n), block(second, ethers.MaxUint256));
 
-    it(`${method} publishes its admin descriptor, label, and pair grouping`, async () => {
+    it(`${method} publishes its admin descriptor, name, and pair grouping`, async () => {
       const id = await commandId(method + "(bytes)", host, 2n);
-      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...endpointSpecs({ input: key, inputHint: size, inputCodes: 0x20000002n | (0x20000008n << 32n) | ((method === "addPool" ? 4n : 5n) << 64n), admin: true }));
-      await expect(host.deploymentTransaction()).to.emitAnnotation(host)
-        .withArgs(id, encodeLabelBlock(ethers.ZeroHash, method));
-      await expect(host.deploymentTransaction()).to.emitAnnotation(host)
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...endpointSpecs({ input: key, inputHint: size, admin: true }));
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host)
+        .withArgs(id, undefined, undefined, undefined, method);
+      await expect(host.deploymentTransaction()).to.emitMetadata(host)
         .withArgs(id, encodeBlock(blockKey("#groups"), encodeStringBlock("#input as (first, second)")));
     });
 

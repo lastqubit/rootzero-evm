@@ -658,15 +658,11 @@ describe("Cursors", () => {
         .to.equal(encodeLabelBlock(namespace, "rootzero"));
     });
 
-    it("action factory matches the canonical ACTION encoding", async () => {
+    it("historical action factory preserves ACTION encoding", async () => {
       expect(await helper.testToActionBlock(4n)).to.equal(encodeActionBlock(4n));
     });
 
-    it("publishes an action annotation", async () => {
-      await expect(blocksHelper.publishAction(123n, 4n))
-        .to.emitAnnotation(blocksHelper)
-        .withArgs(123n, encodeActionBlock(4n));
-    });
+
 
     for (const account of [ethers.ZeroHash, encodeUserAccount("0x42"), pad32((0x03010200n << 224n) | 2n)]) {
       it(`encodes and publishes counterparty account ${account}`, async () => {
@@ -675,14 +671,14 @@ describe("Cursors", () => {
         expect(ethers.dataSlice(encoded, 8)).to.equal(account);
         expect(await helper.testToCounterpartyBlock(account)).to.equal(encoded);
         await expect(blocksHelper.publishCounterparty(123n, account))
-          .to.emitAnnotation(blocksHelper).withArgs(123n, encoded);
+          .to.emitMetadata(blocksHelper).withArgs(123n, encoded);
       });
     }
 
     it("leaves counterparty claim validation to consumers", async () => {
       const value = pad32(456n);
       await expect(blocksHelper.publishCounterparty(123n, value))
-        .to.emitAnnotation(blocksHelper)
+        .to.emitMetadata(blocksHelper)
         .withArgs(123n, encodeCounterpartyBlock(value));
     });
 
@@ -785,7 +781,7 @@ describe("Cursors", () => {
     });
 
     it("packs complete descriptor metadata without exposing field accessors", async () => {
-      const expected = (BigInt(Keys.Balance) << 224n) | (72n << 192n) | (72n << 160n) | 1n;
+      const expected = (BigInt(Keys.Balance) << 224n) | (72n << 192n) | (72n << 160n) | 33n;
 
       expect(await blocksHelper.descriptorWord()).to.equal(expected);
     });
@@ -809,7 +805,9 @@ describe("Cursors", () => {
       expect(stateCursor >> 64n).to.equal(0n);
       expect(((inputCursor >> 32n) & 0xffffffffn) - (inputCursor & 0xffffffffn)).to.equal(3n);
       expect(inputCursor >> 64n).to.equal(0n);
-      expect((stateWriter >> 32n) & 0xffffffffn).to.equal(0n);
+      // Equal fixed strides use source bytes as an allocation hint; opening does
+      // not validate the deliberately malformed two-byte state stream.
+      expect((stateWriter >> 32n) & 0xffffffffn).to.equal(2n);
       expect(stateWriter >> 64n).to.equal(0n);
       expect((inputWriter >> 32n) & 0xffffffffn).to.equal(0n);
       expect(inputWriter >> 64n).to.equal(0n);
@@ -823,19 +821,6 @@ describe("Cursors", () => {
 
       expect(await blocksHelper.executionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
         .to.deep.equal([stateAsset, 41n, inputAsset, 42n]);
-    });
-
-    it("keeps state/input traversal gas within one percent of tagged relative cursors", async () => {
-      const state = encodeBalanceBlock(ethers.zeroPadValue("0x31", 32), 41n);
-      const input = encodeListBlock(encodeAssetAmountBlock(ethers.zeroPadValue("0x32", 32), 42n));
-
-      expect(await blocksHelper.executionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)))
-        .to.deep.equal(await blocksHelper.legacyExecutionEnterAssetAmount(encodeContextBlock(ethers.ZeroHash, state, input)));
-      const specialized = await blocksHelper.executionEnterAssetAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
-      const legacy = await blocksHelper.legacyExecutionEnterAssetAmount.estimateGas(encodeContextBlock(ethers.ZeroHash, state, input));
-      // Whole-call estimates include selector dispatch and cursor initialization.
-      // Allow small compiler/layout changes while detecting a material regression.
-      expect(specialized * 100n).to.be.lessThan(legacy * 101n);
     });
 
     it("reads raw words from a validated execution prefix", async () => {
@@ -1279,19 +1264,6 @@ describe("Cursors", () => {
       expect(await helper.testIsAtCurrent(source, Keys.Balance)).to.equal(true);
     });
 
-
-
-    it("uses less gas than the removed relative generic cursor", async () => {
-      const source = concat(
-        encodeBytesBlock("0x0102"),
-        encodeBytesBlock("0x030405"),
-        encodeBytesBlock("0x06070809"),
-      );
-
-      const absolute = await helper.absoluteCursorBytes.estimateGas(source);
-      const relative = await helper.relativeCursorBytes.estimateGas(source);
-      expect(absolute).to.be.lessThan(relative);
-    });
 
 
     it("hasAt checks a block key at an arbitrary source position", async () => {

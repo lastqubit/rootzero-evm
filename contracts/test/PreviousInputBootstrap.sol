@@ -1,25 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
+import {Entities} from "./PreviousEntities.sol";
+import {Actions} from "./PreviousActions.sol";
 
-import {CommandBase, Specs} from "../commands/Base.sol";
+import {LogsBalance151} from "./LogsBalance151.sol";
+
+import {CommandBase, Executions, Specs} from "../commands/Base.sol";
 import {Blocks} from "../codec/Blocks.sol";
 import {Execute} from "../codec/Execute.sol";
 import {Keys} from "../codec/Keys.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {Codes} from "../utils/Codes.sol";
 import {UnexpectedState} from "../utils/Errors.sol";
 
 /// @notice Pipeline-local balance funding with a minimum remaining native budget.
 // Frozen input-logging baseline for gas comparisons.
 abstract contract PreviousInputBootstrap is CommandBase, DebitAccountHook {
-    uint private constant INPUT = Specs.Bootstrap | Codes.AccountBootstrap;
+    uint private constant INPUT = Specs.Bootstrap;
 
     uint private immutable id;
 
     constructor() {
-        (id, ) = command("bootstrap", Specs.Empty, INPUT, Specs.Balance, 0);
+        (id, ) = command("bootstrap", Specs.Empty, INPUT, Specs.Balance, Logs.Input);
     }
 
     /// @notice Return the registered BOOTSTRAP command ID.
@@ -56,7 +60,7 @@ abstract contract PreviousInputBootstrap is CommandBase, DebitAccountHook {
         unchecked {
             (i, output) = Execute.allocateBalances((end - abs) / Sizes.AssetAmount);
         }
-        Logs.copyWrap(id, Keys.Input, inputCur);
+        PreviousLogs.copyWrap(id, Keys.Input, inputCur);
 
         uint nativeAmount;
         while (abs < end) {
@@ -81,7 +85,7 @@ abstract contract PreviousInputBootstrap is CommandBase, DebitAccountHook {
         }
         if (nativeAmount != 0) {
             debitAccount(account, chainAsset, nativeAmount);
-            Logs.balance(chainAsset, nativeAmount, Codes.AccountDebit);
+            LogsBalance151.balance(chainAsset, nativeAmount, (Entities.Account | (Actions.Debit << 32)));
         }
 
         return (true, output, credit);

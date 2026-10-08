@@ -22,13 +22,13 @@ abstract contract PositionLogHarness {
         Execution memory exec;
         exec.account = account;
         (exec.buffer, exec.output) = Encoder.init(capacity);
-        if (sentinels) exec.outputCodes(0x1234);
+        if (sentinels) exec.outputAmount(0x1234);
         uint start = uint32(exec.output);
         uint initial = gasleft();
         for (uint i; i < count; ++i) one(exec, p, codes);
         afterBatch(exec, codes, start, count);
         used = initial - gasleft();
-        if (sentinels) exec.outputCodes(0x5678);
+        if (sentinels) exec.outputAmount(0x5678);
         output = exec.finish();
     }
 
@@ -94,11 +94,11 @@ abstract contract PositionLogHarness {
         Execution memory exec;
         exec.account = account;
         (exec.buffer, exec.output) = Encoder.init(capacity);
-        exec.outputCodes(0x1234);
+        exec.outputAmount(0x1234);
         uint start = uint32(exec.output);
         for (uint i; i < positions.length; ++i) one(exec, positions[i], codes);
         afterBatch(exec, codes, start, positions.length);
-        exec.outputCodes(0x5678);
+        exec.outputAmount(0x5678);
         return exec.finish();
     }
 

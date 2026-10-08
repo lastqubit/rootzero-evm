@@ -12,7 +12,6 @@ import {
   encodeStepBlock,
   encodeBookingBlock,
   encodeDispatchBlock,
-  encodeLabelBlock,
   encodeUserAccount,
 } from "./helpers/blocks.js";
 import { ethers } from "ethers";
@@ -55,48 +54,48 @@ describe("Port Entrypoints", () => {
         ...endpointSpecs({ input: Keys.AssetAmount, inputHint: 64 }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portRequestAllowance(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portRequestAllowance"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portRequestAllowance(bytes)"), undefined, undefined, undefined, "portRequestAllowance");
 
     await expect(tx!)
       .to.emitEndpoint(host).withArgs(await port("portRequestAsset(bytes)"),
         ...endpointSpecs({ input: Keys.AssetAmount, inputHint: 64 }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portRequestAsset(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portRequestAsset"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portRequestAsset(bytes)"), undefined, undefined, undefined, "portRequestAsset");
 
     await expect(tx!)
       .to.emitEndpoint(host).withArgs(await port("portCreditAccount(bytes)"),
         ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portCreditAccount(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portCreditAccount"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portCreditAccount(bytes)"), undefined, undefined, undefined, "portCreditAccount");
 
     await expect(tx!)
       .to.emitEndpoint(host).withArgs(await port("portDebitAccount(bytes)"),
         ...endpointSpecs({ input: Keys.AccountAmount, inputHint: 96 }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portDebitAccount(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portDebitAccount"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portDebitAccount(bytes)"), undefined, undefined, undefined, "portDebitAccount");
 
     await expect(tx!)
       .to.emitEndpoint(host).withArgs(await port("portPipePayable(bytes)"),
         ...endpointSpecs({ input: Keys.Context, inputHint: 512, funded: true }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portPipePayable(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portPipePayable"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portPipePayable(bytes)"), undefined, undefined, undefined, "portPipePayable");
 
     await expect(tx!)
       .to.emitEndpoint(host).withArgs(await port("portDispatchPayable(bytes)"),
         ...endpointSpecs({ input: Keys.Dispatch, inputHint: 256, funded: true }),
       );
     await expect(tx!)
-      .to.emitAnnotation(host)
-      .withArgs(await port("portDispatchPayable(bytes)"), encodeLabelBlock(ethers.ZeroHash, "portDispatchPayable"));
+      .to.emitEndpoint(host)
+      .withArgs(await port("portDispatchPayable(bytes)"), undefined, undefined, undefined, "portDispatchPayable");
 
   });
 

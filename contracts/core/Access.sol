@@ -66,13 +66,10 @@ abstract contract AdminAccess {
 /// @notice Aggregate hook surface required by node administration and guards.
 /// @dev Contains declarations only; hosts provide the policy and storage.
 abstract contract NodeAccess is PeerAccess, AdminAccess, CommandAccess, PortAccess {
-    /// @notice Grant authorization to a node.
-    /// @param node Node ID to authorize under the host's policy.
-    function authorizeNode(uint node) internal virtual;
-
-    /// @notice Revoke authorization from a node.
-    /// @param node Node ID whose authorization is revoked.
-    function revokeNode(uint node) internal virtual;
+    /// @notice Set a node's authorization under the host's policy.
+    /// @param node Node ID whose authorization is updated.
+    /// @param enabled Whether the node should be authorized.
+    function setAccess(uint node, bool enabled) internal virtual;
 }
 
 /// @title GuardianAccess

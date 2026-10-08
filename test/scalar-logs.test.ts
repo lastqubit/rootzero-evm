@@ -1,20 +1,24 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
-import { concat, encodeAccountBalanceBlock, encodeBalanceBlock, encodePipelineBlock } from "./helpers/blocks.js";
+import { Category, eventRecord, word } from "./helpers/event-records.js";
 
-describe("Temporary scalar logs", () => {
-  it("preserves live memory and the allocator across repeated full-width logs", async () => {
-    const helper = await deploy("TestStreamLogs");
-    for (const codes of [0n, ethers.MaxUint256]) for (const amount of [0n, 1n, ethers.MaxUint256]) {
-      const subject = ethers.toBeHex(amount, 32);
-      const receipt = await (await helper.emitScalars(codes, subject, amount, "0x" + "ab".repeat(97))).wait();
-      const record = (data: string) => ({ topics: [], data: concat(ethers.toBeHex(codes, 32), data) });
-      expect(receipt.logs.map((log: any) => ({ topics: [...log.topics], data: log.data }))).deep.eq([
-        record(encodePipelineBlock(subject, amount)), record(encodeBalanceBlock(subject, amount)),
-        { topics: [], data: concat(ethers.toBeHex(0x20000001n | (2n << 32n), 32), encodeAccountBalanceBlock(subject, subject, amount)) },
-        record(encodePipelineBlock(subject, amount)),
-      ]);
+describe("Category scalar logs", () => {
+  it("emits exact full-width headers and preserves live memory and allocator state", async () => {
+    const helper = await deploy("TestEventCategories");
+    for (const value of [0n, 1n, ethers.MaxUint256]) {
+      const subject = word(value), n = word(value);
+      const receipt = await (await helper.emitScalars(subject, value, "0x" + "ab".repeat(97))).wait();
+      expect(receipt.logs.map((l: any) => ({ topics: l.topics, data: l.data }))).deep.eq([
+        eventRecord(Category.Access,n,"0x00"),
+        eventRecord(Category.Access,n,"0x01"),
+        eventRecord(Category.Endpoint,n,n,n,n),
+        eventRecord(Category.Balance,subject,subject,n),
+        eventRecord(Category.Introduction,n,subject,n),
+        eventRecord(Category.Envelope,n,n,subject,subject),
+        eventRecord(Category.Resolution,subject,subject,"0x00"),
+        eventRecord(Category.Resolution,subject,subject,"0x01"),
+      ].map(data => ({topics: [], data})));
     }
   });
 });

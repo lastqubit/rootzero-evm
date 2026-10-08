@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {Encoder, Execution, Executions} from "../Codec.sol";
 import {Specs} from "../codec/Specs.sol";
@@ -17,9 +18,12 @@ contract TestExecutionFinalization {
         exec.budget = budget;
         exec.input = Cursors.wrap(input);
         exec.state = Cursors.wrap(state);
-        if ((flags & 4) != 0) (exec.buffer, exec.output) = Encoder.init(capacity);
+        uint descriptor = Executions.describe(0, 0, Specs.Balance, flags & 2 != 0 ? Logs.Output : 0);
+        if (flags & 2 != 0) {
+            exec.openInput(descriptor, budget, input, 0, 1);
+            exec.state = Cursors.wrap(state);
+        } else if ((flags & 4) != 0) (exec.buffer, exec.output) = Encoder.init(capacity);
         for (uint i; i < count; ++i) exec.outputBalance(bytes32(i + 1), type(uint).max - i);
-        uint descriptor = Executions.describe(0, 0, Specs.Balance | (flags & 2));
         if ((flags & 1) != 0) (output, credit) = exec.close(123, descriptor);
         else output = exec.finish(123, descriptor);
         remaining = exec.budget;

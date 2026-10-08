@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {Codes} from "../utils/Codes.sol";
 using Executions for Execution;
 
 /// @notice Hook implemented by hosts that burn account assets.
@@ -23,13 +23,11 @@ abstract contract BurnHook {
 /// @notice Command that irreversibly destroys each BALANCE state block via a virtual hook.
 /// Produces no output state.
 abstract contract Burn is CommandBase, BurnHook {
-    uint private constant STATE = Specs.Balance | Codes.AccountBurn;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("burn", STATE, Specs.Empty, Specs.Empty, 0);
+        (id, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Burn each BALANCE block from the command state.

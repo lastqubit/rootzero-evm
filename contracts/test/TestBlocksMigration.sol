@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousNamingEncoder} from "./PreviousNaming.sol";
+import {PreviousExecutionCost} from "./PreviousExecutionCost.sol";
 import {MalformedBlocks} from "./LegacyErrors.sol";
 import {LegacyBlocks} from "./LegacyBlocks.sol";
 import {LegacyMemory} from "./LegacyMemory.sol";
@@ -563,7 +565,7 @@ contract BlocksEncodingMigrationCandidate {
     }
     function Action(uint value) external view returns (uint usedGas, bytes memory output) {
         uint beforeGas = gasleft();
-        output = Encoder.createAction(value);
+        output = LegacyBlocks.createAction(value);
 
         usedGas = beforeGas - gasleft();
     }
@@ -575,12 +577,12 @@ contract BlocksEncodingMigrationCandidate {
     }
     function ExecutionCost(uint base, uint batch) external view returns (uint usedGas, bytes memory output) {
         uint beforeGas = gasleft();
-        output = Encoder.createExecutionCost(base, batch);
+        output = PreviousExecutionCost.createExecutionCost(base, batch);
         usedGas = beforeGas - gasleft();
     }
     function Label(bytes32 namespace, string memory value) external view returns (uint usedGas, bytes memory output) {
         uint beforeGas = gasleft();
-        output = Encoder.createLabel(namespace, bytes(value));
+        output = PreviousNamingEncoder.createLabel(namespace, bytes(value));
         usedGas = beforeGas - gasleft();
     }
     function Schema(uint spec, string memory value) external view returns (uint usedGas, bytes memory output) {

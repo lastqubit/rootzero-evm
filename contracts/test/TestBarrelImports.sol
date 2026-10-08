@@ -78,9 +78,7 @@ import {
     CashoutHook as CoreCashoutHook,
     SendFailed as CoreSendFailed,
     sendChainAsset as coreSendChainAsset,
-    ActionAnnot,
     CounterpartyAnnot,
-    LabelAnnot,
     SchemaAnnot,
     CommandAccess,
     ExecuteHook as CoreExecuteHook,
@@ -201,5 +199,5 @@ import {
     ZeroAmount as UtilsSharedZeroAmount
 } from "../Utils.sol";
 
-import {Quote as CommandQuote, ActionAnnot as CommandActionAnnot, CounterpartyAnnot as CommandCounterpartyAnnot, LabelAnnot as CommandLabelAnnot, SchemaAnnot as CommandSchemaAnnot} from "../Commands.sol";
+import {Quote as CommandQuote, CounterpartyAnnot as CommandCounterpartyAnnot, SchemaAnnot as CommandSchemaAnnot} from "../Commands.sol";
 import {Cursors as UtilsCursors} from "../Utils.sol";

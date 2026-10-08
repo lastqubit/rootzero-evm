@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
-import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -37,13 +37,11 @@ abstract contract DepositPayableHook {
 /// Use `deposit` for assets arriving from outside the protocol (e.g. ERC-20 transfers, ETH).
 /// For internal balance deductions, use `debitAccount` instead.
 abstract contract Deposit is CommandBase, DepositHook {
-    uint private constant OUTPUT = Specs.Balance | Codes.AccountDeposit;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, OUTPUT, 0);
+        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks into the command account and output matching BALANCE blocks.
@@ -66,13 +64,11 @@ abstract contract Deposit is CommandBase, DepositHook {
 /// @notice Command that receives externally sourced assets and records them as BALANCE state.
 /// Use `depositPayable` when the hook needs tracked access to `msg.value` via a mutable budget.
 abstract contract DepositPayable is CommandBase, DepositPayableHook {
-    uint private constant OUTPUT = Specs.Balance | Codes.AccountDeposit;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, OUTPUT, Flags.Funded);
+        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output | Flags.Funded);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks with access to a mutable native-value budget.

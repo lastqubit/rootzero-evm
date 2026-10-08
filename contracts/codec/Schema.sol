@@ -125,7 +125,6 @@ library Schemas {
     string constant Account = "bytes32 account";
     string constant Asset = "bytes32 asset";
     string constant Status = "uint code";
-    string constant Codes = "uint codes";
     string constant Amount = "uint amount";
 
     /// @dev High 128 bits: inclusive minimum; low 128 bits: inclusive maximum; context defines meaning.
@@ -182,14 +181,10 @@ library Schemas {
     string constant Resolution = "bytes32 key, bytes32 digest";
     string constant Introduction = "uint peer, bytes32 origin, uint blocknum";
     string constant Endpoint = "uint id, uint state, uint input, uint output";
-    string constant Annotation = "uint entity, #bytes as data";
 
-    // Annotation payloads
+    // Metadata payloads
 
-    string constant Action = "uint action";
     string constant Counterparty = "bytes32 account";
-    string constant ExecutionCost = "uint base, uint batch";
     string constant Groups = "#string as description";
-    string constant Label = "bytes32 namespace, #string as name";
     string constant Schema = "uint spec, #string as body";
 }

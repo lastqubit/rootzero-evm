@@ -1,15 +1,12 @@
-import { decodeBlockLog, decodeFixedBlock, type RawLog } from "./log-blocks.js";
 import { ethers } from "ethers";
+import type { RawLog } from "./log-blocks.js";
+import { categoryPayload, Category } from "./event-records.js";
 import { Keys } from "./blocks.js";
-
-export const HostAdd = 0x20000002n | (4n << 32n);
 export const EndpointKey = Keys.Endpoint;
-
-export function decodeEndpointLog(log: RawLog): bigint[] | null {
-  const record = decodeBlockLog(log);
-  if (!record || (record.prefix !== HostAdd)) return null;
-  // HostAdd can register other block kinds as well.
-  if (ethers.dataLength(record.stream) < 4 || ethers.dataSlice(record.stream, 0, 4) !== Keys.Endpoint) return null;
-  const payload = decodeFixedBlock(record.stream, Keys.Endpoint, 128);
-  return [0, 1, 2, 3].map(i => BigInt(ethers.dataSlice(payload, i * 32, (i + 1) * 32)));
+export function decodeEndpointLog(log: RawLog): [bigint, bigint, bigint, bigint, string] | null {
+  const payload = categoryPayload(log, Category.Endpoint);
+  if (payload === null) return null;
+  if (ethers.dataLength(payload) < 128) throw new Error("Invalid endpoint record length");
+  const words = [0, 1, 2, 3].map(i => BigInt(ethers.dataSlice(payload, i * 32, (i + 1) * 32)));
+  return [words[0], words[1], words[2], words[3], ethers.toUtf8String(ethers.dataSlice(payload, 128))];
 }

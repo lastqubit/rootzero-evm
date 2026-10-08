@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {Keys, Specs, Sizes, Headers, Schemas, Encoder, Blocks, Cursors, Execution, Executions, Logs} from "../Codec.sol";
+import {Keys, Specs, Sizes, Headers, Schemas, Encoder, Blocks, Cursors, Execution, Executions} from "../Codec.sol";
 
 contract TestPipelineBlock {
     function layoutPipeline() external pure returns (bytes4, uint, uint, uint, string memory) {
@@ -31,8 +31,5 @@ contract TestPipelineBlock {
         } else (account, budget, cur) = Blocks.unpackPipeline(cur);
         consumed = Cursors.position(cur) - abs;
         remaining = Cursors.length(cur);
-    }
-    function emitPipeline(uint codes, bytes32 account, uint budget) external {
-        Logs.pipeline(account, budget, codes);
     }
 }

@@ -18,19 +18,19 @@ contract TestMinimalHostExample is MinimalHostExample {
 
 /// @notice Concrete host used to exercise the single-input command example.
 contract TestBasicCommandExampleHost is Host, BasicCommandExample {
-    constructor(uint rootzero) Host(rootzero) {}
+    constructor(uint rootzero) Host(rootzero, "TestCommandExamplesImport") {}
 }
 
 /// @notice Concrete host used to exercise the batch command example.
 contract TestBatchCommandExampleHost is Host, BatchCommandExample {
-    constructor(uint rootzero) Host(rootzero) {}
+    constructor(uint rootzero) Host(rootzero, "TestCommandExamplesImport") {}
 }
 
 /// @notice Concrete host used to exercise the custom-data command example.
 contract TestDataCommandExampleHost is Host, DataCommandExample {
     event SentToHost(uint host, bytes32 asset, uint amount);
 
-    constructor(uint rootzero) Host(rootzero) {}
+    constructor(uint rootzero) Host(rootzero, "TestCommandExamplesImport") {}
 
     function sendToHost(uint host, bytes32 asset, uint amount) internal override {
         emit SentToHost(host, asset, amount);

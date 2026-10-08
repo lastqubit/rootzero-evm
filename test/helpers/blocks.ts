@@ -35,14 +35,13 @@ export function endpointDescriptor({
   const sourceSize = sourceKey === 0n ? 0n : BigInt(8 + (stateKey !== 0n ? stateHint : inputHint));
   const outputSize = outputKey === 0n ? 0n : 8n + ((outputSpec >> 136n) & 0xffffffn);
   return (sourceKey << 224n) | (sourceSize << 192n) | (outputSize << 160n)
-    | (stateKey !== 0n ? 1n : 0n);
+    | (stateKey !== 0n ? 1n : 0n) | (sourceSize !== 0n && sourceSize === outputSize ? 32n : 0n);
 }
 
 // Expected discovery specs; runtime descriptor assertions use endpointDescriptor.
 export function endpointSpecs({
   state = Keys.Empty, stateHint = 0, input = Keys.Empty, inputHint = 0, output = Keys.Empty,
-  stateCodes = 0n, inputCodes = 0n, outputCodes = 0n,
-}: Parameters<typeof endpointDescriptor>[0] & { stateCodes?: bigint; inputCodes?: bigint; outputCodes?: bigint }): [bigint, bigint, bigint] {
+}: Parameters<typeof endpointDescriptor>[0]): [bigint, bigint, bigint] {
   const spec = (key: string, hint: number): bigint => {
     if (key === Keys.Empty) return 0n;
     const dynamic = new Map<string, number>([
@@ -55,7 +54,7 @@ export function endpointSpecs({
   };
   const outputSpec = typeof output === "bigint" ? output : output === Keys.Empty
     ? 0n : (() => { throw new Error("non-empty output lanes require a spec"); })();
-  return [spec(state, stateHint) | stateCodes, spec(input, inputHint) | inputCodes, outputSpec | outputCodes];
+  return [spec(state, stateHint), spec(input, inputHint), outputSpec];
 }
 
 // Known block keys
@@ -111,7 +110,6 @@ export const Keys = {
   Counterparty: blockKey("#counterparty"),
   Schema: blockKey("#schema"),
   Status: blockKey("#status"),
-  Codes: blockKey("#codes"),
   AssetLiability: blockKey("#assetLiability"),
   AccountAsset: blockKey("#accountAsset"),
   HostAsset: blockKey("#hostAsset"),
@@ -336,9 +334,6 @@ export function encodeSchemaBlock(spec: bigint, body: string): string {
   return encodeBlock(Keys.Schema, ethers.concat([pad32(spec), encodeStringBlock(body)]));
 }
 
-export function encodeCodesBlock(codes: bigint): string {
-  return encodeBlock(Keys.Codes, pad32(codes));
-}
 
 export function encodeStatusBlock(code: bigint): string {
   return encodeBlock(Keys.Status, pad32(code));

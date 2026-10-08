@@ -5,7 +5,7 @@ import {Accounts} from "../utils/Accounts.sol";
 import {Amounts, Assets} from "../utils/Assets.sol";
 import {Ids} from "../utils/Ids.sol";
 import {Layout} from "../utils/Layout.sol";
-import {Nodes} from "../Utils.sol";
+import {Math, Nodes} from "../Utils.sol";
 import {addrOr, applyBps, beforeBps, bytes32ToString, clear8, clear16, clear32, clear64, isFamily, matchesBase, toLocalBase, max8, max16, max32, max64, max128, max160, replace8, replace16, replace32, replace64} from "../utils/Utils.sol";
 import {CommandBase} from "../commands/Base.sol";
 import {AccessDenied, enforceSender} from "../core/Access.sol";
@@ -16,6 +16,10 @@ using Executions for Execution;
 
 contract TestUtils is CommandBase {
     constructor() Runtime(0) {}
+
+    function testScale(uint value, uint numerator, uint denominator) external pure returns (uint) {
+        return Math.scale(value, numerator, denominator);
+    }
 
     function enforceCaller(address caller) internal view override returns (address) {
         if (caller != address(this)) revert AccessDenied();

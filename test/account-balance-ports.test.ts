@@ -17,7 +17,7 @@ describe("Unified account balance ports", () => {
   });
 
   const record = (account: string, amount: bigint, token = asset) =>
-    concat(ethers.toBeHex(0x20000001n | (2n << 32n), 32), encodeAccountBalanceBlock(account, token, amount));
+    concat("0x07", account, token, ethers.toBeHex(amount, 32));
   const logs = (receipt: any) => receipt.logs.map((log: any) => {
     expect(log.topics).deep.eq([]);
     return log.data;

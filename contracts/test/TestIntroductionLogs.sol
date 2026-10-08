@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 import {Encoder} from "../codec/Encoder.sol";
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Specs, Sizes} from "../codec/Specs.sol";
 import {Headers} from "../codec/Headers.sol";
 import {Schemas} from "../codec/Schema.sol";
@@ -13,7 +12,7 @@ contract TestIntroductionLogs {
     }
 
     function publish(uint peer, bytes32 origin, uint blocknum) external returns (bytes memory) {
-        Logs.introduction(peer, origin, blocknum, Codes.HostIntroduce);
+        Logs.introduction(peer, origin, blocknum, "");
         return Encoder.createIntroduction(peer, origin, blocknum);
     }
 }

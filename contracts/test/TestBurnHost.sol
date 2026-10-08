@@ -8,10 +8,10 @@ contract TestBurnHost is Host, Burn {
     event BurnCalled(bytes32 account, bytes32 asset, uint amount);
 
     constructor(uint cmdr)
-        Host(0)
+        Host(0, "TestBurnHost")
         Burn()
     {
-        if (cmdr != 0) authorizeNode(cmdr);
+        if (cmdr != 0) setAccess(cmdr, true);
     }
 
     function burn(bytes32 account, bytes32 asset, uint amount)

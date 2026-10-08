@@ -3,7 +3,6 @@ pragma solidity ^0.8.33;
 
 import {InputEndpointBase} from "../core/Endpoint.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
-import {Lanes} from "../codec/Lanes.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Nodes} from "../utils/Nodes.sol";
 
@@ -18,16 +17,15 @@ abstract contract QueryBase is InputEndpointBase {
     /// @notice Publish query metadata and a default label.
     /// @param name Query entrypoint name and default label. It must exactly
     /// match the Solidity query function name used by the canonical ABI.
-    /// @param input Input spec; query lane codes must be zero.
-    /// @param output Output spec; query lane codes must be zero.
+    /// @param input Pure input block specification.
+    /// @param output Pure output block specification.
     /// @return id Query node ID.
-    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
+    /// @return descriptor Packed execution allocation hints and explicit logging selections.
     function query(
         string memory name,
         uint input,
         uint output
     ) internal returns (uint id, uint descriptor) {
-        if (Lanes.codes(input) != 0 || Lanes.codes(output) != 0) revert Specs.InvalidSpec();
         id = Nodes.toQuery(name, address(this), 0);
         descriptor = endpoint(id, name, Specs.Empty, input, output);
     }

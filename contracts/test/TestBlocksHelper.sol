@@ -12,13 +12,12 @@ import {Execution, Executions} from "../execution/Execution.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 import {Budget, Budgets} from "../core/Budget.sol";
-import {ActionAnnot} from "../annotations/Action.sol";
 import {CounterpartyAnnot} from "../annotations/Counterparty.sol";
 
 using Budgets for Budget;
 using Executions for Execution;
 
-contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
+contract TestBlocksHelper is CounterpartyAnnot {
     bytes4 private constant TestKey = bytes4(uint32(1));
 
     function openInput(
@@ -53,9 +52,6 @@ contract TestBlocksHelper is ActionAnnot, CounterpartyAnnot {
         return Specs.create(key, size);
     }
 
-    function publishAction(uint entity, uint value) external {
-        annotateAction(entity, value);
-    }
 
     function publishCounterparty(uint entity, bytes32 account) external {
         annotateCounterparty(entity, account);

@@ -2,9 +2,9 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import { exactSpec, encodeBlock, Keys } from "./helpers/blocks.js";
-import { HostIntroduce, decodeIntroductionLog } from "./helpers/introduction-logs.js";
+import { decodeIntroductionLog } from "./helpers/introduction-logs.js";
 
-describe("Introduction block logs", () => {
+describe("Introduction category logs", () => {
   it("preserves the canonical layout and full-width scalar fields", async () => {
     const helper = await deploy("TestIntroductionLogs");
     const spec = exactSpec(Keys.Introduction, 96);
@@ -16,8 +16,8 @@ describe("Introduction block logs", () => {
       const receipt = await (await helper.publish(value, origin, value)).wait();
       expect(receipt.logs.length).eq(1);
       expect(receipt.logs[0].topics).deep.eq([]);
-      expect(receipt.logs[0].data).eq(ethers.concat([ethers.toBeHex(HostIntroduce, 32), block]));
-      expect(decodeIntroductionLog(receipt.logs[0])).deep.eq({ peer: value, origin, blocknum: value });
+      expect(receipt.logs[0].data).eq(ethers.concat(["0x02", ethers.dataSlice(block, 8)]));
+      expect(decodeIntroductionLog(receipt.logs[0])).deep.eq({ peer: value, origin, blocknum: value, name: "" });
     }
   });
 });

@@ -3,21 +3,18 @@ pragma solidity ^0.8.33;
 
 import {Headers} from "../codec/Headers.sol";
 import {Blocks} from "../codec/Blocks.sol";
-import {Encoder} from "../codec/Encoder.sol";
-import {Keys, STATE_KEY, INPUT_KEY, CONTEXT_KEY} from "../codec/Keys.sol";
 import {Logs} from "../codec/Logs.sol";
+import {Encoder} from "../codec/Encoder.sol";
+import {Keys} from "../codec/Keys.sol";
 import {Specs, Sizes} from "../codec/Specs.sol";
-import {Lanes} from "../codec/Lanes.sol";
 import {Cursors} from "../utils/Cursors.sol";
+import {Math} from "../utils/Math.sol";
 import {Budget} from "../core/Budget.sol";
 import {Calls} from "../core/Calls.sol";
 import {
     InsufficientValue,
     OutOfBounds,
-    UnconsumedData,
-    ValueOverflow,
-    ZeroAmount,
-    INVALID_BLOCK
+    UnconsumedData
 } from "../utils/Errors.sol";
 import {
     AssetAmount,
@@ -46,7 +43,8 @@ struct Execution {
     uint budget;
     uint input;
     uint state;
-    /// @dev Packed output cursor: written offset in bits 0-31, capacity in bits 32-63.
+    /// @dev Written offset:32, capacity:32, output start offset:32. The optional
+    /// event prefix shares the buffer; Encoder preserves the upper cursor metadata.
     uint output;
     /// @dev Growable memory backing the output cursor; finish exposes only written bytes.
     bytes buffer;
@@ -66,67 +64,102 @@ library Executions {
 
     /// @dev Internal execution flags; distinct from public endpoint Flags.
     uint internal constant StateSource = 1 << 0;
-    uint internal constant LogState = 1 << 1;
-    uint internal constant LogInput = 1 << 2;
-    uint internal constant LogOutput = 1 << 3;
+    uint private constant LogState = 1 << 1;
+    uint private constant LogInput = 1 << 2;
+    uint private constant LogOutput = 1 << 3;
+    uint private constant LogEnabled = 1 << 4;
+    uint internal constant ByteCapacity = 1 << 5;
 
-    /// @notice Precompute allocation hints and lane-derived logging selections for execution.
+    /// @notice Precompute allocation hints and explicit logging selections for execution.
     /// @dev Layout: [source key:4][source block size:4][output block size:4]
     /// [reserved:19][flags:1]. Sizes include headers and require 25 bits at maximum hint.
     /// Declared state takes precedence over input, even when supplied state is empty.
     /// Zero output size disables preallocation; no source reserves one output block.
-    /// State/input/output are lanes: specs in the upper half, codes in the lower half.
-    /// Nonzero lane codes select logging; endpoint behavior flags are independent.
+    /// State/input/output are pure specs; flags contains the complete endpoint identity flags byte.
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
+        return describe(state, input, output, 0);
+    }
+
+    /// @notice Describe pure lane specs and one endpoint-wide logging policy.
+    /// @dev Logging bits 2-5 select records; lane bits require Logs.Execution.
+    /// Only one byte is accepted; behavior bits do not affect the logging descriptor.
+    function describe(uint state, uint input, uint output, uint flags)
+        internal pure returns (uint descriptor)
+    {
+        if (uint128(state | input | output) != 0 || flags > 255 || (flags & 56 != 0 && flags & Logs.Execution == 0))
+            revert Specs.InvalidSpec();
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
+        uint sourceSize = Specs.blockSize(source);
+        uint outputSize = Specs.blockSize(output);
         descriptor =
             (uint(uint32(Specs.key(source))) << 224) |
-            (Specs.blockSize(source) << 192) |
-            (Specs.blockSize(output) << 160) |
+            (sourceSize << 192) |
+            (outputSize << 160) |
             (stateSource ? StateSource : 0) |
-            (Lanes.codes(state) != 0 ? LogState : 0) |
-            (Lanes.codes(input) != 0 ? LogInput : 0) |
-            (Lanes.codes(output) != 0 ? LogOutput : 0);
+            (sourceSize != 0 && sourceSize == outputSize
+                && uint32(source >> 160) != 0 && uint32(output >> 160) != 0
+                && uint32(source >> 192) == uint32(source >> 160)
+                && uint32(output >> 192) == uint32(output >> 160) ? ByteCapacity : 0) |
+            (flags & Logs.Execution != 0 ? LogEnabled | ((flags >> 2) & 14) : 0);
     }
 
-    /// @notice Log selected STATE/INPUT blocks from a freshly opened context.
-    /// @dev Requires untouched cursors from openContext and its matching descriptor.
-    /// Call before consuming either source. Includes each selected container header;
-    /// both selected blocks are adjacent and copied together. Empty selected blocks
-    /// retain their headers. Emits [id:32][blocks] without changing the execution.
-    /// Input-only executions from openInput are not valid here.
-    function logContext(Execution memory exec, uint id, uint descriptor) internal {
-        if (descriptor & (LogState | LogInput) == 0) return;
-        uint abs;
-        uint size;
-        // openContext proves both cursors follow their headers and share one
-        // bounded context. The selected end cannot precede the selected header.
-        // Execution layout: input at +64, state at +96. LogState is bit 1;
-        // LogInput is bit 2. Select both addresses without per-lane branches.
-        assembly ("memory-safe") {
-            let startCur := mload(add(exec, add(64, shl(4, and(descriptor, LogState)))))
-            let endCur := mload(add(exec, sub(96, shl(3, and(descriptor, LogInput)))))
-            abs := sub(and(startCur, 0xffffffff), 8)
-            size := sub(and(shr(32, endCur), 0xffffffff), abs)
+    /// @dev Initialize one writer for optional log prefix and returned output.
+    /// Sources remain calldata cursors. Snapshot selected lanes once, before callbacks.
+    /// All endpoint kinds share the same account-bearing header.
+    function initOutput(Execution memory exec, uint descriptor, uint capacity, bool context) private pure {
+        if (descriptor & LogEnabled == 0) {
+            (exec.buffer, exec.output) = Encoder.init(capacity);
+            return;
         }
-        Logs.copy(id, abs, size);
+        uint stateSize = context && descriptor & LogState != 0 ? Encoder.length(exec.state) + 8 : 0;
+        uint inputSize = descriptor & LogInput != 0 ? Encoder.length(exec.input) + 8 : 0;
+        uint prefix = 65 + stateSize + inputSize + (descriptor & LogOutput != 0 ? 8 : 0);
+        (exec.buffer, exec.output) = Encoder.init(prefix + capacity);
+        exec.output |= prefix | (prefix << 64);
+        uint abs = Encoder.write32(Encoder.pos(exec.buffer, 0) + 33, exec.account);
+        if (stateSize != 0 && inputSize != 0) {
+            // Context containers are adjacent, with their original headers intact.
+            abs = Encoder.copy(abs, uint32(exec.state) - 8, stateSize + inputSize);
+        } else {
+            if (stateSize != 0) abs = Encoder.wrap(abs, Keys.State, exec.state);
+            if (inputSize != 0) abs = Encoder.wrap(abs, Keys.Input, exec.input);
+        }
+        if (descriptor & LogOutput != 0) Encoder.writeHeader(abs, Keys.Output, 0);
     }
 
-    /// @notice Log raw input from a freshly opened input-only execution.
-    /// @dev Requires untouched input from openInput and its matching descriptor.
-    /// Call before consuming input. Nonzero input lane codes select emission;
-    /// other lane selections are ignored. Emits [id:32][INPUT header][input],
-    /// including the header for empty input. Creates the missing header in
-    /// temporary memory; preserves all execution fields and the free-memory pointer.
-    function logInput(Execution memory exec, uint id, uint descriptor) internal {
-        if (descriptor & LogInput == 0) return;
-        Logs.copyWrap(id, bytes4(uint32(INPUT_KEY)), exec.input);
+    /// @notice Relative start of the output payload within the shared writer.
+    /// @dev Zero for an unlogged writer. Survives Encoder reserve/grow operations.
+    function outputOffset(Execution memory exec) internal pure returns (uint) {
+        return uint32(exec.output >> 64);
+    }
+
+    /// @dev Patch only the trailing header bytes, preserving preceding context and output.
+    function sealOutput(uint abs, uint size) private pure {
+        uint header = (uint(uint32(Keys.Output)) << 32) | size;
+        assembly ("memory-safe") {
+            let at := sub(abs, 32)
+            mstore(at, or(and(mload(at), not(0xffffffffffffffff)), header))
+        }
+    }
+
+    /// @dev Emit the initialized prefix and selected output before exposing returned bytes.
+    /// Reacquires the buffer address after growth. Prefix is consumed by finish.
+    function emitExecution(Execution memory exec, uint id, uint descriptor) private {
+        uint prefix = outputOffset(exec);
+        uint size = prefix;
+        uint abs = Encoder.pos(exec.buffer, 0);
+        if (descriptor & LogOutput != 0) {
+            size = uint32(exec.output);
+            sealOutput(abs + prefix, size - prefix);
+        }
+        Logs.execution(id, abs, size);
     }
 
     /// @dev Capacity is only a hint; decoding validates the stream and buffers can grow.
     function outputCapacity(uint input, uint state, uint descriptor) private pure returns (uint capacity) {
         if (uint32(descriptor >> 160) == 0) return 0;
+        if (descriptor & ByteCapacity != 0) return Encoder.length(descriptor & StateSource != 0 ? state : input);
         uint count = 1;
         bytes4 key = bytes4(uint32(descriptor >> 224));
         if (key != bytes4(0)) {
@@ -148,75 +181,6 @@ library Executions {
         }
     }
 
-    /// @dev Scale an allocation hint with floor division before allocating.
-    /// The unit ratio is an identity; Encoder.init checks the final uint32 limit.
-    function scaledCapacity(uint capacity, uint numerator, uint denominator) private pure returns (uint) {
-        if (denominator == 0) revert ZeroAmount();
-        if (numerator == 1 && denominator == 1) return capacity;
-        if (capacity != 0 && numerator > type(uint).max / capacity) revert ValueOverflow();
-        unchecked {
-            return (capacity * numerator) / denominator;
-        }
-    }
-
-    /// @dev Initialize the input source without allocating output.
-    function inputSource(Execution memory exec, uint budget, bytes calldata input) private pure returns (uint cur) {
-        cur = Cursors.wrap(input);
-        exec.budget = budget;
-        exec.input = cur;
-    }
-
-    /// @dev Decode and initialize a bounded context without allocating output.
-    function contextSource(
-        Execution memory exec,
-        uint budget,
-        bytes calldata context
-    ) private pure returns (uint input, uint state) {
-        bytes32 account;
-        // A genuine bounded calldata slice plus uint32 nested lengths cannot
-        // overflow uint256 offsets. The tail check rejects subtraction underflow;
-        // the final boundary check confines both lanes to the supplied slice.
-        // Keep this local: unpackContext also accepts arbitrary absolute offsets.
-        assembly ("memory-safe") {
-            function fail(selector) {
-                mstore(0, selector)
-                revert(28, 4)
-            }
-            let start := context.offset
-            let head := calldataload(start)
-            if iszero(eq(shr(224, head), CONTEXT_KEY)) {
-                fail(INVALID_BLOCK)
-            }
-            let limit := add(add(start, 8), and(shr(192, head), 0xffffffff))
-            account := calldataload(add(start, 8))
-            let stateHeader := add(start, 40)
-            head := calldataload(stateHeader)
-            if iszero(eq(shr(224, head), STATE_KEY)) {
-                fail(INVALID_BLOCK)
-            }
-            let stateStart := add(stateHeader, 8)
-            let stateEnd := add(stateStart, and(shr(192, head), 0xffffffff))
-            let inputStart := add(stateEnd, 8)
-            let inputLength := sub(limit, inputStart)
-            // Match the INPUT tail check, including underflow and exact header length.
-            if or(
-                gt(inputLength, 0xffffffff),
-                iszero(eq(shr(192, calldataload(stateEnd)), or(shl(32, INPUT_KEY), inputLength)))
-            ) {
-                fail(INVALID_BLOCK)
-            }
-            if iszero(eq(limit, add(start, context.length))) {
-                fail(INVALID_BLOCK)
-            }
-            input := or(inputStart, shl(32, limit))
-            state := or(stateStart, shl(32, stateEnd))
-        }
-        exec.account = account;
-        exec.budget = budget;
-        exec.input = input;
-        exec.state = state;
-    }
-
     /// @notice Open an execution containing only the current call-value budget.
     /// @dev Input/state cursors remain empty; initializes a growable output writer.
     /// @return exec Budget-only execution initialized with `msg.value`.
@@ -226,14 +190,15 @@ library Executions {
     }
 
     /// @notice Initialize an input-only execution and its native-value budget.
-    /// @dev `exec` must be newly allocated or otherwise empty.
+    /// @dev Requires a fresh execution; account may be supplied before opening.
     /// @param exec Execution to initialize.
     /// @param descriptor Packed endpoint descriptor.
     /// @param budget Initial native-value budget.
     /// @param input Descriptor-backed input source.
     function openInput(Execution memory exec, uint descriptor, uint budget, bytes calldata input) internal pure {
-        uint cur = inputSource(exec, budget, input);
-        (exec.buffer, exec.output) = Encoder.init(outputCapacity(cur, 0, descriptor));
+        exec.input = Cursors.wrap(input);
+        exec.budget = budget;
+        initOutput(exec, descriptor, outputCapacity(exec.input, 0, descriptor), false);
     }
 
     /// @notice Open an execution with its output-capacity hint scaled before allocation.
@@ -254,10 +219,10 @@ library Executions {
         uint numerator,
         uint denominator
     ) internal pure {
-        uint cur = inputSource(exec, budget, input);
-        (exec.buffer, exec.output) = Encoder.init(
-            scaledCapacity(outputCapacity(cur, 0, descriptor), numerator, denominator)
-        );
+        exec.input = Cursors.wrap(input);
+        exec.budget = budget;
+        uint capacity = outputCapacity(exec.input, 0, descriptor);
+        initOutput(exec, descriptor, Math.scale(capacity, numerator, denominator), false);
     }
 
     /// @notice Decode exactly one context and initialize a complete command execution.
@@ -268,8 +233,9 @@ library Executions {
     /// @param budget Initial native-value budget.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
     function openContext(Execution memory exec, uint descriptor, uint budget, bytes calldata context) internal pure {
-        (uint input, uint state) = contextSource(exec, budget, context);
-        (exec.buffer, exec.output) = Encoder.init(outputCapacity(input, state, descriptor));
+        (exec.account, exec.state, exec.input) = Blocks.unpackContextExact(Cursors.wrap(context));
+        exec.budget = budget;
+        initOutput(exec, descriptor, outputCapacity(exec.input, exec.state, descriptor), true);
     }
 
     /// @notice Open an execution with its output-capacity hint scaled before allocation.
@@ -290,10 +256,10 @@ library Executions {
         uint numerator,
         uint denominator
     ) internal pure {
-        (uint input, uint state) = contextSource(exec, budget, context);
-        (exec.buffer, exec.output) = Encoder.init(
-            scaledCapacity(outputCapacity(input, state, descriptor), numerator, denominator)
-        );
+        (exec.account, exec.state, exec.input) = Blocks.unpackContextExact(Cursors.wrap(context));
+        exec.budget = budget;
+        uint capacity = outputCapacity(exec.input, exec.state, descriptor);
+        initOutput(exec, descriptor, Math.scale(capacity, numerator, denominator), true);
     }
 
     // -------------------------------------------------------------------------
@@ -413,19 +379,6 @@ library Executions {
         inputCur = exec.input;
         inputCur.expectRunFixed(header);
         exec.input = Cursors.exhaust(inputCur);
-    }
-
-    /// @notice Validate and consume the remaining input as ANNOTATION blocks.
-    /// @dev Empty streams pass. Checks every parent and its exact final BYTES child;
-    /// annotation payloads remain opaque. Returns the original stream cursor.
-    /// Descriptor declarations do not affect validation; state remains unconsumed.
-    function takeAnnotations(Execution memory exec) internal pure returns (uint inputCur) {
-        inputCur = exec.input;
-        uint cur = inputCur;
-        while (Cursors.more(cur)) {
-            (, , cur) = cur.unpackAnnotation();
-        }
-        exec.input = cur;
     }
 
     /// @notice Validate and consume all remaining state blocks with key.
@@ -566,12 +519,6 @@ library Executions {
     /// @return entity Decoded entity identifier.
     function unpackEntity(Execution memory exec) internal pure returns (uint entity) {
         (entity, exec.input) = exec.input.unpackEntity();
-    }
-
-    /// @notice Consume one CODES input block and return its packed identifiers.
-    /// @dev Validates block shape and containment, not code semantics.
-    function unpackCodes(Execution memory exec) internal pure returns (uint codes) {
-        (codes, exec.input) = exec.input.unpackCodes();
     }
 
     /// @notice Decode and consume one LIMITS block.
@@ -872,20 +819,6 @@ library Executions {
         (inputCur, stepsCur, exec.input) = exec.input.unpackRelay();
     }
 
-    /// @notice Decode ANNOTATION and retain dynamic payloads as calldata cursors.
-    /// @dev Blocks validates and advances input once; returned payload cursors
-    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
-    function unpackAnnotation(Execution memory exec) internal pure returns (uint entity, uint dataCur) {
-        (entity, dataCur, exec.input) = exec.input.unpackAnnotation();
-    }
-
-    /// @notice Decode LABEL and retain dynamic payloads as calldata cursors.
-    /// @dev Blocks validates and advances input once; returned payload cursors
-    /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
-    function unpackLabel(Execution memory exec) internal pure returns (bytes32 namespace, uint nameCur) {
-        (namespace, nameCur, exec.input) = exec.input.unpackLabel();
-    }
-
     /// @notice Decode SCHEMA and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
@@ -988,12 +921,6 @@ library Executions {
     /// @param code Status code to encode.
     function outputStatus(Execution memory exec, uint code) internal pure {
         (exec.buffer, exec.output) = exec.output.writeStatus(exec.buffer, code);
-    }
-
-    /// @notice Append one CODES block containing packed identifiers.
-    /// @dev Delegates allocation and writing to Encoder; callers define code semantics.
-    function outputCodes(Execution memory exec, uint codes) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeCodes(exec.buffer, codes);
     }
 
     /// @notice Append a scalar AMOUNT block to execution output.
@@ -1350,14 +1277,6 @@ library Executions {
         (exec.buffer, exec.output) = exec.output.writeRecoverWrap(exec.buffer, handler, value, recoverykey, witness);
     }
 
-    /// @notice Append a LABEL block to execution output.
-    /// @param exec Execution receiving the block.
-    /// @param namespace Label namespace to encode.
-    /// @param name Label text to encode.
-    function outputLabel(Execution memory exec, bytes32 namespace, string memory name) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeLabelWrap(exec.buffer, namespace, bytes(name));
-    }
-
     /// @notice Append a SCHEMA block to execution output.
     /// @param exec Execution receiving the block.
     /// @param spec Block specification to encode.
@@ -1436,12 +1355,6 @@ library Executions {
         (exec.buffer, exec.output) = exec.output.writeRecover(exec.buffer, handler, value, recoverykey, witnessCur);
     }
 
-    /// @notice Append LABEL from a complete validated STRING block cursor.
-    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
-    function outputLabel(Execution memory exec, bytes32 namespace, uint nameCur) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeLabel(exec.buffer, namespace, nameCur);
-    }
-
     /// @notice Append SCHEMA from a complete validated STRING block cursor.
     /// @dev Source is not advanced or revalidated; its range must belong to calldata.
     function outputSchema(Execution memory exec, uint spec, uint bodyCur) internal pure {
@@ -1513,12 +1426,6 @@ library Executions {
         uint witnessCur
     ) internal pure {
         (exec.buffer, exec.output) = exec.output.writeRecoverWrap(exec.buffer, handler, value, recoverykey, witnessCur);
-    }
-
-    /// @notice Append LABEL from a payload cursor; adds the STRING header.
-    /// @dev Source is not advanced or revalidated; its range must belong to calldata.
-    function outputLabelWrap(Execution memory exec, bytes32 namespace, uint nameCur) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeLabelWrap(exec.buffer, namespace, nameCur);
     }
 
     /// @notice Append SCHEMA from a payload cursor; adds the STRING header.
@@ -1658,15 +1565,24 @@ library Executions {
     /// through a complete loop over valid cursors, expectEnd, or close.
     function finish(Execution memory exec) internal pure returns (bytes memory out) {
         if (exec.buffer.length == 0) return Encoder.allocate(0);
-        out = exec.output.finish(exec.buffer);
+        uint offset = outputOffset(exec);
+        uint size = uint32(exec.output) - offset;
+        bytes memory buffer = exec.buffer;
+        // Destructive finalization: the event has already captured the prefix.
+        // The preceding word becomes the Solidity length, without copying output.
+        assembly ("memory-safe") {
+            out := add(buffer, offset)
+            mstore(out, size)
+            mstore(add(add(out, 32), size), 0)
+        }
     }
 
-    /// @notice Finalize and conditionally log an OUTPUT container for an endpoint.
-    /// @dev Same lifecycle as finish. Descriptor logging selection comes from lane
-    /// codes; id is the matching registered endpoint ID. Returned bytes are unwrapped.
+    /// @notice Emit one selected execution record and expose output from the same buffer.
+    /// @dev Call once after processing. Absent logging bits disable logging at registration.
+    /// Returned bytes exclude the log prefix; no further writes or logging are allowed.
     function finish(Execution memory exec, uint id, uint descriptor) internal returns (bytes memory out) {
+        if (descriptor & LogEnabled != 0) emitExecution(exec, id, descriptor);
         out = finish(exec);
-        if (descriptor & LogOutput != 0) Logs.memWrap(id, Keys.Output, out);
     }
 
     /// @notice Check consumption, finalize output, and return and clear the budget.

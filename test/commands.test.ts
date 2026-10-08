@@ -1,4 +1,4 @@
-import { decodeAnnotationLog } from "./helpers/annotation-logs.js";
+import { decodeMetadataLog } from "./helpers/metadata-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
@@ -15,7 +15,7 @@ import {
   encodeBalanceBlock, encodeLiabilityPosition, encodePositionBlock, encodeCustodyBlock,
   encodeAccountBlock, encodeNodeBlock, encodeStepBlock, encodeUserAccount,
   encodeActionBlock, encodeOutputBlock, encodeStateBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
-  encodeTxBlock, encodeLabelBlock, encodeSchemaBlock, localKey,
+  encodeTxBlock, encodeSchemaBlock, localKey,
   concat
 } from "./helpers/blocks.js";
 
@@ -124,7 +124,7 @@ describe("Commands", () => {
   function commandFlags(method: string): bigint {
     if (method === "relayPayable" || method === "relayBalancePayable") return HandoffFunded;
     if (method === "executePayable") return 0x03n;
-    if (["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "annotate"].includes(method)) {
+    if (["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance"].includes(method)) {
       return 0x02n;
     }
     if (["depositPayable", "settlePayable", "recoverPayable"].includes(method)) {
@@ -145,11 +145,11 @@ describe("Commands", () => {
       it(`${method} publishes its logging selection without duplicate annotations`, async () => {
         const id = await cmd(method);
         const logged = method.startsWith("deposit");
-        const lane = exactSpec(Keys.Balance, 64) | (logged ? 0x20000001n | (action << 32n) : 0n);
+        const lane = exactSpec(Keys.Balance, 64);
         await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, stateLane ? lane : 0n,
           stateLane ? 0n : exactSpec(Keys.AssetAmount, 64), stateLane ? 0n : lane);
         const receipt = await host.deploymentTransaction().wait();
-        const annotations = receipt.logs.flatMap((log: any) => decodeAnnotationLog(log)).filter((log: any) => log.entity === id);
+        const annotations = receipt.logs.flatMap((log: any) => decodeMetadataLog(log)).filter((log: any) => log.entity === id);
         expect(annotations.some((log: any) => log.data === encodeActionBlock(action))).eq(false);
       });
 
@@ -161,7 +161,7 @@ describe("Commands", () => {
           const input = concat(...Array(count).fill(encodeAssetAmountBlock(asset, amount)));
           const receipt = await (await callAs(0, method, ctx(stateLane ? { state: balances } : { input }),
             { value: method === "depositPayable" ? BigInt(count) * amount : 0n })).wait();
-          const expected = concat(ethers.toBeHex(await cmd(method), 32),
+          const expected = concat("0x04", ethers.toBeHex(await cmd(method), 32), userAccount,
             stateLane ? encodeStateBlock(balances) : encodeOutputBlock(balances));
           expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq(method.startsWith("deposit") ? [expected] : []);
           if (method.startsWith("deposit")) expect(receipt.logs[receipt.logs.length - 1].data).eq(expected);
@@ -176,13 +176,13 @@ describe("Commands", () => {
           const receipt = await (await callAs(0, method, ctx({ input: encodeAssetAmountBlock(asset, 50n) }),
             { value: method === "depositPayable" ? 50n : 0n })).wait();
           expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq([
-            concat(ethers.toBeHex(await cmd(method), 32), encodeOutputBlock(encodeBalanceBlock(asset, 43n))),
+            concat("0x04", ethers.toBeHex(await cmd(method), 32), userAccount, encodeOutputBlock(encodeBalanceBlock(asset, 43n))),
           ]);
         }
       });
     });
 
-    it("optimized debit and credit emit pipeline context followed by the same records as direct commands", async () => {
+    it("optimized debit and credit emit the same records as direct commands", async () => {
       const asset = ethers.id("adapter-log-asset");
       for (const count of [0, 1, 3]) {
         const input = concat(...Array(count).fill(encodeAssetAmountBlock(asset, 100n)));
@@ -195,10 +195,7 @@ describe("Commands", () => {
         const steps = concat(encodeStepBlock(await cmd("debitAccount"), 0n, input),
           encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
         const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps)).wait();
-        expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-          { topics: [], data: concat(ethers.toBeHex(0x20000001n, 32), encodePipelineBlock(userAccount, 0n)) },
-          ...direct,
-        ]);
+        expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq(direct);
       }
     });
   });
@@ -216,7 +213,7 @@ describe("Commands", () => {
     ] as const) {
       const id = await cmd(method);
       const receipt = await deployment!.wait();
-      const annotations = receipt!.logs.flatMap(log => decodeAnnotationLog(log)).filter(log => log.entity === id);
+      const annotations = receipt!.logs.flatMap(log => decodeMetadataLog(log)).filter(log => log.entity === id);
       expect(annotations.some(log => log.data === encodeActionBlock(action))).eq(false);
     }
   });
@@ -380,16 +377,15 @@ describe("Commands", () => {
   describe("withdraw", () => {
     const asset = ethers.zeroPadValue("0x10", 32);
 
-    it("publishes Account/Withdraw state codes without a duplicate action annotation", async () => {
+    it("publishes state logging flags", async () => {
       const id = await cmd("withdraw");
-      const codes = 0x20000001n | (35n << 32n);
-      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, exactSpec(Keys.Balance, 64) | codes, 0n, 0n);
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, exactSpec(Keys.Balance, 64), 0n, 0n);
       const receipt = await host.deploymentTransaction().wait();
-      const annotations = receipt.logs.flatMap((log: any) => decodeAnnotationLog(log)).filter((log: any) => log.entity === id);
+      const annotations = receipt.logs.flatMap((log: any) => decodeMetadataLog(log)).filter((log: any) => log.entity === id);
       expect(annotations.some((log: any) => log.data === encodeActionBlock(35n))).eq(false);
     });
 
-    it("logs one complete state before withdrawal hooks, including empty and full-width batches", async () => {
+    it("logs one complete state after withdrawal hooks, including empty and full-width batches", async () => {
       const prefix = ethers.toBeHex(await cmd("withdraw"), 32);
       for (const count of [0, 1, 3]) {
         const state = concat(...Array(count).fill(encodeBalanceBlock(asset, ethers.MaxUint256)));
@@ -397,8 +393,8 @@ describe("Commands", () => {
         expect(Array.from(await host.withdraw.staticCall(...context))).deep.eq(["0x", 0n]);
         const receipt = await (await callAs(0, "withdraw", context)).wait();
         const logs = receipt.logs.filter((log: any) => log.topics.length === 0);
-        expect(logs.map((log: any) => log.data)).deep.eq([concat(prefix, encodeStateBlock(state))]);
-        expect(receipt.logs[0].data).eq(logs[0].data);
+        expect(logs.map((log: any) => log.data)).deep.eq([concat("0x04", prefix, userAccount, encodeStateBlock(state))]);
+        expect(receipt.logs.at(-1).data).eq(logs[0].data);
         expect(receipt.logs.length).eq(count + 1);
       }
     });
@@ -456,7 +452,7 @@ describe("Commands", () => {
       expect(deployment).to.not.equal(null);
 
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("cashout"),
-          ...endpointSpecs({ state: Keys.Balance, stateHint: 64, stateCodes: 0x20000001n | (37n << 32n) }),
+          ...endpointSpecs({ state: Keys.Balance, stateHint: 64, }),
         );
     });
 
@@ -821,8 +817,7 @@ describe("Commands", () => {
     it("discovers POSITION state, empty input, and POSITION output", async () => {
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(await cmd("realize"), ...endpointSpecs({
           state: Keys.Position, stateHint: 160, output: exactSpec(Keys.Position, 160),
-          stateCodes: 0x20000001n | (66n << 32n), outputCodes: 0x20000001n | (66n << 32n),
-        }));
+          }));
     });
 
     it("passes the full position to its hook and returns its result", async () => {
@@ -958,9 +953,9 @@ describe("Commands", () => {
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("relayPayable"),
           ...endpointSpecs({ input: Keys.Relay, inputHint: 256, funded: true, handoff: true }),
         );
-      await expect(deployment!).to.emitAnnotation(host)
-        .withArgs(await cmd("relayPayable"), encodeLabelBlock(ethers.ZeroHash, "relayPayable"));
-      await expect(deployment!).to.emitAnnotation(host)
+      await expect(deployment!).to.emitEndpoint(host)
+        .withArgs(await cmd("relayPayable"), undefined, undefined, undefined, "relayPayable");
+      await expect(deployment!).to.emitMetadata(host)
         .withArgs(
           await host.host(),
           encodeSchemaBlock(
@@ -1032,8 +1027,8 @@ describe("Commands", () => {
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("relayBalancePayable"),
           ...endpointSpecs({ state: Keys.Balance, stateHint: 64, input: Keys.Relay, inputHint: 256, funded: true, handoff: true }),
         );
-      await expect(deployment!).to.emitAnnotation(host)
-        .withArgs(await cmd("relayBalancePayable"), encodeLabelBlock(ethers.ZeroHash, "relayBalancePayable"));
+      await expect(deployment!).to.emitEndpoint(host)
+        .withArgs(await cmd("relayBalancePayable"), undefined, undefined, undefined, "relayBalancePayable");
     });
 
     it("passes transport input and a complete destination context to the hook", async () => {
@@ -1317,8 +1312,8 @@ describe("Commands", () => {
       await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("recoverPayable"),
           ...endpointSpecs({ input: Keys.Recover, inputHint: 256, funded: true }),
         );
-      await expect(deployment!).to.emitAnnotation(host)
-        .withArgs(await cmd("recoverPayable"), encodeLabelBlock(ethers.ZeroHash, "recoverPayable"));
+      await expect(deployment!).to.emitEndpoint(host)
+        .withArgs(await cmd("recoverPayable"), undefined, undefined, undefined, "recoverPayable");
     });
 
     it("passes recovery value and the shared budget to the hook", async () => {

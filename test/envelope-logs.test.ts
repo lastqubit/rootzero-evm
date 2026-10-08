@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import { Keys, exactSpec, encodeBlock } from "./helpers/blocks.js";
 
-describe("Envelope block logs", () => {
+describe("Envelope category logs", () => {
   it("defines the canonical fixed four-word schema", async () => {
     const helper = await deploy("TestEnvelopeLogs");
     const spec = exactSpec(Keys.Envelope, 128);
@@ -24,13 +24,11 @@ describe("Envelope block logs", () => {
       const block = encodeBlock(Keys.Envelope, ethers.concat([
         ethers.toBeHex(portal, 32), ethers.toBeHex(resources, 32), key, digest,
       ]));
-      for (const codes of [0n, 0x20000001n | (96n << 32n), 0x20000002n | (97n << 32n), ethers.MaxUint256]) {
-        expect(await helper.publish.staticCall(...values, codes)).eq(block);
-        const receipt = await (await helper.publish(...values, codes)).wait();
-        expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-          { topics: [], data: ethers.concat([ethers.toBeHex(codes, 32), block]) },
-        ]);
-      }
+      expect(await helper.publish.staticCall(...values)).eq(block);
+      const receipt = await (await helper.publish(...values)).wait();
+      expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
+        { topics: [], data: ethers.concat(["0x08", ethers.dataSlice(block, 8)]) },
+      ]);
     }
   });
 });

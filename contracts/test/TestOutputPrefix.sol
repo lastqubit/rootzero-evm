@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 import {Encoder} from "../codec/Encoder.sol";
 import {Logs} from "../codec/Logs.sol";
 import {ValueOverflow} from "../utils/Errors.sol";
@@ -145,7 +146,7 @@ contract OutputPrefixCurrent {
         uint beforeMemory;
         assembly ("memory-safe") { beforeMemory := mload(0x40) }
         uint beforeGas = gasleft();
-        if (mode == 1) Logs.mem(123, PreviousPrefixEncoder.pos(output, 0), output.length);
+        if (mode == 1) PreviousLogs.mem(123, PreviousPrefixEncoder.pos(output, 0), output.length);
         else if (mode == 2) OutputWrapCandidate.copyWrap(123, output);
         used = beforeGas - gasleft();
         uint afterMemory;
@@ -197,8 +198,8 @@ contract OutputPrefixCandidate {
         uint beforeMemory;
         assembly ("memory-safe") { beforeMemory := mload(0x40) }
         uint beforeGas = gasleft();
-        if (mode == 1) Logs.mem(123, Encoder.pos(output, 0), output.length);
-        else if (mode == 2) Logs.memWrap(123, bytes4(keccak256("#output")), output);
+        if (mode == 1) PreviousLogs.mem(123, Encoder.pos(output, 0), output.length);
+        else if (mode == 2) PreviousLogs.memWrap(123, bytes4(keccak256("#output")), output);
         used = beforeGas - gasleft();
         uint afterMemory;
         assembly ("memory-safe") { afterMemory := mload(0x40) }

@@ -1038,7 +1038,7 @@ library LegacyBlocks {
     /// @param name Label text.
     function writeLabel(bytes memory dst, uint i, bytes32 namespace, string memory name) internal pure {
         uint len = 32 + Sizes.Header + bytes(name).length;
-        uint key = uint32(Keys.Label);
+        uint key = uint32(bytes4(keccak256("#label")));
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
@@ -1426,7 +1426,7 @@ library LegacyBlocks {
     }
 
     function writeLabelAllocated(bytes memory dst, bytes32 namespace, string memory name) private pure {
-        uint key = uint32(Keys.Label);
+        uint key = uint32(bytes4(keccak256("#label")));
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
             let p := add(dst, 0x20)
@@ -1567,7 +1567,7 @@ library LegacyBlocks {
     /// @dev DANGER: Caller must reserve size bytes plus header scratch space,
     /// prove size fits uint32, and pass the exact complete block size.
     function writeLabelSized(bytes memory dst, uint i, bytes32 namespace, string memory name, uint size) internal pure {
-        uint key = uint32(Keys.Label);
+        uint key = uint32(bytes4(keccak256("#label")));
         uint stringkey = uint32(Keys.String);
         assembly ("memory-safe") {
             let p := add(add(dst, 0x20), i)
@@ -2678,7 +2678,7 @@ library LegacyBlocks {
     /// @return end Absolute position after the block.
     function unpackAnnotation(uint abs) internal pure returns (uint entity, bytes calldata stream, uint end) {
         uint limit;
-        (abs, limit) = enter(abs, Keys.Annotation);
+        (abs, limit) = enter(abs, bytes4(keccak256("#annotation")));
         assembly ("memory-safe") {
             entity := calldataload(abs)
         }
@@ -2782,7 +2782,7 @@ library LegacyBlocks {
     /// @return end Absolute position after the block.
     function unpackLabel(uint abs) internal pure returns (bytes32 namespace, bytes calldata name, uint end) {
         uint limit;
-        (abs, limit) = enter(abs, Keys.Label);
+        (abs, limit) = enter(abs, bytes4(keccak256("#label")));
         assembly ("memory-safe") {
             namespace := calldataload(abs)
         }
@@ -2938,7 +2938,7 @@ library LegacyBlocks {
     /// @return value Encoded ACTION block bytes.
     function createAction(uint actionid) internal pure returns (bytes memory value) {
         value = allocate(Sizes.B32);
-        write32(value, 0, Keys.Action, bytes32(actionid));
+        write32(value, 0, bytes4(keccak256("#action")), bytes32(actionid));
     }
 
     /// @notice Encode a COUNTERPARTY annotation block.
@@ -2955,7 +2955,7 @@ library LegacyBlocks {
     /// @return value Encoded EXECUTION_COST block bytes.
     function createExecutionCost(uint base, uint batch) internal pure returns (bytes memory value) {
         value = allocate(Sizes.B64);
-        write64(value, 0, Keys.ExecutionCost, bytes32(base), bytes32(batch));
+        write64(value, 0, bytes4(keccak256("#executionCost")), bytes32(base), bytes32(batch));
     }
 
     /// @notice Encode a SCHEMA block.

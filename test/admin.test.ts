@@ -1,4 +1,4 @@
-import { expectInputLog } from "./helpers/scoped-logs.js";
+import { expectInputLog, expectAccessLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, getProvider, hostId } from "./helpers/setup.js";
@@ -8,7 +8,7 @@ import {
   endpointSpecs,
   exactSpec,
   encodeNodeBlock, encodeAccountBlock, encodeAssetBlock, encodeAllowanceBlock,
-  encodeCallBlock, encodeContextBlock, encodeLabelBlock, encodeAnnotationBlock, encodeSchemaBlock, concat
+  encodeCallBlock, encodeContextBlock, encodeSchemaBlock, concat
 } from "./helpers/blocks.js";
 
 describe("Admin Commands", () => {
@@ -41,7 +41,7 @@ describe("Admin Commands", () => {
 
   async function cmd(method: string) {
     const flags = method === "executePayable" ? 3n
-      : ["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "annotate"].includes(method)
+      : ["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance"].includes(method)
         ? 2n
         : 0n;
     return commandId(host.interface.getFunction(method)!.selector, host, flags);
@@ -50,7 +50,7 @@ describe("Admin Commands", () => {
   describe("admin runner", () => {
     for (const method of [
       "authorize", "unauthorize", "appoint", "dismiss", "allowAsset",
-      "denyAsset", "allowance", "annotate", "executePayable",
+      "denyAsset", "allowance", "executePayable",
     ]) {
       it(`${method} authorizes even an empty batch`, async () => {
         await expect(callAs(1, method, adminCtx("0x")))
@@ -90,10 +90,10 @@ describe("Admin Commands", () => {
       expect(await host.testAuthorizeId()).to.equal(await cmd("authorize"));
     });
 
-    it("authorizes a node and logs input", async () => {
+    it("authorizes a node and logs Access", async () => {
       const nodeId = await hostId(await (await getSigner(4)).getAddress());
       const input = encodeNodeBlock(nodeId);
-      await expectInputLog(callAs(0, "authorize", adminCtx(input)), host, "authorize", encodeNodeBlock(nodeId));
+      await expectAccessLogs(callAs(0, "authorize", adminCtx(input)), [nodeId], true);
       expect(await host.isAuthorized(nodeId)).to.be.true;
     });
 
@@ -148,12 +148,12 @@ describe("Admin Commands", () => {
       expect(await host.testUnauthorizeId()).to.equal(await cmd("unauthorize"));
     });
 
-    it("revokes node and logs input", async () => {
+    it("revokes node and logs Access", async () => {
       const nodeId = await hostId(await (await getSigner(8)).getAddress());
       // authorize first
       await callAs(0, "authorize", adminCtx(encodeNodeBlock(nodeId)));
       // then unauthorize
-      await expectInputLog(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))), host, "unauthorize", encodeNodeBlock(nodeId));
+      await expectAccessLogs(callAs(0, "unauthorize", adminCtx(encodeNodeBlock(nodeId))), [nodeId], false);
       expect(await host.isAuthorized(nodeId)).to.be.false;
     });
 
@@ -307,64 +307,6 @@ describe("Admin Commands", () => {
 
     it("accepts an empty input batch", async () => {
       await callAs(0, "allowance", adminCtx("0x"));
-    });
-  });
-
-  describe("annotate", () => {
-    it("discovers annotate and publishes its default label", async () => {
-      const deployment = host.deploymentTransaction();
-      expect(deployment).to.not.equal(null);
-
-      await expect(deployment!).to.emitEndpoint(host).withArgs(await cmd("annotate"),
-          0n, endpointSpecs({ input: Keys.Annotation, inputHint: 256, admin: true })[1] | 0x20000002n | (8n << 32n), 0n,
-        );
-      await expect(deployment!).to.emitAnnotation(host)
-        .withArgs(await cmd("annotate"), encodeLabelBlock(ethers.ZeroHash, "annotate"));
-    });
-
-    it("emits an Annotation containing the encoded block stream", async () => {
-      const entity = await cmd("deposit");
-      const data = concat(encodeNodeBlock(11n), encodeNodeBlock(12n));
-      const input = encodeAnnotationBlock(entity, data);
-
-      await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emitAnnotation(host)
-        .withArgs(entity, data);
-    });
-
-    it("publishes a namespaced label through an Annotation block", async () => {
-      const entity = await cmd("deposit");
-      const namespace = ethers.encodeBytes32String("docs");
-      const data = encodeLabelBlock(namespace, "deposit v2");
-      const input = encodeAnnotationBlock(entity, data);
-
-      await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emitAnnotation(host)
-        .withArgs(entity, data);
-    });
-
-    it("publishes a block schema through an Annotation block", async () => {
-      const entity = await host.host();
-      const data = encodeSchemaBlock(
-        exactSpec(Keys.AssetAmount, 64),
-        "assetAmount: { bytes32 asset, uint amount }",
-      );
-      const input = encodeAnnotationBlock(entity, data);
-
-      await expect(callAs(0, "annotate", adminCtx(input)))
-        .to.emitAnnotation(host)
-        .withArgs(entity, data);
-    });
-
-    it("reverts AccessDenied for non-admin account", async () => {
-      const fakeAdmin = ethers.zeroPadValue("0x06", 32);
-      const input = encodeAnnotationBlock(await cmd("deposit"), encodeNodeBlock(1n));
-      await expect(callAs(0, "annotate", userCtx(fakeAdmin, input)))
-        .to.be.revertedWithCustomError(host, "AccessDenied");
-    });
-
-    it("accepts an empty input batch", async () => {
-      await callAs(0, "annotate", adminCtx("0x"));
     });
   });
 

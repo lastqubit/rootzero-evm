@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Position} from "../core/Types.sol";
-import {Codes} from "../utils/Codes.sol";
 
 using Executions for Execution;
 
@@ -26,18 +26,17 @@ abstract contract RealizeHook {
 
 /// @notice Realize each POSITION and return the hook's fulfilled result.
 abstract contract Realize is CommandBase, RealizeHook {
-    uint private constant STATE = Specs.Position | Codes.AccountRealize;
-    uint private constant OUTPUT = Specs.Position | Codes.AccountRealize;
+    uint private constant LOGS = Logs.State | Logs.Output;
 
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("realize", STATE, Specs.Empty, OUTPUT, 0);
+        (id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, LOGS);
     }
 
     /// @notice Realize POSITION state blocks without caller-supplied outcome constraints.
-    /// @dev Logs original POSITION state before hooks and fulfilled OUTPUT afterward.
+    /// @dev Logs original POSITION state and fulfilled OUTPUT together after hooks.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.

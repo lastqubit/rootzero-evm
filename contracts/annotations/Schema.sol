@@ -4,7 +4,6 @@ pragma solidity ^0.8.33;
 import {Encoder} from "../codec/Encoder.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Runtime} from "../core/Runtime.sol";
 
 /// @title SchemaAnnot
@@ -45,7 +44,7 @@ abstract contract SchemaAnnot is Runtime {
     /// @param spec Packed block specification.
     /// @return The published block specification.
     function schema(string memory body, uint spec) internal returns (uint) {
-        Logs.annotation(host, Encoder.createSchema(spec, bytes(body)), Codes.HostAnnotate);
+        Logs.metadata(host, Encoder.createSchema(spec, bytes(body)));
         return spec;
     }
 }

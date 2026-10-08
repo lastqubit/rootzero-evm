@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs} from "../codec/Logs.sol";
 
 import {PortBase} from "./Base.sol";
 import {AllowAssetHook, DenyAssetHook} from "../commands/admin/Asset.sol";
 import {Specs} from "../Codec.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
@@ -24,17 +24,15 @@ abstract contract RequestAssetHook {
 /// @notice Port that permits a list of assets on behalf of a peer host.
 /// Each ASSET block in the input calls `allowAsset`. Restricted to trusted peers.
 abstract contract AllowAssetPort is PortBase, AllowAssetHook {
-    uint private constant INPUT = Specs.Asset | Codes.HostAllowThenActive;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portAllowAsset", INPUT, Specs.Empty, 0);
+        (id, descriptor) = port("portAllowAsset", Specs.Asset, Specs.Empty, Logs.Input);
     }
 
     /// @notice Execute the allow-asset peer call.
-    /// @dev Logs the complete host-scoped INPUT batch before hooks.
+    /// @dev Logs the complete host-scoped INPUT batch after hooks.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
@@ -52,17 +50,15 @@ abstract contract AllowAssetPort is PortBase, AllowAssetHook {
 /// @notice Port that blocks a list of assets on behalf of a peer host.
 /// Each ASSET block in the input calls `denyAsset`. Restricted to trusted peers.
 abstract contract DenyAssetPort is PortBase, DenyAssetHook {
-    uint private constant INPUT = Specs.Asset | Codes.HostDenyThenInactive;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portDenyAsset", INPUT, Specs.Empty, 0);
+        (id, descriptor) = port("portDenyAsset", Specs.Asset, Specs.Empty, Logs.Input);
     }
 
     /// @notice Execute the deny-asset peer call.
-    /// @dev Logs the complete host-scoped INPUT batch before hooks.
+    /// @dev Logs the complete host-scoped INPUT batch after hooks.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Accounts} from "../utils/Accounts.sol";
+import {Logs} from "../codec/Logs.sol";
 
 import {Specs} from "../codec/Specs.sol";
 import {GuardianAccess} from "../core/Access.sol";
@@ -22,19 +24,22 @@ abstract contract GuardBase is InputEndpointBase, GuardianAccess {
     /// @notice Publish guard metadata and a default label.
     /// @param name Guard entrypoint name and default label. It must exactly
     /// match the Solidity guard function name used by the canonical ABI.
-    /// @param input Input lane: upper-half spec and lower-half logging codes.
+    /// @param input Input block specification.
     /// @return id Guard action node ID.
-    /// @return descriptor Packed execution allocation hints and lane-derived logging selections.
-    function guard(
-        string memory name,
-        uint input
-    ) internal returns (uint id, uint descriptor) {
-        id = Nodes.toGuard(name, address(this));
+    /// @return descriptor Packed execution allocation hints and explicit logging selections.
+    function guard(string memory name, uint input) internal returns (uint id, uint descriptor) {
+        return guard(name, input, 0);
+    }
+
+    /// @notice Register a guard with identity flags and optional input logging.
+    function guard(string memory name, uint input, uint flags) internal returns (uint id, uint descriptor) {
+        if (flags & ~uint(Logs.Input) != 0) revert Specs.InvalidSpec();
+        id = Nodes.toGuard(name, address(this), uint8(flags));
         descriptor = endpoint(id, name, Specs.Empty, input, Specs.Empty);
     }
 
     /// @notice Process guardian input; entrypoint must enforce guardian access.
-    /// @dev Guards have no response or budget. Logs selected INPUT before processing.
+    /// @dev Guards have no response or budget. Emits selected INPUT after processing.
     /// Callback must advance input each iteration; empty input invokes no callback.
     /// @param id Registered guard endpoint ID used as the log prefix.
     /// @param descriptor Packed input-only endpoint descriptor.
@@ -47,9 +52,10 @@ abstract contract GuardBase is InputEndpointBase, GuardianAccess {
         function(Execution memory) internal process
     ) internal {
         Execution memory exec;
+        exec.account = Accounts.toUser(msg.sender);
         exec.openInput(descriptor, 0, input);
-        exec.logInput(id, descriptor);
         while (exec.more()) process(exec);
         exec.expectEnd();
+        exec.finish(id, descriptor);
     }
 }

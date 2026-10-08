@@ -267,20 +267,6 @@ library Encoder {
         write32(abs, bytes32(code));
     }
 
-    /// @notice Append one CODES block containing packed identifiers.
-    /// @dev Inherits reserve's initialized-writer requirements. Preserves all bits;
-    /// performs no code-packing or semantic validation.
-    function writeCodes(
-        uint cur,
-        bytes memory dst,
-        uint codes
-    ) internal pure returns (bytes memory value, uint nextCur) {
-        uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, 40);
-        abs = writeHeader(abs, Keys.Codes, 32);
-        write32(abs, bytes32(codes));
-    }
-
     /// @notice Append LIMITS, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeLimits(
@@ -324,9 +310,12 @@ library Encoder {
 
     /// @notice Append PIPELINE to a growable writer, preserving full-width fields.
     /// @dev Inherits reserve's initialized-writer and lifecycle requirements.
-    function writePipeline(uint cur, bytes memory dst, bytes32 account, uint budget)
-        internal pure returns (bytes memory value, uint nextCur)
-    {
+    function writePipeline(
+        uint cur,
+        bytes memory dst,
+        bytes32 account,
+        uint budget
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 72);
         abs = writeHeader(abs, Keys.Pipeline, 64);
@@ -632,9 +621,11 @@ library Encoder {
 
     /// @notice Append one BOOKING from a structured value.
     /// @dev Inherits reserve's initialized-writer and lifecycle requirements.
-    function writeBooking(uint cur, bytes memory dst, Booking memory booking)
-        internal pure returns (bytes memory value, uint nextCur)
-    {
+    function writeBooking(
+        uint cur,
+        bytes memory dst,
+        Booking memory booking
+    ) internal pure returns (bytes memory value, uint nextCur) {
         uint abs;
         (value, abs, nextCur) = reserve(cur, dst, 200);
         writeBookingAt(abs, booking);
@@ -644,7 +635,9 @@ library Encoder {
     /// @dev Caller owns 200 writable bytes. Does not allocate or advance a writer.
     function writeBookingAt(uint abs, Booking memory booking) internal pure returns (uint) {
         uint payload = writeHeader(abs, Keys.Booking, 192);
-        assembly ("memory-safe") { mcopy(payload, booking, 192) }
+        assembly ("memory-safe") {
+            mcopy(payload, booking, 192)
+        }
         return payload + 192;
     }
 
@@ -1139,65 +1132,6 @@ library Encoder {
         wrap(abs, Keys.Bytes, uint32(witnessCur), witnessSize);
     }
 
-    /// @notice Append LABEL by copying complete validated calldata STRING children.
-    /// @dev Children include their headers, are not advanced, and are not revalidated.
-    function writeLabel(
-        uint cur,
-        bytes memory dst,
-        bytes32 namespace,
-        uint nameCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
-        uint nameSize = length(nameCur);
-        uint size = 40 + nameSize;
-        uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
-        unchecked {
-            abs = writeHeader(abs, Keys.Label, size - 8);
-        }
-        abs = write32(abs, namespace);
-        copy(abs, uint32(nameCur), nameSize);
-    }
-
-    /// @notice Append LABEL, wrapping memory payloads in child headers.
-    /// @dev Inherits reserve and copy requirements. Sources exclude child headers,
-    /// must be disjoint from writes, and are not advanced or revalidated.
-    function writeLabelWrap(
-        uint cur,
-        bytes memory dst,
-        bytes32 namespace,
-        bytes memory name
-    ) internal pure returns (bytes memory value, uint nextCur) {
-        uint nameSize = name.length;
-        uint size = 48 + nameSize;
-        uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
-        unchecked {
-            abs = writeHeader(abs, Keys.Label, size - 8);
-        }
-        abs = write32(abs, namespace);
-        wrap(abs, Keys.String, name, nameSize);
-    }
-
-    /// @notice Append LABEL, wrapping validated calldata payload cursors in child headers.
-    /// @dev Inherits reserve and copy requirements. Sources exclude child headers,
-    /// must be disjoint from writes, and are not advanced or revalidated.
-    function writeLabelWrap(
-        uint cur,
-        bytes memory dst,
-        bytes32 namespace,
-        uint nameCur
-    ) internal pure returns (bytes memory value, uint nextCur) {
-        uint nameSize = length(nameCur);
-        uint size = 48 + nameSize;
-        uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, size);
-        unchecked {
-            abs = writeHeader(abs, Keys.Label, size - 8);
-        }
-        abs = write32(abs, namespace);
-        wrap(abs, Keys.String, uint32(nameCur), nameSize);
-    }
-
     /// @notice Append SCHEMA by copying complete validated calldata STRING children.
     /// @dev Children include their headers, are not advanced, and are not revalidated.
     function writeSchema(
@@ -1391,29 +1325,12 @@ library Encoder {
         write32(abs, bytes32(code));
     }
 
-    /// @notice Create a CODES block containing packed identifiers.
-    /// @dev Preserves all bits with zero allocation padding; performs no semantic validation.
-    function createCodes(uint codes) internal pure returns (bytes memory value) {
-        value = allocate(40);
-        uint abs = writeHeader(pos(value, 0), Keys.Codes, 32);
-        write32(abs, bytes32(codes));
-    }
-
     /// @notice Create a complete LIMITS block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     function createLimits(uint limits) internal pure returns (bytes memory value) {
         value = allocate(40);
         uint abs = writeHeader(pos(value, 0), Keys.Limits, 32);
         write32(abs, bytes32(limits));
-    }
-
-    /// @notice Create an ACTION annotation from a full-width action identifier.
-    /// @param actionid Canonical action identifier, encoded unchanged.
-    /// @return value Complete 40-byte ACTION block with zero allocation padding.
-    function createAction(uint actionid) internal pure returns (bytes memory value) {
-        value = allocate(40);
-        uint abs = writeHeader(pos(value, 0), Keys.Action, 32);
-        write32(abs, bytes32(actionid));
     }
 
     /// @notice Create a COUNTERPARTY annotation from an account identifier.
@@ -1445,9 +1362,12 @@ library Encoder {
 
     /// @notice Create ENVELOPE with routing metadata, lookup key and payload digest.
     /// @dev Preserves full-width fields without hashing or validating them.
-    function createEnvelope(uint portal, uint resources, bytes32 key, bytes32 digest)
-        internal pure returns (bytes memory value)
-    {
+    function createEnvelope(
+        uint portal,
+        uint resources,
+        bytes32 key,
+        bytes32 digest
+    ) internal pure returns (bytes memory value) {
         value = allocate(136);
         uint abs = writeHeader(pos(value, 0), Keys.Envelope, 128);
         abs = write32(abs, bytes32(portal));
@@ -1475,15 +1395,15 @@ library Encoder {
         write32(abs, bytes32(blocknum));
     }
 
-    /// @notice Create ENDPOINT with its ID and complete Spec + Codes lanes.
-    /// @dev Preserves all four uint values without interpreting or validating them.
+    /// @notice Create a silent ENDPOINT with its ID and pure lane specs.
+    /// @dev Preserves all fields without interpreting or validating them.
     function createEndpoint(uint id, uint state, uint input, uint output) internal pure returns (bytes memory value) {
         value = allocate(136);
         uint abs = writeHeader(pos(value, 0), Keys.Endpoint, 128);
         abs = write32(abs, bytes32(id));
         abs = write32(abs, bytes32(state));
         abs = write32(abs, bytes32(input));
-        write32(abs, bytes32(output));
+        abs = write32(abs, bytes32(output));
     }
 
     /// @notice Create PIPELINE with account and initial native-value budget in that order.
@@ -1505,17 +1425,6 @@ library Encoder {
         uint abs = writeHeader(pos(value, 0), Keys.Balance, 64);
         abs = write32(abs, asset);
         write32(abs, bytes32(amount));
-    }
-
-    /// @notice Create an EXECUTION_COST annotation with base and per-batch costs.
-    /// @param base Fixed execution cost per invocation.
-    /// @param batch Additional execution cost per logical batch.
-    /// @return value Complete encoded annotation with zero allocation padding.
-    function createExecutionCost(uint base, uint batch) internal pure returns (bytes memory value) {
-        value = allocate(72);
-        uint abs = writeHeader(pos(value, 0), Keys.ExecutionCost, 64);
-        abs = write32(abs, bytes32(base));
-        write32(abs, bytes32(batch));
     }
 
     /// @notice Create a complete ASSETLIABILITY block with zero allocation padding.
@@ -1827,34 +1736,6 @@ library Encoder {
             uint abs = writeHeader(pos(value, 0), Keys.AssetPreimage, size - 8);
             abs = write32(abs, asset);
             wrap(abs, Keys.Bytes, preimage, preimage.length);
-        }
-    }
-
-    /// @notice Create ANNOTATION around an existing annotation block stream.
-    /// @param entity Entity receiving the metadata claims.
-    /// @param data Encoded annotation blocks, preserved without interpreting their merge rules.
-    /// @return value Complete ANNOTATION block with zero allocation padding.
-    function createAnnotation(uint entity, bytes memory data) internal pure returns (bytes memory value) {
-        uint size = 48 + data.length;
-        value = allocate(size);
-        unchecked {
-            uint abs = writeHeader(pos(value, 0), Keys.Annotation, size - 8);
-            abs = write32(abs, bytes32(entity));
-            wrap(abs, Keys.Bytes, data, data.length);
-        }
-    }
-
-    /// @notice Create LABEL by wrapping a memory payload in a STRING child header.
-    /// @param namespace Label namespace.
-    /// @param name Raw text bytes, excluding the STRING header.
-    /// @return value Complete LABEL block with zero allocation padding.
-    function createLabel(bytes32 namespace, bytes memory name) internal pure returns (bytes memory value) {
-        uint size = 48 + name.length;
-        value = allocate(size);
-        unchecked {
-            uint abs = writeHeader(pos(value, 0), Keys.Label, size - 8);
-            abs = write32(abs, namespace);
-            wrap(abs, Keys.String, name, name.length);
         }
     }
 

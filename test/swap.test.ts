@@ -1,10 +1,10 @@
-import { decodeAnnotationLog } from "./helpers/annotation-logs.js";
+import { decodeMetadataLog } from "./helpers/metadata-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, hostId, commandId } from "./helpers/setup.js";
 import {
   concat, encodeActionBlock, encodeAssetBlock, encodeBlock, encodeBytesBlock,
-  encodeContextBlock, encodeOutputBlock, encodeLabelBlock, encodeListBlock, encodePositionBlock,
+  encodeContextBlock, encodeOutputBlock, encodeListBlock, encodePositionBlock,
   encodeSwapBlock, encodeUserAccount, endpointSpecs, exactSpec, Keys, pad32,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
@@ -26,13 +26,13 @@ describe("Swap commands", () => {
     const exactIn = method === "swapExactIn";
     const specifiedAsset = exactIn ? asset : output;
     const finalHop = exactIn ? output : asset;
-    it(`${method} publishes the shared SWAP input, POSITION output lane codes and label without duplicate action metadata`, async () => {
+    it(`${method} publishes the shared SWAP input, POSITION output, logging flags and name`, async () => {
       const id = await commandId(method + "(bytes)", host);
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
-        ...endpointSpecs({ input: Keys.Swap, inputHint: 256, output: exactSpec(Keys.Position, 160) | 80n }));
-      await expect(host.deploymentTransaction()).to.emitAnnotation(host).withArgs(id, encodeLabelBlock(ethers.ZeroHash, method));
+        ...endpointSpecs({ input: Keys.Swap, inputHint: 256, output: exactSpec(Keys.Position, 160), }));
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, undefined, undefined, undefined, method);
       const receipt = await host.deploymentTransaction().wait();
-      expect(receipt.logs.flatMap((log: any) => decodeAnnotationLog(log))
+      expect(receipt.logs.flatMap((log: any) => decodeMetadataLog(log))
         .some((value: { entity: bigint; data: string }) => value.entity === id && value.data === encodeActionBlock(80n))).eq(false);
     });
 
@@ -58,7 +58,7 @@ describe("Swap commands", () => {
           exactIn, i === 0 ? specifiedAsset : hops[i - 1], quantity + delta * BigInt(i), hop,
         ]));
         expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-          concat(pad32(await commandId(method + "(bytes)", host)), encodeOutputBlock(expectedOutput)),
+          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)),
         ]);
       }
       expect(await host.calls()).eq(8n);
@@ -73,7 +73,7 @@ describe("Swap commands", () => {
         const receipt = await (await host[method](context)).wait();
         const logs = receipt.logs.filter((log: any) => log.topics.length === 0);
         expect(logs).to.have.length(1);
-        expect(logs[0].data).eq(concat(pad32(await commandId(method + "(bytes)", host)), encodeOutputBlock(expectedOutput)));
+        expect(logs[0].data).eq(concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)));
       }
     });
 
@@ -86,7 +86,7 @@ describe("Swap commands", () => {
         const receipt = await (await host[method](context)).wait();
         expect(callsFrom(receipt)).deep.eq([]);
         expect(receipt.logs.map((log: any) => log.data)).deep.eq([
-          concat(pad32(await commandId(method + "(bytes)", host)), encodeOutputBlock(expectedOutput)),
+          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)),
         ]);
       }
       expect(await host.calls()).eq(0n);
@@ -114,7 +114,7 @@ describe("Swap commands", () => {
       const emptyContext = encodeContextBlock(account, "0x", "0x");
       expect(await host[method].staticCall(emptyContext)).deep.eq(["0x", 0n]);
       expect((await (await host[method](emptyContext)).wait()).logs.map((log: any) => log.data))
-        .deep.eq([concat(pad32(await commandId(method + "(bytes)", host)), encodeOutputBlock("0x"))]);
+        .deep.eq([concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock("0x"))]);
       const input = concat(encodeSwapBlock(specifiedAsset, 10n, middle), encodeSwapBlock(middle, 20n, finalHop));
       const context = encodeContextBlock(account, "0x", input);
       const expectedOutput = concat(result(specifiedAsset, 10n, middle, 10n), result(middle, 20n, finalHop, 20n));
@@ -125,7 +125,7 @@ describe("Swap commands", () => {
         [exactIn, middle, 20n, finalHop],
       ]);
       expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-        concat(pad32(await commandId(method + "(bytes)", host)), encodeOutputBlock(expectedOutput))]);
+        concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput))]);
       expect(receipt.logs.map((log: any) => log.topics.length === 0)).deep.eq([false, false, true]);
       expect(await host.calls()).eq(2n);
     });

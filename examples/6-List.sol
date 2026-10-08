@@ -34,7 +34,6 @@ abstract contract MyCommand is CommandBase {
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
         Execution memory exec = openCommand(context, descriptor);
-        exec.logContext(id, descriptor);
         uint batch;
 
         while (exec.more()) {
@@ -56,5 +55,5 @@ abstract contract MyCommand is CommandBase {
 }
 
 contract ExampleHost is Host, MyCommand {
-    constructor(uint rootzero) Host(rootzero) {}
+    constructor(uint rootzero) Host(rootzero, "6-List") {}
 }

@@ -11,7 +11,7 @@ contract TestSwapCommands is CommandHost, SwapExactIn, SwapExactOut {
     error HookRejected();
     event SwapCalled(bool exactIn, bytes32 asset, uint amount, bytes32 next);
 
-    constructor(uint commander, bytes32 account) CommandHost(commander) Counterparty(account) {}
+    constructor(uint commander, bytes32 account) CommandHost(commander, "TestSwapCommands") Counterparty(account) {}
 
     function configure(uint delta, uint failAt) external {
         adjustment = delta;

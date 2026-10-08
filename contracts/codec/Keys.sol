@@ -122,18 +122,10 @@ library Keys {
     bytes4 constant Resolution = bytes4(keccak256("#resolution"));
     /// @dev Host introduction claim - (uint peer, bytes32 origin, uint blocknum)
     bytes4 constant Introduction = bytes4(keccak256("#introduction"));
-    /// @dev Endpoint registration - (uint id, uint state, uint input, uint output)
+    /// @dev Endpoint data block - (uint id, uint state, uint input, uint output)
     bytes4 constant Endpoint = bytes4(keccak256("#endpoint"));
-    /// @dev Entity label annotation - (bytes32 namespace, #string as name)
-    bytes4 constant Label = bytes4(keccak256("#label"));
-    /// @dev Entity annotations - (uint entity, #bytes as data)
-    bytes4 constant Annotation = bytes4(keccak256("#annotation"));
-    /// @dev Primary semantic action annotation - (uint action)
-    bytes4 constant Action = bytes4(keccak256("#action"));
     /// @dev Entity counterparty annotation - (bytes32 account)
     bytes4 constant Counterparty = bytes4(keccak256("#counterparty"));
-    /// @dev Command execution cost estimate - (uint base, uint batch)
-    bytes4 constant ExecutionCost = bytes4(keccak256("#executionCost"));
     /// @dev Command loop-group annotation - (#string as description)
     bytes4 constant Groups = bytes4(keccak256("#groups"));
     /// @dev Block schema publication - (uint spec, #string as body)
@@ -141,8 +133,6 @@ library Keys {
 
     /// @dev Structural status form - (uint code)
     bytes4 constant Status = bytes4(keccak256("#status"));
-    /// @dev Packed categorized identifiers - (uint codes)
-    bytes4 constant Codes = bytes4(keccak256("#codes"));
     /// @dev Structural asset-liability pair - (bytes32 asset, bytes32 liability)
     bytes4 constant AssetLiability = bytes4(keccak256("#assetLiability"));
     /// @dev Structural account asset form - (bytes32 account, bytes32 asset)

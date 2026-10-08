@@ -7,7 +7,6 @@ import {Keys} from "../codec/Keys.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {CashoutHook} from "../core/Cash.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {InvalidAsset, UnexpectedInput} from "../utils/Errors.sol";
 
@@ -16,13 +15,11 @@ using Executions for Execution;
 /// @title Cashout
 /// @notice Command that withdraws requested chain-asset amounts from its account.
 abstract contract Cashout is CommandBase, CashoutHook {
-    uint private constant STATE = Specs.Balance | Codes.AccountCashout;
-
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("cashout", STATE, Specs.Empty, Specs.Empty, 0);
+        (id, descriptor) = command("cashout", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Return the registered CASHOUT command ID.
@@ -31,7 +28,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
     }
 
     /// @notice Withdraw chain-asset BALANCE state from the command account.
-    /// @dev Logs the consumed State stream before hooks, including empty batches.
+    /// @dev Logs the consumed State stream after hooks, including empty batches.
     /// @param context Command context carrying a BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -50,7 +47,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
 /// @notice Extends cashout with optimized local pipeline execution.
 abstract contract ExecuteCashout is Cashout {
     /// @notice Execute cashout directly against chain-asset BALANCE state held in memory.
-    /// @dev Logs STATE before hooks, matching the calldata command.
+    /// @dev Logs STATE after hooks, matching the calldata command.
     /// @param account Account whose chain asset is withdrawn.
     /// @param state BALANCE block stream held in pipeline memory.
     /// @param inputCur Cursor over empty input required by the command schema.
@@ -67,8 +64,6 @@ abstract contract ExecuteCashout is Cashout {
         if (!Cursors.done(inputCur)) revert UnexpectedInput();
         (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
-        Logs.memCopyWrap(cashoutId(), Keys.State, state);
-
         while (abs < end) {
             (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
             if (asset != chainAsset) revert InvalidAsset();
@@ -78,6 +73,7 @@ abstract contract ExecuteCashout is Cashout {
             }
         }
 
+        Logs.execution(cashoutId(), account, Keys.State, state);
         // The default output is the shared empty bytes value; no allocation is needed.
         return (true, output, value);
     }

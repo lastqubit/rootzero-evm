@@ -42,7 +42,7 @@ describe("Burn", () => {
     expect(deployment).to.not.equal(null);
 
     await expect(deployment!).to.emitEndpoint(host)
-      .withArgs(await commandId(burnMethod, host), exactSpec(Keys.Balance, 64) | 0x20000001n | (49n << 32n), 0n, 0n);
+      .withArgs(await commandId(burnMethod, host), exactSpec(Keys.Balance, 64), 0n, 0n);
   });
 
   // â”€â”€ Happy path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

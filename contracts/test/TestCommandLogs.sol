@@ -3,8 +3,8 @@ pragma solidity ^0.8.33;
 
 import {CommandBase, Execution, Executions, Specs} from "../commands/Base.sol";
 
-import {Lanes} from "../codec/Lanes.sol";
 import {Runtime} from "../core/Runtime.sol";
+import {Encoder} from "../codec/Encoder.sol";
 
 contract TestCommandLogs is CommandBase {
     using Executions for Execution;
@@ -15,8 +15,8 @@ contract TestCommandLogs is CommandBase {
     event Processed(uint amount);
     error Rejected();
 
-    constructor(uint stateCodes, uint inputCodes, uint outputCodes, uint8 flags) Runtime(0) {
-        (id, descriptor) = command("run", Lanes.create(Specs.Balance, stateCodes), Lanes.create(Specs.AssetAmount, inputCodes), Lanes.create(Specs.Balance, outputCodes), flags);
+    constructor(uint logFlags, uint8 flags) Runtime(0) {
+        (id, descriptor) = command("run", Specs.Balance, Specs.AssetAmount, Specs.Balance, logFlags | flags);
     }
 
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -25,6 +25,18 @@ contract TestCommandLogs is CommandBase {
 
     function run(bytes calldata context) external payable returns (bytes memory, uint) {
         return runCommand(id, descriptor, context, process);
+    }
+
+    function underallocated(bytes calldata context) external payable returns (bytes memory output, bool aliases) {
+        Execution memory exec;
+        exec.openContext(descriptor, msg.value, context, 0, 1);
+        while (exec.more()) process(exec);
+        uint abs = Encoder.pos(exec.buffer, exec.outputOffset());
+        output = exec.finish(id, descriptor);
+        aliases = Encoder.pos(output, 0) == abs;
+        bytes32 digest = keccak256(output);
+        bytes memory neighbor = abi.encode(exec.account, uint(0xabcdef));
+        require(neighbor.length == 64 && keccak256(output) == digest);
     }
 
     function process(Execution memory exec) private {

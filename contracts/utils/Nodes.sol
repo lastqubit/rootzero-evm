@@ -198,7 +198,7 @@ library Nodes {
         return toCommand(name, target, 0);
     }
 
-    /// @notice Build a chain-local command ID carrying endpoint behavior flags.
+    /// @notice Build a chain-local command ID carrying endpoint behavior and logging flags.
     function toCommand(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Command | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -212,7 +212,7 @@ library Nodes {
         return toPort(name, target, 0);
     }
 
-    /// @notice Build a chain-local port ID carrying endpoint behavior flags.
+    /// @notice Build a chain-local port ID carrying endpoint behavior and logging flags.
     function toPort(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Port | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -226,7 +226,7 @@ library Nodes {
         return toQuery(name, target, 0);
     }
 
-    /// @notice Build a chain-local query ID carrying endpoint behavior flags.
+    /// @notice Build a chain-local query ID carrying endpoint behavior and logging flags.
     function toQuery(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Query | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -240,7 +240,7 @@ library Nodes {
         return toGuard(name, target, 0);
     }
 
-    /// @notice Build a chain-local guard ID carrying endpoint behavior flags.
+    /// @notice Build a chain-local guard ID carrying endpoint behavior and logging flags.
     function toGuard(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Guard | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;

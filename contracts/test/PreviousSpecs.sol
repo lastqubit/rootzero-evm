@@ -115,9 +115,9 @@ library PreviousSpecs {
     uint constant Call = uint(bytes32(Keys.Call)) | UnboundedMin72Hint256;
     uint constant Asset = uint(bytes32(Keys.Asset)) | Exact32;
     uint constant Node = uint(bytes32(Keys.Node)) | Exact32;
-    uint constant Label = uint(bytes32(Keys.Label)) | UnboundedMin40Hint256;
-    uint constant Annotation = uint(bytes32(Keys.Annotation)) | UnboundedMin40Hint256;
-    uint constant Action = uint(bytes32(Keys.Action)) | Exact32;
+    uint constant Label = uint(bytes32(bytes4(keccak256("#label")))) | UnboundedMin40Hint256;
+    uint constant Annotation = uint(bytes32(bytes4(keccak256("#annotation")))) | UnboundedMin40Hint256;
+    uint constant Action = uint(bytes32(bytes4(keccak256("#action")))) | Exact32;
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
     uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 

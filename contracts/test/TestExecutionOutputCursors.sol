@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {PreviousNamingExecutions} from "./PreviousNaming.sol";
 
 import {Execution, Executions} from "../execution/Execution.sol";
 import {Encoder} from "../codec/Encoder.sol";
@@ -34,7 +35,7 @@ contract TestExecutionOutputCursors {
                 else if (kind == 7) exec.outputRelay(aCur, bCur);
                 else if (kind == 8) exec.outputContext(bytes32(uint(33)), aCur, bCur);
                 else if (kind == 9) exec.outputRecover(11, 22, bytes32(uint(33)), aCur);
-                else if (kind == 10) exec.outputLabel(bytes32(uint(33)), aCur);
+                else if (kind == 10) PreviousNamingExecutions.outputLabel(exec, bytes32(uint(33)), aCur);
                 else if (kind == 11) exec.outputSchema(11, aCur);
                 else revert();
                 continue;
@@ -49,7 +50,7 @@ contract TestExecutionOutputCursors {
             else if (kind == 7) exec.outputRelayWrap(aCur, bCur);
             else if (kind == 8) exec.outputContextWrap(bytes32(uint(33)), aCur, bCur);
             else if (kind == 9) exec.outputRecoverWrap(11, 22, bytes32(uint(33)), aCur);
-            else if (kind == 10) exec.outputLabelWrap(bytes32(uint(33)), aCur);
+            else if (kind == 10) PreviousNamingExecutions.outputLabelWrap(exec, bytes32(uint(33)), aCur);
             else if (kind == 11) exec.outputSchemaWrap(11, aCur);
             else revert();
         }

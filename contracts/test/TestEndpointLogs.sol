@@ -3,7 +3,6 @@ pragma solidity ^0.8.33;
 
 import {Encoder} from "../codec/Encoder.sol";
 import {Logs} from "../codec/Logs.sol";
-import {Codes} from "../utils/Codes.sol";
 import {Specs, Sizes} from "../codec/Specs.sol";
 import {Headers} from "../codec/Headers.sol";
 import {Schemas} from "../codec/Schema.sol";
@@ -14,7 +13,7 @@ contract TestEndpointLogs {
     }
 
     function publish(uint id, uint state, uint input, uint output) external returns (bytes memory) {
-        Logs.endpoint(id, state, input, output, Codes.HostAdd);
+        Logs.endpoint(id, state, input, output, "");
         return Encoder.createEndpoint(id, state, input, output);
     }
 }

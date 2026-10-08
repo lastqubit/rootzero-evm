@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
+import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 
 import {Logs, Encoder} from "../Codec.sol";
 import {Cursors} from "../utils/Cursors.sol";
@@ -21,7 +22,7 @@ contract TestLogs {
             prefix := mload(sub(abs, 32))
             zero := mload(0x60)
         }
-        for (uint i; i < codes.length; ++i) Logs.mem(codes[i], abs, size);
+        for (uint i; i < codes.length; ++i) PreviousLogs.mem(codes[i], abs, size);
         assembly ("memory-safe") {
             if iszero(and(eq(pointer, mload(0x40)),
                 and(eq(prefix, mload(sub(abs, 32))), eq(zero, mload(0x60))))) { revert(0, 0) }
@@ -45,7 +46,7 @@ contract TestLogs {
             zero := mload(0x60)
         }
         uint cur = Cursors.pack(abs, abs + size);
-        for (uint i; i < codes.length; ++i) Logs.copy(codes[i], cur);
+        for (uint i; i < codes.length; ++i) PreviousLogs.copy(codes[i], cur);
         assembly ("memory-safe") {
             if iszero(and(eq(pointer, mload(0x40)), eq(zero, mload(0x60)))) { revert(0, 0) }
         }
@@ -54,15 +55,15 @@ contract TestLogs {
         afterLog = abi.encode(uint(0x5678), data);
     }
 
-    function emitBalance(bytes32 asset, uint amount, uint codes) external {
-        Logs.balance(asset, amount, codes);
+    function emitBalance(bytes32 account, bytes32 asset, uint amount) external {
+        Logs.balance(account, asset, amount);
     }
 
     function measureMem(uint codes, bytes memory data) external returns (uint used) {
         uint abs = Encoder.pos(data, 0);
         uint size = data.length;
         uint initial = gasleft();
-        Logs.mem(codes, abs, size);
+        PreviousLogs.mem(codes, abs, size);
         used = initial - gasleft();
     }
 
@@ -71,7 +72,7 @@ contract TestLogs {
         assembly ("memory-safe") { abs := data.offset }
         uint size = data.length;
         uint initial = gasleft();
-        Logs.copy(codes, abs, size);
+        PreviousLogs.copy(codes, abs, size);
         used = initial - gasleft();
     }
 }
