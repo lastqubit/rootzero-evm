@@ -8,6 +8,46 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.53.0
+
+- **Breaking: categorized events.** Standard LOG0 records start with a category
+  byte: Access=1, Introduction=2, Metadata=3, Execution=4, Endpoint=5, Balance=7,
+  Envelope=8 and Resolution=9. Category 6 is reserved; pipeline entry no longer
+  emits a record. Replace codes-prefixed and block-wrapped event decoders with
+  the layouts documented in `docs/Indexing.md`. Execution records include the
+  endpoint and acting account; selected lanes share the returned output buffer.
+- **Breaking: endpoint identity and logging.** Put behavior and logging flags in
+  the endpoint ID byte at bits 224..231. `Logs.Execution`, `Logs.State`,
+  `Logs.Input` and `Logs.Output` select completion logging; lane specs contain
+  no codes or flags. Logging changes require a new endpoint ID and access grant.
+  Endpoint events contain four words and a trailing name (129 bytes plus name);
+  ENDPOINT blocks retain their four-word payload (136 bytes including header).
+- **Breaking: discovery and metadata.** Introduction and Endpoint events include
+  trailing UTF-8 names. Host constructors and introduction APIs take a name;
+  IDs remain authoritative. Remove LABEL/ANNOTATION codecs, LabelAnnot, the admin
+  Annotate command, action annotations and execution-cost annotations. Retain
+  direct schema, group and counterparty metadata publication.
+- **Breaking: access and balances.** Replace authorization hooks with
+  `setAccess(uint node, bool enabled)`, emitting Access only on transitions.
+  Authorization commands and the revoke guard no longer emit duplicate execution
+  records. Rename `Logs.accountBalance` to `Logs.balance`; its new categorized
+  record carries account, asset and actual balance. Ledger hooks publish successful
+  nonzero mutations. Envelope records omit codes; Resolution carries a boolean.
+- **Breaking: classification APIs.** Remove CODES codecs, semantic code catalogs,
+  Logs presets, Lanes packing, and assetCodes/entityCodes query mixins and hooks.
+  Classification moves offchain. GetBalance remains the built-in query, with
+  QueryBase available for custom direct reads. Update exports, examples and
+  indexing guidance for the new APIs.
+- Add `Blocks.unpackContextExact` for execution context opening, preserving
+  malformed/trailing-data errors, and inline input/context source setup.
+- Extract capacity scaling into the general-purpose `Math.scale` utility,
+  exported through `Utils.sol`. Preserve floor division, zero-denominator errors
+  and checked intermediate multiplication.
+- Keep five core benchmark suites. Remove obsolete experiments, gas-only regular
+  assertions and unused fixtures while retaining historical measurements. Move
+  portal recovery checks into regular tests and repair stale endpoint IDs and
+  reservation metadata in test fixtures.
+
 ## 1.52.0
 
 - Enable INPUT logging for revokeAllowance and revokeAsset, completing logging
