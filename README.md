@@ -54,7 +54,7 @@ receive function. Use `Host` instead when the application needs those advanced
 facilities; its commands accept the commander, the host itself, and explicitly
 authorized host callers.
 
-Both host types introduce themselves during deployment when the native target
+For ordinary deployments, both host types introduce themselves when the native target
 encoded by the commander host ID is a contract. That commander must implement
 `introduce(uint,uint,string)` and accept the call, otherwise deployment reverts. Host
 IDs encoding EOAs do not receive an introduction call. Both host constructors
@@ -62,10 +62,18 @@ accept a discovery name, included only when an introduction is emitted. Names
 are nonunique hints; host IDs are the identifiers. Endpoint names are included
 in Endpoint registration events. Additional labels are managed offchain.
 
-Host contracts are designed for fresh deployment rather than proxy upgrades.
-Releases may change inheritance storage layout, immutable configuration, and
-encoded identity formats; storage compatibility across versions is not
-supported.
+`Host(cmdr, name, self)` and `Runtime(cmdr, self)` accept `address(0)` for ordinary
+deployments. A commander implementation can pass a known proxy address as `self`;
+host and endpoint identities then use that address. `hostAddr()` returns the
+address embedded in `host`, and `hostAccount()` derives its account identity.
+`CommandHost(cmdr, name)` continues to use its own deployment address.
+
+Proxy-bound implementations skip constructor-time introductions; those must be
+made through the proxy. Constructor metadata is still emitted by the implementation.
+The application supplies the proxy, initialization, upgrade authorization, and
+metadata publication through the proxy. Releases may change inheritance storage
+layout, immutable configuration, and encoded identity formats; applications must
+validate storage and protocol compatibility for every upgrade.
 
 Pipelines and trusted outbound port callers require `CommandAccess` and
 `PortAccess` implementations respectively. The advanced `Host` supplies both
@@ -160,9 +168,9 @@ continues to use the generic `#list` key.
 An input is not a single struct; it is a run of blocks. One `#assetAmount` block
 asks for one deposit, five blocks ask for five, and the code path is identical
 — every endpoint parses with a cursor and loops until the stream is exhausted.
-The published lane key is the prime item: it is the block type that may repeat
-for batching. Each top-level block represents one operation; fixed compositions
-use a custom parent block.
+The published lane's embedded block key identifies the prime item: it is the block type that may repeat
+for batching. A lane description may group consecutive blocks into one operation;
+compositions containing different block types use a custom parent block.
 
 Off-chain, building a batch is concatenation. Using the reference encoders from
 [`test/helpers/blocks.ts`](test/helpers/blocks.ts):
@@ -559,16 +567,28 @@ next pipeline step. Account debits are exact internal bookkeeping operations:
 they must make the complete requested amount available or revert. Any account
 fee is charged in addition and does not reduce the resulting balance.
 
-Commands can describe grouped lanes with `GroupsAnnot`, available through
-`Core.sol` and `Commands.sol`:
+Commands can describe grouped lanes through `SchemaAnnot`, already inherited by
+endpoint bases:
 
 ```solidity
-annotateGroups(id, "#state as (debit, credit), #output as (receipt, change)");
+uint input = lane("#amount[2] as (first, second)", "amountPair", Specs.Amount);
 ```
 
-Only grouped lanes are listed. Their schemas come from the published endpoint specs; empty
-lanes remain empty. Counts and roles are off-chain hints, with no descriptor
-fields or runtime enforcement. An empty description clears previous hints.
+Pass the returned value as the endpoint's input spec. The low 32 bits identify
+host-scoped `#lane` metadata; all block-spec fields stay unchanged. A plain spec
+has lane key zero. The body describes consecutive blocks of the same type using
+the normal schema language; mixed types require a parent block. Lane keys are
+only for offchain lookup and never used as block headers or during unpacking.
+Allocation retains the embedded spec's per-block hints, without a group multiplier.
+The latest trusted lane definition replaces the previous one; an empty body
+clears grouping hints. Block definitions still use `schema(...)` and `#schema`.
+
+Both `lane` and the exact-size and ranged `schema` helpers accept a string key
+as an alternative to `uint32`. They derive `uint32(bytes4(keccak256(bytes(key))))`
+from the exact supplied string, with no automatic `#` prefix or normalization.
+For example, `schema("pair: #amount[2] as (a, b)", "#pair", 80)` defines a
+parent block whose payload contains two complete AMOUNT blocks. The string key
+does not set a schema name; names still come from the body or standard catalog.
 
 Execution costs are estimated off-chain per command; there is no execution-cost metadata block.
 
@@ -796,7 +816,22 @@ response: accountBalance { bytes32 account, bytes32 asset, uint amount }
 Like commands, every query announces its input and output specs at deployment;
 tooling resolves their keys through the published block schemas.
 
-`GetBalance` is the only built-in query. Application reads, discovery, asset
+`GetQuote` provides exact-asset-amount price quotations:
+
+```txt
+input:    quoteRequest { bytes32 asset, uint amount, bytes32 liability }
+response: quote { bytes32 asset, uint amount, bytes32 liability, uint debt }
+```
+
+Inherit `GetQuote` from `Endpoints.sol` and implement the scalar view hook
+`getQuote(asset, amount, liability) returns (uint debt)`. It quotes the liability
+required to receive exactly the requested asset amount. Fees, pricing,
+availability, and unsupported-pair behavior are implementation-defined. Each
+request produces one complete Quote in input order; empty input returns empty
+output, and malformed input or a hook revert fails the whole query. QuoteRequest
+has scalar codec helpers and no struct.
+
+`GetBalance` and `GetQuote` are the built-in queries. Application reads, discovery, asset
 permissions and entity classification should primarily come from the indexer.
 Onchain queries are reserved for specific cases needing a direct contract read.
 `QueryBase` remains available for custom queries; code-classification queries
@@ -806,7 +841,7 @@ and their hooks have been removed.
 
 Settlement and the book port share `BookHook` from `core/Settlement.sol`:
 `book(Booking memory value)`. `Settlement` forwards it to its virtual scalar
-`book(from, to, liability, debt, asset, amount)` overload, which implements it by
+`book(from, to, asset, amount, liability, debt)` overload, which implements it by
 debiting `debt` from `from` before crediting `amount` to `to`, skipping zero
 amounts. Matching accounts or assets are not netted. Hosts may implement the
 hook directly while preserving those exact-leg and funding requirements.
@@ -865,7 +900,7 @@ The central ports are batches all the way down:
 - `portRequestAllowance` consumes the same assetAmount blocks and lets the
   authenticated peer set its own asset allowance through the same authoritative
   hook used by the admin allowance command.
-- `portBook` consumes BOOKING blocks with fields `from, to, liability, debt, asset, amount`.
+- `portBook` consumes BOOKING blocks with fields `from, to, asset, amount, liability, debt`.
   Each 200-byte block describes one debit from `from` and one credit to `to`.
   Its input lane uses `Specs.Booking` without operation logging. Account hooks
   own updated-balance logging.
@@ -913,7 +948,8 @@ account: trust management (`authorize`, `unauthorize`), guardian management
 `AddPool` and `RemovePool` in `commands/admin/Pool.sol` provide optional pool
 administration. `addPool` consumes consecutive pairs of ASSET_AMOUNT blocks and calls
 its hook with two `AssetAmount` values; `removePool` consumes ASSET pairs and
-passes their identifiers. Both publish `#input as (first, second)` grouping,
+passes their identifiers. Both publish host-scoped input lane descriptions (`#assetAmount[2]` and
+`#asset[2]`, each `as (a, b)`),
 accept empty batches, and return empty output. Incomplete pairs or hook failures
 revert the entire batch. Hosts define pair ordering, asset and amount validation,
 funding, and removal requirements. These commands identify pools by their asset
@@ -922,6 +958,19 @@ pair; hosts with multiple pools per pair need a more specific identifier.
 Guards go the other way: direct actions guardians can take
 without any command context — the default is `revoke`, which lets a guardian
 drop a trusted node immediately.
+
+`UpdatePool` in `guards/Pool.sol` is an optional guardian action for live virtual
+reserve updates. It consumes the same `#assetAmount[2] as (a, b)` input as
+`addPool`. Pool lane keys use the first four bytes of `keccak256` of the
+endpoint name (`addPool`, `removePool`, or `updatePool`), allowing these mixins
+to compose without sharing small numeric identifiers. Implement
+`updatePool(AssetAmount memory a, AssetAmount memory b)` to replace the reserves
+of an existing pool. The host defines pair ordering, pool-existence checks, and
+reserve/pricing policy; updates imply no transfer of actual funds. The external
+`updatePool(bytes input)` entrypoint takes raw block-stream input, requires an
+active guardian, accepts empty batches, and returns nothing. Incomplete pairs
+or hook failures revert the entire batch. Successful calls log the full INPUT
+after all hooks, identifying the guardian as the acting account.
 
 ## Events and Discovery
 
@@ -954,9 +1003,15 @@ The permanent benchmark suite contains five production workloads:
 
 - `command-runner`: empty, state-only, input-only, and paired execution batches.
 - `encoder-buffer`: current writers with exact allocation hints and buffer growth.
-- `pipeline-optimization`: internal and external pipeline steps and remaining credit.
+- `pipeline-optimization`: internal and external pipeline steps, remaining credit,
+  and Main-style commander pipelines deployed directly or through an ERC-1967/UUPS proxy.
 - `settlement`: ledger exchanges with empty and existing recipient balances.
 - `portal-reserve`: gas retained for recovery after an out-of-gas pipe call.
+
+The commander comparison uses OpenZeppelin 5.6.1 test dependencies and records
+three samples per case in [`docs/benchmarks/COMMANDER_PROXY.json`](docs/benchmarks/COMMANDER_PROXY.json).
+It reports receipt gas separately from opcode-traced execution gas because
+calldata pricing floors can mask proxy overhead in the transaction total.
 
 Keep one-off optimization comparisons temporary. Promote useful correctness cases
 into regular tests, and extend these core benchmarks when a production workload

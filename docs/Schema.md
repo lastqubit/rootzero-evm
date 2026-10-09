@@ -127,7 +127,25 @@ A schema reference may declare two or more aliases in parentheses:
 #accountAmount as (debit, credit)
 ```
 
-This is syntax sugar for consecutive child references, in the same order:
+An explicit repetition count may appear immediately after the schema reference.
+These three forms are equivalent:
+
+```txt
+#amount[2] as (first, second)
+#amount as (first, second)
+#amount as first, #amount as second
+```
+
+In `#schema[N] as (aliases)`, `N` is a decimal integer of at least two and
+must equal the number of aliases. The count repeats the entire referenced block,
+including its existing header; it does not create a wrapper or pack the payloads
+together. For example, two AMOUNT children occupy 80 bytes: two eight-byte headers
+and two 32-byte payloads. The count does not change the referenced block's spec.
+This convenience form requires the alias list; use ordinary references for a
+single occurrence. Zero, negative, fractional, missing, and mismatched counts
+are invalid, as are multiple count suffixes such as `#amount[2][2]`.
+
+The account-amount example likewise expands to consecutive child references:
 
 ```txt
 #accountAmount as debit, #accountAmount as credit
@@ -139,8 +157,9 @@ key. The parentheses introduce no block, list, tuple value, or extra header.
 The surrounding custom parent and its wire encoding are identical for both forms.
 Schema annotations may publish either spelling; they are not rewritten onchain.
 
-The shorthand applies only to an unmodified `#schema` reference, which must
-resolve in the active schema context. It does not apply to inline field types
+The shorthand applies only to a `#schema` reference with an optional `[N]`
+count and no other modifiers, which must resolve in the active schema context.
+It does not apply to inline field types
 such as `uint`. The alias list must contain at least two ordinary alias paths,
 separated by commas; dotted paths follow the existing field-path rules.
 Empty or single-alias lists, empty entries, trailing commas, nested parentheses,
@@ -188,6 +207,14 @@ does not fall back to a standard schema. Name resolution and trusted-context
 precedence are unchanged. Solidity helpers encode the complete string without
 parsing or validating this offchain DSL.
 
+The exact-size and ranged `SchemaAnnot.schema` overloads accept either a
+numeric `uint32` key or a string key. String keys are converted to
+`uint32(bytes4(keccak256(bytes(key))))` before calling the numeric overload.
+The bytes are hashed exactly: there is no normalization or automatic `#` prefix.
+Pass `"#amount"` to derive the standard AMOUNT key; `"amount"` is a different key.
+The string key is not emitted separately and does not supply the body's name.
+The existing overload taking an already packed spec is unchanged.
+
 The `#schema` payload is `uint spec, #string as body`, with a minimum payload
 length of 40 bytes. There is no separate name word. This replaces the previous
 `uint spec, #string as body, bytes32 name` wire format; consumers must migrate
@@ -219,8 +246,8 @@ exclude the wrapper headers. Commands validate their own payload schemas.
 Runner logs retain STATE/INPUT container headers and wrap output in OUTPUT.
 Returned output streams remain unwrapped.
 
-Within `#groups` metadata, `#state` and `#input` retain their contextual meaning
-as endpoint lane references; this is distinct from their container block keys.
+`#state` and `#input` always reference their actual container blocks; lane
+descriptions do not reinterpret these aliases as endpoint lane selectors.
 
 ## Payload Layout
 
@@ -377,16 +404,20 @@ This remains available for custom compositions. `portBook` instead uses the cano
 `#booking` schema:
 
 ```text
-bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount
+bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt
 ```
 
-Its payload is 192 bytes and its complete block is 200 bytes. Each block debits
+Its payload is 192 bytes and its complete block is 200 bytes. After the two
+accounts, fields follow Position's `asset, amount, liability, debt` order.
+This replaces the former liability-first layout under the same key and size;
+producers and consumers must migrate together because the header cannot
+distinguish the layouts. Execution remains liability-first. Each block debits
 `debt` of `liability` from `from`, then credits `amount` of `asset` to `to`.
 The accounts and assets may differ; zero quantities omit their respective legs.
 `Booking` is the matching Solidity struct. Codec and execution helpers accept
 or return that struct, and `BookHook.book(Booking memory value)` applies it.
 Hooks must not mutate the supplied value. `Settlement.book(Booking)` forwards to
-the virtual scalar `book(from, to, liability, debt, asset, amount)` implementation.
+the virtual scalar `book(from, to, asset, amount, liability, debt)` implementation.
 Settlement extensions override the scalar version to customize both paths. Direct
 scalar callers allocate no temporary Booking; overriding only the struct version
 affects struct callers only.
@@ -470,7 +501,7 @@ for discovery; the standard block schema above describes only the fixed fields.
 ## Endpoint Registration
 
 The canonical `#endpoint` schema is `uint id, uint state, uint input, uint output`.
-Its payload is exactly 128 bytes (136 including the block header). Specs are pure;
+Its payload is exactly 128 bytes (136 including the block header). Lane words retain block specs;
 flags select logged lanes. `Keys.Endpoint`, `Specs.Endpoint`, `Sizes.Endpoint`,
 `Headers.Endpoint` and `Schemas.Endpoint` define this layout. `Encoder.createEndpoint`
 constructs the block; `Logs.endpoint` emits category 0x05, those four fields, and
@@ -487,11 +518,17 @@ Bit 0 is Funded, bit 1 Admin, bit 6 endpoint-defined and bit 7 Handoff.
 Registration takes one flags argument; lane bits without Execution are rejected.
 Endpoint identity and logging policy are fixed at deployment. Tags and custom effects are
 maintained offchain; see [Indexing](Indexing.md#offchain-interpretation).
-Specs with nonzero lower halves are rejected by endpoint registration.
-Each spec identifies its top-level block key and retains bounds and hints. Each block
-represents one operation; fixed compositions use a custom parent block.
-Solidity endpoint helpers accept specs such as `Specs.AssetAmount`, while
-`Specs.Empty` declares an absent lane. There is no stride or group multiplier.
+Endpoint helpers accept plain block specs or packed lanes. Their layout is:
+
+```txt
+[block key:32][min:32][max:32][hint:24][reserved:104][lane key:32]
+```
+
+All widths above are bits. Existing spec fields retain their positions. The
+lowest 32 bits optionally identify a host-local lane description; zero means a
+plain spec. Bits 32 through 135 remain reserved and must be zero. `Specs.Empty`
+declares an absent lane. Each lane contains one block type; mixed types require
+a custom parent block. There is no runtime stride or group multiplier.
 
 Registration separately derives an internal execution descriptor for opening and
 allocation; it is not published in Endpoint events. Its layout, from most to
@@ -501,35 +538,43 @@ least significant byte, is:
 [source key:4][source block size:4][output block size:4][reserved:19][flags:1]
 ```
 
-Endpoint loop grouping is described separately by a `#groups` annotation on the
-endpoint ID. Its payload schema is `#string as description`. For example:
+Lane descriptions use the normal schema language and are published by
+`SchemaAnnot.lane(body, key, spec)`. The helper requires a nonzero lane key and a
+nonempty plain block spec with all reserved bits zero. `Specs.toLane(spec, key)`
+validates these requirements and returns `spec | key`. The annotation helper uses it
+and emits host-scoped Metadata containing a `#lane` block. Its payload is
+`uint lane, #string as body`, with a minimum payload length of 40 bytes. The
+packed word carries both the block spec and lane identifier. For example:
 
-```txt
-#state as (debit, credit), #output as (receipt, change)
+```solidity
+uint input = lane("#amount[2] as (first, second)", "amountPair", Specs.Amount);
 ```
 
-This is a dedicated annotation language, not a block payload schema. Only
-`#state`, `#input`, and `#output` are lane references; each resolves to the
-corresponding published endpoint spec. An entry is a lane reference followed by `as`
-and a parenthesized list of at least two aliases. Commas outside parentheses
-separate entries. Each lane may appear once. Aliases use the ordinary schema
-alias-path rules; duplicate or colliding aliases within a lane are invalid.
-Alias order describes consecutive blocks within one loop iteration. No wrapper
-or extra block header is added, and no global schema aliases are introduced.
+The string-key `lane(body, key, spec)` overload hashes the exact key string
+with the same rule as `schema` and delegates to the numeric-key lane helper.
+Both overloads produce identical packed values and metadata for the same key.
 
-Only grouped lanes are listed; omitted lanes have no grouping hint. Published endpoint
-specs take precedence: entries for empty lanes are ignored and cannot create
-blocks. Group counts are implied by the alias lists, not stored in descriptors.
-Annotations affect neither decoding, allocation, nor runtime enforcement.
-Execution output allocation uses descriptor hints and grows when needed.
-Indexers can use the description to interpret repeated loop groups; incompatible
-streams should be reported as inconsistent hints, not reinterpreted as new encoding.
+The endpoint publishes this packed value in its input field. Offchain tooling
+resolves the low 32-bit key against that host's lane metadata. The body describes
+one group of consecutive blocks; every reference must resolve to the embedded
+spec's block type. Counts and aliases follow the repeated-reference rules above.
+Mixed block types, inline fields, and list modifiers require a parent block
+schema instead. The body adds no wrapper, does not redefine the block schema,
+and does not change its bounds or hint. `#state`, `#input`, and `#output` always
+refer to actual blocks, never lane selectors.
 
-`GroupsAnnot.annotateGroups(endpointId, description)` publishes the string without
-on-chain syntax validation. The latest annotation from a trusted emitter replaces
-the previous whole description; an empty string clears the hints. Invalid selected
-annotations should be reported by tooling rather than silently falling back to an
-older description. Trust remains the consumer's responsibility.
+Claims are keyed by host and lane key, independently of block-schema claims.
+Distinct lane keys accumulate; the latest trusted claim for a key replaces the
+previous description. An empty body clears grouping hints. The published block
+spec must agree with the spec embedded in the endpoint lane. Invalid selected
+bodies or conflicting specs must be reported by consumers rather than silently
+falling back to older claims. Helpers publish strings without onchain DSL
+validation; trust and semantic validation remain offchain.
+
+Descriptor construction ignores lane identifiers. Allocation still estimates
+output per source block, not per described group; buffers grow when needed.
+Unpacking uses the actual block key. Lane identifiers never appear as headers
+in the encoded lane stream. This replaces `GroupsAnnot` and `#groups` metadata.
 
 The allocation source is declared state when present, otherwise input, even when
 supplied state is empty. Block sizes include the header; 32-bit fields preserve
@@ -591,13 +636,15 @@ significant byte. `Specs.blockSize` adds the header to the payload hint;
 `Specs.allocation(spec, count)` reserves that size for each top-level block.
 Descriptors retain precomputed block sizes rather than full specs.
 
-Any non-empty lane resolves its key to a block alias and schema body through the
+Any non-empty lane resolves its embedded block key to a block alias and schema body through the
 active schema context. A top-level list lane uses the key of its emitted custom
 `many` schema; a fixed-composition lane similarly uses its custom parent key.
-Each parent is one operation, and its children retain their own keys.
+Each parent retains its child keys. A lane description may group consecutive
+blocks of that parent type, just as it may group built-in blocks.
 
-The lane key is the prime item. Prime items may repeat at the top level for
-batching. Later top-level items are globals for the whole batch and are not
+The embedded block key identifies the prime block. Prime blocks may repeat at
+the top level for batching; a lane description may assign several consecutive
+prime blocks to one operation. Later top-level items are globals for the whole batch and are not
 counted as per-operation prime blocks.
 
 Each prime block must satisfy its payload schema. An empty stream represents
@@ -916,7 +963,27 @@ pipeline. A failed check rolls back realization and any earlier effects. The
 check is optional. The realization hook must preserve asset and liability
 identifiers and return counterparty zero after fulfillment.
 
-The QUOTE schema remains available independently:
+The scalar QUOTE_REQUEST schema identifies an exact asset amount to price:
+
+```txt
+#quoteRequest { bytes32 asset, uint amount, bytes32 liability }
+```
+
+Its payload is 96 bytes (104 including its header). `GetQuote` consumes these
+requests and returns one QUOTE per request in input order. Its scalar view hook
+`getQuote(asset, amount, liability)` returns the liability quantity required to
+receive exactly `amount` of `asset`. Quantities are in each asset's native units.
+Fees, pricing, availability, and unsupported-pair behavior belong to the host.
+Empty input returns empty output; malformed input or hook failures revert the
+whole query. The query performs no trade and introduces no live position state.
+
+`Encoder.createQuoteRequest` and `Encoder.writeQuoteRequest` accept scalar fields;
+`Blocks.unpackQuoteRequest` returns the fields and next cursor. Execution helpers
+`unpackQuoteRequest` and `outputQuoteRequest` consume and write the same layout.
+There is no QuoteRequest struct. Decoders validate the key, exact payload length,
+and containment, while semantic validation belongs to the consuming operation.
+
+The QUOTE schema is the response and is also available independently:
 
 ```txt
 #quote { bytes32 asset, uint amount, bytes32 liability, uint debt }
@@ -1144,7 +1211,9 @@ bytes1 through bytes32
 ```
 
 `uint` means `uint256`; `int` means `int256`. Other integer widths, unsized
-`bytes`, `string`, and array syntax are not part of the core schema DSL.
+`bytes`, `string`, and field array syntax are not part of the core schema DSL.
+The `[N]` suffix on a schema reference is the repeated-reference shorthand
+defined above, not a field array type.
 
 Restricting fixed bytes to the power-of-two widths `bytes1`, `bytes2`,
 `bytes4`, `bytes8`, `bytes16`, and `bytes32` is under consideration, but has
@@ -1295,9 +1364,10 @@ hostAccountAsset     uint host, bytes32 account, bytes32 asset
 limits               uint limits
 balanceConstraints   bytes32 asset, uint min, uint max
 positionConstraints  bytes32 asset, uint amount, bytes32 liability, uint debt
+quoteRequest         bytes32 asset, uint amount, bytes32 liability
 quote                bytes32 asset, uint amount, bytes32 liability, uint debt
 position             bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty
-booking              bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount
+booking              bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt
 transaction          bytes32 from, bytes32 to, bytes32 asset, uint amount
 hostAccountAmount    uint host, bytes32 account, bytes32 asset, uint amount
 step                 uint cmd, uint value, #input
@@ -1307,9 +1377,8 @@ relay                #input, #bytes as steps
 dispatch             uint portal, uint resources, #bytes as payload
 context              bytes32 account, #state, #input
 recover              uint handler, uint value, bytes32 key, #bytes as witness
-annotation           uint entity, #bytes as data
 counterparty         bytes32 account
-groups               #string as description
+lane                 uint lane, #string as body
 schema               uint spec, #string as body
 ```
 
@@ -1342,7 +1411,7 @@ amount/debt. The position is logged normally; settlement may still book both leg
 annotations. It is distinct from `#node` and `#asset`; the codec validates the
 exact 32-byte payload without restricting the identifier's kind or rejecting zero.
 
-`GetBalance` is the only built-in query. Custom queries can use `QueryBase` for
+`GetBalance` and `GetQuote` are the built-in queries. Custom queries can use `QueryBase` for
 specific direct-read requirements; normal application reads come from the indexer.
 
 ### Host Accounts

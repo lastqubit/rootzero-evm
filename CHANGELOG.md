@@ -8,6 +8,69 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- Decode pool input pairs in explicit stream order. Remove unused cursor and
+  log-comparison fixtures and correct stale lane and schema documentation.
+
+- **Breaking: host account identity moves to Runtime.** Replace the standalone
+  `HostAccount` base with `Runtime.hostAccount()`, derived from the immutable host
+  node. Hosts using Runtime retain the getter; Settlement alone no longer exposes
+  it.
+
+- **Breaking: explicit runtime execution address.** `Runtime(cmdr, self)` and
+  `Host(cmdr, name, self)` accept zero for an ordinary deployment or an explicit
+  execution address for a proxy-bound implementation. `hostAddr()` extracts that
+  address from the immutable host node, and all endpoint IDs use it. `CommandHost`
+  retains its existing constructor and uses its deployment address. Bound
+  implementations defer introductions until called through the execution address.
+
+- Add a Main-style commander integration fixture with OpenZeppelin ERC-1967/UUPS
+  upgrades. Verify retained balances, access, guardians, ownership, local command
+  additions, rollback, and transient reentrancy protection. Extend the pipeline
+  benchmark with direct, proxied, and upgraded deployments; record transaction
+  gas and traced execution gas separately so calldata floors remain visible.
+
+- Add `Specs.toLane(spec, key)` to validate and pack a plain block spec with
+  its lane key. The lane annotation helper delegates packing to Specs.
+
+- Add string-key overloads for `SchemaAnnot.lane` and exact-size/ranged
+  `schema` helpers. Hash the exact supplied bytes to a 32-bit key and delegate
+  to the numeric-key helpers. Pool endpoints now use these overloads without
+  changing their derived keys or metadata.
+
+- Derive pool input lane keys from `bytes4(keccak256(endpointName))` for
+  `addPool`, `removePool`, and `updatePool` to reduce collisions when composing
+  endpoint mixins.
+
+- Add opt-in `UpdatePool` and `UpdatePoolHook` in `guards/Pool.sol`, exported by
+  `Endpoints.sol`. Active guardians submit ordered ASSET_AMOUNT pairs to replace
+  existing virtual pool reserves through the host hook. Publish a named input lane,
+  log INPUT after successful batches, and revert the whole batch on incomplete
+  pairs or hook failures. Pool validation and pricing policy remain host-defined.
+
+- **Breaking: Booking field order.** BOOKING payloads and the `Booking` struct
+  now use `from, to, asset, amount, liability, debt`, matching Position's leg
+  order. The scalar `Settlement.book` overload uses the same order. The key and
+  192-byte payload size are unchanged; producers and consumers must migrate
+  together. Settlement still debits liability before crediting asset.
+
+- Add `GetQuote` and `GetQuoteHook` for batched exact-asset-amount queries.
+  Scalar `#quoteRequest` blocks carry asset, amount, and liability; each response
+  is a complete `Quote` with debt supplied by the host's view hook. Add request
+  catalog entries and scalar factory, writer, cursor, and execution codecs,
+  without a QuoteRequest struct. Pricing policy remains implementation-defined.
+
+- **Breaking: lane metadata replaces group annotations.** `SchemaAnnot.lane(body,
+  key, spec)` publishes host-scoped `#lane { uint lane, #string as body }` metadata
+  and packs its identifier in the low 32 bits of the existing block spec.
+  Endpoint discovery preserves lane identifiers; runtime descriptors ignore them
+  and retain per-block allocation behavior. Plain specs remain valid. Remove
+  `GroupsAnnot`, `#groups`, and its codec/catalog entries; pool admin commands now
+  publish named homogeneous input lanes using normal schema expressions.
+
+- Document explicit-count schema shorthand `#amount[2] as (first, second)`,
+  equivalent to two consecutive aliased AMOUNT references. Counts must match
+  the alias list; block keys, headers, and specs retain their existing meaning.
+
 ## 1.53.0
 
 - **Breaking: categorized events.** Standard LOG0 records start with a category

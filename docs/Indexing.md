@@ -121,7 +121,7 @@ For example, a registry may interpret INPUT asset blocks from an allowAsset
 endpoint as allowed assets. That interpretation relies on the implementation's
 promised effect; input data alone does not prove it. Core Access and Balance events
 retain their category-defined state meaning. Asset and entity code queries have been removed. Normal application reads come
-from indexer projections; `GetBalance` is the only built-in query. `QueryBase`
+from indexer projections; `GetBalance` and `GetQuote` are the built-in queries. `QueryBase`
 remains available for specific custom direct reads. The CODES block API and
 onchain classification vocabularies have been removed.
 
@@ -133,14 +133,20 @@ onchain classification vocabularies have been removed.
 
 `Logs.metadata(subject, data)` publishes one or more blocks about one subject.
 There is no ANNOTATION wrapper, BYTES wrapper or codes prefix in this event.
-SCHEMA, GROUPS and COUNTERPARTY remain distinct standard blocks.
-Schemas describe block structure; groups describe endpoint lane interpretation.
+SCHEMA, LANE and COUNTERPARTY are distinct standard blocks.
+Schemas describe block structure; lanes describe homogeneous block sequences.
+LANE has payload `uint lane, #string as body`. The low 32 bits of `lane` identify
+the host-local description; the remaining spec fields identify the actual blocks.
+Endpoint discovery retains the packed lane words. A zero lane key needs no lookup.
 Asset preimages can be published as metadata about the asset.
 
 Trust and merge rules belong to the block type. Schema claims are keyed by subject
 and the block key in the spec. The latest trusted
-claim replaces the previous claim for that key. Empty group descriptions clear
-previous hints.
+claim replaces the previous claim for that key. Lane claims are independently
+keyed by subject (host) and the low 32-bit lane key. Their spec must match the
+endpoint lane spec. The latest trusted claim replaces the previous one; an empty
+body clears grouping hints. Invalid bodies and conflicting specs are reported,
+not silently replaced with older claims.
 A COUNTERPARTY value of zero identifies Rootzero, not a deletion.
 
 General labels and annotations are maintained offchain. The admin `annotate`
