@@ -33,6 +33,9 @@ function getErrorData(e: unknown): string | null {
   const info = err["info"] as Record<string, unknown> | undefined;
   const innerErr = info?.["error"] as Record<string, unknown> | undefined;
   if (typeof innerErr?.["data"] === "string") return innerErr["data"];
+  // EDR can wrap custom-error bytes in an object instead of a data string.
+  const nestedData = innerErr?.["data"] as Record<string, unknown> | undefined;
+  if (typeof nestedData?.["data"] === "string") return nestedData["data"];
   return null;
 }
 
