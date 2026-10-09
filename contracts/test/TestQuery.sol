@@ -24,7 +24,7 @@ contract TestQuery is QueryBase {
 
     uint private immutable descriptor;
 
-    constructor() Runtime(0) {
+    constructor() Runtime(0, address(0)) {
         uint32 size = uint32(Sizes.B32 - Sizes.Header);
         uint valueSpec = schema(INPUT, 1, size, size, size);
         ValueSpec = valueSpec;
@@ -48,7 +48,7 @@ contract TestKeyedLocalQuery is QueryBase {
 
     uint private immutable descriptor;
 
-    constructor() Runtime(0) {
+    constructor() Runtime(0, address(0)) {
         uint32 size = uint32(Sizes.B32 - Sizes.Header);
         uint valueSpec = schema(INPUT, 2, size, size, size);
         ValueSpec = valueSpec;
@@ -67,7 +67,7 @@ contract TestKeyedLocalQuery is QueryBase {
 }
 
 contract TestQualifiedSchema is SchemaAnnot {
-    constructor() Runtime(0) {
+    constructor() Runtime(0, address(0)) {
         uint32 size = 64;
         schema(
             "relay.input: uint portal, uint resources",

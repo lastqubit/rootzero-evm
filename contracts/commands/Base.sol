@@ -51,7 +51,7 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         uint flags
     ) internal returns (uint id, uint descriptor) {
         if (flags > 255) revert Specs.InvalidSpec();
-        id = Nodes.toCommand(name, address(this), uint8(flags));
+        id = Nodes.toCommand(name, hostAddr(), uint8(flags));
         descriptor = endpoint(id, name, state, input, output);
     }
 

@@ -20,7 +20,7 @@ contract TestRealize is Realize {
     uint private failAssetAt;
     uint private failDebtAt;
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function failAt(uint assetCall, uint debtCall) external {
         failAssetAt = assetCall;

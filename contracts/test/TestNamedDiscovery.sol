@@ -6,7 +6,7 @@ import {Logs} from "../codec/Logs.sol";
 import {PreviousNamingEncoder} from "./PreviousNaming.sol";
 
 contract TestNamedHost is Host {
-    constructor(uint commander, string memory name) Host(commander, name) {}
+    constructor(uint commander, string memory name) Host(commander, name, address(0)) {}
 
     function announce(uint target, string memory name) external {
         introduceTo(target, name);

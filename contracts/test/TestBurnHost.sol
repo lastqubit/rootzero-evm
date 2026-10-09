@@ -8,7 +8,7 @@ contract TestBurnHost is Host, Burn {
     event BurnCalled(bytes32 account, bytes32 asset, uint amount);
 
     constructor(uint cmdr)
-        Host(0, "TestBurnHost")
+        Host(0, "TestBurnHost", address(0))
         Burn()
     {
         if (cmdr != 0) setAccess(cmdr, true);

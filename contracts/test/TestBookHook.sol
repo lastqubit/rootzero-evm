@@ -13,7 +13,7 @@ contract TestBookHook is Settle, BookPort, Settlement {
     address private immutable tester = msg.sender;
     event Applied(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt);
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function enforceCaller(address caller) internal view override returns (address) {
         if (caller != tester) revert AccessDenied();

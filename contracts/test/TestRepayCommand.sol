@@ -15,7 +15,7 @@ import {AccessDenied} from "../core/Access.sol";
 contract TestRepayCommand is Repay, ExecuteSettle, Settlement, Balances, Pipeline {
     address private immutable tester = msg.sender;
     event BookCalled(bytes32 from, bytes32 to, uint amount, uint debt);
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function seed(bytes32 account, bytes32 asset, uint amount) external { creditTo(account, asset, amount); }
     function balance(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
     function run(bytes32 account, bytes memory state, bytes calldata steps) external payable returns (uint) {

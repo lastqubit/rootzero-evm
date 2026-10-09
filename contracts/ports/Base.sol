@@ -47,7 +47,7 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     /// @return descriptor Packed execution allocation hints and explicit logging selections.
     function port(string memory name, uint input, uint output, uint flags) internal returns (uint id, uint descriptor) {
         if (flags > 255 || flags & (Logs.State ^ Logs.Execution) != 0) revert Specs.InvalidSpec();
-        id = Nodes.toPort(name, address(this), uint8(flags));
+        id = Nodes.toPort(name, hostAddr(), uint8(flags));
         descriptor = endpoint(id, name, Specs.Empty, input, output);
     }
 

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.33;
 
 import {Booking, Position} from "./Types.sol";
-import {HostAccount} from "./Runtime.sol";
 
 /// @title DebitAccountHook
 /// @notice Hook for exactly debiting externally managed account funds.
@@ -89,7 +88,7 @@ abstract contract SettleHook {
 /// balance ledger implement RealizeHook instead; a production host chooses one
 /// position-fulfillment model. Producers supply final quantities with fees already handled.
 /// Trusted position producers and account hooks remain responsible for authorization.
-abstract contract Settlement is HostAccount, DebitAccountHook, CreditAccountHook, BookHook, RepayHook, SettleHook {
+abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, RepayHook, SettleHook {
     /// @notice Apply exact legs through the account hooks, debiting before crediting.
     /// @dev Zero amounts skip their hooks. Matching accounts or assets are not
     /// netted: the full debit must succeed before the credit. Failure reverts both.

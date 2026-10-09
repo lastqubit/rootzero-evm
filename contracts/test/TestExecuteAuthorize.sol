@@ -8,7 +8,7 @@ import {ExecuteAuthorize} from "../Endpoints.sol";
 
 /// @dev Test-only entrypoint accepts arbitrary accounts to exercise adapter checks.
 contract TestExecuteAuthorize is Host, Pipeline, ExecuteAuthorize {
-    constructor(uint cmdr) Host(cmdr, "TestExecuteAuthorize") {}
+    constructor(uint cmdr) Host(cmdr, "TestExecuteAuthorize", address(0)) {}
 
     function execute(
         uint cmd, bytes32 account, bytes memory state, uint inputCur, uint value

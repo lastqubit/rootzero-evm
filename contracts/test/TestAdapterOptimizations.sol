@@ -10,7 +10,7 @@ contract TestAdapterOptimizations is ExecuteCheckBalance, ExecuteBootstrap {
     mapping(bytes32 => uint) public balances;
     event Debited(bytes32 asset, uint amount);
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
 

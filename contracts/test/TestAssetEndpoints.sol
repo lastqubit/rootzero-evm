@@ -7,7 +7,7 @@ import {AllowAsset, DenyAsset, AllowAssetPort, DenyAssetPort} from "../Endpoints
 contract TestAssetEndpoints is Host, AllowAsset, DenyAsset, AllowAssetPort, DenyAssetPort {
     mapping(bytes32 => bool) public allowed;
 
-    constructor(uint commander, uint peer) Host(commander, "TestAssetEndpoints") { setAccess(peer, true); }
+    constructor(uint commander, uint peer) Host(commander, "TestAssetEndpoints", address(0)) { setAccess(peer, true); }
 
     function allowAsset(bytes32 asset) internal override { allowed[asset] = true; }
     function denyAsset(bytes32 asset) internal override { allowed[asset] = false; }

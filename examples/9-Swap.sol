@@ -129,5 +129,5 @@ abstract contract SwapCommand is CommandBase, SwapHopInput, SwapInput {
 }
 
 contract ExampleHost is Host, SwapCommand {
-    constructor(uint rootzero) Host(rootzero, "9-Swap") {}
+    constructor(uint rootzero) Host(rootzero, "9-Swap", address(0)) {}
 }

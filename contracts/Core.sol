@@ -12,7 +12,7 @@ import { Balances, InsufficientFunds } from "./core/Balances.sol";
 import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
 import { Counterparty } from "./core/Counterparty.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
-import { ChainAsset, HostAccount, Runtime } from "./core/Runtime.sol";
+import { ChainAsset, Runtime } from "./core/Runtime.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
 import { Calls, FailedCall } from "./core/Calls.sol";
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";

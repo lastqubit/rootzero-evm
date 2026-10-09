@@ -12,7 +12,7 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     uint[7] private descriptors;
     event Processed(uint amount);
     error Rejected();
-    constructor(uint mask) Runtime(0) {
+    constructor(uint mask) Runtime(0, address(0)) {
         uint st = Specs.Balance;
         uint inp = Specs.AssetAmount;
         uint out = Specs.AssetAmount;
@@ -81,7 +81,7 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     function enforceGuardian(address who) internal pure override returns(address) { return who; }
 }
 contract TestQueryCodes is QueryBase {
-    constructor(uint inputCodes, uint outputCodes) Runtime(0) {
+    constructor(uint inputCodes, uint outputCodes) Runtime(0, address(0)) {
         query("read", Specs.AssetAmount | inputCodes, Specs.AssetAmount | outputCodes);
     }
 }

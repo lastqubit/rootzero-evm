@@ -16,7 +16,7 @@ contract TestDispatchBudget is DispatchPayablePort {
     event DispatchSpent(uint value, uint remaining);
     error TransferFailed();
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function enforcePeer(address caller) internal view override returns (address) {
         if (caller != peer) revert AccessDenied();

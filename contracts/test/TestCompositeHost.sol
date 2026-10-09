@@ -7,7 +7,7 @@ import {GetBalance} from "../queries/Balance.sol";
 
 contract TestCompositeHost is Host, Deposit, GetBalance {
     constructor(uint cmdr)
-        Host(0, "TestCompositeHost")
+        Host(0, "TestCompositeHost", address(0))
         Deposit()
         GetBalance()
     {

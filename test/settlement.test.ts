@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
-import { deploy } from "./helpers/setup.js";
-import { packLimits, MaxUint128, encodeUserAccount } from "./helpers/blocks.js";
+import { deploy, hostId } from "./helpers/setup.js";
+import { packLimits, MaxUint128, encodeUserAccount, encodeHostAccount } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Settlement ledger", () => {
@@ -14,7 +14,7 @@ describe("Settlement ledger", () => {
 
   beforeEach(async () => {
     ledger = await deploy("TestSettlement");
-    host = await ledger.hostAccount();
+    host = encodeHostAccount(await hostId(ledger));
     await ledger.seed(account, liability, 40_000n);
   });
 
@@ -33,7 +33,7 @@ describe("Settlement ledger", () => {
     for (const exact of [true, false]) {
       it(`settles exact quantities against a ${kind} with ${exact ? "exact" : "roomy"} limits and no host fee`, async () => {
         const other = kind === "host" ? host : kind === "user" ? external
-          : await (await deploy("TestSettlement")).hostAccount();
+          : encodeHostAccount(await hostId(await deploy("TestSettlement")));
         await ledger.seed(other, asset, 100_000n);
         const limits = exact ? packLimits(100_000n, 40_000n) : packLimits(0n, MaxUint128);
         expect(await events(ledger.applyLimitedPosition(account,

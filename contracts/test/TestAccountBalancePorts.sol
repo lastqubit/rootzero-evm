@@ -15,7 +15,7 @@ import {AccessDenied} from "../core/Access.sol";
 
 contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPort, GetBalance, ExecuteCreditAccount, ExecuteDebitAccount, ExecuteBootstrap {
     address private immutable peer = msg.sender;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function enforcePeer(address caller) internal view override returns (address) {
         if (caller != peer) revert AccessDenied();

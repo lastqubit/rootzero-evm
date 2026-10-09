@@ -24,7 +24,7 @@ contract TestCounterpartyPipeline is Realize, ExecuteCheckPosition, ExecuteSettl
     uint public realizations;
     uint public memorySettlements;
 
-    constructor(bool useMemory) Runtime(0) {
+    constructor(bool useMemory) Runtime(0, address(0)) {
         memorySettlement = useMemory;
     }
 

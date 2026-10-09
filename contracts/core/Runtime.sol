@@ -12,18 +12,11 @@ abstract contract ChainAsset {
     bytes32 internal immutable chainAsset = Assets.toChain();
 }
 
-/// @title HostAccount
-/// @notice Shared host account identity for host helpers.
-abstract contract HostAccount {
-    /// @notice This contract's host account, bound to its address and chain at deployment.
-    bytes32 public immutable hostAccount = Accounts.toHost(address(this));
-}
-
 /// @title Runtime
 /// @notice Shared runtime for host and chain asset identities.
 abstract contract Runtime is ChainAsset {
-    /// @dev This contract's host node ID, set to `Nodes.toHost(address(this))` at construction.
-    uint public immutable host = Nodes.toHost(address(this));
+    /// @dev This contract's host node ID, derived from `self` at construction.
+    uint public immutable host;
 
     /// @dev Commander host ID. Defaults to this contract's host ID when self-managed.
     uint internal immutable commander;
@@ -32,8 +25,21 @@ abstract contract Runtime is ChainAsset {
     address internal immutable commanderAddr;
 
     /// @param cmdr Local host ID of the commander, or zero to make this runtime self-managed.
-    constructor(uint cmdr) {
+    /// @param self Execution address, or zero to use this deployment's address.
+    constructor(uint cmdr, address self) {
+        if (self == address(0)) self = address(this);
+        host = Nodes.toHost(self);
         commander = cmdr == 0 ? host : cmdr;
         commanderAddr = Nodes.hostAddr(commander);
+    }
+
+    /// @notice Execution address embedded in this runtime's host node.
+    function hostAddr() public view returns (address) {
+        return address(uint160(host));
+    }
+
+    /// @notice This runtime's host account, preserving the host node's chain and address.
+    function hostAccount() public view returns (bytes32) {
+        return Accounts.toHost(host);
     }
 }

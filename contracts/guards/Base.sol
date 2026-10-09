@@ -34,7 +34,7 @@ abstract contract GuardBase is InputEndpointBase, GuardianAccess {
     /// @notice Register a guard with identity flags and optional input logging.
     function guard(string memory name, uint input, uint flags) internal returns (uint id, uint descriptor) {
         if (flags & ~uint(Logs.Input) != 0) revert Specs.InvalidSpec();
-        id = Nodes.toGuard(name, address(this), uint8(flags));
+        id = Nodes.toGuard(name, hostAddr(), uint8(flags));
         descriptor = endpoint(id, name, Specs.Empty, input, Specs.Empty);
     }
 

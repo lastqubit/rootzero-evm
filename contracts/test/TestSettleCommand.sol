@@ -17,7 +17,7 @@ contract TestSettleCommand is ExecuteSettle, Settlement, Balances, Pipeline {
     event DebitCalled(bytes32 asset, uint amount);
     event CreditCalled(bytes32 asset, uint amount);
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function seed(bytes32 account, bytes32 asset, uint amount) external { creditTo(account, asset, amount); }
     function balance(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }

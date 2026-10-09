@@ -1,8 +1,8 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { deploy } from "./helpers/setup.js";
-import { packLimits, encodeUserAccount } from "./helpers/blocks.js";
+import { deploy, hostId } from "./helpers/setup.js";
+import { packLimits, encodeUserAccount, encodeHostAccount } from "./helpers/blocks.js";
 
 describe("Exact settlement benchmark", function () {
   this.timeout(120_000);
@@ -18,7 +18,7 @@ describe("Exact settlement benchmark", function () {
         const samples: { gas: number; execution: number }[] = [];
         for (let sample = 0; sample < 3; sample++) {
           const ledger = await deploy("TestSettlementGas");
-          const host = await ledger.hostAccount();
+          const host = encodeHostAccount(await hostId(ledger));
           const counterparty = kind === "Rootzero" ? ethers.ZeroHash : kind === "host" ? host : external;
           await ledger.seed(account, liability, 100_000n);
           if (kind !== "Rootzero") await ledger.seed(counterparty, asset, 200_000n);

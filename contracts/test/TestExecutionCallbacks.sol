@@ -20,7 +20,7 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
     uint private immutable emptyId;
     uint private immutable portId;
 
-    constructor() Runtime(0) {
+    constructor() Runtime(0, address(0)) {
         (onceId,) = command("executeOnce", 0, Specs.AssetAmount, Specs.AssetAmount, 0);
         (emptyId,) = command("executeOnceEmpty", 0, 0, 0, 0);
         (portId,) = port("executePort", Specs.AssetAmount, Specs.AssetAmount, 0);

@@ -13,7 +13,7 @@ contract TestBookPort is BookPort, Balances {
     event Debited(bytes32 account, bytes32 asset, uint amount);
     event Credited(bytes32 account, bytes32 asset, uint amount);
 
-    constructor(address trustedPeer) Runtime(0) { peer = trustedPeer; }
+    constructor(address trustedPeer) Runtime(0, address(0)) { peer = trustedPeer; }
 
     function seed(bytes32 account, bytes32 asset, uint amount) external { creditTo(account, asset, amount); }
     function balance(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }

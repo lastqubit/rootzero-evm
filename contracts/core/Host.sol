@@ -24,12 +24,13 @@ interface IHostIntroduction {
 
 /// @title HostAnnouncer
 /// @notice Shared outbound introduction behavior for rootzero hosts.
-/// Calls a deployed commander during construction without adding an inbound
+/// Ordinary deployments call a deployed commander during construction without adding an inbound
 /// introduction endpoint to the inheriting host.
 abstract contract HostAnnouncer is Runtime {
-    /// @dev Deployment reverts if a contract commander does not accept `introduce(uint,uint,string)`.
+    /// @dev Implementations bound to another execution address introduce through that address later.
+    /// Ordinary deployment reverts if a contract commander does not accept `introduce(uint,uint,string)`.
     constructor(string memory name) {
-        if (commander == host) return;
+        if (commander == host || hostAddr() != address(this)) return;
         address target = commanderAddr;
         if (target.code.length == 0) return;
         IHostIntroduction(target).introduce(host, block.number, name);
@@ -70,7 +71,7 @@ abstract contract CommandHost is CallerAccess, HostAnnouncer {
 
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
     /// @param name Discovery hint emitted only when introducing this host.
-    constructor(uint cmdr, string memory name) Runtime(cmdr) HostAnnouncer(name) {
+    constructor(uint cmdr, string memory name) Runtime(cmdr, address(0)) HostAnnouncer(name) {
         if (cmdr == 0) revert InvalidCommander();
     }
 
@@ -105,10 +106,11 @@ abstract contract Host is
     mapping(bytes32 account => bool) internal guardians;
 
     /// @param cmdr Commander host ID; used by the composed access capabilities.
-    ///        If the encoded native target is a deployed contract, the host
-    ///        calls `introduce` on it during construction.
+    ///        Ordinary deployments call `introduce` during construction when
+    ///        the encoded native target is a deployed contract.
     /// @param name Discovery hint emitted only when introducing this host.
-    constructor(uint cmdr, string memory name) Runtime(cmdr) HostAnnouncer(name) {
+    /// @param self Execution address, or zero for an ordinary deployment.
+    constructor(uint cmdr, string memory name, address self) Runtime(cmdr, self) HostAnnouncer(name) {
         admin = Accounts.toAdmin(commanderAddr);
     }
 

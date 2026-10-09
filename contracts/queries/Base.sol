@@ -17,8 +17,8 @@ abstract contract QueryBase is InputEndpointBase {
     /// @notice Publish query metadata and a default label.
     /// @param name Query entrypoint name and default label. It must exactly
     /// match the Solidity query function name used by the canonical ABI.
-    /// @param input Pure input block specification.
-    /// @param output Pure output block specification.
+    /// @param input Input block spec or named lane.
+    /// @param output Output block spec or named lane.
     /// @return id Query node ID.
     /// @return descriptor Packed execution allocation hints and explicit logging selections.
     function query(
@@ -26,7 +26,7 @@ abstract contract QueryBase is InputEndpointBase {
         uint input,
         uint output
     ) internal returns (uint id, uint descriptor) {
-        id = Nodes.toQuery(name, address(this), 0);
+        id = Nodes.toQuery(name, hostAddr(), 0);
         descriptor = endpoint(id, name, Specs.Empty, input, output);
     }
 

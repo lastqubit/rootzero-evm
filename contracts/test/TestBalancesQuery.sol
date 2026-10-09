@@ -23,7 +23,7 @@ contract TestBalancesQuery is GetBalance {
     TestErc20BalanceToken public immutable token = new TestErc20BalanceToken();
     bytes32 public immutable tokenAsset = Assets.toErc20(address(token));
 
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function mint(address account, uint amount) external {
         token.mint(account, amount);

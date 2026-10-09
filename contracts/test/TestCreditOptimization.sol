@@ -14,7 +14,7 @@ import {Runtime} from "../core/Runtime.sol";
 
 abstract contract CreditMeasure is ExecuteCreditAccount {
     uint internal sum;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         require(amount != type(uint).max, "hook");

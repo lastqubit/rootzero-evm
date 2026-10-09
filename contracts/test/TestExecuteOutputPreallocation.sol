@@ -184,7 +184,7 @@ abstract contract PreallocatedDebitAccount is PreallocatedWriter, DebitAccount {
 contract ExecuteOutputBaseline is PreviousOutputBootstrap, PreviousOutputDebitAccount {
     uint public checksum;
     bool public allocateInHook;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setAllocate(bool enabled) external { allocateInHook = enabled; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -242,7 +242,7 @@ contract ExecuteOutputBaseline is PreviousOutputBootstrap, PreviousOutputDebitAc
 contract ExecuteOutputReserved is PreallocatedBootstrap, PreallocatedDebitAccount, ReserveOnceWriter {
     uint public checksum;
     bool public allocateInHook;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setAllocate(bool enabled) external { allocateInHook = enabled; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -300,7 +300,7 @@ contract ExecuteOutputReserved is PreallocatedBootstrap, PreallocatedDebitAccoun
 contract ExecuteOutputExact is PreallocatedBootstrap, PreallocatedDebitAccount, ExactWriter {
     uint public checksum;
     bool public allocateInHook;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setAllocate(bool enabled) external { allocateInHook = enabled; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -358,7 +358,7 @@ contract ExecuteOutputExact is PreallocatedBootstrap, PreallocatedDebitAccount, 
 contract ExecuteOutputUnchecked is PreallocatedBootstrap, PreallocatedDebitAccount, UncheckedCursorWriter {
     uint public checksum;
     bool public allocateInHook;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setAllocate(bool enabled) external { allocateInHook = enabled; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -416,7 +416,7 @@ contract ExecuteOutputUnchecked is PreallocatedBootstrap, PreallocatedDebitAccou
 contract ExecuteOutputCurrent is ExecuteBootstrap, ExecuteDebitAccount {
     uint public checksum;
     bool public allocateInHook;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setAllocate(bool enabled) external { allocateInHook = enabled; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }

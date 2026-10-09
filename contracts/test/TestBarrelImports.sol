@@ -12,7 +12,7 @@ import {BalanceConstraints as CommandBalanceConstraints, PositionConstraints as 
 
 import {Quote as CoreQuote} from "../Core.sol";
 import {Quote as CodecQuote} from "../Codec.sol";
-import {HostAccount} from "../Core.sol";
+import {Runtime} from "../Core.sol";
 
 import {UnexpectedValue} from "../Utils.sol";
 import {BookHook} from "../Endpoints.sol";

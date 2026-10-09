@@ -21,7 +21,7 @@ abstract contract TestTransport is ForwardHook {
 }
 
 contract TestPortalRecoverHost is Host, Portal, TestTransport, RecoverPayable {
-    constructor(uint rootzero) Host(rootzero, "TestPortalRecoverHost") {}
+    constructor(uint rootzero) Host(rootzero, "TestPortalRecoverHost", address(0)) {}
 
     function testForward(bytes32 key, bytes calldata message, uint value) external payable {
         receiveMessage(key, Cursors.wrap(message), value);

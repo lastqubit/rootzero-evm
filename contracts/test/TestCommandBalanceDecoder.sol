@@ -10,7 +10,7 @@ import {PreviousCommandCheckBalance, PreviousCommandWithdraw} from "./PreviousCo
 /// token transfers are host-specific and deliberately outside this comparison.
 abstract contract CommandBalanceHost is Runtime, CommandBase {
     mapping(bytes32 => mapping(bytes32 => uint)) public delivered;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     /// @dev Measures the real external command, excluding transaction-level calldata gas.
     /// ABI encoding precedes the timer; CALL and returned-byte copying are included.

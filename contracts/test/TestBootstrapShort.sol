@@ -101,7 +101,7 @@ abstract contract BootstrapShortHarness is CommandBase, DebitAccountHook, Comman
 }
 
 contract BootstrapShortCurrent is ExecuteBootstrap, BootstrapShortHarness {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
@@ -110,7 +110,7 @@ contract BootstrapShortCurrent is ExecuteBootstrap, BootstrapShortHarness {
 }
 
 contract BootstrapShortStock is BootstrapStock150, BootstrapShortHarness {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
@@ -119,7 +119,7 @@ contract BootstrapShortStock is BootstrapStock150, BootstrapShortHarness {
 }
 
 contract BootstrapShortZero is BootstrapZero150, BootstrapShortHarness {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }
@@ -128,7 +128,7 @@ contract BootstrapShortZero is BootstrapZero150, BootstrapShortHarness {
 }
 
 contract BootstrapShortLogged151 is BootstrapLogged151, BootstrapShortHarness {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function bootstrap(bytes memory state, uint cur, uint value) internal override returns (bytes memory output, uint credit) {
         (, output, credit) = executeBootstrap(bytes32(uint(uint160(msg.sender))), state, cur, value);
     }

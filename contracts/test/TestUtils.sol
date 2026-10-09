@@ -15,7 +15,7 @@ import {Execution, Executions} from "../execution/Execution.sol";
 using Executions for Execution;
 
 contract TestUtils is CommandBase {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function testScale(uint value, uint numerator, uint denominator) external pure returns (uint) {
         return Math.scale(value, numerator, denominator);

@@ -10,7 +10,7 @@ import {LegacyHeaders} from "./LegacyHeaders.sol";
 
 contract TestCheckBalance is ExecuteCheckBalance, ExecuteCheckPosition {
     address private immutable tester = msg.sender;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
 
     function enforceCaller(address caller) internal view override returns (address) {
         if (caller != tester) revert AccessDenied();

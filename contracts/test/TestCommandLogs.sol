@@ -15,7 +15,7 @@ contract TestCommandLogs is CommandBase {
     event Processed(uint amount);
     error Rejected();
 
-    constructor(uint logFlags, uint8 flags) Runtime(0) {
+    constructor(uint logFlags, uint8 flags) Runtime(0, address(0)) {
         (id, descriptor) = command("run", Specs.Balance, Specs.AssetAmount, Specs.Balance, logFlags | flags);
     }
 

@@ -11,7 +11,7 @@ contract TestPoolCommands is Host, AddPool, RemovePool {
     event PoolAdded(bytes32 first, uint firstAmount, bytes32 second, uint secondAmount);
     event PoolRemoved(bytes32 first, bytes32 second);
 
-    constructor(uint commander) Host(commander, "TestPoolCommands") {}
+    constructor(uint commander) Host(commander, "TestPoolCommands", address(0)) {}
 
     function getAdminAccount() external view returns (bytes32) { return admin; }
     function failAt(uint callNumber) external { rejectAt = callNumber; }

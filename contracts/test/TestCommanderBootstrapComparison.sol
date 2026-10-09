@@ -20,7 +20,7 @@ abstract contract CommanderBootstrapLedger is Balances {
 
 /// @dev Frozen v1.51 adapter and logging policy for historical comparisons.
 contract CommanderCurrentBootstrap is BootstrapLogged151, CommanderBootstrapLedger {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
@@ -39,7 +39,7 @@ contract CommanderCurrentBootstrap is BootstrapLogged151, CommanderBootstrapLedg
 
 /// @dev Frozen 1.50.0 adapter for historical log-writer comparisons.
 contract CommanderStockBootstrap is BootstrapStock150, CommanderBootstrapLedger {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
@@ -58,7 +58,7 @@ contract CommanderStockBootstrap is BootstrapStock150, CommanderBootstrapLedger 
 
 /// @dev Frozen input-logging adapter, with the same ledger hook.
 contract CommanderInputBootstrap is PreviousInputBootstrap, CommanderBootstrapLedger {
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {

@@ -15,7 +15,7 @@ import {PreviousExecuteBootstrap, PreviousExecuteDebitAccount, PreviousExecuteCr
 
 contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDebitAccount, PreviousExecuteCreditAccount, PreviousExecuteCashout, PreviousExecuteSettle, PreviousExecuteAuthorize, PreviousExecuteCheckBalance, PreviousExecuteCheckPosition {
     uint public checksum;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function enforcePeer(address caller) internal pure override returns (address) { return caller; }
@@ -126,7 +126,7 @@ contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDeb
 
 contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, ExecuteCreditAccount, ExecuteCashout, ExecuteSettle, ExecuteAuthorize, ExecuteCheckBalance, ExecuteCheckPosition {
     uint public checksum;
-    constructor() Runtime(0) {}
+    constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
     function enforcePeer(address caller) internal pure override returns (address) { return caller; }

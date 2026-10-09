@@ -17,7 +17,7 @@ contract TestOutOfGasPipe {
 
 /// @dev Exercise production forwarding after a transport has allocated memory.
 contract TestPortalGasReserve is Portal {
-    constructor(uint cmdr) Runtime(cmdr) {}
+    constructor(uint cmdr) Runtime(cmdr, address(0)) {}
 
     function testForward(bytes32 key, bytes calldata message, uint priorMemory)
         external payable returns (bytes32 miss)
@@ -36,7 +36,7 @@ contract TestPortalGasReserve is Portal {
 
 /// @dev Calls the production forward implementation without extra instrumentation.
 contract TestPortalGas is Portal {
-    constructor(uint cmdr) Runtime(cmdr) {}
+    constructor(uint cmdr) Runtime(cmdr, address(0)) {}
 
     function testForward(bytes32 key, bytes calldata message) external payable returns (bytes32) {
         return forward(key, Cursors.wrap(message), msg.value);
