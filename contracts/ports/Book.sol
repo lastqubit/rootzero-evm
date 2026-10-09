@@ -24,7 +24,7 @@ abstract contract BookPort is PortBase, BookHook {
     /// @dev Both legs are decoded before calling book. Zero amounts skip their
     /// respective legs; supplied account validity belongs to the trusted peer.
     /// The receiving port need not repeat format checks. Empty batches are accepted.
-    /// @param data BOOKING stream: from, to, liability, debt, asset, amount.
+    /// @param data BOOKING stream: from, to, asset, amount, liability, debt.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portBook(bytes calldata data) external onlyPeer returns (bytes memory, uint) {

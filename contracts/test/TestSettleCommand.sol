@@ -45,11 +45,11 @@ contract TestSettleCommand is ExecuteSettle, Settlement, Balances, Pipeline {
         return executeSettle(account, state, inputCur, value);
     }
 
-    function book(bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount)
+    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
         internal override
     {
         emit BookCalled(from);
-        Settlement.book(from, to, liability, debt, asset, amount);
+        Settlement.book(from, to, asset, amount, liability, debt);
     }
 
     function settle(bytes32 account, Position memory position)

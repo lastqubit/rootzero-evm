@@ -33,7 +33,7 @@ describe("BookPort", () => {
     expect(ethers.dataLength(booking)).to.equal(200);
     expect(await peer.portBook.staticCall(booking)).to.deep.equal(["0x", 0n]);
   });
-  it("debits the first leg then credits the second for each booking", async () => {
+  it("debits liability before crediting asset despite asset-first wire order", async () => {
     const receipt = await (await peer.portBook(concat(booking, booking))).wait();
     expect(receipt.logs.filter((log: any) => log.topics.length).map((log: any) => host.interface.parseLog(log)?.name))
       .to.deep.equal(["Debited", "Credited", "Debited", "Credited"]);

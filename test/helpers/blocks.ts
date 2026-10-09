@@ -376,12 +376,12 @@ export function encodeHostAccount(host: bigint): string {
 }
 
 export interface Booking {
-  from: string; to: string; liability: string; debt: bigint; asset: string; amount: bigint;
+  from: string; to: string; asset: string; amount: bigint; liability: string; debt: bigint;
 }
 
 export function encodeBookingBlock(value: Booking): string {
-  return encodeBlock(Keys.Booking, concat(pad32(value.from), pad32(value.to), pad32(value.liability),
-    pad32(value.debt), pad32(value.asset), pad32(value.amount)));
+  return encodeBlock(Keys.Booking, concat(pad32(value.from), pad32(value.to), pad32(value.asset),
+    pad32(value.amount), pad32(value.liability), pad32(value.debt)));
 }
 
 export function encodePipelineBlock(account: string, budget: bigint): string {

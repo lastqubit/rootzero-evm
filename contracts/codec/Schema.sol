@@ -165,7 +165,7 @@ library Schemas {
     // Six-word payloads
 
     /// @dev Debit from/liability/debt, then credit to/asset/amount; quantities are full width.
-    string constant Booking = "bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount";
+    string constant Booking = "bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt";
 
     // Composite payloads
 

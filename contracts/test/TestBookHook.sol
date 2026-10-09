@@ -39,7 +39,7 @@ contract TestBookHook is Settle, BookPort, Settlement {
         Settlement.book(value);
     }
 
-    function book(bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount)
+    function book(bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt)
         internal override
     {
         emit Applied(from, to, asset, amount, liability, debt);

@@ -136,20 +136,21 @@ struct Position {
 }
 
 /// @notice One account debit followed by one account credit.
-/// @dev Debit from/liability/debt; credit to/asset/amount. Accounts may differ.
+/// @dev Fields follow Position's asset/amount/liability/debt order after the accounts.
+/// Debit from/liability/debt before crediting to/asset/amount. Accounts may differ.
 struct Booking {
     /// @dev Account identifier debited for the liability.
     bytes32 from;
     /// @dev Account identifier credited with the asset.
     bytes32 to;
-    /// @dev Identifier for the liability side debited from `from`.
-    bytes32 liability;
-    /// @dev Exact debit quantity in the liability's native units.
-    uint debt;
     /// @dev Identifier for the asset side credited to `to`.
     bytes32 asset;
     /// @dev Exact credit quantity in the asset's native units.
     uint amount;
+    /// @dev Identifier for the liability side debited from `from`.
+    bytes32 liability;
+    /// @dev Exact debit quantity in the liability's native units.
+    uint debt;
 }
 
 /// @notice Transfer payload used by transaction blocks and peer posting.

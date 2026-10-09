@@ -94,7 +94,7 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// netted: the full debit must succeed before the credit. Failure reverts both.
     /// Override the scalar overload to customize both scalar and struct callers.
     function book(Booking memory value) internal virtual override {
-        book(value.from, value.to, value.liability, value.debt, value.asset, value.amount);
+        book(value.from, value.to, value.asset, value.amount, value.liability, value.debt);
     }
 
     /// @notice Apply exact scalar legs without constructing a temporary Booking.
@@ -103,10 +103,10 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     function book(
         bytes32 from,
         bytes32 to,
-        bytes32 liability,
-        uint debt,
         bytes32 asset,
-        uint amount
+        uint amount,
+        bytes32 liability,
+        uint debt
     ) internal virtual {
         if (debt != 0) debitAccount(from, liability, debt);
         if (amount != 0) creditAccount(to, asset, amount);
@@ -118,7 +118,7 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     function repay(bytes32 account, Position memory position) internal virtual override {
         if (position.debt == 0) return;
         uint amount = position.counterparty == bytes32(0) ? 0 : position.debt;
-        book(account, position.counterparty, position.liability, position.debt, position.liability, amount);
+        book(account, position.counterparty, position.liability, amount, position.liability, position.debt);
     }
 
     /// @notice Apply the final position quantities exactly; producers enforce limits.
@@ -130,7 +130,7 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// accounts from faulty trusted integrations are not guaranteed to be rejected.
     function settle(bytes32 account, Position memory position) internal virtual override {
         if (position.counterparty == bytes32(0)) {
-            book(account, account, position.liability, position.debt, position.asset, position.amount);
+            book(account, account, position.asset, position.amount, position.liability, position.debt);
             return;
         }
         if (position.debt != 0) {

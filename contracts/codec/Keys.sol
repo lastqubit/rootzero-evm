@@ -60,7 +60,7 @@ library Keys {
     bytes4 constant Custody = bytes4(keccak256("#custody"));
     /// @dev Asset-liability position state - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
     bytes4 constant Position = bytes4(keccak256("#position"));
-    /// @dev Account debit/credit booking - (bytes32 from, bytes32 to, bytes32 liability, uint debt, bytes32 asset, uint amount).
+    /// @dev Account debit/credit booking - (bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt).
     bytes4 constant Booking = bytes4(keccak256("#booking"));
 
     // Input and value blocks
