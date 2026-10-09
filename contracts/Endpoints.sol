@@ -52,9 +52,11 @@ import {DispatchPayablePort, DispatchPayableHook} from "./ports/Dispatch.sol";
 // Guard endpoints
 import {GuardBase} from "./guards/Base.sol";
 import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
+import {UpdatePool, UpdatePoolHook} from "./guards/Pool.sol";
 
 // Query endpoints
 import {QueryBase} from "./queries/Base.sol";
+import {GetQuote, GetQuoteHook} from "./queries/Quote.sol";
 import {GetBalance, GetBalanceHook} from "./queries/Balance.sol";
 
 // Shared protocol errors.

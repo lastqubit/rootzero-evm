@@ -13,9 +13,9 @@ abstract contract EndpointBase is SchemaAnnot {
     /// @notice Create and publish endpoint identity, specs and name.
     /// @param id Endpoint node ID.
     /// @param name Human-readable endpoint registration name.
-    /// @param state State block specification.
-    /// @param input Input block specification.
-    /// @param output Output block specification.
+    /// @param state State block spec or named lane.
+    /// @param input Input block spec or named lane.
+    /// @param output Output block spec or named lane.
     /// @return descriptor Packed execution allocation hints and explicit logging selections.
     function endpoint(
         uint id,

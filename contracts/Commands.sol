@@ -6,7 +6,6 @@ pragma solidity ^0.8.33;
 
 import {CounterpartyAnnot} from "./annotations/Counterparty.sol";
 import {SchemaAnnot} from "./annotations/Schema.sol";
-import {GroupsAnnot} from "./annotations/Groups.sol";
 import {CommandBase} from "./commands/Base.sol";
 import {Flags} from "./utils/Flags.sol";
 import {Execution, Executions} from "./execution/Execution.sol";

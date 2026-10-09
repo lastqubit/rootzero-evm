@@ -527,11 +527,6 @@ contract BlocksEncodingMigrationBaseline {
         output = LegacyBlocks.createSchema(spec, value);
         usedGas = beforeGas - gasleft();
     }
-    function Groups(string memory value) external view returns (uint usedGas, bytes memory output) {
-        uint beforeGas = gasleft();
-        output = LegacyBlocks.createGroups(value);
-        usedGas = beforeGas - gasleft();
-    }
 }
 
 contract BlocksEncodingMigrationCandidate {
@@ -588,11 +583,6 @@ contract BlocksEncodingMigrationCandidate {
     function Schema(uint spec, string memory value) external view returns (uint usedGas, bytes memory output) {
         uint beforeGas = gasleft();
         output = Encoder.createSchema(spec, bytes(value));
-        usedGas = beforeGas - gasleft();
-    }
-    function Groups(string memory value) external view returns (uint usedGas, bytes memory output) {
-        uint beforeGas = gasleft();
-        output = Encoder.createGroups(bytes(value));
         usedGas = beforeGas - gasleft();
     }
 }

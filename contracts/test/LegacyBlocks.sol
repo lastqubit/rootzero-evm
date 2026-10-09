@@ -2927,12 +2927,6 @@ library LegacyBlocks {
         writeLabelAllocated(value, namespace, name);
     }
 
-    /// @notice Encode a command loop-group annotation containing its description string.
-    /// @dev The grouping syntax is interpreted offchain, not validated here.
-    function createGroups(string memory description) internal pure returns (bytes memory value) {
-        return create(Keys.Groups, createString(description));
-    }
-
     /// @notice Encode an ACTION annotation block.
     /// @param actionid Canonical semantic action identifier.
     /// @return value Encoded ACTION block bytes.

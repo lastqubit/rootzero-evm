@@ -8,7 +8,7 @@ import {
 import "./helpers/matchers.js";
 
 describe("Pool admin commands", () => {
-  const first = ethers.toBeHex(1, 32), second = ethers.toBeHex(2, 32);
+  const a = ethers.toBeHex(1, 32), b = ethers.toBeHex(2, 32);
   let host: Awaited<ReturnType<typeof deploy>>;
   let admin: string;
   beforeEach(async () => {
@@ -22,27 +22,30 @@ describe("Pool admin commands", () => {
     const size = add ? 64 : 32;
     const event = add ? "PoolAdded" : "PoolRemoved";
     const block = (asset: string, amount: bigint) => add ? encodeAssetAmountBlock(asset, amount) : encodeAssetBlock(asset);
-    const pair = concat(block(first, 0n), block(second, ethers.MaxUint256));
+    const pair = concat(block(a, 0n), block(b, ethers.MaxUint256));
 
     it(`${method} publishes its admin descriptor, name, and pair grouping`, async () => {
       const id = await commandId(method + "(bytes)", host, 2n);
-      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...endpointSpecs({ input: key, inputHint: size, admin: true }));
+      const lanes = endpointSpecs({ input: key, inputHint: size, admin: true });
+      lanes[1] |= BigInt(blockKey(method));
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, ...lanes);
       await expect(host.deploymentTransaction()).to.emitEndpoint(host)
         .withArgs(id, undefined, undefined, undefined, method);
       await expect(host.deploymentTransaction()).to.emitMetadata(host)
-        .withArgs(id, encodeBlock(blockKey("#groups"), encodeStringBlock("#input as (first, second)")));
+        .withArgs(await host.host(), encodeBlock(blockKey("#lane"), concat(ethers.toBeHex(lanes[1], 32),
+          encodeStringBlock(`#${add ? "assetAmount" : "asset"}[2] as (a, b)`))));
     });
 
     it(`${method} decodes ordered pairs and leaves asset and quantity policy to the hook`, async () => {
-      const input = concat(pair, block(second, 7n), block(second, 11n));
+      const input = concat(pair, block(b, 7n), block(b, 11n));
       const context = encodeContextBlock(admin, "0x", input);
       expect(await host[method].staticCall(context)).deep.eq(["0x", 0n]);
       const receipt = await (await host[method](context)).wait();
       const events = receipt.logs.filter((log: any) => log.topics.length).map((log: any) => host.interface.parseLog(log))
         .filter((log: any) => log?.name === event);
       expect(events.map((log: any) => Array.from(log.args))).deep.eq(add
-        ? [[first, 0n, second, ethers.MaxUint256], [second, 7n, second, 11n]]
-        : [[first, second], [second, second]]);
+        ? [[a, 0n, b, ethers.MaxUint256], [b, 7n, b, 11n]]
+        : [[a, b], [b, b]]);
       expect(await host.calls()).eq(2n);
     });
 
@@ -58,7 +61,7 @@ describe("Pool admin commands", () => {
     });
 
     it(`${method} rejects malformed or incomplete pairs and rolls back earlier pairs`, async () => {
-      const member = block(first, 1n);
+      const member = block(a, 1n);
       const cases: [string, string][] = [
         [member, "InvalidBlock"],
         [concat(member, encodeBlock(Keys.Bytes, "0x")), "InvalidBlock"],
@@ -72,7 +75,7 @@ describe("Pool admin commands", () => {
           expect(await host.calls()).eq(0n);
         }
       }
-      await expect(host[method](encodeContextBlock(admin, encodeAssetBlock(first), pair), { gasLimit: 3_000_000 }))
+      await expect(host[method](encodeContextBlock(admin, encodeAssetBlock(a), pair), { gasLimit: 3_000_000 }))
         .revertedWithCustomError(host, "InvalidBlock");
       expect(await host.calls()).eq(0n);
     });

@@ -8,21 +8,21 @@ contract TestPoolCommands is Host, AddPool, RemovePool {
     uint public calls;
     uint public rejectAt;
     error HookRejected();
-    event PoolAdded(bytes32 first, uint firstAmount, bytes32 second, uint secondAmount);
-    event PoolRemoved(bytes32 first, bytes32 second);
+    event PoolAdded(bytes32 a, uint aAmount, bytes32 b, uint bAmount);
+    event PoolRemoved(bytes32 a, bytes32 b);
 
     constructor(uint commander) Host(commander, "TestPoolCommands", address(0)) {}
 
     function getAdminAccount() external view returns (bytes32) { return admin; }
     function failAt(uint callNumber) external { rejectAt = callNumber; }
 
-    function addPool(AssetAmount memory first, AssetAmount memory second) internal override {
+    function addPool(AssetAmount memory a, AssetAmount memory b) internal override {
         if (++calls == rejectAt) revert HookRejected();
-        emit PoolAdded(first.asset, first.amount, second.asset, second.amount);
+        emit PoolAdded(a.asset, a.amount, b.asset, b.amount);
     }
 
-    function removePool(bytes32 first, bytes32 second) internal override {
+    function removePool(bytes32 a, bytes32 b) internal override {
         if (++calls == rejectAt) revert HookRejected();
-        emit PoolRemoved(first, second);
+        emit PoolRemoved(a, b);
     }
 }

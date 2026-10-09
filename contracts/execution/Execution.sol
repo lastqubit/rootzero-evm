@@ -75,18 +75,19 @@ library Executions {
     /// [reserved:19][flags:1]. Sizes include headers and require 25 bits at maximum hint.
     /// Declared state takes precedence over input, even when supplied state is empty.
     /// Zero output size disables preallocation; no source reserves one output block.
-    /// State/input/output are pure specs; flags contains the complete endpoint identity flags byte.
+    /// State/input/output may carry low 32-bit lane keys, ignored by the descriptor.
+    /// Flags contains the complete endpoint identity flags byte.
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
         return describe(state, input, output, 0);
     }
 
-    /// @notice Describe pure lane specs and one endpoint-wide logging policy.
+    /// @notice Describe block specs or named lanes and one endpoint-wide logging policy.
     /// @dev Logging bits 2-5 select records; lane bits require Logs.Execution.
     /// Only one byte is accepted; behavior bits do not affect the logging descriptor.
     function describe(uint state, uint input, uint output, uint flags)
         internal pure returns (uint descriptor)
     {
-        if (uint128(state | input | output) != 0 || flags > 255 || (flags & 56 != 0 && flags & Logs.Execution == 0))
+        if (uint104((state | input | output) >> 32) != 0 || flags > 255 || (flags & 56 != 0 && flags & Logs.Execution == 0))
             revert Specs.InvalidSpec();
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
@@ -732,6 +733,13 @@ library Executions {
         (value, exec.input) = exec.input.unpackBalanceConstraints();
     }
 
+    /// @notice Decode and consume one QUOTE_REQUEST input as scalar values.
+    function unpackQuoteRequest(Execution memory exec)
+        internal pure returns (bytes32 asset, uint amount, bytes32 liability)
+    {
+        (asset, amount, liability, exec.input) = exec.input.unpackQuoteRequest();
+    }
+
     /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
     function unpackQuote(
         Execution memory exec
@@ -969,6 +977,11 @@ library Executions {
     /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function outputLimits(Execution memory exec, uint limits) internal pure {
         (exec.buffer, exec.output) = exec.output.writeLimits(exec.buffer, limits);
+    }
+
+    /// @notice Append a scalar QUOTE_REQUEST block to execution output.
+    function outputQuoteRequest(Execution memory exec, bytes32 asset, uint amount, bytes32 liability) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeQuoteRequest(exec.buffer, asset, amount, liability);
     }
 
     /// @notice Append a QUOTE with full-width asset and liability quantities.

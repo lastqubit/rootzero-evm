@@ -80,8 +80,8 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     function dismissGuardian(bytes32) internal pure override {}
     function enforceGuardian(address who) internal pure override returns(address) { return who; }
 }
-contract TestQueryCodes is QueryBase {
-    constructor(uint inputCodes, uint outputCodes) Runtime(0, address(0)) {
-        query("read", Specs.AssetAmount | inputCodes, Specs.AssetAmount | outputCodes);
+contract TestQueryLanes is QueryBase {
+    constructor(uint inputLaneBits, uint outputLaneBits) Runtime(0, address(0)) {
+        query("read", Specs.AssetAmount | inputLaneBits, Specs.AssetAmount | outputLaneBits);
     }
 }

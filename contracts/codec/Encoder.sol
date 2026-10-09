@@ -467,6 +467,23 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Append QUOTE_REQUEST, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements.
+    function writeQuoteRequest(
+        uint cur,
+        bytes memory dst,
+        bytes32 asset,
+        uint amount,
+        bytes32 liability
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 104);
+        abs = writeHeader(abs, Keys.QuoteRequest, 96);
+        abs = write32(abs, asset);
+        abs = write32(abs, bytes32(amount));
+        write32(abs, liability);
+    }
+
     /// @notice Append ACCOUNTAMOUNT, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     function writeAccountAmount(
@@ -1498,6 +1515,20 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Create a complete QUOTE_REQUEST block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    function createQuoteRequest(
+        bytes32 asset,
+        uint amount,
+        bytes32 liability
+    ) internal pure returns (bytes memory value) {
+        value = allocate(104);
+        uint abs = writeHeader(pos(value, 0), Keys.QuoteRequest, 96);
+        abs = write32(abs, asset);
+        abs = write32(abs, bytes32(amount));
+        write32(abs, liability);
+    }
+
     /// @notice Create a complete ACCOUNTAMOUNT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     function createAccountAmount(
@@ -1753,16 +1784,17 @@ library Encoder {
         }
     }
 
-    /// @notice Create GROUPS by wrapping a memory payload in a STRING child header.
-    /// @dev Allocates only the final block; no intermediate STRING buffer.
-    /// @param description Raw description bytes, excluding the STRING header.
-    /// @return value Complete GROUPS block with zero allocation padding.
-    function createGroups(bytes memory description) internal pure returns (bytes memory value) {
-        uint size = 16 + description.length;
+    /// @notice Create LANE metadata with its packed lane value and schema body.
+    /// @param lane Packed block spec and host-local lane key, encoded unchanged.
+    /// @param body Raw schema text bytes, excluding the STRING header.
+    /// @return value Complete LANE block with zero allocation padding.
+    function createLane(uint lane, bytes memory body) internal pure returns (bytes memory value) {
+        uint size = 48 + body.length;
         value = allocate(size);
         unchecked {
-            uint abs = writeHeader(pos(value, 0), Keys.Groups, size - 8);
-            wrap(abs, Keys.String, description, description.length);
+            uint abs = writeHeader(pos(value, 0), Keys.Lane, size - 8);
+            abs = write32(abs, bytes32(lane));
+            wrap(abs, Keys.String, body, body.length);
         }
     }
 }

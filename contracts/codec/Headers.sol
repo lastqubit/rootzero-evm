@@ -35,6 +35,7 @@ library Headers {
     uint constant Limits = Specs.Limits >> 192;
     uint constant BalanceConstraints = Specs.BalanceConstraints >> 192;
     uint constant PositionConstraints = Specs.PositionConstraints >> 192;
+    uint constant QuoteRequest = Specs.QuoteRequest >> 192;
     uint constant Quote = Specs.Quote >> 192;
     uint constant Position = Specs.Position >> 192;
     uint constant Booking = Specs.Booking >> 192;

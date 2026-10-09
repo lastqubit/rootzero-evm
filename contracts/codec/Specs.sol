@@ -68,6 +68,8 @@ library Sizes {
 
     /// @dev POSITION_CONSTRAINTS block: 8 header + four-word constraints = 136 bytes.
     uint constant PositionConstraints = B128;
+    /// @dev QUOTE_REQUEST: 8 header + asset, amount, liability = 104 bytes.
+    uint constant QuoteRequest = B96;
     /// @dev QUOTE block: 8 header + four-word quantities = 136 bytes.
     uint constant Quote = B128;
 
@@ -100,6 +102,8 @@ library Sizes {
 /// `[key:4][min:4][max:4][hint:3][reserved:17]`.
 /// The upper eight bytes of a fixed-layout spec are its encoded block header,
 /// allowing the entire spec word to be written directly as that header.
+/// Named endpoint lanes use the low 32 reserved bits for a host-local lane key;
+/// these accessors continue to read only the embedded block spec fields.
 /// A maximum of zero means the payload size is unbounded.
 library Specs {
     /// @dev A payload is incompatible with its block specification.
@@ -143,6 +147,7 @@ library Specs {
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
     uint constant BalanceConstraints = uint(bytes32(Keys.BalanceConstraints)) | Exact96;
     uint constant PositionConstraints = uint(bytes32(Keys.PositionConstraints)) | Exact128;
+    uint constant QuoteRequest = uint(bytes32(Keys.QuoteRequest)) | Exact96;
     uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
     uint constant AssetAmount = uint(bytes32(Keys.AssetAmount)) | Exact64;
@@ -172,7 +177,7 @@ library Specs {
     uint constant Introduction = uint(bytes32(Keys.Introduction)) | Exact96;
     uint constant Endpoint = uint(bytes32(Keys.Endpoint)) | Exact128;
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
-    uint constant Groups = uint(bytes32(Keys.Groups)) | (uint(8) << 192) | UnboundedHint128;
+    uint constant Lane = uint(bytes32(Keys.Lane)) | (uint(40) << 192) | UnboundedHint128;
     uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
@@ -233,6 +238,16 @@ library Specs {
     /// @return Encoded block key.
     function key(uint spec) internal pure returns (bytes4) {
         return bytes4(uint32(spec >> 224));
+    }
+
+    /// @notice Attach a nonzero host-local lane key to a plain block spec.
+    /// @dev Rejects EMPTY and occupied reserved bits. Preserves all block-spec fields.
+    /// @param spec Nonempty block spec without a lane key or other reserved bits.
+    /// @param laneKey Host-local description key; not a wire block key.
+    /// @return Packed lane value for endpoint discovery.
+    function toLane(uint spec, uint32 laneKey) internal pure returns (uint) {
+        if (laneKey == 0 || key(spec) == bytes4(0) || uint136(spec) != 0) revert InvalidSpec();
+        return spec | uint(laneKey);
     }
 
     /// @notice Return whether a payload size lies within a specification's bounds.

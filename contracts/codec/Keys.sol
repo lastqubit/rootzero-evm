@@ -71,6 +71,8 @@ library Keys {
     bytes4 constant BalanceConstraints = bytes4(keccak256("#balanceConstraints"));
     /// @dev Exact asset/liability identifiers and inclusive minimum amount / maximum debt bounds.
     bytes4 constant PositionConstraints = bytes4(keccak256("#positionConstraints"));
+    /// @dev Requested asset quantity priced in the liability asset.
+    bytes4 constant QuoteRequest = bytes4(keccak256("#quoteRequest"));
     /// @dev Quoted asset and liability quantities; interpretation belongs to the consumer.
     bytes4 constant Quote = bytes4(keccak256("#quote"));
 
@@ -126,8 +128,8 @@ library Keys {
     bytes4 constant Endpoint = bytes4(keccak256("#endpoint"));
     /// @dev Entity counterparty annotation - (bytes32 account)
     bytes4 constant Counterparty = bytes4(keccak256("#counterparty"));
-    /// @dev Command loop-group annotation - (#string as description)
-    bytes4 constant Groups = bytes4(keccak256("#groups"));
+    /// @dev Host-local lane annotation - (uint lane, #string as body)
+    bytes4 constant Lane = bytes4(keccak256("#lane"));
     /// @dev Block schema publication - (uint spec, #string as body)
     bytes4 constant Schema = bytes4(keccak256("#schema"));
 

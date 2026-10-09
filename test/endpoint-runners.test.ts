@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
-import { deploy } from "./helpers/setup.js";
-import { concat, encodeUserAccount, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock, encodeOutputBlock } from "./helpers/blocks.js";
+import { deploy, queryId } from "./helpers/setup.js";
+import { concat, encodeUserAccount, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock, encodeOutputBlock, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Endpoint runner lifecycle", () => {
@@ -67,10 +67,21 @@ describe("Endpoint runner lifecycle", () => {
     const receipt = await (await helper.attributedPeer(account, input, {value: 1n})).wait();
     expect(receipt.logs.at(-1).data).eq(concat("0x04", ethers.toBeHex(await helper.ids(3),32), account, encodeInputBlock(input), encodeOutputBlock(output)));
   });
-  it("rejects logging codes on view query registration", async () => {
-    const helper = await deploy("TestQueryCodes", 0, 0);
-    for (const codes of [[1,0],[0,1],[1,1]]) {
-      await expect(deploy("TestQueryCodes", ...codes)).revertedWithCustomError(helper, "InvalidSpec");
+  it("preserves lane keys in view query registration without adding logging flags", async () => {
+    const spec = exactSpec(Keys.AssetAmount, 64);
+    for (const [inputKey, outputKey] of [[0n, 0n], [1n, 0n], [0n, 1n], [0xffffffffn, 0xffffffffn]]) {
+      const helper = await deploy("TestQueryLanes", inputKey, outputKey);
+      await expect(helper.deploymentTransaction()).to.emitEndpoint(helper).withArgs(
+        await queryId("read(bytes)", helper), 0n, spec | inputKey, spec | outputKey, "read",
+      );
+    }
+  });
+  it("rejects reserved bits on view query registration", async () => {
+    const helper = await deploy("TestQueryLanes", 0, 0);
+    for (const bit of [32n, 64n, 127n, 128n, 135n]) {
+      for (const lanes of [[1n << bit, 0n], [0n, 1n << bit]]) {
+        await expect(deploy("TestQueryLanes", ...lanes)).revertedWithCustomError(helper, "InvalidSpec");
+      }
     }
   });
 });

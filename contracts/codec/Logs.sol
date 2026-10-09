@@ -63,7 +63,7 @@ pragma solidity ^0.8.33;
 //   emitter address. The same account/asset on different hosts has independent
 //   balances. Each record replaces only that compound identity's balance; no delta.
 // - Metadata's subject is what is described, not necessarily the emitter. Its
-//   blocks may include SCHEMA, GROUPS or COUNTERPARTY. No wrapper
+//   blocks may include SCHEMA, LANE or COUNTERPARTY. No wrapper
 //   or codes are needed. Multiple blocks can describe one subject in one record.
 // - Introduction is a provenance claim, not authorization or verified creation.
 // - Envelope contains portal, resources, key and digest; interpretation is offchain.
@@ -130,7 +130,7 @@ library Logs {
         execution(id, start, 73 + Encoder.length(cur));
     }
 
-    /// @notice Publish an endpoint identity, pure specs and its registration name.
+    /// @notice Publish an endpoint identity, packed lanes and its registration name.
     function endpoint(uint id, uint state, uint input, uint output, string memory name) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)

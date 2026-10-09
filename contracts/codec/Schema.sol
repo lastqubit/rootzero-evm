@@ -15,8 +15,12 @@ pragma solidity ^0.8.33;
 // - commas outside alias-list parentheses separate siblings at every level
 // - `#x as (a, b)` expands to `#x as a, #x as b` in declaration order; it adds
 //   no container or header and preserves the referenced key for every child
-// - alias lists require at least two valid alias paths and an unmodified schema
-//   reference; use expanded items with `many` or `at` modifiers
+// - `#x[2] as (a, b)` is equivalent: an optional decimal count of at least two
+//   must match the alias count; each repetition includes the original block header
+// - counted references require an alias list and allow only one count suffix;
+//   the count does not change the referenced block spec or apply to field types
+// - alias lists require at least two valid alias paths and a schema reference
+//   with no modifiers except the optional count; expand `many` or `at` items
 // - empty entries, trailing commas, nested lists, and colliding alias paths are invalid
 // - braces are presentation-only and do not change payload layout
 // - command inputs are a single run when the input schema is non-empty
@@ -31,7 +35,8 @@ pragma solidity ^0.8.33;
 // - a custom schema consisting of exactly one `many #x` item uses its custom
 //   key for the outer list block and contains repeated `#x` items directly,
 //   whether or not the item is wrapped in braces
-// - endpoint lanes identify their top-level block key directly
+// - endpoint lanes retain their block spec and may carry a host-local description
+//   key in the low 32 bits; #lane metadata describes homogeneous block groups
 // - `portal` fields identify destination portal hosts. By convention the value
 //   is the portal implementation's host ID; core passes it through unchanged
 //   and hooks may validate or resolve it for their transport
@@ -160,6 +165,7 @@ library Schemas {
 
     /// @dev Exact identifiers and full-width inclusive quantity bounds.
     string constant PositionConstraints = "bytes32 asset, uint amount, bytes32 liability, uint debt";
+    string constant QuoteRequest = "bytes32 asset, uint amount, bytes32 liability";
     string constant Quote = "bytes32 asset, uint amount, bytes32 liability, uint debt";
 
     // Six-word payloads
@@ -185,6 +191,6 @@ library Schemas {
     // Metadata payloads
 
     string constant Counterparty = "bytes32 account";
-    string constant Groups = "#string as description";
+    string constant Lane = "uint lane, #string as body";
     string constant Schema = "uint spec, #string as body";
 }

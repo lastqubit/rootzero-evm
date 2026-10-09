@@ -68,7 +68,7 @@ async function nodeId(
     ["burn", 12n], ["realize", 44n], ["payout", 28n], ["swapExactIn", 36n], ["swapExactOut", 36n],
     ...["appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "addPool", "removePool"].map(name => [name, 20n] as [string, bigint]),
   ] : prefix === PortPrefix ? [["portAllowAsset", 20n], ["portDenyAsset", 20n]]
-    : prefix === GuardPrefix ? [["revokeAsset", 20n], ["revokeAllowance", 20n]] : [];
+    : prefix === GuardPrefix ? [["revokeAsset", 20n], ["revokeAllowance", 20n], ["updatePool", 20n]] : [];
   for (const [name, logging] of policies) if (selector(name + "(bytes)") === selector(signature)) flags |= logging;
   const addr = typeof target === "string" ? target : await target.getAddress();
   const provider = await getProvider();

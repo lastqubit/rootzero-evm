@@ -37,9 +37,9 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @notice Publish command metadata and a default label.
     /// @param name Command entrypoint name and default label. It must exactly
     /// match the Solidity command function name used by the canonical ABI.
-    /// @param state State block specification.
-    /// @param input Input block specification.
-    /// @param output Output block specification.
+    /// @param state State block spec or named lane.
+    /// @param input Input block spec or named lane.
+    /// @param output Output block spec or named lane.
     /// @param flags Combined behavior and logging identity flags.
     /// @return id Command node ID.
     /// @return descriptor Packed execution allocation hints and explicit logging selections.

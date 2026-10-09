@@ -1201,6 +1201,21 @@ library Blocks {
         amount = uint(a);
     }
 
+    /// @notice Decode QUOTE_REQUEST and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return liability Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackQuoteRequest(
+        uint cur
+    ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint nextCur) {
+        bytes32 a;
+        (asset, a, liability, nextCur) = unpack96(cur, Keys.QuoteRequest);
+        amount = uint(a);
+    }
+
     /// @notice Decode ACCOUNTAMOUNT and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.

@@ -3,7 +3,6 @@ pragma solidity ^0.8.33;
 import {Logs} from "../../codec/Logs.sol";
 
 import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
-import {GroupsAnnot} from "../../annotations/Groups.sol";
 import {AssetAmount} from "../../core/Types.sol";
 
 using Executions for Execution;
@@ -13,9 +12,9 @@ abstract contract AddPoolHook {
     /// @notice Add a pool with two asset quantities.
     /// @dev Both ASSET_AMOUNT blocks are decoded before invocation. Implementations define
     /// pair ordering, validate assets and quantities, and handle existing pools and funding.
-    /// @param first First pool asset and quantity.
-    /// @param second Second pool asset and quantity.
-    function addPool(AssetAmount memory first, AssetAmount memory second) internal virtual;
+    /// @param a First pool asset and quantity.
+    /// @param b Second pool asset and quantity.
+    function addPool(AssetAmount memory a, AssetAmount memory b) internal virtual;
 }
 
 /// @notice Hook implemented by hosts that remove asset-pair pools.
@@ -23,19 +22,19 @@ abstract contract RemovePoolHook {
     /// @notice Remove the pool identified by two assets.
     /// @dev Both ASSET blocks are decoded before invocation. Implementations define
     /// pair ordering and removal requirements, including outstanding liquidity or obligations.
-    /// @param first First pool asset.
-    /// @param second Second pool asset.
-    function removePool(bytes32 first, bytes32 second) internal virtual;
+    /// @param a First pool asset.
+    /// @param b Second pool asset.
+    function removePool(bytes32 a, bytes32 b) internal virtual;
 }
 
 /// @notice Admin command that adds one pool per pair of ASSET_AMOUNT inputs.
-abstract contract AddPool is AdminBase, AddPoolHook, GroupsAnnot {
+abstract contract AddPool is AdminBase, AddPoolHook {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("addPool", Specs.Empty, Specs.AssetAmount, Specs.Empty, Logs.Input | Flags.Admin);
-        annotateGroups(id, "#input as (first, second)");
+        uint input = lane("#assetAmount[2] as (a, b)", "addPool", Specs.AssetAmount);
+        (id, descriptor) = command("addPool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Add pools from consecutive ASSET_AMOUNT pairs.
@@ -49,20 +48,20 @@ abstract contract AddPool is AdminBase, AddPoolHook, GroupsAnnot {
     }
 
     function addPoolOne(Execution memory exec) private {
-        AssetAmount memory first = exec.unpackAssetAmountValue();
-        AssetAmount memory second = exec.unpackAssetAmountValue();
-        addPool(first, second);
+        AssetAmount memory a = exec.unpackAssetAmountValue();
+        AssetAmount memory b = exec.unpackAssetAmountValue();
+        addPool(a, b);
     }
 }
 
 /// @notice Admin command that removes one pool per pair of ASSET inputs.
-abstract contract RemovePool is AdminBase, RemovePoolHook, GroupsAnnot {
+abstract contract RemovePool is AdminBase, RemovePoolHook {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("removePool", Specs.Empty, Specs.Asset, Specs.Empty, Logs.Input | Flags.Admin);
-        annotateGroups(id, "#input as (first, second)");
+        uint input = lane("#asset[2] as (a, b)", "removePool", Specs.Asset);
+        (id, descriptor) = command("removePool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Remove pools from consecutive ASSET pairs.
@@ -76,8 +75,8 @@ abstract contract RemovePool is AdminBase, RemovePoolHook, GroupsAnnot {
     }
 
     function removePoolOne(Execution memory exec) private {
-        bytes32 first = exec.unpackAsset();
-        bytes32 second = exec.unpackAsset();
-        removePool(first, second);
+        bytes32 a = exec.unpackAsset();
+        bytes32 b = exec.unpackAsset();
+        removePool(a, b);
     }
 }
