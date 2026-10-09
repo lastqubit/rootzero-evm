@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.54.0
+
 - Decode pool input pairs in explicit stream order. Remove unused cursor and
   log-comparison fixtures and correct stale lane and schema documentation.
 
