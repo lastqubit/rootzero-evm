@@ -6,6 +6,61 @@ import { decodeEndpointLog } from "./helpers/endpoint-logs.js";
 import { decodeIntroductionLog } from "./helpers/introduction-logs.js";
 
 describe("Runtime execution identity", () => {
+  describe("remote commander policy", () => {
+    let commander: Awaited<ReturnType<typeof deploy>>;
+
+    beforeEach(async () => {
+      const root = await deploy("TestRuntime", 0, ethers.ZeroAddress);
+      commander = await deploy("TestRemoteCommander", await root.host(), ethers.ZeroAddress);
+    });
+
+    it("accepts a deployed commander for ordinary and proxy-bound hosts", async () => {
+      const proxy = await deploy("TestRuntimeProxy");
+      for (const self of [ethers.ZeroAddress, await proxy.getAddress()]) {
+        const host = await deploy("TestRemoteCommander", await commander.host(), self);
+        expect(await host.remoteCommander()).eq(await commander.getAddress());
+        if (self !== ethers.ZeroAddress) {
+          await proxy.upgrade(await host.getAddress());
+          expect(await host.attach(self).remoteCommander()).eq(await commander.getAddress());
+        }
+      }
+    });
+
+    it("rejects implicit and explicit self-management, including the proxy execution address", async () => {
+      await expect(deploy("TestRemoteCommander", 0, ethers.ZeroAddress))
+        .to.be.revertedWithCustomError(commander, "InvalidCommander");
+      const signer = await getSigner();
+      const predicted = ethers.getCreateAddress({ from: await signer.getAddress(), nonce: await signer.getNonce() });
+      await expect(deploy("TestRemoteCommander", await hostId(predicted), ethers.ZeroAddress))
+        .to.be.revertedWithCustomError(commander, "InvalidCommander");
+      const proxy = await deploy("TestRuntimeProxy");
+      for (const cmdr of [0n, await hostId(proxy)]) {
+        await expect(deploy("TestRemoteCommander", cmdr, await proxy.getAddress()))
+          .to.be.revertedWithCustomError(commander, "InvalidCommander");
+      }
+    });
+
+    it("rejects commanders without deployed bytecode", async () => {
+      for (const target of [await (await getSigner(1)).getAddress(), ethers.toBeHex(0x1234, 20)]) {
+        await expect(deploy("TestRemoteCommander", await hostId(target), ethers.ZeroAddress))
+          .to.be.revertedWithCustomError(commander, "InvalidContract");
+      }
+    });
+
+    it("requires a canonical local host ID", async () => {
+      const cmdr = BigInt(await commander.host());
+      for (const invalid of [
+        cmdr ^ (1n << 192n), // Foreign chain.
+        cmdr | (1n << 160n), // Nonzero selector.
+        cmdr | (1n << 224n), // Host flags.
+        cmdr ^ (1n << 232n), // Different node subtype.
+      ]) {
+        await expect(deploy("TestRemoteCommander", invalid, ethers.ZeroAddress))
+          .to.be.revertedWithCustomError(commander, "InvalidId");
+      }
+    });
+  });
+
   for (const explicit of [false, true]) {
     it(`binds inherited identities to ${explicit ? "an explicit execution address" : "the deployment address"}`, async () => {
       const self = explicit ? await (await getSigner(1)).getAddress() : ethers.ZeroAddress;

@@ -36,6 +36,14 @@ contract TestRuntime is Host, Pipeline, ExecuteAuthorize, CreditAccountPort, Get
     function announce(uint node) external { introduceTo(node, "TestRuntime"); }
 }
 
+contract TestRemoteCommander is TestRuntime {
+    address public immutable remoteCommander;
+
+    constructor(uint cmdr, address self) TestRuntime(cmdr, self) {
+        remoteCommander = ensureRemoteCommander();
+    }
+}
+
 contract TestRuntimeV2 is TestRuntime {
     uint public immutable markId;
     uint public markers;

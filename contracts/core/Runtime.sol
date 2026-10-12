@@ -15,6 +15,9 @@ abstract contract ChainAsset {
 /// @title Runtime
 /// @notice Shared runtime for host and chain asset identities.
 abstract contract Runtime is ChainAsset {
+    /// @dev Commander does not satisfy the host's external-commander policy.
+    error InvalidCommander();
+
     /// @dev This contract's host node ID, derived from `self` at construction.
     uint public immutable host;
 
@@ -31,6 +34,16 @@ abstract contract Runtime is ChainAsset {
         host = Nodes.toHost(self);
         commander = cmdr == 0 ? host : cmdr;
         commanderAddr = Nodes.hostAddr(commander);
+    }
+
+    /// @notice Require a deployed commander host distinct from this runtime's execution address.
+    /// @dev Opt-in policy for inheriting constructors. Remote means another host on the
+    /// current chain. Rejects self-management with InvalidCommander and validates the
+    /// canonical host ID and deployed bytecode via Nodes.ensureContract; no interface check.
+    /// @return target Validated commander contract address.
+    function ensureRemoteCommander() internal view returns (address target) {
+        if (commanderAddr == hostAddr()) revert InvalidCommander();
+        return Nodes.ensureContract(commander);
     }
 
     /// @notice Execution address embedded in this runtime's host node.

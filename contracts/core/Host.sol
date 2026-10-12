@@ -66,9 +66,6 @@ abstract contract HostIntroduction is HostAnnouncer, IHostIntroduction {
 /// introductions, generic execution, or a native-token receive function.
 /// Pipelines must separately compose a `CommandAccess` policy.
 abstract contract CommandHost is CallerAccess, HostAnnouncer {
-    /// @dev Thrown when a commander-only host is deployed without an external commander.
-    error InvalidCommander();
-
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
     /// @param name Discovery hint emitted only when introducing this host.
     constructor(uint cmdr, string memory name) Runtime(cmdr, address(0)) HostAnnouncer(name) {

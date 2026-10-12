@@ -68,6 +68,13 @@ host and endpoint identities then use that address. `hostAddr()` returns the
 address embedded in `host`, and `hostAccount()` derives its account identity.
 `CommandHost(cmdr, name)` continues to use its own deployment address.
 
+Hosts can call `ensureRemoteCommander()` in their constructor to require a
+canonical commander host ID on the current chain with deployed bytecode at a
+different execution address. The helper returns the commander address and rejects
+self-management (including `cmdr = 0`) with `InvalidCommander`. It uses `hostAddr()`
+for the self check, including proxy-bound hosts. This opt-in policy validates
+deployment, not a host interface.
+
 Proxy-bound implementations skip constructor-time introductions; those must be
 made through the proxy. Constructor metadata is still emitted by the implementation.
 The application supplies the proxy, initialization, upgrade authorization, and
