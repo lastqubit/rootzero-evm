@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.55.0
+
 - **Breaking: expand swap command and hook names to Input/Output.** Rename
   `swapExactIn` / `swapExactOut` to `swapExactInput` / `swapExactOutput`, with
   matching `SwapExactInput` / `SwapExactOutput` mixins and hook names. External
