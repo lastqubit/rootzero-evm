@@ -11,7 +11,7 @@ import "./helpers/matchers.js";
 
 describe("Swap commands", () => {
   const asset = ethers.toBeHex(1, 32), middle = ethers.toBeHex(2, 32), output = ethers.toBeHex(3, 32);
-  const counterparty = ethers.toBeHex(4, 32);
+  const counterparty = encodeUserAccount(ethers.toBeHex(4, 20));
   let host: Awaited<ReturnType<typeof deploy>>;
   let account: string;
   beforeEach(async () => {
@@ -22,10 +22,29 @@ describe("Swap commands", () => {
     await host.configure(0n, 0n);
   });
 
-  for (const method of ["swapExactIn", "swapExactOut"]) {
-    const exactIn = method === "swapExactIn";
-    const specifiedAsset = exactIn ? asset : output;
-    const finalHop = exactIn ? output : asset;
+  it("rejects zero and non-account counterparties at deployment", async () => {
+    const commander = await hostId(await (await getSigner()).getAddress());
+    for (const value of [ethers.ZeroHash, asset, pad32(commander)]) {
+      await expect(deploy("TestSwapCommands", commander, value))
+        .to.be.revertedWithCustomError(host, "InvalidAccount");
+    }
+  });
+
+  it("preserves opaque account counterparties in both swap outputs", async () => {
+    const opaque = "0x0201ff" + "ab".repeat(29);
+    const commander = await hostId(await (await getSigner()).getAddress());
+    const opaqueHost = await deploy("TestSwapCommands", commander, opaque);
+    const context = encodeContextBlock(account, "0x", encodeSwapBlock(asset, 100n));
+    for (const method of ["swapExactInput", "swapExactOutput"]) {
+      expect(await opaqueHost[method].staticCall(context))
+        .deep.eq([encodePositionBlock(asset, 100n, asset, 100n, opaque), 0n]);
+    }
+  });
+
+  for (const method of ["swapExactInput", "swapExactOutput"]) {
+    const exactInput = method === "swapExactInput";
+    const specifiedAsset = exactInput ? asset : output;
+    const finalHop = exactInput ? output : asset;
     it(`${method} publishes the shared SWAP input, POSITION output, logging flags and name`, async () => {
       const id = await commandId(method + "(bytes)", host);
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
@@ -36,7 +55,7 @@ describe("Swap commands", () => {
         .some((value: { entity: bigint; data: string }) => value.entity === id && value.data === encodeActionBlock(80n))).eq(false);
     });
 
-    const result = (start: string, quantity: bigint, end: string, returned: bigint) => exactIn
+    const result = (start: string, quantity: bigint, end: string, returned: bigint) => exactInput
       ? encodePositionBlock(end, returned, start, quantity, counterparty)
       : encodePositionBlock(start, quantity, end, returned, counterparty);
     const callsFrom = (receipt: any) => receipt.logs.filter((log: any) => log.topics.length > 0)
@@ -49,13 +68,13 @@ describe("Swap commands", () => {
       const routes = [[finalHop], [middle, other, finalHop], [middle, specifiedAsset, middle, finalHop]];
       for (const hops of routes) {
         const quantity = 100n;
-        const delta = exactIn ? -3n : 3n;
+        const delta = exactInput ? -3n : 3n;
         const context = encodeContextBlock(account, "0x", encodeSwapBlock(specifiedAsset, quantity, ...hops));
         const expectedOutput = result(specifiedAsset, quantity, finalHop, quantity + delta * BigInt(hops.length));
         expect(await host[method].staticCall(context)).deep.eq([expectedOutput, 0n]);
         const receipt = await (await host[method](context)).wait();
         expect(callsFrom(receipt)).deep.eq(hops.map((hop, i) => [
-          exactIn, i === 0 ? specifiedAsset : hops[i - 1], quantity + delta * BigInt(i), hop,
+          exactInput, i === 0 ? specifiedAsset : hops[i - 1], quantity + delta * BigInt(i), hop,
         ]));
         expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
           concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)),
@@ -121,8 +140,8 @@ describe("Swap commands", () => {
       expect(await host[method].staticCall(context)).deep.eq([expectedOutput, 0n]);
       const receipt = await (await host[method](context)).wait();
       expect(callsFrom(receipt)).deep.eq([
-        [exactIn, specifiedAsset, 10n, middle],
-        [exactIn, middle, 20n, finalHop],
+        [exactInput, specifiedAsset, 10n, middle],
+        [exactInput, middle, 20n, finalHop],
       ]);
       expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
         concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput))]);

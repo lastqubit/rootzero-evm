@@ -458,24 +458,47 @@ reduce the fulfilled quantity. When fulfillment produces custody, the amount
 that actually reaches custody must equal the debt. Partial fulfillment requires
 preserving the unsatisfied remainder in a position rather than consuming it.
 
-`SwapExactIn` and `SwapExactOut` in `commands/Swap.sol` share the input schema
+`SwapExactInput` and `SwapExactOutput` in `commands/Swap.sol` share the input schema
 `bytes32 asset, uint amount, many #asset as hops` and return one POSITION per
-SWAP input. For `swapExactIn`, `asset` and `amount` identify the input liability
-and exact debt; hops run forward toward the output asset. For `swapExactOut`,
+SWAP input. For `swapExactInput`, `asset` and `amount` identify the input liability
+and exact debt; hops run forward toward the output asset. For `swapExactOutput`,
 `asset` and `amount` identify the desired output; hops run in reverse toward
 the input asset. Both routes exclude the asset named in the fixed fields.
-For an A ? B ? C swap, exact-in encodes A with hops [B, C], while exact-out
+For an A -> B -> C swap, exact-input encodes A with hops [B, C], while exact-output
 encodes C with hops [B, A].
 Commands validate each ASSET block. Empty routes call no hook and produce a
 Position with equal asset/liability and amount/debt; the position is still returned
-and logged, and normal settlement rules apply. The exact-in
+and logged, and normal settlement rules apply. The exact-input
 hook takes `(liability, debt, asset)` and returns the amount received; the
-exact-out hook takes `(asset, amount, liability)` and returns the debt required.
+exact-output hook takes `(asset, amount, liability)` and returns the debt required.
 The command feeds each result into the next hop and builds one aggregate Position
 using the shared immutable `Counterparty`. A concrete host initializes that base
 with `Counterparty(account)` once, even when it inherits both swap commands.
+The constructor validates the account category with `Accounts.account`, rejecting
+zero and non-account identifiers.
 Hooks validate amounts and asset pairs and settle intermediate assets internally.
 Use position-constraint commands to check the resulting amounts separately.
+
+`SwapAssetExactInput` and `SwapDebtExactOutput` transform existing POSITION state,
+pairing each position with exactly one LIST of ASSET blocks in input. Routes
+exclude the starting asset. `swapAssetExactInput` starts from `position.asset` and
+`position.amount`, walking forward through the list with the same exact-input hook:
+`swapExactInput(currentAsset, exactAmount, nextAsset)` returns the next amount.
+It updates only asset and amount, preserving liability, debt, and counterparty.
+`swapDebtExactOutput` starts from `position.liability` and `position.debt`, walking
+backward along the payment path in list order with the same exact-output hook:
+`swapExactOutput(currentLiability, exactDebt, nextPaymentAsset)` returns the next debt.
+For payment A through B to satisfy an existing debt in C, supply [B, A]. It updates
+only liability and debt, preserving asset, amount, and counterparty.
+
+Both commands require every incoming counterparty to equal the host's configured
+`Counterparty`, reverting `UnexpectedValue` on mismatch even for an empty route.
+An empty route leaves the position unchanged without calling a hook. Empty state
+with empty input is valid after access checks. Outputs preserve position order
+and use OUTPUT logging. Malformed blocks, unmatched positions/routes, and trailing
+data revert the batch. All four swap commands can share one implementation of
+each hook and one `Counterparty(account)` initialization. Pricing, amount and
+pair validation, reserves, custody, and settlement remain host responsibilities.
 
 The standard `Deposit` mixin shows the canonical shape: open the execution,
 decode its input, call the hook, and write the output run. Execution helpers

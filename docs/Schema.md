@@ -1393,14 +1393,14 @@ inputs must be re-encoded with the new key; scalar `#amount` accepts exactly
 deployments using the schemas applicable to those deployments.
 
 `#swap` contains an asset and amount followed by a LIST of ASSET blocks.
-`swapExactIn` interprets the fixed fields as the input liability and exact debt,
-with hops in forward order ending at the output asset. `swapExactOut` interprets
+`swapExactInput` interprets the fixed fields as the input liability and exact debt,
+with hops in forward order ending at the output asset. `swapExactOutput` interprets
 them as the desired output asset and amount, with hops in reverse order ending
-at the input asset. Hops excludes the asset named in the fixed fields: A ? B ? C
-is encoded as A with [B, C] for exact-in, or C with [B, A] for exact-out.
+at the input asset. Hops exclude the asset named in the fixed fields: A -> B -> C
+is encoded as A with [B, C] for exact-input, or C with [B, A] for exact-output.
 The codec validates the outer container and final LIST framing. The commands
 accept empty routes, validate each ASSET block and invoke one scalar hook
-per hop. Exact-in carries the returned amount forward; exact-out carries the
+per hop. Exact-input carries the returned amount forward; exact-output carries the
 returned debt backward. Hooks validate amounts and asset pairs and settle
 intermediate assets internally. Each command produces one aggregate Position
 with its immutable Counterparty; position constraints remain separate commands.
