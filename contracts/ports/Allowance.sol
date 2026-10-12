@@ -28,6 +28,8 @@ abstract contract RequestAllowancePort is PortBase, AllowanceHook {
         return runPort(id, descriptor, data, portRequestAllowanceOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT item for the RequestAllowancePort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portRequestAllowanceOne(Execution memory exec) private {
         uint peer = caller();
         (bytes32 asset, uint amount) = exec.unpackAssetAmount();

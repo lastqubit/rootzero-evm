@@ -8,6 +8,7 @@ import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 using Executions for Execution;
 using Blocks for uint;
 
+/// @title RelayPayableHook
 /// @notice Hook implemented by hosts that relay command contexts.
 abstract contract RelayPayableHook {
     /// @notice Override to relay a complete destination command context.
@@ -43,10 +44,15 @@ abstract contract RelayPayable is CommandBase, RelayPayableHook {
     }
 
     /// @notice Relay one RELAY input block with the command account and empty state.
+    /// @param context Exactly one CONTEXT block containing the account, state, and input streams.
+    /// @return Empty output state.
+    /// @return Remaining native-value budget, in wei.
     function relayPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
         return runCommandOnce(id, descriptor, context, relayPayableOnce);
     }
 
+    /// @dev Decode the relay input and forward its continuation with empty state.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function relayPayableOnce(Execution memory exec) private {
         (uint inputCur, uint stepsCur) = exec.unpackRelay();
         relay(exec.account, inputCur, Encoder.createContext(exec.account, 0, stepsCur), exec);
@@ -74,6 +80,8 @@ abstract contract RelayBalancePayable is CommandBase, RelayPayableHook {
         return runCommandOnce(id, descriptor, context, relayBalancePayableOnce);
     }
 
+    /// @dev Consume balance state and forward it with the relay continuation.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function relayBalancePayableOnce(Execution memory exec) private {
         (uint inputCur, uint stepsCur) = exec.unpackRelay();
         uint stateCur = exec.takeBalances();

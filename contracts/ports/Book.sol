@@ -31,6 +31,8 @@ abstract contract BookPort is PortBase, BookHook {
         return runPort(id, descriptor, data, portBookOne);
     }
 
+    /// @dev Process one BOOKING item for the BookPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portBookOne(Execution memory exec) private {
         book(exec.unpackBooking());
     }

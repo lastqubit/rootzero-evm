@@ -6,6 +6,7 @@ import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
 
 using Executions for Execution;
 
+/// @title AllowanceHook
 /// @notice Hook implemented by hosts that configure peer asset allowances.
 abstract contract AllowanceHook {
     /// @notice Apply or revoke one host-scoped allowance.
@@ -40,6 +41,8 @@ abstract contract Allowance is AdminBase, AllowanceHook {
         return runAdmin(id, descriptor, context, allowanceOne);
     }
 
+    /// @dev Process one ALLOWANCE item for the Allowance endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function allowanceOne(Execution memory exec) private {
         (uint peer, bytes32 asset, uint amount) = exec.unpackAllowance();
         allowance(peer, asset, amount);

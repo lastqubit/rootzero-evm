@@ -40,8 +40,11 @@ struct Execution {
     /// @dev Trusted active account; context decoding checks structure, not account format.
     /// Untrusted account input must be validated at entry before internal execution.
     bytes32 account;
+    /// @dev Remaining native-value budget, in wei.
     uint budget;
+    /// @dev Packed calldata cursor over unconsumed input blocks.
     uint input;
+    /// @dev Packed calldata cursor over unconsumed state blocks.
     uint state;
     /// @dev Written offset:32, capacity:32, output start offset:32. The optional
     /// event prefix shares the buffer; Encoder preserves the upper cursor metadata.
@@ -64,10 +67,15 @@ library Executions {
 
     /// @dev Internal execution flags; distinct from public endpoint Flags.
     uint internal constant StateSource = 1 << 0;
+    /// @dev Internal descriptor flag selecting the STATE log lane.
     uint private constant LogState = 1 << 1;
+    /// @dev Internal descriptor flag selecting the INPUT log lane.
     uint private constant LogInput = 1 << 2;
+    /// @dev Internal descriptor flag selecting the OUTPUT log lane.
     uint private constant LogOutput = 1 << 3;
+    /// @dev Internal descriptor flag enabling an execution record.
     uint private constant LogEnabled = 1 << 4;
+    /// @dev Internal descriptor flag allowing byte-for-byte output capacity estimation.
     uint internal constant ByteCapacity = 1 << 5;
 
     /// @notice Precompute allocation hints and explicit logging selections for execution.
@@ -76,7 +84,12 @@ library Executions {
     /// Declared state takes precedence over input, even when supplied state is empty.
     /// Zero output size disables preallocation; no source reserves one output block.
     /// State/input/output may carry low 32-bit lane keys, ignored by the descriptor.
-    /// Flags contains the complete endpoint identity flags byte.
+    /// The low byte contains internal source, capacity, and logging selections.
+    /// This overload disables execution logging.
+    /// @param state State block specification or named lane.
+    /// @param input Input block specification or named lane.
+    /// @param output Output block specification or named lane.
+    /// @return descriptor Packed source and output allocation hints with internal execution flags.
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
         return describe(state, input, output, 0);
     }
@@ -84,6 +97,11 @@ library Executions {
     /// @notice Describe block specs or named lanes and one endpoint-wide logging policy.
     /// @dev Logging bits 2-5 select records; lane bits require Logs.Execution.
     /// Only one byte is accepted; behavior bits do not affect the logging descriptor.
+    /// @param state State block specification or named lane.
+    /// @param input Input block specification or named lane.
+    /// @param output Output block specification or named lane.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return descriptor Packed source and output allocation hints with internal execution flags.
     function describe(uint state, uint input, uint output, uint flags)
         internal pure returns (uint descriptor)
     {
@@ -108,6 +126,10 @@ library Executions {
     /// @dev Initialize one writer for optional log prefix and returned output.
     /// Sources remain calldata cursors. Snapshot selected lanes once, before callbacks.
     /// All endpoint kinds share the same account-bearing header.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @param capacity Logical output capacity, in bytes.
+    /// @param context Whether the execution has a CONTEXT state lane to include in logging.
     function initOutput(Execution memory exec, uint descriptor, uint capacity, bool context) private pure {
         if (descriptor & LogEnabled == 0) {
             (exec.buffer, exec.output) = Encoder.init(capacity);
@@ -131,11 +153,15 @@ library Executions {
 
     /// @notice Relative start of the output payload within the shared writer.
     /// @dev Zero for an unlogged writer. Survives Encoder reserve/grow operations.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return Byte offset of returned output within the shared buffer.
     function outputOffset(Execution memory exec) internal pure returns (uint) {
         return uint32(exec.output >> 64);
     }
 
     /// @dev Patch only the trailing header bytes, preserving preceding context and output.
+    /// @param abs Absolute memory byte position; not a packed cursor.
+    /// @param size Final OUTPUT payload length, in bytes.
     function sealOutput(uint abs, uint size) private pure {
         uint header = (uint(uint32(Keys.Output)) << 32) | size;
         assembly ("memory-safe") {
@@ -146,6 +172,9 @@ library Executions {
 
     /// @dev Emit the initialized prefix and selected output before exposing returned bytes.
     /// Reacquires the buffer address after growth. Prefix is consumed by finish.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param id Registered endpoint node identifier.
+    /// @param descriptor Packed allocation hints and execution logging selections.
     function emitExecution(Execution memory exec, uint id, uint descriptor) private {
         uint prefix = outputOffset(exec);
         uint size = prefix;
@@ -158,6 +187,10 @@ library Executions {
     }
 
     /// @dev Capacity is only a hint; decoding validates the stream and buffers can grow.
+    /// @param input Bounded calldata cursor over the input stream.
+    /// @param state Bounded calldata cursor over the state stream.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @return capacity Suggested initial output capacity, in bytes.
     function outputCapacity(uint input, uint state, uint descriptor) private pure returns (uint capacity) {
         if (uint32(descriptor >> 160) == 0) return 0;
         if (descriptor & ByteCapacity != 0) return Encoder.length(descriptor & StateSource != 0 ? state : input);
@@ -282,6 +315,7 @@ library Executions {
     // Source cursors must come from opening helpers or another validated calldata range.
 
     /// @dev Mark a range already validated by an exact selector fully consumed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function exhaustInput(Execution memory exec) private pure {
         exec.input = Cursors.exhaust(exec.input);
     }
@@ -290,6 +324,9 @@ library Executions {
 
     /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
     /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @param amount Number of source bytes to consume.
     /// @return abs Original payload address; amount bytes are safe to read.
     /// @return payloadCur Clean cursor over the payload after the prefix.
     function enter(Execution memory exec, uint spec, uint amount) internal pure returns (uint abs, uint payloadCur) {
@@ -298,6 +335,9 @@ library Executions {
 
     /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
     /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param key Block key.
+    /// @param amount Number of source bytes to consume.
     /// @return abs Original payload address; amount bytes are safe to read.
     /// @return payloadCur Clean cursor over the payload after the prefix.
     function enter(Execution memory exec, bytes4 key, uint amount) internal pure returns (uint abs, uint payloadCur) {
@@ -306,6 +346,9 @@ library Executions {
 
     /// @notice Consume one block, validate a fixed prefix, and select its remaining payload.
     /// @dev Blocks validates the block and prefix once. Input advances past the parent.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @param amount Number of source bytes to consume.
     /// @return abs Original payload address; amount bytes are safe to read.
     /// @return payloadCur Clean cursor over the payload after the prefix.
     function enterFixed(
@@ -318,6 +361,11 @@ library Executions {
 
     /// @notice Consume the entire input as one matching block and select its fixed prefix and tail.
     /// @dev Reuses Blocks exact validation; no separate source-bound check is needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @param amount Number of source bytes to consume.
+    /// @return abs Absolute calldata position of the selected bytes.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function enterExact(
         Execution memory exec,
         uint spec,
@@ -329,30 +377,44 @@ library Executions {
 
     /// @notice Consume one input block and return its complete encoding as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function take(Execution memory exec) internal pure returns (uint blockCur) {
         (blockCur, exec.input) = exec.input.take();
     }
 
     /// @notice Consume one input block and return its complete encoding as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function take(Execution memory exec, uint spec) internal pure returns (uint blockCur) {
         (blockCur, exec.input) = exec.input.take(spec);
     }
 
     /// @notice Consume one input block and return its complete encoding as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param key Block key.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function take(Execution memory exec, bytes4 key) internal pure returns (uint blockCur) {
         (blockCur, exec.input) = exec.input.take(key);
     }
 
     /// @notice Consume one input block and return its complete encoding as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function takeFixed(Execution memory exec, uint header) internal pure returns (uint blockCur) {
         (blockCur, exec.input) = exec.input.takeFixed(header);
     }
 
     /// @notice Consume the entire input as one matching block and return its complete encoding as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function takeExact(Execution memory exec, uint spec) internal pure returns (uint blockCur) {
         blockCur = exec.input.takeExact(spec);
         exhaustInput(exec);
@@ -360,6 +422,9 @@ library Executions {
 
     /// @notice Consume the entire input as one exact-header block and return its complete encoding.
     /// @dev Delegates validation to Blocks; returns a clean child and preserves input metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return blockCur Clean calldata cursor over the complete block, including its header.
     function takeFixedExact(Execution memory exec, uint header) internal pure returns (uint blockCur) {
         blockCur = exec.input.takeFixedExact(header);
         exhaustInput(exec);
@@ -368,6 +433,9 @@ library Executions {
     /// @notice Validate and consume all remaining input blocks with key.
     /// @dev Empty streams pass. Validates the requested key regardless of descriptor
     /// declarations; close still rejects any source bytes left unread.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param key Block key.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function takeInput(Execution memory exec, bytes4 key) internal pure returns (uint inputCur) {
         inputCur = exec.input;
         inputCur.expectRun(key);
@@ -376,6 +444,9 @@ library Executions {
 
     /// @notice Validate and consume all remaining input blocks with an exact header.
     /// @dev Shares takeInput's empty-stream behavior; descriptor declarations do not affect validation.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function takeInputFixed(Execution memory exec, uint header) internal pure returns (uint inputCur) {
         inputCur = exec.input;
         inputCur.expectRunFixed(header);
@@ -385,6 +456,9 @@ library Executions {
     /// @notice Validate and consume all remaining state blocks with key.
     /// @dev Empty streams pass. Validates the requested key regardless of descriptor
     /// declarations; close still rejects any source bytes left unread.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param key Block key.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
     function takeState(Execution memory exec, bytes4 key) internal pure returns (uint stateCur) {
         stateCur = exec.state;
         stateCur.expectRun(key);
@@ -393,6 +467,9 @@ library Executions {
 
     /// @notice Validate and consume all remaining state blocks with an exact header.
     /// @dev Shares takeState's empty-stream behavior; descriptor declarations do not affect validation.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
     function takeStateFixed(Execution memory exec, uint header) internal pure returns (uint stateCur) {
         stateCur = exec.state;
         stateCur.expectRunFixed(header);
@@ -401,30 +478,44 @@ library Executions {
 
     /// @notice Validate and consume the remaining state as BALANCE blocks.
     /// @dev Returns a clean stream cursor; shares takeStateFixed's lane behavior.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
     function takeBalances(Execution memory exec) internal pure returns (uint stateCur) {
         return takeStateFixed(exec, Headers.Balance);
     }
 
     /// @notice Consume one input block and return its payload as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpack(Execution memory exec, uint spec) internal pure returns (uint payloadCur) {
         (payloadCur, exec.input) = exec.input.unpack(spec);
     }
 
     /// @notice Consume one input block and return its payload as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param key Block key.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpack(Execution memory exec, bytes4 key) internal pure returns (uint payloadCur) {
         (payloadCur, exec.input) = exec.input.unpack(key);
     }
 
     /// @notice Consume one input block and return its payload as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackFixed(Execution memory exec, uint header) internal pure returns (uint payloadCur) {
         (payloadCur, exec.input) = exec.input.unpackFixed(header);
     }
 
     /// @notice Consume the entire input as one matching block and return its payload as a cursor.
     /// @dev Delegates validation to Blocks; the returned range has no metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackExact(Execution memory exec, uint spec) internal pure returns (uint payloadCur) {
         payloadCur = exec.input.unpackExact(spec);
         exhaustInput(exec);
@@ -432,17 +523,25 @@ library Executions {
 
     /// @notice Consume the entire input as one exact-header block and return its payload.
     /// @dev Delegates validation to Blocks; returns a clean child and preserves input metadata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param header Right-aligned 8-byte block header containing the key and exact payload size.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackFixedExact(Execution memory exec, uint header) internal pure returns (uint payloadCur) {
         payloadCur = exec.input.unpackFixedExact(header);
         exhaustInput(exec);
     }
 
     /// @notice Consume a LIST and return its clean payload cursor.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return itemsCur Clean calldata cursor over the list payload.
     function unpackList(Execution memory exec) internal pure returns (uint itemsCur) {
         (itemsCur, exec.input) = exec.input.unpackList();
     }
 
     /// @notice Consume a custom list and return its clean payload cursor.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @return itemsCur Clean calldata cursor over the list payload.
     function unpackList(Execution memory exec, uint spec) internal pure returns (uint itemsCur) {
         return unpack(exec, spec);
     }
@@ -451,6 +550,9 @@ library Executions {
 
     /// @notice Advance input by a raw byte count and return its previous absolute position.
     /// @dev Validates containment once; no block header or schema is inspected.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param amount Number of source bytes to consume.
+    /// @return abs Absolute calldata position of the selected bytes.
     function advance(Execution memory exec, uint amount) internal pure returns (uint abs) {
         (abs, exec.input) = Cursors.enter(exec.input, amount);
     }
@@ -469,6 +571,9 @@ library Executions {
 
     /// @notice Consume one BALANCE_CONSTRAINTS input and check an asset and amount directly against calldata.
     /// @dev Validates the header and containment once before asset and quantity checks.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
     function expectBalanceConstraints(Execution memory exec, bytes32 asset, uint amount) internal pure {
         exec.input = exec.input.expectBalanceConstraints(asset, amount);
     }
@@ -523,6 +628,7 @@ library Executions {
     }
 
     /// @notice Decode and consume one LIMITS block.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     /// @return limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function unpackLimits(Execution memory exec) internal pure returns (uint limits) {
         (limits, exec.input) = exec.input.unpackLimits();
@@ -614,6 +720,9 @@ library Executions {
     }
 
     /// @notice Decode one PIPELINE block from input and advance the input cursor.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return account Account identifier.
+    /// @return budget Native-value budget, in wei.
     function unpackPipeline(Execution memory exec) internal pure returns (bytes32 account, uint budget) {
         (account, budget, exec.input) = exec.input.unpackPipeline();
     }
@@ -729,11 +838,17 @@ library Executions {
     }
 
     /// @notice Decode and consume one BALANCE_CONSTRAINTS input without enforcing its bounds.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return value Decoded BalanceConstraints value in independent memory.
     function unpackBalanceConstraints(Execution memory exec) internal pure returns (BalanceConstraints memory value) {
         (value, exec.input) = exec.input.unpackBalanceConstraints();
     }
 
     /// @notice Decode and consume one QUOTE_REQUEST input as scalar values.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
+    /// @return liability Liability asset identifier.
     function unpackQuoteRequest(Execution memory exec)
         internal pure returns (bytes32 asset, uint amount, bytes32 liability)
     {
@@ -741,6 +856,11 @@ library Executions {
     }
 
     /// @notice Decode and consume one QUOTE input with full-width asset and liability quantities.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
+    /// @return liability Liability asset identifier.
+    /// @return debt Quantity in the liability's native units.
     function unpackQuote(
         Execution memory exec
     ) internal pure returns (bytes32 asset, uint amount, bytes32 liability, uint debt) {
@@ -748,6 +868,8 @@ library Executions {
     }
 
     /// @notice Decode one QUOTE into its structured value.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return quote Decoded Quote value in independent memory.
     function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
         (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
     }
@@ -772,6 +894,8 @@ library Executions {
     }
 
     /// @notice Decode POSITION_CONSTRAINTS with exact denominations and inclusive full-width bounds.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return value Decoded PositionConstraints value in independent memory.
     function unpackPositionConstraints(Execution memory exec) internal pure returns (PositionConstraints memory value) {
         (value, exec.input) = exec.input.unpackPositionConstraints();
     }
@@ -798,6 +922,8 @@ library Executions {
 
     /// @notice Decode and consume one BOOKING input block into independent memory.
     /// @dev Validates both legs before advancing input; accounts follow caller policy.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return value Decoded Booking value in independent memory.
     function unpackBooking(Execution memory exec) internal pure returns (Booking memory value) {
         (value, exec.input) = exec.input.unpackBooking();
     }
@@ -809,6 +935,8 @@ library Executions {
     /// @notice Decode BYTES and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackBytes(Execution memory exec) internal pure returns (uint payloadCur) {
         (payloadCur, exec.input) = exec.input.unpackBytes();
     }
@@ -816,6 +944,8 @@ library Executions {
     /// @notice Decode STRING and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return textCur Clean calldata cursor over the string payload.
     function unpackString(Execution memory exec) internal pure returns (uint textCur) {
         (textCur, exec.input) = exec.input.unpackString();
     }
@@ -823,6 +953,9 @@ library Executions {
     /// @notice Decode RELAY and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
+    /// @return stepsCur Clean calldata cursor over the continuation STEP stream.
     function unpackRelay(Execution memory exec) internal pure returns (uint inputCur, uint stepsCur) {
         (inputCur, stepsCur, exec.input) = exec.input.unpackRelay();
     }
@@ -830,6 +963,9 @@ library Executions {
     /// @notice Decode SCHEMA and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return spec Packed block specification or named lane.
+    /// @return bodyCur Clean calldata cursor over the schema STRING payload.
     function unpackSchema(Execution memory exec) internal pure returns (uint spec, uint bodyCur) {
         (spec, bodyCur, exec.input) = exec.input.unpackSchema();
     }
@@ -837,6 +973,10 @@ library Executions {
     /// @notice Decode CONTEXT and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return account Account identifier.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function unpackContext(
         Execution memory exec
     ) internal pure returns (bytes32 account, uint stateCur, uint inputCur) {
@@ -846,12 +986,20 @@ library Executions {
     /// @notice Decode STEP and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return cmd Command node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function unpackStep(Execution memory exec) internal pure returns (uint cmd, uint value, uint inputCur) {
         (cmd, value, inputCur, exec.input) = exec.input.unpackStep();
     }
 
     /// @notice Consume SWAP input and return its fixed fields and LIST payload cursor.
     /// @dev Validates structural encoding; the caller validates hop blocks and route semantics.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
+    /// @return hopsCur Clean calldata cursor over the hop LIST payload.
     function unpackSwap(Execution memory exec) internal pure returns (bytes32 asset, uint amount, uint hopsCur) {
         (asset, amount, hopsCur, exec.input) = exec.input.unpackSwap();
     }
@@ -859,6 +1007,10 @@ library Executions {
     /// @notice Decode CALL and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return target Target node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackCall(Execution memory exec) internal pure returns (uint target, uint value, uint payloadCur) {
         (target, value, payloadCur, exec.input) = exec.input.unpackCall();
     }
@@ -866,6 +1018,10 @@ library Executions {
     /// @notice Decode DISPATCH and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return portal Transport portal node identifier.
+    /// @return resources Transport resource descriptor.
+    /// @return payloadCur Clean calldata cursor over the payload.
     function unpackDispatch(
         Execution memory exec
     ) internal pure returns (uint portal, uint resources, uint payloadCur) {
@@ -875,6 +1031,11 @@ library Executions {
     /// @notice Decode RECOVER and retain dynamic payloads as calldata cursors.
     /// @dev Blocks validates and advances input once; returned payload cursors
     /// exclude child headers and have no metadata. Convert only when bytes/text are needed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return handler Recovery handler node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return key Forwarding or recovery lookup key.
+    /// @return witnessCur Clean calldata cursor over the recovery witness payload.
     function unpackRecover(
         Execution memory exec
     ) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur) {
@@ -954,6 +1115,9 @@ library Executions {
     }
 
     /// @notice Append PIPELINE to output without emitting a log or changing execution context.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param account Account identifier.
+    /// @param budget Native-value budget, in wei.
     function outputPipeline(Execution memory exec, bytes32 account, uint budget) internal pure {
         (exec.buffer, exec.output) = exec.output.writePipeline(exec.buffer, account, budget);
     }
@@ -974,17 +1138,27 @@ library Executions {
     }
 
     /// @notice Append a LIMITS block with a packed inclusive minimum and maximum.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     /// @param limits Packed inclusive minimum (high 128 bits) and maximum (low 128 bits); meaning is context-dependent.
     function outputLimits(Execution memory exec, uint limits) internal pure {
         (exec.buffer, exec.output) = exec.output.writeLimits(exec.buffer, limits);
     }
 
     /// @notice Append a scalar QUOTE_REQUEST block to execution output.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param liability Liability asset identifier.
     function outputQuoteRequest(Execution memory exec, bytes32 asset, uint amount, bytes32 liability) internal pure {
         (exec.buffer, exec.output) = exec.output.writeQuoteRequest(exec.buffer, asset, amount, liability);
     }
 
     /// @notice Append a QUOTE with full-width asset and liability quantities.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param liability Liability asset identifier.
+    /// @param debt Quantity in the liability's native units.
     function outputQuote(
         Execution memory exec,
         bytes32 asset,
@@ -996,11 +1170,19 @@ library Executions {
     }
 
     /// @notice Append a structured QUOTE.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param quote Quoted asset and liability quantities.
     function outputQuote(Execution memory exec, Quote memory quote) internal pure {
         outputQuote(exec, quote.asset, quote.amount, quote.liability, quote.debt);
     }
 
     /// @notice Append a POSITION block to execution output.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param liability Liability asset identifier.
+    /// @param debt Quantity in the liability's native units.
+    /// @param counterparty Settlement counterparty account, or zero for Rootzero.
     function outputPosition(
         Execution memory exec,
         bytes32 asset,
@@ -1020,11 +1202,15 @@ library Executions {
     }
 
     /// @notice Append a structured POSITION value to execution output.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param value Position fields used by this operation.
     function outputPosition(Execution memory exec, Position memory value) internal pure {
         Encoder.writePositionAt(reserve(exec, Sizes.Position), value);
     }
 
     /// @notice Append one structured BOOKING output block.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param value Booking fields used by this operation.
     function outputBooking(Execution memory exec, Booking memory value) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBooking(exec.buffer, value);
     }
@@ -1046,6 +1232,8 @@ library Executions {
     }
 
     /// @notice Append a structured ASSET_LIABILITY value to execution output.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param value AssetLiability fields used by this operation.
     function outputAssetLiability(Execution memory exec, AssetLiability memory value) internal pure {
         outputAssetLiability(exec, value.asset, value.liability);
     }
@@ -1220,16 +1408,28 @@ library Executions {
     }
 
     /// @notice Append SWAP output, wrapping memory ASSET blocks in LIST.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param hops ASSET hop block stream, excluding the LIST child header.
     function outputSwap(Execution memory exec, bytes32 asset, uint amount, bytes memory hops) internal pure {
         (exec.buffer, exec.output) = exec.output.writeSwapWrap(exec.buffer, asset, amount, hops);
     }
 
     /// @notice Append SWAP output from a complete validated LIST child cursor.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param hopsCur Validated calldata cursor over the complete LIST child, including its header.
     function outputSwap(Execution memory exec, bytes32 asset, uint amount, uint hopsCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeSwap(exec.buffer, asset, amount, hopsCur);
     }
 
     /// @notice Append SWAP output by wrapping a validated ASSET stream cursor in LIST.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param hopsCur Validated calldata cursor over the LIST payload, excluding its header.
     function outputSwapWrap(Execution memory exec, bytes32 asset, uint amount, uint hopsCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeSwapWrap(exec.buffer, asset, amount, hopsCur);
     }
@@ -1304,60 +1504,92 @@ library Executions {
 
     /// @notice Append BLOCK output using a complete validated block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param dataCur Validated calldata cursor over the complete block child, including its header.
     function outputBlock(Execution memory exec, uint dataCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, dataCur);
     }
 
     /// @notice Append LIST output using a complete validated block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the complete LIST child, including its header.
     function outputList(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
     /// @notice Append BYTES output using a complete validated block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the complete BYTES child, including its header.
     function outputBytes(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
     /// @notice Append STRING output using a complete validated block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the complete STRING child, including its header.
     function outputString(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, valueCur);
     }
 
     /// @notice Append STEP output using a complete validated INPUT child block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param cmd Command node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param inputCur Validated calldata cursor over the complete INPUT child, including its header.
     function outputStep(Execution memory exec, uint cmd, uint value, uint inputCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeStep(exec.buffer, cmd, value, inputCur);
     }
 
-    /// @notice Append CALL output using complete validated BYTES child blocks.
+    /// @notice Append CALL output using a complete validated BYTES child block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param target Target node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param payloadCur Validated calldata cursor over the complete BYTES child, including its header.
     function outputCall(Execution memory exec, uint target, uint value, uint payloadCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeCall(exec.buffer, target, value, payloadCur);
     }
 
-    /// @notice Append DISPATCH output using complete validated BYTES child blocks.
+    /// @notice Append DISPATCH output using a complete validated BYTES child block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param portal Transport portal node identifier.
+    /// @param resources Transport resource descriptor.
+    /// @param payloadCur Validated calldata cursor over the complete BYTES child, including its header.
     function outputDispatch(Execution memory exec, uint portal, uint resources, uint payloadCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeDispatch(exec.buffer, portal, resources, payloadCur);
     }
 
     /// @notice Append RELAY output using complete validated INPUT and BYTES child blocks.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param inputCur Validated calldata cursor over the complete INPUT child, including its header.
+    /// @param stepsCur Validated calldata cursor over the complete BYTES child, including its header.
     function outputRelay(Execution memory exec, uint inputCur, uint stepsCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeRelay(exec.buffer, inputCur, stepsCur);
     }
 
     /// @notice Append CONTEXT output using complete validated STATE and INPUT child blocks.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param account Account identifier.
+    /// @param stateCur Validated calldata cursor over the complete STATE child, including its header.
+    /// @param inputCur Validated calldata cursor over the complete INPUT child, including its header.
     function outputContext(Execution memory exec, bytes32 account, uint stateCur, uint inputCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeContext(exec.buffer, account, stateCur, inputCur);
     }
 
-    /// @notice Append RECOVER output using complete validated BYTES child blocks.
+    /// @notice Append RECOVER output using a complete validated BYTES child block.
     /// @dev Cursor ranges include headers and must have the required schema. No revalidation or source advancement.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param handler Recovery handler node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param recoverykey Recovery lookup key.
+    /// @param witnessCur Validated calldata cursor over the complete BYTES child, including its header.
     function outputRecover(
         Execution memory exec,
         uint handler,
@@ -1370,12 +1602,18 @@ library Executions {
 
     /// @notice Append SCHEMA from a complete validated STRING block cursor.
     /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @param bodyCur Validated calldata cursor over the complete STRING child, including its header.
     function outputSchema(Execution memory exec, uint spec, uint bodyCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeSchema(exec.buffer, spec, bodyCur);
     }
 
     /// @notice Append a custom block to execution output by wrapping a validated calldata payload cursor.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @param dataCur Validated calldata cursor over the block payload, excluding its header.
     function outputBlockWrap(Execution memory exec, uint spec, uint dataCur) internal pure {
         Specs.validate(spec, Encoder.length(dataCur));
         (exec.buffer, exec.output) = exec.output.writeBlock(exec.buffer, Specs.key(spec), dataCur);
@@ -1383,54 +1621,84 @@ library Executions {
 
     /// @notice Append a LIST block to execution output by wrapping a validated calldata payload cursor.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the LIST payload, excluding its header.
     function outputListWrap(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeList(exec.buffer, valueCur);
     }
 
     /// @notice Append a BYTES block to execution output by wrapping a validated calldata payload cursor.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the BYTES payload, excluding its header.
     function outputBytesWrap(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeBytes(exec.buffer, valueCur);
     }
 
     /// @notice Append a STRING block to execution output by wrapping a validated calldata payload cursor.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param valueCur Validated calldata cursor over the STRING payload, excluding its header.
     function outputStringWrap(Execution memory exec, uint valueCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeString(exec.buffer, valueCur);
     }
 
     /// @notice Append a STEP block to execution output by wrapping a validated input payload cursor in INPUT.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param cmd Command node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param inputCur Validated calldata cursor over the INPUT payload, excluding its header.
     function outputStepWrap(Execution memory exec, uint cmd, uint value, uint inputCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeStepWrap(exec.buffer, cmd, value, inputCur);
     }
 
     /// @notice Append a CALL block to execution output by wrapping a validated payload cursor in BYTES.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param target Target node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param payloadCur Validated calldata cursor over the BYTES payload, excluding its header.
     function outputCallWrap(Execution memory exec, uint target, uint value, uint payloadCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeCallWrap(exec.buffer, target, value, payloadCur);
     }
 
     /// @notice Append a DISPATCH block to execution output by wrapping a validated payload cursor in BYTES.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param portal Transport portal node identifier.
+    /// @param resources Transport resource descriptor.
+    /// @param payloadCur Validated calldata cursor over the BYTES payload, excluding its header.
     function outputDispatchWrap(Execution memory exec, uint portal, uint resources, uint payloadCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeDispatchWrap(exec.buffer, portal, resources, payloadCur);
     }
 
     /// @notice Append a RELAY block to execution output by wrapping validated payload cursors in INPUT and BYTES.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param inputCur Validated calldata cursor over the INPUT payload, excluding its header.
+    /// @param stepsCur Validated calldata cursor over the BYTES payload, excluding its header.
     function outputRelayWrap(Execution memory exec, uint inputCur, uint stepsCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeRelayWrap(exec.buffer, inputCur, stepsCur);
     }
 
     /// @notice Append a CONTEXT block to execution output by wrapping validated payload cursors in STATE and INPUT.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param account Account identifier.
+    /// @param stateCur Validated calldata cursor over the STATE payload, excluding its header.
+    /// @param inputCur Validated calldata cursor over the INPUT payload, excluding its header.
     function outputContextWrap(Execution memory exec, bytes32 account, uint stateCur, uint inputCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeContextWrap(exec.buffer, account, stateCur, inputCur);
     }
 
     /// @notice Append a RECOVER block to execution output by wrapping a validated witness payload cursor in BYTES.
     /// @dev Sources exclude headers and must be valid calldata ranges; they are not advanced or revalidated.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param handler Recovery handler node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param recoverykey Recovery lookup key.
+    /// @param witnessCur Validated calldata cursor over the BYTES payload, excluding its header.
     function outputRecoverWrap(
         Execution memory exec,
         uint handler,
@@ -1443,6 +1711,9 @@ library Executions {
 
     /// @notice Append SCHEMA from a payload cursor; adds the STRING header.
     /// @dev Source is not advanced or revalidated; its range must belong to calldata.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param spec Packed block specification or named lane.
+    /// @param bodyCur Validated calldata cursor over the STRING payload, excluding its header.
     function outputSchemaWrap(Execution memory exec, uint spec, uint bodyCur) internal pure {
         (exec.buffer, exec.output) = exec.output.writeSchemaWrap(exec.buffer, spec, bodyCur);
     }
@@ -1568,6 +1839,7 @@ library Executions {
 
     /// @notice Require both execution sources to be consumed exactly.
     /// @dev Rejects remaining data and overshot cursors with UnconsumedData.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function expectEnd(Execution memory exec) internal pure {
         Cursors.expectEnd(exec.input);
         Cursors.expectEnd(exec.state);
@@ -1576,6 +1848,8 @@ library Executions {
     /// @notice Finalize output without checking sources or changing the budget.
     /// @dev Ends the writer lifecycle. Caller must establish source consumption
     /// through a complete loop over valid cursors, expectEnd, or close.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return out Final output block stream, excluding the execution log prefix.
     function finish(Execution memory exec) internal pure returns (bytes memory out) {
         if (exec.buffer.length == 0) return Encoder.allocate(0);
         uint offset = outputOffset(exec);
@@ -1593,12 +1867,19 @@ library Executions {
     /// @notice Emit one selected execution record and expose output from the same buffer.
     /// @dev Call once after processing. Absent logging bits disable logging at registration.
     /// Returned bytes exclude the log prefix; no further writes or logging are allowed.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param id Registered endpoint node identifier.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @return out Final output block stream, excluding the execution log prefix.
     function finish(Execution memory exec, uint id, uint descriptor) internal returns (bytes memory out) {
         if (descriptor & LogEnabled != 0) emitExecution(exec, id, descriptor);
         out = finish(exec);
     }
 
     /// @notice Check consumption, finalize output, and return and clear the budget.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return credit Native value returned to the caller budget, in wei.
     function close(Execution memory exec) internal pure returns (bytes memory output, uint credit) {
         expectEnd(exec);
         output = finish(exec);
@@ -1606,6 +1887,11 @@ library Executions {
     }
 
     /// @notice Checked close with descriptor-selected output logging.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
+    /// @param id Registered endpoint node identifier.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return credit Native value returned to the caller budget, in wei.
     function close(
         Execution memory exec,
         uint id,

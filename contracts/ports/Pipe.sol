@@ -12,7 +12,7 @@ import {Execution, Executions} from "../execution/Execution.sol";
 using Executions for Execution;
 using Blocks for uint;
 
-// Canonical selector of the payable pipeline port.
+/// @dev Canonical selector of the payable pipeline port.
 bytes4 constant PortPipePayableSelector = bytes4(keccak256("portPipePayable(bytes)"));
 
 /// @title PipePayablePort

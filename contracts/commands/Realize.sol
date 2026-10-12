@@ -7,6 +7,7 @@ import {Position} from "../core/Types.sol";
 
 using Executions for Execution;
 
+/// @title RealizeHook
 /// @notice Hook implemented by hosts that fulfill an entire position.
 /// @dev Intended for hosts without their own account balance ledger. Ledger hosts
 /// use SettleHook instead; production hosts choose one position-fulfillment model.
@@ -24,6 +25,7 @@ abstract contract RealizeHook {
     function realize(bytes32 account, Position memory position) internal virtual returns (Position memory);
 }
 
+/// @title Realize
 /// @notice Realize each POSITION and return the hook's fulfilled result.
 abstract contract Realize is CommandBase, RealizeHook {
     uint private constant LOGS = Logs.State | Logs.Output;
@@ -44,6 +46,8 @@ abstract contract Realize is CommandBase, RealizeHook {
         return runCommand(id, descriptor, context, realizeOne);
     }
 
+    /// @dev Process one POSITION item for the Realize endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function realizeOne(Execution memory exec) private {
         Position memory position = exec.unpackPositionValue();
         position = realize(exec.account, position);

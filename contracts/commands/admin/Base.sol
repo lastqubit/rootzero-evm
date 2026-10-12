@@ -10,6 +10,9 @@ using Executions for Execution;
 /// @notice Shared base for admin commands.
 abstract contract AdminBase is NodeAccess, CommandBase {
     /// @notice Open and authorize one admin command context.
+    /// @param context Exactly one CONTEXT block containing the account, state, and input streams.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @return exec Initialized command execution with administrative access checked.
     function openAdminCommand(
         bytes calldata context,
         uint descriptor

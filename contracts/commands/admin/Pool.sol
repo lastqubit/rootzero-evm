@@ -7,6 +7,7 @@ import {AssetAmount} from "../../core/Types.sol";
 
 using Executions for Execution;
 
+/// @title AddPoolHook
 /// @notice Hook implemented by hosts that add asset-pair pools.
 abstract contract AddPoolHook {
     /// @notice Add a pool with two asset quantities.
@@ -17,6 +18,7 @@ abstract contract AddPoolHook {
     function addPool(AssetAmount memory a, AssetAmount memory b) internal virtual;
 }
 
+/// @title RemovePoolHook
 /// @notice Hook implemented by hosts that remove asset-pair pools.
 abstract contract RemovePoolHook {
     /// @notice Remove the pool identified by two assets.
@@ -27,6 +29,7 @@ abstract contract RemovePoolHook {
     function removePool(bytes32 a, bytes32 b) internal virtual;
 }
 
+/// @title AddPool
 /// @notice Admin command that adds one pool per pair of ASSET_AMOUNT inputs.
 abstract contract AddPool is AdminBase, AddPoolHook {
     uint private immutable descriptor;
@@ -47,6 +50,8 @@ abstract contract AddPool is AdminBase, AddPoolHook {
         return runAdmin(id, descriptor, context, addPoolOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT / ASSET_AMOUNT item for the AddPool endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function addPoolOne(Execution memory exec) private {
         AssetAmount memory a = exec.unpackAssetAmountValue();
         AssetAmount memory b = exec.unpackAssetAmountValue();
@@ -54,6 +59,7 @@ abstract contract AddPool is AdminBase, AddPoolHook {
     }
 }
 
+/// @title RemovePool
 /// @notice Admin command that removes one pool per pair of ASSET inputs.
 abstract contract RemovePool is AdminBase, RemovePoolHook {
     uint private immutable descriptor;
@@ -74,6 +80,8 @@ abstract contract RemovePool is AdminBase, RemovePoolHook {
         return runAdmin(id, descriptor, context, removePoolOne);
     }
 
+    /// @dev Process one ASSET / ASSET item for the RemovePool endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function removePoolOne(Execution memory exec) private {
         bytes32 a = exec.unpackAsset();
         bytes32 b = exec.unpackAsset();

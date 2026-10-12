@@ -18,7 +18,7 @@ abstract contract Runtime is ChainAsset {
     /// @dev Commander does not satisfy the host's external-commander policy.
     error InvalidCommander();
 
-    /// @dev This contract's host node ID, derived from `self` at construction.
+    /// @notice This runtime's host node ID, derived from its execution address at construction.
     uint public immutable host;
 
     /// @dev Commander host ID. Defaults to this contract's host ID when self-managed.
@@ -27,6 +27,7 @@ abstract contract Runtime is ChainAsset {
     /// @dev Native address embedded in `commander`, resolved once at construction.
     address internal immutable commanderAddr;
 
+    /// @notice Bind the runtime to its execution address and local commander.
     /// @param cmdr Local host ID of the commander, or zero to make this runtime self-managed.
     /// @param self Execution address, or zero to use this deployment's address.
     constructor(uint cmdr, address self) {
@@ -47,11 +48,13 @@ abstract contract Runtime is ChainAsset {
     }
 
     /// @notice Execution address embedded in this runtime's host node.
+    /// @return Execution address encoded in the host node ID.
     function hostAddr() public view returns (address) {
         return address(uint160(host));
     }
 
     /// @notice This runtime's host account, preserving the host node's chain and address.
+    /// @return Host account identifier for this runtime.
     function hostAccount() public view returns (bytes32) {
         return Accounts.toHost(host);
     }

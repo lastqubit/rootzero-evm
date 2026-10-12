@@ -8,6 +8,29 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: expand swap command and hook names to Input/Output.** Rename
+  `swapExactIn` / `swapExactOut` to `swapExactInput` / `swapExactOutput`, with
+  matching `SwapExactInput` / `SwapExactOutput` mixins and hook names. External
+  function selectors and command endpoint IDs change; update callers and hook overrides.
+
+- Add `SwapAssetExactInput` and `SwapDebtExactOutput` position-transforming commands,
+  pairing POSITION state with one asset-hop LIST per position. Reuse the existing
+  swap hooks, enforce the configured counterparty, preserve the opposite leg,
+  and log ordered POSITION output. Economic policy remains host-defined.
+
+- Add opt-in `Runtime.ensureRemoteCommander()` for hosts requiring a deployed,
+  canonical commander host on the current chain at a different execution address.
+  Move the shared `InvalidCommander` error from `CommandHost` to `Runtime`.
+
+- **Breaking: validate immutable counterparties at deployment.** `Counterparty`
+  now uses `Accounts.account`, rejecting zero and non-account identifiers with
+  `InvalidAccount`.
+
+- Standardize production NatSpec, complete parameter and return descriptions,
+  and correct codec child-block, cursor, and fee documentation. Record the
+  conventions in `AGENTS.md`, excluding endpoint registration fields,
+  constructors, and internal constants.
+
 ## 1.54.0
 
 - Decode pool input pairs in explicit stream order. Remove unused cursor and

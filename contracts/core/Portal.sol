@@ -7,6 +7,7 @@ import {Runtime} from "./Runtime.sol";
 import {Logs} from "../codec/Logs.sol";
 import {PortPipePayableSelector} from "../ports/Pipe.sol";
 
+/// @title ForwardHook
 /// @notice Hook for forwarding a recoverable message through a transport boundary.
 abstract contract ForwardHook {
     /// @notice Attempt to forward the message cursor, recording or returning its failure digest as needed.
@@ -23,14 +24,19 @@ abstract contract Portal is ForwardHook, Runtime {
     /// @dev Fixed recovery allowance; derived constructors may increase it for transport work.
     uint internal immutable gasReserve = 35_000;
 
+    /// @dev The supplied witness does not hash to the unresolved digest for its key.
     error BadWitness();
 
+    /// @dev Unresolved message digests indexed by recovery lookup key.
     mapping(bytes32 key => bytes32 digest) internal unresolved;
 
-    /// @dev Return the pipe gas budget, or zero to skip delivery and try storage.
-    /// Reserve call preparation, a cold CALL, fresh digest storage, the failure
+    /// @notice Return the pipe gas budget, or zero to skip delivery and try storage.
+    /// @dev Reserve call preparation, a cold CALL, fresh digest storage, the failure
     /// event, and return. Value overhead assumes an existing commander.
     /// Charge full memory cost conservatively, including already allocated memory.
+    /// @param length Encoded message length, in bytes.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @return gas Gas available for forwarding, or zero when the reserve cannot be met.
     function forwardGas(uint length, uint value) internal view returns (uint gas) {
         uint free;
         assembly ("memory-safe") {

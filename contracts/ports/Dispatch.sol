@@ -10,6 +10,7 @@ import {Execution, Executions} from "../execution/Execution.sol";
 using Executions for Execution;
 using Blocks for uint;
 
+/// @title DispatchPayableHook
 /// @notice Hook implemented by hosts that forward funded dispatch payloads.
 abstract contract DispatchPayableHook {
     /// @notice Override to dispatch an encoded payload to `portal`.
@@ -45,6 +46,8 @@ abstract contract DispatchPayablePort is PortBase, DispatchPayableHook {
         return runPort(id, descriptor, data, portDispatchPayableOne);
     }
 
+    /// @dev Process one DISPATCH item for the DispatchPayablePort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portDispatchPayableOne(Execution memory exec) private {
         (uint portal, uint resources, uint payloadCur) = exec.unpackDispatch();
         dispatchTo(portal, resources, payloadCur, exec);

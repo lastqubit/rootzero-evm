@@ -93,6 +93,7 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// @dev Zero amounts skip their hooks. Matching accounts or assets are not
     /// netted: the full debit must succeed before the credit. Failure reverts both.
     /// Override the scalar overload to customize both scalar and struct callers.
+    /// @param value Booking fields used by this operation.
     function book(Booking memory value) internal virtual override {
         book(value.from, value.to, value.asset, value.amount, value.liability, value.debt);
     }
@@ -100,6 +101,12 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// @notice Apply exact scalar legs without constructing a temporary Booking.
     /// @dev Shared customization point for Settlement's scalar callers and struct wrapper.
     /// Overriding only book(Booking) does not intercept direct scalar calls.
+    /// @param from Account debited for the transfer or booking.
+    /// @param to Account credited for the transfer or booking.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @param liability Liability asset identifier.
+    /// @param debt Quantity in the liability's native units.
     function book(
         bytes32 from,
         bytes32 to,
@@ -115,6 +122,8 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// @notice Settle only the debt through BookHook, leaving the position unchanged.
     /// @dev Zero counterparty only debits the active account; an account counterparty
     /// receives the exact payment. Zero debt skips booking and all account hooks.
+    /// @param account Account identifier.
+    /// @param position Position containing asset, liability, and settlement counterparty.
     function repay(bytes32 account, Position memory position) internal virtual override {
         if (position.debt == 0) return;
         uint amount = position.counterparty == bytes32(0) ? 0 : position.debt;
@@ -128,6 +137,8 @@ abstract contract Settlement is DebitAccountHook, CreditAccountHook, BookHook, R
     /// Account format is trusted from callers; book and debit/credit hooks need not
     /// repeat boundary validation. Empty exchanges skip those hooks. Malformed
     /// accounts from faulty trusted integrations are not guaranteed to be rejected.
+    /// @param account Account identifier.
+    /// @param position Position containing asset, liability, and settlement counterparty.
     function settle(bytes32 account, Position memory position) internal virtual override {
         if (position.counterparty == bytes32(0)) {
             book(account, account, position.asset, position.amount, position.liability, position.debt);

@@ -19,16 +19,25 @@ library Ids {
     uint8 constant Keccak = 0x01;
 
     /// @notice Return true if `id` is opaque and carries a nonzero category.
+    /// @param id Opaque identifier to inspect.
+    /// @return True if `id` is opaque and carries a nonzero category.
     function isOpaque(bytes32 id) internal pure returns (bool) {
         return uint8(uint(id) >> 248) == Layout.Opaque && uint8(uint(id) >> 240) != 0;
     }
 
     /// @notice Return true if `id` is opaque and carries `category`.
+    /// @param id Opaque identifier to inspect.
+    /// @param category Expected opaque-ID category byte.
+    /// @return True if `id` is opaque and carries `category`.
     function isOpaque(bytes32 id, uint8 category) internal pure returns (bool) {
         return category != 0 && uint16(uint(id) >> 240) == ((uint16(Layout.Opaque) << 8) | uint16(category));
     }
 
     /// @notice Return true if `id` is opaque and carries `category` and `subtype`.
+    /// @param id Opaque identifier to inspect.
+    /// @param category Expected opaque-ID category byte.
+    /// @param subtype Expected opaque-ID subtype byte.
+    /// @return True if `id` is opaque and carries `category` and `subtype`.
     function isOpaque(bytes32 id, uint8 category, uint8 subtype) internal pure returns (bool) {
         return
             category != 0 &&
@@ -62,6 +71,7 @@ library Ids {
     /// @notice Derive an opaque ID and require its preimage category.
     /// @param category Expected nonzero category byte.
     /// @param preimage Preimage encoded as `0x01 || category || subtype || payload`.
+    /// @return id Opaque identifier derived from the validated preimage.
     function toKeccak(uint8 category, bytes memory preimage) internal pure returns (bytes32 id) {
         id = toKeccak(preimage);
         if (!isOpaque(id, category)) revert InvalidPreimage();

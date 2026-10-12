@@ -7,6 +7,7 @@ import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 using Executions for Execution;
 using Blocks for uint;
 
+/// @title RecoverPayableHook
 /// @notice Hook implemented by hosts that recover previously unresolved payloads.
 abstract contract RecoverPayableHook {
     /// @notice Override to recover a witness through `handler`.
@@ -46,6 +47,8 @@ abstract contract RecoverPayable is CommandBase, RecoverPayableHook {
         return runCommand(id, descriptor, context, recoverPayableOne);
     }
 
+    /// @dev Process one RECOVER item for the RecoverPayable endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function recoverPayableOne(Execution memory exec) private {
         (uint handler, uint value, bytes32 key, uint witnessCur) = exec.unpackRecover();
         recover(handler, value, key, witnessCur, exec);

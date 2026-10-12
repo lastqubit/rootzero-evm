@@ -15,6 +15,10 @@ import {Runtime} from "../core/Runtime.sol";
 abstract contract SchemaAnnot is Runtime {
     /// @notice Publish a lane using the first four bytes of the key string's hash.
     /// @dev Hashes the exact string bytes; adds no prefix and performs no normalization.
+    /// @param body Schema DSL string, optionally prefixed with a name.
+    /// @param key Exact string whose keccak256 prefix supplies the four-byte key.
+    /// @param spec Packed block specification or named lane.
+    /// @return Packed lane containing the specification and hashed lane key.
     function lane(string memory body, string memory key, uint spec) internal returns (uint) {
         return lane(body, uint32(bytes4(keccak256(bytes(key)))), spec);
     }
@@ -51,6 +55,12 @@ abstract contract SchemaAnnot is Runtime {
 
     /// @notice Publish a ranged block spec using the first four bytes of the key string's hash.
     /// @dev Hashes the exact string bytes, independently of any name prefix in body.
+    /// @param body Schema DSL string, optionally prefixed with a name.
+    /// @param key Exact string whose keccak256 prefix supplies the four-byte key.
+    /// @param min Inclusive minimum payload size, in bytes.
+    /// @param max Inclusive maximum payload size, or zero for no upper bound.
+    /// @param hint Expected payload size used for allocation, in bytes.
+    /// @return Published packed block specification.
     function schema(
         string memory body,
         string memory key,
@@ -72,6 +82,10 @@ abstract contract SchemaAnnot is Runtime {
 
     /// @notice Publish an exact-size block spec using the first four bytes of the key string's hash.
     /// @dev Hashes the exact string bytes, independently of any name prefix in body.
+    /// @param body Schema DSL string, optionally prefixed with a name.
+    /// @param key Exact string whose keccak256 prefix supplies the four-byte key.
+    /// @param size Payload length, in bytes.
+    /// @return Published packed block specification.
     function schema(string memory body, string memory key, uint32 size) internal returns (uint) {
         return schema(body, uint32(bytes4(keccak256(bytes(key)))), size);
     }

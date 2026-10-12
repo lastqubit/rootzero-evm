@@ -23,6 +23,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
     }
 
     /// @notice Return the registered CASHOUT command ID.
+    /// @return Registered command node identifier.
     function cashoutId() internal view returns (uint) {
         return id;
     }
@@ -36,6 +37,8 @@ abstract contract Cashout is CommandBase, CashoutHook {
         return runCommand(id, descriptor, context, cashoutOne);
     }
 
+    /// @dev Process one BALANCE item for the Cashout endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function cashoutOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         if (asset != chainAsset) revert InvalidAsset();

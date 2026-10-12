@@ -4,6 +4,7 @@ pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Execute} from "../codec/Execute.sol";
 
+/// @title CheckBalance
 /// @notice Check each BALANCE amount against paired inclusive BALANCE_CONSTRAINTS and preserve the balance.
 /// @dev Checks asset identity and quantity, not authorization or backing.
 abstract contract CheckBalance is CommandBase {
@@ -17,6 +18,7 @@ abstract contract CheckBalance is CommandBase {
     }
 
     /// @notice Return the registered checkBalance command ID.
+    /// @return Registered command node identifier.
     function checkBalanceId() internal view returns (uint) {
         return id;
     }
@@ -29,6 +31,8 @@ abstract contract CheckBalance is CommandBase {
         return runCommand(id, descriptor, context, checkBalanceOne);
     }
 
+    /// @dev Check one balance against its paired constraints and append the unchanged balance.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function checkBalanceOne(Execution memory exec) private pure {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         exec.expectBalanceConstraints(asset, amount);
@@ -36,6 +40,7 @@ abstract contract CheckBalance is CommandBase {
     }
 }
 
+/// @title ExecuteCheckBalance
 /// @notice Extends checkBalance with direct validation of memory-backed pipeline state.
 abstract contract ExecuteCheckBalance is CheckBalance {
     /// @notice Validate balances in place without unpacking or copying their blocks.

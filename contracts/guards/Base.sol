@@ -32,6 +32,11 @@ abstract contract GuardBase is InputEndpointBase, GuardianAccess {
     }
 
     /// @notice Register a guard with identity flags and optional input logging.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param input Input block specification or named lane.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return id Registered endpoint node identifier.
+    /// @return descriptor Packed source and output allocation hints with internal execution flags.
     function guard(string memory name, uint input, uint flags) internal returns (uint id, uint descriptor) {
         if (flags & ~uint(Logs.Input) != 0) revert Specs.InvalidSpec();
         id = Nodes.toGuard(name, hostAddr(), uint8(flags));

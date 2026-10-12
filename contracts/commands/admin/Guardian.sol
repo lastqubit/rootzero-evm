@@ -29,6 +29,8 @@ abstract contract Appoint is AdminBase, GuardianAccess {
         return runAdmin(id, descriptor, context, appointOne);
     }
 
+    /// @dev Process one ACCOUNT item for the Appoint endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function appointOne(Execution memory exec) private {
         bytes32 guardian = exec.unpackAccount();
         appointGuardian(guardian);
@@ -58,6 +60,8 @@ abstract contract Dismiss is AdminBase, GuardianAccess {
         return runAdmin(id, descriptor, context, dismissOne);
     }
 
+    /// @dev Process one ACCOUNT item for the Dismiss endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function dismissOne(Execution memory exec) private {
         bytes32 guardian = exec.unpackAccount();
         dismissGuardian(guardian);

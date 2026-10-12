@@ -20,6 +20,7 @@ abstract contract Authorize is AdminBase {
     }
 
     /// @notice Return the registered AUTHORIZE command ID.
+    /// @return Registered command node identifier.
     function authorizeId() internal view returns (uint) {
         return id;
     }
@@ -35,6 +36,8 @@ abstract contract Authorize is AdminBase {
         return runAdmin(id, descriptor, context, authorizeOne);
     }
 
+    /// @dev Process one NODE item for the Authorize endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function authorizeOne(Execution memory exec) private {
         uint node = exec.unpackNode();
         setAccess(node, true);

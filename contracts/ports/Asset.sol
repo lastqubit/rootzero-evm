@@ -9,6 +9,7 @@ import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
 
+/// @title RequestAssetHook
 /// @notice Hook implemented by hosts that fulfill asset requests from peers.
 abstract contract RequestAssetHook {
     /// @notice Override to handle one asset request from a peer host.
@@ -40,6 +41,8 @@ abstract contract AllowAssetPort is PortBase, AllowAssetHook {
         return runPort(id, descriptor, data, portAllowAssetOne);
     }
 
+    /// @dev Process one ASSET item for the AllowAssetPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portAllowAssetOne(Execution memory exec) private {
         bytes32 asset = exec.unpackAsset();
         allowAsset(asset);
@@ -66,6 +69,8 @@ abstract contract DenyAssetPort is PortBase, DenyAssetHook {
         return runPort(id, descriptor, data, portDenyAssetOne);
     }
 
+    /// @dev Process one ASSET item for the DenyAssetPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portDenyAssetOne(Execution memory exec) private {
         bytes32 asset = exec.unpackAsset();
         denyAsset(asset);
@@ -93,6 +98,8 @@ abstract contract RequestAssetPort is PortBase, RequestAssetHook {
         return runPort(id, descriptor, data, portRequestAssetOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT item for the RequestAssetPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portRequestAssetOne(Execution memory exec) private {
         uint peer = caller();
         (bytes32 asset, uint amount) = exec.unpackAssetAmount();

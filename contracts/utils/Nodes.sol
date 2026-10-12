@@ -37,41 +37,57 @@ library Nodes {
     uint32 constant Guard = (uint32(Layout.Evm) << 24) | (uint32(Layout.Node) << 16) | (uint32(Layout.Guard) << 8);
 
     /// @notice Return true if `node` is a host node ID.
+    /// @param node Node identifier.
+    /// @return True if `node` is a host node ID.
     function isHost(uint node) internal pure returns (bool) {
         return uint32(node >> 224) == Host;
     }
 
     /// @notice Return true if `node` is a command node ID.
+    /// @param node Node identifier.
+    /// @return True if `node` is a command node ID.
     function isCommand(uint node) internal pure returns (bool) {
         return (uint32(node >> 224) & 0xffffff00) == Command;
     }
 
     /// @notice Return true if `node` is a port node ID.
+    /// @param node Node identifier.
+    /// @return True if `node` is a port node ID.
     function isPort(uint node) internal pure returns (bool) {
         return (uint32(node >> 224) & 0xffffff00) == Port;
     }
 
     /// @notice Return true if `node` is a query node ID.
+    /// @param node Node identifier.
+    /// @return True if `node` is a query node ID.
     function isQuery(uint node) internal pure returns (bool) {
         return (uint32(node >> 224) & 0xffffff00) == Query;
     }
 
     /// @notice Return true if `node` is a guard action node ID.
+    /// @param node Node identifier.
+    /// @return True if `node` is a guard action node ID.
     function isGuard(uint node) internal pure returns (bool) {
         return (uint32(node >> 224) & 0xffffff00) == Guard;
     }
 
     /// @notice Return true if `node` belongs to the EVM node family.
+    /// @param node Node identifier.
+    /// @return True if `node` belongs to the EVM node family.
     function isEvm(uint node) internal pure returns (bool) {
         return isFamily(node, Family);
     }
 
     /// @notice Return true if `node` is opaque.
+    /// @param node Node identifier.
+    /// @return True if `node` is opaque.
     function isOpaque(uint node) internal pure returns (bool) {
         return Ids.isOpaque(bytes32(node), Layout.Node);
     }
 
     /// @notice Return true if `node` belongs to the EVM node family on the current chain.
+    /// @param node Node identifier.
+    /// @return True if `node` belongs to the EVM node family on the current chain.
     function isLocal(uint node) internal view returns (bool) {
         return isEvm(node) && uint32(node >> 192) == block.chainid;
     }
@@ -199,6 +215,10 @@ library Nodes {
     }
 
     /// @notice Build a chain-local command ID carrying endpoint behavior and logging flags.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param target Native contract address embedded in the endpoint ID.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return node Local endpoint node ID including selector, address, and flags.
     function toCommand(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Command | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -213,6 +233,10 @@ library Nodes {
     }
 
     /// @notice Build a chain-local port ID carrying endpoint behavior and logging flags.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param target Native contract address embedded in the endpoint ID.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return node Local endpoint node ID including selector, address, and flags.
     function toPort(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Port | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -227,6 +251,10 @@ library Nodes {
     }
 
     /// @notice Build a chain-local query ID carrying endpoint behavior and logging flags.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param target Native contract address embedded in the endpoint ID.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return node Local endpoint node ID including selector, address, and flags.
     function toQuery(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Query | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
@@ -241,12 +269,19 @@ library Nodes {
     }
 
     /// @notice Build a chain-local guard ID carrying endpoint behavior and logging flags.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param target Native contract address embedded in the endpoint ID.
+    /// @param flags Endpoint behavior and logging flags.
+    /// @return node Local endpoint node ID including selector, address, and flags.
     function toGuard(string memory name, address target, uint8 flags) internal view returns (uint node) {
         node = toLocalBase(Guard | uint32(flags)) | uint(uint160(target));
         node |= uint(uint32(toSelector(name, "(bytes)"))) << 160;
     }
 
     /// @dev Derive an ABI selector from an endpoint name and argument signature.
+    /// @param name Canonical endpoint function name used to derive its ABI selector.
+    /// @param args Canonical parenthesized ABI argument types.
+    /// @return First four bytes of the canonical function-signature hash.
     function toSelector(string memory name, string memory args) private pure returns (bytes4) {
         return bytes4(keccak256(bytes(string.concat(name, args))));
     }

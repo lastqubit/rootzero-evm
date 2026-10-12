@@ -108,86 +108,150 @@ library Sizes {
 library Specs {
     /// @dev A payload is incompatible with its block specification.
     error InvalidSpec();
+    /// @dev Unit value in each packed minimum, maximum, and allocation-hint field.
     uint private constant SizeFields = (uint(1) << 192) | (uint(1) << 160) | (uint(1) << 136);
 
     // Reusable field shapes keep public specs readable while remaining valid
     // compile-time constant expressions.
+    /// @dev Packed minimum, maximum, and allocation hint for a 32-byte payload.
     uint private constant Exact32 = 32 * SizeFields;
+    /// @dev Packed minimum, maximum, and allocation hint for a 64-byte payload.
     uint private constant Exact64 = 64 * SizeFields;
+    /// @dev Packed minimum, maximum, and allocation hint for a 96-byte payload.
     uint private constant Exact96 = 96 * SizeFields;
+    /// @dev Packed minimum, maximum, and allocation hint for a 128-byte payload.
     uint private constant Exact128 = 128 * SizeFields;
+    /// @dev Packed minimum, maximum, and allocation hint for a 160-byte payload.
     uint private constant Exact160 = 160 * SizeFields;
+    /// @dev Packed minimum, maximum, and allocation hint for a 192-byte payload.
     uint private constant Exact192 = 192 * SizeFields;
+    /// @dev Packed fields for an unbounded payload with minimum 0 and allocation hint 128 bytes.
     uint private constant UnboundedHint128 = uint(128) << 136;
+    /// @dev Packed fields for an unbounded payload with minimum 16 and allocation hint 256 bytes.
     uint private constant UnboundedMin16Hint256 = (uint(16) << 192) | (uint(256) << 136);
+    /// @dev Packed fields for an unbounded payload with minimum 40 and allocation hint 256 bytes.
     uint private constant UnboundedMin40Hint256 = (uint(40) << 192) | (uint(256) << 136);
+    /// @dev Packed fields for an unbounded payload with minimum 72 and allocation hint 256 bytes.
     uint private constant UnboundedMin72Hint256 = (uint(72) << 192) | (uint(256) << 136);
+    /// @dev Packed fields for an unbounded payload with minimum 48 and allocation hint 512 bytes.
     uint private constant UnboundedMin48Hint512 = (uint(48) << 192) | (uint(512) << 136);
+    /// @dev Packed fields for an unbounded payload with minimum 104 and allocation hint 256 bytes.
     uint private constant UnboundedMin104Hint256 = (uint(104) << 192) | (uint(256) << 136);
 
     // Empty and reserved blocks
 
+    /// @dev Empty lane specification; no block key or payload is declared.
     uint constant Empty = uint(bytes32(Keys.Empty));
+    /// @dev LIST specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant List = uint(bytes32(Keys.List)) | UnboundedHint128;
+    /// @dev STATE specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant State = uint(bytes32(Keys.State)) | UnboundedHint128;
+    /// @dev INPUT specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant Input = uint(bytes32(Keys.Input)) | UnboundedHint128;
+    /// @dev OUTPUT specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant Output = uint(bytes32(Keys.Output)) | UnboundedHint128;
+    /// @dev BYTES specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant Bytes = uint(bytes32(Keys.Bytes)) | UnboundedHint128;
+    /// @dev STRING specification with minimum 0, unbounded maximum, and 128-byte allocation hint.
     uint constant String = uint(bytes32(Keys.String)) | UnboundedHint128;
 
     // Live pipeline state
 
+    /// @dev BALANCE specification with an exact 64-byte payload.
     uint constant Balance = uint(bytes32(Keys.Balance)) | Exact64;
+    /// @dev CUSTODY specification with an exact 96-byte payload.
     uint constant Custody = uint(bytes32(Keys.Custody)) | Exact96;
+    /// @dev POSITION specification with an exact 160-byte payload.
     uint constant Position = uint(bytes32(Keys.Position)) | Exact160;
+    /// @dev BOOKING specification with an exact 192-byte payload.
     uint constant Booking = uint(bytes32(Keys.Booking)) | Exact192;
 
     // Input and value blocks
 
+    /// @dev LIMITS specification with an exact 32-byte payload.
     uint constant Limits = uint(bytes32(Keys.Limits)) | Exact32;
+    /// @dev BALANCE_CONSTRAINTS specification with an exact 96-byte payload.
     uint constant BalanceConstraints = uint(bytes32(Keys.BalanceConstraints)) | Exact96;
+    /// @dev POSITION_CONSTRAINTS specification with an exact 128-byte payload.
     uint constant PositionConstraints = uint(bytes32(Keys.PositionConstraints)) | Exact128;
+    /// @dev QUOTE_REQUEST specification with an exact 96-byte payload.
     uint constant QuoteRequest = uint(bytes32(Keys.QuoteRequest)) | Exact96;
+    /// @dev QUOTE specification with an exact 128-byte payload.
     uint constant Quote = uint(bytes32(Keys.Quote)) | Exact128;
 
+    /// @dev ASSET_AMOUNT specification with an exact 64-byte payload.
     uint constant AssetAmount = uint(bytes32(Keys.AssetAmount)) | Exact64;
+    /// @dev AMOUNT specification with an exact 32-byte payload.
     uint constant Amount = uint(bytes32(Keys.Amount)) | Exact32;
+    /// @dev PIPELINE specification with an exact 64-byte payload.
     uint constant Pipeline = uint(bytes32(Keys.Pipeline)) | Exact64;
+    /// @dev BOOTSTRAP specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | UnboundedMin40Hint256;
+    /// @dev ALLOCATION specification with an exact 96-byte payload.
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
+    /// @dev ALLOWANCE specification with an exact 96-byte payload.
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;
+    /// @dev ACCOUNT specification with an exact 32-byte payload.
     uint constant Account = uint(bytes32(Keys.Account)) | Exact32;
+    /// @dev TRANSACTION specification with an exact 128-byte payload.
     uint constant Transaction = uint(bytes32(Keys.Transaction)) | Exact128;
 
     // Composite and annotation blocks
 
+    /// @dev SWAP specification with minimum 72, unbounded maximum, and 256-byte allocation hint.
     uint constant Swap = uint(bytes32(Keys.Swap)) | UnboundedMin72Hint256;
+    /// @dev STEP specification with minimum 72, unbounded maximum, and 256-byte allocation hint.
     uint constant Step = uint(bytes32(Keys.Step)) | UnboundedMin72Hint256;
+    /// @dev RELAY specification with minimum 16, unbounded maximum, and 256-byte allocation hint.
     uint constant Relay = uint(bytes32(Keys.Relay)) | UnboundedMin16Hint256;
+    /// @dev CONTEXT specification with minimum 48, unbounded maximum, and 512-byte allocation hint.
     uint constant Context = uint(bytes32(Keys.Context)) | UnboundedMin48Hint512;
+    /// @dev RECOVER specification with minimum 104, unbounded maximum, and 256-byte allocation hint.
     uint constant Recover = uint(bytes32(Keys.Recover)) | UnboundedMin104Hint256;
+    /// @dev DISPATCH specification with minimum 72, unbounded maximum, and 256-byte allocation hint.
     uint constant Dispatch = uint(bytes32(Keys.Dispatch)) | UnboundedMin72Hint256;
+    /// @dev CALL specification with minimum 72, unbounded maximum, and 256-byte allocation hint.
     uint constant Call = uint(bytes32(Keys.Call)) | UnboundedMin72Hint256;
+    /// @dev ASSET specification with an exact 32-byte payload.
     uint constant Asset = uint(bytes32(Keys.Asset)) | Exact32;
+    /// @dev ASSET_PREIMAGE specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
     uint constant AssetPreimage = uint(bytes32(Keys.AssetPreimage)) | UnboundedMin40Hint256;
+    /// @dev NODE specification with an exact 32-byte payload.
     uint constant Node = uint(bytes32(Keys.Node)) | Exact32;
+    /// @dev ENTITY specification with an exact 32-byte payload.
     uint constant Entity = uint(bytes32(Keys.Entity)) | Exact32;
+    /// @dev ENVELOPE specification with an exact 128-byte payload.
     uint constant Envelope = uint(bytes32(Keys.Envelope)) | Exact128;
+    /// @dev RESOLUTION specification with an exact 64-byte payload.
     uint constant Resolution = uint(bytes32(Keys.Resolution)) | Exact64;
+    /// @dev INTRODUCTION specification with an exact 96-byte payload.
     uint constant Introduction = uint(bytes32(Keys.Introduction)) | Exact96;
+    /// @dev ENDPOINT specification with an exact 128-byte payload.
     uint constant Endpoint = uint(bytes32(Keys.Endpoint)) | Exact128;
+    /// @dev COUNTERPARTY specification with an exact 32-byte payload.
     uint constant Counterparty = uint(bytes32(Keys.Counterparty)) | Exact32;
+    /// @dev LANE specification with minimum 40, unbounded maximum, and 128-byte allocation hint.
     uint constant Lane = uint(bytes32(Keys.Lane)) | (uint(40) << 192) | UnboundedHint128;
+    /// @dev SCHEMA specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
     uint constant Schema = uint(bytes32(Keys.Schema)) | UnboundedMin40Hint256;
 
+    /// @dev STATUS specification with an exact 32-byte payload.
     uint constant Status = uint(bytes32(Keys.Status)) | Exact32;
+    /// @dev ASSET_LIABILITY specification with an exact 64-byte payload.
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;
+    /// @dev ACCOUNT_ASSET specification with an exact 64-byte payload.
     uint constant AccountAsset = uint(bytes32(Keys.AccountAsset)) | Exact64;
+    /// @dev HOST_ASSET specification with an exact 64-byte payload.
     uint constant HostAsset = uint(bytes32(Keys.HostAsset)) | Exact64;
+    /// @dev ACCOUNT_BALANCE specification with an exact 96-byte payload.
     uint constant AccountBalance = uint(bytes32(Keys.AccountBalance)) | Exact96;
+    /// @dev ACCOUNT_AMOUNT specification with an exact 96-byte payload.
     uint constant AccountAmount = uint(bytes32(Keys.AccountAmount)) | Exact96;
+    /// @dev HOST_AMOUNT specification with an exact 96-byte payload.
     uint constant HostAmount = uint(bytes32(Keys.HostAmount)) | Exact96;
+    /// @dev HOST_ACCOUNT_ASSET specification with an exact 96-byte payload.
     uint constant HostAccountAsset = uint(bytes32(Keys.HostAccountAsset)) | Exact96;
+    /// @dev HOST_ACCOUNT_AMOUNT specification with an exact 128-byte payload.
     uint constant HostAccountAmount = uint(bytes32(Keys.HostAccountAmount)) | Exact128;
 
     /// @notice Construct a block specification from its encoded fields.

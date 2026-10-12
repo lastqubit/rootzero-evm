@@ -3,6 +3,7 @@ pragma solidity ^0.8.33;
 
 import {ValueOverflow, ZeroAmount} from "./Errors.sol";
 
+/// @title Math
 /// @notice General-purpose checked arithmetic helpers.
 library Math {
     /// @notice Scale a value by a ratio, rounding down.

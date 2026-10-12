@@ -27,6 +27,8 @@ abstract contract DebitAccountPort is PortBase, DebitAccountHook {
         return runPort(id, descriptor, data, portDebitAccountOne);
     }
 
+    /// @dev Process one ACCOUNT_AMOUNT item for the DebitAccountPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portDebitAccountOne(Execution memory exec) private {
         (bytes32 account, bytes32 asset, uint amount) = exec.unpackAccountAmount();
         debitAccount(account, asset, amount);

@@ -7,6 +7,7 @@ import {Position} from "../core/Types.sol";
 
 using Executions for Execution;
 
+/// @title Repay
 /// @notice Repay each POSITION debt and return the position with debt cleared.
 abstract contract Repay is CommandBase, RepayHook {
     uint private immutable descriptor;
@@ -24,6 +25,8 @@ abstract contract Repay is CommandBase, RepayHook {
         return runCommand(id, descriptor, context, repayOne);
     }
 
+    /// @dev Process one POSITION item for the Repay endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function repayOne(Execution memory exec) private {
         Position memory position = exec.unpackPositionValue();
         repay(exec.account, position);

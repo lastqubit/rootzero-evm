@@ -5,6 +5,7 @@ import {Logs} from "../codec/Logs.sol";
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 using Executions for Execution;
 
+/// @title BurnHook
 /// @notice Hook implemented by hosts that burn account assets.
 abstract contract BurnHook {
     /// @notice Override to burn or consume the provided balance amount.
@@ -39,6 +40,8 @@ abstract contract Burn is CommandBase, BurnHook {
         return runCommand(id, descriptor, context, burnOne);
     }
 
+    /// @dev Process one BALANCE item for the Burn endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function burnOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         burn(exec.account, asset, amount);

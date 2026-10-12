@@ -3,11 +3,16 @@ pragma solidity ^0.8.33;
 
 import {MAX_BPS} from "./Utils.sol";
 
+/// @title Fees
 /// @notice Basis-point fees that fit inclusive amount limits.
 /// @dev Fees round up to whole asset units and are never partially charged. Zero means either no
 /// fee was calculated or the full fee cannot fit; it does not validate the amount.
 library Fees {
     /// @dev Split the product to avoid intermediate overflow, even at uint maximum.
+    /// @param amount Quantity in the asset's native units.
+    /// @param bps Fee rate in basis points; 10_000 equals 100%.
+    /// @param room Maximum fee that can be charged, in asset units.
+    /// @return Rounded-up fee, or zero when the complete fee exceeds room.
     function within(uint amount, uint16 bps, uint room) private pure returns (uint) {
         if (bps == 0) return 0;
         uint whole = amount / MAX_BPS;

@@ -23,6 +23,9 @@ abstract contract ExecutePayable is AdminBase {
 
     /// @dev Execute arbitrary calldata while ignoring successful returndata.
     /// Returndata is copied only when needed to report a failed call.
+    /// @param target Target node identifier.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param dataCur Bounded calldata cursor over raw call data.
     function callTarget(uint target, uint value, uint dataCur) private {
         address addr = Nodes.addr(target);
         bytes4 selector;
@@ -65,6 +68,8 @@ abstract contract ExecutePayable is AdminBase {
         return runAdmin(id, descriptor, context, executePayableOne);
     }
 
+    /// @dev Process one CALL item for the ExecutePayable endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function executePayableOne(Execution memory exec) private {
         (uint target, uint value, uint dataCur) = exec.unpackCall();
         callTarget(target, exec.useValue(value), dataCur);

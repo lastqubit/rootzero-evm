@@ -7,6 +7,7 @@ import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 
+/// @title PipeHook
 /// @notice Hook implemented by hosts that execute encoded step streams.
 abstract contract PipeHook {
     /// @notice Execute a bounded calldata STEP cursor and return its remaining native-value budget.
@@ -26,6 +27,7 @@ abstract contract PipeHook {
     ) internal virtual returns (uint remaining);
 }
 
+/// @title ExecuteHook
 /// @notice Hook implemented by pipeline hosts that execute host-local commands.
 abstract contract ExecuteHook {
     /// @notice Try to execute one command whose node ID targets the current host.
@@ -40,7 +42,7 @@ abstract contract ExecuteHook {
     /// @param cmd Host-local command node ID to authorize and execute.
     /// @param account Account supplied to the command.
     /// @param state State block stream supplied to the command.
-    /// @param inputCur Bounded calldata cursor over command input, excluding the BYTES header.
+    /// @param inputCur Bounded calldata cursor over command input, excluding the INPUT header.
     /// @param value Native value assigned to this command, in wei.
     /// @return handled Whether the hook executed the command instead of delegating it.
     /// @return output Resulting state block stream; ignored when handled is false.
@@ -64,6 +66,11 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @dev Decode one STEP into its command, value, clean input cursor, and
     /// advanced stream cursor. Both cursors use standard absolute start/end lanes.
     /// The exact child end and stream bound prove both cursors fit uint32 lanes.
+    /// @param cur Bounded calldata cursor over the remaining STEP stream.
+    /// @return cmd Command node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return inputCur Clean calldata cursor over the STEP input payload.
+    /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function takeStep(uint cur) private pure returns (uint cmd, uint value, uint inputCur, uint nextCur) {
         assembly ("memory-safe") {
             function fail(selector) {
@@ -98,6 +105,15 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @dev Authorize and invoke a command, strictly decoding (bytes, uint).
     /// Handoffs receive the remaining STEP stream and exhaust the returned cursor;
     /// ordinary calls receive only inputCur and preserve the remaining cursor.
+    /// @param cmd Command node identifier.
+    /// @param account Account identifier.
+    /// @param state State block stream, excluding the enclosing container header.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param inputCur Bounded calldata cursor over command input payload.
+    /// @param stepsCur Bounded calldata cursor over the continuation STEP stream.
+    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return credit Native value returned to the caller budget, in wei.
+    /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function invokeCommand(
         uint cmd,
         bytes32 account,
@@ -206,6 +222,16 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         }
     }
 
+    /// @dev Try host-local execution, then delegate unhandled commands to their authorized endpoint.
+    /// @param cmd Command node identifier.
+    /// @param account Account identifier.
+    /// @param state State block stream, excluding the enclosing container header.
+    /// @param value Native value assigned to the operation, in wei.
+    /// @param inputCur Bounded calldata cursor over command input payload.
+    /// @param cur Bounded calldata cursor over the remaining STEP stream.
+    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return credit Native value returned to the caller budget, in wei.
+    /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function run(
         uint cmd,
         bytes32 account,

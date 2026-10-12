@@ -23,6 +23,9 @@ library Cursors {
 
     /// @notice Pack an already validated absolute range without repeating checks.
     /// @dev Requires abs <= end <= uint32.max. Does not establish calldata provenance.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @param end Exclusive source end position.
+    /// @return cur Packed cursor over the source range with zero metadata.
     function pack(uint abs, uint end) internal pure returns (uint cur) {
         assembly ("memory-safe") { cur := or(abs, shl(32, end)) }
     }
@@ -38,6 +41,8 @@ library Cursors {
     }
 
     /// @notice Return the absolute calldata position where `source` begins.
+    /// @param source Calldata source bytes.
+    /// @return abs Current source position.
     function base(bytes calldata source) internal pure returns (uint abs) {
         assembly ("memory-safe") {
             abs := source.offset
@@ -45,6 +50,9 @@ library Cursors {
     }
 
     /// @notice Return the absolute position and exclusive end of `source`.
+    /// @param source Calldata source bytes.
+    /// @return abs Current source position.
+    /// @return end Exclusive source end.
     function bounds(bytes calldata source) internal pure returns (uint abs, uint end) {
         assembly ("memory-safe") {
             abs := source.offset
@@ -70,6 +78,8 @@ library Cursors {
     }
 
     /// @notice Create a cursor backed by a calldata slice.
+    /// @param source Calldata source bytes.
+    /// @return cur Packed cursor over the source range with zero metadata.
     function wrap(bytes calldata source) internal pure returns (uint cur) {
         assembly ("memory-safe") {
             cur := or(source.offset, shl(32, add(source.offset, source.length)))
@@ -79,16 +89,23 @@ library Cursors {
     // Inspection
 
     /// @notice Return the cursor's current source position.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return abs Current source position.
     function position(uint cur) internal pure returns (uint abs) {
         return uint32(cur);
     }
 
     /// @notice Return the cursor's source exclusive end.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return end Exclusive source end.
     function limit(uint cur) internal pure returns (uint end) {
         return uint32(cur >> 32);
     }
 
     /// @notice Return the cursor's unread source range.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return abs Current source position.
+    /// @return end Exclusive source end.
     function bounds(uint cur) internal pure returns (uint abs, uint end) {
         abs = uint32(cur);
         end = uint32(cur >> 32);
@@ -98,6 +115,10 @@ library Cursors {
     /// @dev Requires a validated source cursor with current <= end and nonzero size.
     /// Size includes the header. Does not rescan headers, revalidate provenance,
     /// or advance the cursor. Supports fixed-stride execute loops directly.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param size Nonzero complete block size, including its header, in bytes.
+    /// @return abs Current source position.
+    /// @return end Exclusive source end.
     function bounds(uint cur, uint size) internal pure returns (uint abs, uint end) {
         uint remainder;
         assembly ("memory-safe") {
@@ -110,22 +131,30 @@ library Cursors {
 
     /// @notice Return the remaining byte count of a valid cursor.
     /// @dev Requires position <= end; does not validate the source or advance it.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return size Number of bytes remaining in the cursor.
     function length(uint cur) internal pure returns (uint size) {
         unchecked { size = uint32(cur >> 32) - uint(uint32(cur)); }
     }
 
     /// @notice Return whether the cursor has bytes remaining.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return True when the current position is below the exclusive end.
     function more(uint cur) internal pure returns (bool) {
         return uint32(cur) < uint32(cur >> 32);
     }
 
     /// @notice Return whether the current position equals the exclusive end.
     /// @dev Zero and empty ranges are done; reversed ranges are not.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return True when the current position equals the exclusive end.
     function done(uint cur) internal pure returns (bool) {
         return uint32(cur) == uint32(cur >> 32);
     }
 
     /// @notice Require the cursor to be at source position `abs`.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param abs Source byte position; not a packed cursor.
     function expect(uint cur, uint abs) internal pure {
         if (uint32(cur) != abs) revert UnexpectedPosition();
     }
@@ -133,6 +162,7 @@ library Cursors {
     /// @notice Require the cursor to be fully consumed.
     /// @dev Reverts UnconsumedData unless position equals end;
     /// neither validates calldata provenance nor changes the cursor.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
     function expectEnd(uint cur) internal pure {
         if (!done(cur)) revert UnconsumedData();
     }
@@ -140,12 +170,18 @@ library Cursors {
     // Navigation
 
     /// @notice Move the cursor forward to source position `abs`.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function seek(uint cur, uint abs) internal pure returns (uint nextCur) {
         if (abs < uint32(cur) || abs > uint32(cur >> 32)) revert OutOfBounds();
         nextCur = (cur & ~uint(type(uint32).max)) | abs;
     }
 
     /// @notice Advance the current position by `amount` bytes.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param amount Number of source bytes to consume.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function advance(uint cur, uint amount) internal pure returns (uint nextCur) {
         uint abs = uint32(cur);
         uint end = uint32(cur >> 32);
@@ -156,6 +192,9 @@ library Cursors {
 
     /// @notice Replace the cursor's source exclusive end.
     /// @dev Buffer cursors use this as their logical-capacity update.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param end Exclusive source end position.
+    /// @return nextCur Cursor with the new exclusive end, preserving its position and metadata.
     function resize(uint cur, uint end) internal pure returns (uint nextCur) {
         if (end > type(uint32).max) revert ValueOverflow();
         if (uint32(cur) > end) revert OutOfBounds();
@@ -163,6 +202,10 @@ library Cursors {
     }
 
     /// @notice Create a child cursor over unread source range `[abs, end)`.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @param end Exclusive source end position.
+    /// @return childCur Bounded child cursor with zero metadata.
     function slice(uint cur, uint abs, uint end) internal pure returns (uint childCur) {
         if (abs < uint32(cur) || abs > end || end > uint32(cur >> 32)) revert OutOfBounds();
         childCur = abs | (end << 32);
@@ -173,12 +216,16 @@ library Cursors {
     /// @notice Mark the remaining range consumed and return the advanced cursor.
     /// @dev Requires a valid cursor. Preserves the end;
     /// performs no validation of skipped bytes or their block structure.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function exhaust(uint cur) internal pure returns (uint nextCur) {
         return (cur & ~uint(type(uint32).max)) | uint32(cur >> 32);
     }
 
     /// @notice Enter a raw byte range and return its absolute position and the next cursor.
     /// @dev Checks byte containment only; does not inspect a block header or schema.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param amount Number of source bytes to consume.
     /// @return abs Original absolute position.
     /// @return nextCur Cursor after validating and consuming amount bytes.
     function enter(uint cur, uint amount) internal pure returns (uint abs, uint nextCur) {
@@ -190,6 +237,10 @@ library Cursors {
     /// @dev Requires a valid source cursor. Checks containment only, not calldata provenance
     /// or block structure. The child has zero metadata; the next cursor preserves the
     /// source end and metadata. Zero amount yields an empty child without advancing.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param amount Number of source bytes to consume.
+    /// @return sliceCur Bounded child cursor with zero metadata.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function take(uint cur, uint amount) internal pure returns (uint sliceCur, uint nextCur) {
         nextCur = advance(cur, amount);
         sliceCur = pack(uint32(cur), uint32(nextCur));
@@ -201,6 +252,8 @@ library Cursors {
     /// @dev Requires position <= end <= calldatasize; performs no repeated bounds checks.
     /// Ignores metadata and does not advance the cursor. Copies to temporary free memory
     /// without allocating a bytes value or advancing the free-memory pointer.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return digest Message digest.
     function hash(uint cur) internal pure returns (bytes32 digest) {
         assembly ("memory-safe") {
             let abs := and(cur, 0xffffffff)
@@ -215,6 +268,8 @@ library Cursors {
 
     /// @notice Expose a validated cursor as calldata without copying or advancing.
     /// @dev Requires position <= end <= calldatasize. Zero yields msg.data[0:0].
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata bytes view of the remaining range.
     function toBytes(uint cur) internal pure returns (bytes calldata data) {
         assembly ("memory-safe") {
             data.offset := and(cur, 0xffffffff)
@@ -224,6 +279,8 @@ library Cursors {
 
     /// @notice Validate position <= end <= calldatasize, then expose the range.
     /// @dev Reverts OutOfBounds on invalid bounds; zero yields msg.data[0:0].
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata bytes view of the remaining range.
     function toBytesChecked(uint cur) internal pure returns (bytes calldata data) {
         uint abs = uint32(cur);
         uint end = uint32(cur >> 32);
@@ -232,6 +289,8 @@ library Cursors {
     }
 
     /// @notice Expose a validated cursor as a string without UTF-8 validation or copying.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata string view of the remaining range.
     function toString(uint cur) internal pure returns (string calldata data) {
         return string(toBytes(cur));
     }
@@ -240,6 +299,8 @@ library Cursors {
     /// @dev Checks position <= end <= calldatasize, not UTF-8 or block structure.
     /// Reverts OutOfBounds on invalid bounds; zero yields an empty view.
     /// Neither copies nor allocates memory, and does not advance the cursor.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata string view of the remaining range.
     function toStringChecked(uint cur) internal pure returns (string calldata data) {
         return string(toBytesChecked(cur));
     }

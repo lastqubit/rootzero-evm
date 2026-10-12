@@ -9,6 +9,7 @@ import {Execution, Executions} from "../execution/Execution.sol";
 
 using Executions for Execution;
 
+/// @title UpdatePoolHook
 /// @notice Hook implemented by hosts that update existing asset-pair pools.
 abstract contract UpdatePoolHook {
     /// @notice Replace the virtual reserves of an existing pool with the supplied quantities.
@@ -20,6 +21,7 @@ abstract contract UpdatePoolHook {
     function updatePool(AssetAmount memory a, AssetAmount memory b) internal virtual;
 }
 
+/// @title UpdatePool
 /// @notice Opt-in guardian action for immediate updates of virtual pool reserves.
 abstract contract UpdatePool is GuardBase, UpdatePoolHook {
     uint private immutable descriptor;
@@ -38,6 +40,8 @@ abstract contract UpdatePool is GuardBase, UpdatePoolHook {
         runGuard(id, descriptor, input, updatePoolOne);
     }
 
+    /// @dev Decode one pair of reserves and invoke the pool update hook.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function updatePoolOne(Execution memory exec) private {
         AssetAmount memory a = exec.unpackAssetAmountValue();
         AssetAmount memory b = exec.unpackAssetAmountValue();

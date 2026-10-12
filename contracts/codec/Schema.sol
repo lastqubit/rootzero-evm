@@ -109,27 +109,41 @@ pragma solidity ^0.8.33;
 library Schemas {
     // Empty and reserved payloads
 
+    /// @dev Schema DSL for the BYTES block.
     string constant Bytes = "";
+    /// @dev Schema DSL for the STRING block.
     string constant String = "";
+    /// @dev Schema DSL for the LIST block.
     string constant List = "";
     /// @dev Semantic containers for block streams; child schemas depend on the endpoint.
     string constant State = "";
+    /// @dev Schema DSL for the INPUT block.
     string constant Input = "";
+    /// @dev Schema DSL for the OUTPUT block.
     string constant Output = "";
 
     // Live pipeline state
 
+    /// @dev Schema DSL for the BALANCE block.
     string constant Balance = "bytes32 asset, uint amount";
+    /// @dev Schema DSL for the CUSTODY block.
     string constant Custody = "uint host, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the POSITION block.
     string constant Position = "bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty";
 
     // One-word payloads
 
+    /// @dev Schema DSL for the NODE block.
     string constant Node = "uint node";
+    /// @dev Schema DSL for the ENTITY block.
     string constant Entity = "uint entity";
+    /// @dev Schema DSL for the ACCOUNT block.
     string constant Account = "bytes32 account";
+    /// @dev Schema DSL for the ASSET block.
     string constant Asset = "bytes32 asset";
+    /// @dev Schema DSL for the STATUS block.
     string constant Status = "uint code";
+    /// @dev Schema DSL for the AMOUNT block.
     string constant Amount = "uint amount";
 
     /// @dev High 128 bits: inclusive minimum; low 128 bits: inclusive maximum; context defines meaning.
@@ -137,35 +151,50 @@ library Schemas {
 
     // Two-word payloads
 
+    /// @dev Schema DSL for the ASSET_AMOUNT block.
     string constant AssetAmount = "bytes32 asset, uint amount";
+    /// @dev Schema DSL for the ASSET_LIABILITY block.
     string constant AssetLiability = "bytes32 asset, bytes32 liability";
+    /// @dev Schema DSL for the ACCOUNT_ASSET block.
     string constant AccountAsset = "bytes32 account, bytes32 asset";
+    /// @dev Schema DSL for the HOST_ASSET block.
     string constant HostAsset = "uint host, bytes32 asset";
 
     // Three-word payloads
 
+    /// @dev Schema DSL for the BALANCE_CONSTRAINTS block.
     string constant BalanceConstraints = "bytes32 asset, uint min, uint max";
     /// @dev Root pipeline context; budget uses the emitting chain native-value unit.
     string constant Pipeline = "bytes32 account, uint budget";
+    /// @dev Schema DSL for the BOOTSTRAP block.
     string constant Bootstrap = "uint budget, many #assetAmount as balances";
+    /// @dev Schema DSL for the ALLOCATION block.
     string constant Allocation = "uint host, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the ALLOWANCE block.
     string constant Allowance = "uint host, bytes32 asset, uint amount";
     /// @dev Absolute balance, never a credit/debit delta.
     string constant AccountBalance = "bytes32 account, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the ACCOUNT_AMOUNT block.
     string constant AccountAmount = "bytes32 account, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the HOST_AMOUNT block.
     string constant HostAmount = "uint host, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the HOST_ACCOUNT_ASSET block.
     string constant HostAccountAsset = "uint host, bytes32 account, bytes32 asset";
 
     // Four-word payloads
 
+    /// @dev Schema DSL for the TRANSACTION block.
     string constant Transaction = "bytes32 from, bytes32 to, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the HOST_ACCOUNT_AMOUNT block.
     string constant HostAccountAmount = "uint host, bytes32 account, bytes32 asset, uint amount";
 
     // Four-word input payloads
 
     /// @dev Exact identifiers and full-width inclusive quantity bounds.
     string constant PositionConstraints = "bytes32 asset, uint amount, bytes32 liability, uint debt";
+    /// @dev Schema DSL for the QUOTE_REQUEST block.
     string constant QuoteRequest = "bytes32 asset, uint amount, bytes32 liability";
+    /// @dev Schema DSL for the QUOTE block.
     string constant Quote = "bytes32 asset, uint amount, bytes32 liability, uint debt";
 
     // Six-word payloads
@@ -175,22 +204,37 @@ library Schemas {
 
     // Composite payloads
 
+    /// @dev Schema DSL for the SWAP block.
     string constant Swap = "bytes32 asset, uint amount, many #asset as hops";
+    /// @dev Schema DSL for the STEP block.
     string constant Step = "uint cmd, uint value, #input";
+    /// @dev Schema DSL for the CALL block.
     string constant Call = "uint target, uint value, #bytes as payload";
+    /// @dev Schema DSL for the RELAY block.
     string constant Relay = "#input, #bytes as steps";
+    /// @dev Schema DSL for the DISPATCH block.
     string constant Dispatch = "uint portal, uint resources, #bytes as payload";
+    /// @dev Schema DSL for the CONTEXT block.
     string constant Context = "bytes32 account, #state, #input";
+    /// @dev Schema DSL for the RECOVER block.
     string constant Recover = "uint handler, uint value, bytes32 key, #bytes as witness";
+    /// @dev Schema DSL for the ASSET_PREIMAGE block.
     string constant AssetPreimage = "bytes32 asset, #bytes as preimage";
+    /// @dev Schema DSL for the ENVELOPE block.
     string constant Envelope = "uint portal, uint resources, bytes32 key, bytes32 digest";
+    /// @dev Schema DSL for the RESOLUTION block.
     string constant Resolution = "bytes32 key, bytes32 digest";
+    /// @dev Schema DSL for the INTRODUCTION block.
     string constant Introduction = "uint peer, bytes32 origin, uint blocknum";
+    /// @dev Schema DSL for the ENDPOINT block.
     string constant Endpoint = "uint id, uint state, uint input, uint output";
 
     // Metadata payloads
 
+    /// @dev Schema DSL for the COUNTERPARTY block.
     string constant Counterparty = "bytes32 account";
+    /// @dev Schema DSL for the LANE block.
     string constant Lane = "uint lane, #string as body";
+    /// @dev Schema DSL for the SCHEMA block.
     string constant Schema = "uint spec, #string as body";
 }

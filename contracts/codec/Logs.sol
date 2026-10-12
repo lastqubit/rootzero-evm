@@ -73,24 +73,37 @@ pragma solidity ^0.8.33;
 
 import {Encoder} from "./Encoder.sol";
 
+/// @title Logs
 /// @notice Category-specific event encoders. Scalar helpers use temporary memory.
 library Logs {
     // Stable event wire categories; zero is reserved.
+    /// @dev Access record category; not a logging flag.
     uint internal constant Access = 1;
+    /// @dev Introduction record category; not a logging flag.
     uint internal constant Introduction = 2;
+    /// @dev Metadata record category; not a logging flag.
     uint internal constant Metadata = 3;
+    /// @dev Execution record category and base execution logging flag.
     uint internal constant Execution = 4;
+    /// @dev Endpoint record category; not a logging flag.
     uint internal constant Endpoint = 5;
+    /// @dev Balance record category; not a logging flag.
     uint internal constant Balance = 7;
+    /// @dev Envelope record category; not a logging flag.
     uint internal constant Envelope = 8;
+    /// @dev Resolution record category; not a logging flag.
     uint internal constant Resolution = 9;
 
     /// @dev Logging flags only. Lane constants include Execution; zero disables logging.
     uint internal constant State = Execution | (1 << 3);
+    /// @dev INPUT lane logging flag, including the Execution flag.
     uint internal constant Input = Execution | (1 << 4);
+    /// @dev OUTPUT lane logging flag, including the Execution flag.
     uint internal constant Output = Execution | (1 << 5);
 
     /// @notice Record a node authorization change; accounts are not subjects.
+    /// @param node Node identifier.
+    /// @param enabled Whether authorization is enabled.
     function access(uint node, bool enabled) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -104,6 +117,9 @@ library Logs {
     /// @notice Emit a prepared execution buffer without copying.
     /// @dev Caller owns [abs, abs+size), size >= 65, with account at abs+33 and
     /// complete selected containers after abs+65. Consumes category/endpoint slots.
+    /// @param id Registered endpoint node identifier.
+    /// @param abs Absolute memory byte position; not a packed cursor.
+    /// @param size Complete execution record length, in bytes.
     function execution(uint id, uint abs, uint size) internal {
         assembly ("memory-safe") {
             mstore8(abs, Execution)
@@ -113,6 +129,10 @@ library Logs {
     }
 
     /// @notice Emit one memory-backed execution lane using temporary memory.
+    /// @param id Registered endpoint node identifier.
+    /// @param account Account identifier.
+    /// @param key Block key.
+    /// @param value Memory payload bytes, excluding the enclosing block header.
     function execution(uint id, bytes32 account, bytes4 key, bytes memory value) internal {
         uint start;
         assembly ("memory-safe") { start := mload(0x40) }
@@ -122,6 +142,10 @@ library Logs {
     }
 
     /// @notice Emit one validated calldata-backed execution lane.
+    /// @param id Registered endpoint node identifier.
+    /// @param account Account identifier.
+    /// @param key Block key.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
     function execution(uint id, bytes32 account, bytes4 key, uint cur) internal {
         uint start;
         assembly ("memory-safe") { start := mload(0x40) }
@@ -131,6 +155,11 @@ library Logs {
     }
 
     /// @notice Publish an endpoint identity, packed lanes and its registration name.
+    /// @param id Registered endpoint node identifier.
+    /// @param state State block specification or named lane.
+    /// @param input Input block specification or named lane.
+    /// @param output Output block specification or named lane.
+    /// @param name Endpoint registration name.
     function endpoint(uint id, uint state, uint input, uint output, string memory name) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -146,6 +175,9 @@ library Logs {
     }
 
     /// @notice Emit actual updated balance; call after a successful mutation.
+    /// @param account Account identifier.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
     function balance(bytes32 account, bytes32 asset, uint amount) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -160,6 +192,8 @@ library Logs {
     /// @notice Publish metadata blocks about one subject, preserving their bytes.
     /// @dev Accepts ordinary bytes including shared empty values; uses temporary
     /// memory without advancing the allocator or modifying the source.
+    /// @param subject Identifier of the entity described by the metadata.
+    /// @param data Complete metadata block stream.
     function metadata(uint subject, bytes memory data) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -172,6 +206,10 @@ library Logs {
     }
 
     /// @notice Publish peer provenance; blocknum is a caller-supplied claim.
+    /// @param peer Peer host node identifier.
+    /// @param originAccount Transaction-origin account identifier.
+    /// @param blocknum Caller-supplied block-number claim.
+    /// @param name Self-declared host discovery name.
     function introduction(uint peer, bytes32 originAccount, uint blocknum, string memory name) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -186,6 +224,10 @@ library Logs {
     }
 
     /// @notice Describe a transport operation without semantic codes.
+    /// @param portal Transport portal node identifier.
+    /// @param resources Transport resource descriptor.
+    /// @param key Forwarding or recovery lookup key.
+    /// @param digest Message digest.
     function envelope(uint portal, uint resources, bytes32 key, bytes32 digest) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
@@ -199,6 +241,9 @@ library Logs {
     }
 
     /// @notice Record a message becoming unresolved (false) or resolved (true).
+    /// @param key Forwarding or recovery lookup key.
+    /// @param digest Message digest.
+    /// @param resolved Whether the message is resolved.
     function resolution(bytes32 key, bytes32 digest, bool resolved) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)

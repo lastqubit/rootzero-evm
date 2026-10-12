@@ -7,6 +7,7 @@ pragma solidity ^0.8.33;
 /// @param err Revert data returned by the failed call.
 error FailedCall(address addr, bytes4 selector, bytes err);
 
+/// @title Calls
 /// @notice Low-level calls and queries with a single bytes argument.
 library Calls {
     /// @notice Call `addr` with `selector(data)` and report whether it succeeded.

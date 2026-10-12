@@ -5,6 +5,7 @@ import {Logs} from "../codec/Logs.sol";
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 using Executions for Execution;
 
+/// @title WithdrawHook
 /// @notice Hook implemented by hosts that withdraw account balances.
 abstract contract WithdrawHook {
     /// @notice Override to send funds to `account`.
@@ -37,6 +38,8 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
         return runCommand(id, descriptor, context, withdrawOne);
     }
 
+    /// @dev Process one BALANCE item for the Withdraw endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function withdrawOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         withdraw(exec.account, asset, amount);

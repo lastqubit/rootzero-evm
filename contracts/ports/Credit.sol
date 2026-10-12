@@ -27,6 +27,8 @@ abstract contract CreditAccountPort is PortBase, CreditAccountHook {
         return runPort(id, descriptor, data, portCreditAccountOne);
     }
 
+    /// @dev Process one ACCOUNT_AMOUNT item for the CreditAccountPort endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function portCreditAccountOne(Execution memory exec) private {
         (bytes32 account, bytes32 asset, uint amount) = exec.unpackAccountAmount();
         creditAccount(account, asset, amount);

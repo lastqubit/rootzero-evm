@@ -3,10 +3,12 @@ pragma solidity ^0.8.33;
 
 import {NotDivisible, ValueOverflow, ZeroAddress} from "./Errors.sol";
 
-// Basis-points denominator: 10_000 BPS == 100.00%.
+/// @dev Basis-points denominator: 10_000 BPS == 100.00%.
 uint16 constant MAX_BPS = 10_000;
 
 /// @notice Assert that `value` fits in uint8 and return it as uint8.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint8 after the width check.
 function max8(uint value) pure returns (uint8) {
     if (value > type(uint8).max) {
         revert ValueOverflow();
@@ -15,6 +17,8 @@ function max8(uint value) pure returns (uint8) {
 }
 
 /// @notice Assert that `value` fits in uint16 and return it as uint16.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint16 after the width check.
 function max16(uint value) pure returns (uint16) {
     if (value > type(uint16).max) {
         revert ValueOverflow();
@@ -23,6 +27,8 @@ function max16(uint value) pure returns (uint16) {
 }
 
 /// @notice Assert that `value` fits in uint24 and return it as uint24.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint24 after the width check.
 function max24(uint value) pure returns (uint24) {
     if (value > type(uint24).max) {
         revert ValueOverflow();
@@ -31,6 +37,8 @@ function max24(uint value) pure returns (uint24) {
 }
 
 /// @notice Assert that `value` fits in uint32 and return it as uint32.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint32 after the width check.
 function max32(uint value) pure returns (uint32) {
     if (value > type(uint32).max) {
         revert ValueOverflow();
@@ -39,6 +47,8 @@ function max32(uint value) pure returns (uint32) {
 }
 
 /// @notice Assert that `value` fits in uint40 and return it as uint40.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint40 after the width check.
 function max40(uint value) pure returns (uint40) {
     if (value > type(uint40).max) {
         revert ValueOverflow();
@@ -47,6 +57,8 @@ function max40(uint value) pure returns (uint40) {
 }
 
 /// @notice Assert that `value` fits in uint64 and return it as uint64.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint64 after the width check.
 function max64(uint value) pure returns (uint64) {
     if (value > type(uint64).max) {
         revert ValueOverflow();
@@ -55,6 +67,8 @@ function max64(uint value) pure returns (uint64) {
 }
 
 /// @notice Assert that `value` fits in uint96 and return it as uint96.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint96 after the width check.
 function max96(uint value) pure returns (uint96) {
     if (value > type(uint96).max) {
         revert ValueOverflow();
@@ -63,6 +77,8 @@ function max96(uint value) pure returns (uint96) {
 }
 
 /// @notice Assert that `value` fits in uint128 and return it as uint128.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint128 after the width check.
 function max128(uint value) pure returns (uint128) {
     if (value > type(uint128).max) {
         revert ValueOverflow();
@@ -71,6 +87,8 @@ function max128(uint value) pure returns (uint128) {
 }
 
 /// @notice Assert that `value` fits in uint160 and return it as uint160.
+/// @param value Full-width value to encode or transform.
+/// @return Input converted to uint160 after the width check.
 function max160(uint value) pure returns (uint160) {
     if (value > type(uint160).max) {
         revert ValueOverflow();
@@ -81,78 +99,119 @@ function max160(uint value) pure returns (uint160) {
 // Packed fields
 
 /// @notice Clear the 8-bit field beginning at `shift`.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @return Word with the selected bit field updated.
 function clear8(uint value, uint shift) pure returns (uint) {
     return value & ~(uint(type(uint8).max) << shift);
 }
 
 /// @notice Clear the 16-bit field beginning at `shift`.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @return Word with the selected bit field updated.
 function clear16(uint value, uint shift) pure returns (uint) {
     return value & ~(uint(type(uint16).max) << shift);
 }
 
 /// @notice Clear the 32-bit field beginning at `shift`.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @return Word with the selected bit field updated.
 function clear32(uint value, uint shift) pure returns (uint) {
     return value & ~(uint(type(uint32).max) << shift);
 }
 
 /// @notice Clear the 64-bit field beginning at `shift`.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @return Word with the selected bit field updated.
 function clear64(uint value, uint shift) pure returns (uint) {
     return value & ~(uint(type(uint64).max) << shift);
 }
 
 /// @notice Replace the 8-bit field beginning at `shift` with `field`.
 /// @dev Reverts when `field` does not fit in 8 bits.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @param field Replacement field value.
+/// @return Word with the selected bit field updated.
 function replace8(uint value, uint shift, uint field) pure returns (uint) {
     return clear8(value, shift) | (uint(max8(field)) << shift);
 }
 
 /// @notice Replace the 16-bit field beginning at `shift` with `field`.
 /// @dev Reverts when `field` does not fit in 16 bits.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @param field Replacement field value.
+/// @return Word with the selected bit field updated.
 function replace16(uint value, uint shift, uint field) pure returns (uint) {
     return clear16(value, shift) | (uint(max16(field)) << shift);
 }
 
 /// @notice Replace the 32-bit field beginning at `shift` with `field`.
 /// @dev Reverts when `field` does not fit in 32 bits.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @param field Replacement field value.
+/// @return Word with the selected bit field updated.
 function replace32(uint value, uint shift, uint field) pure returns (uint) {
     return clear32(value, shift) | (uint(max32(field)) << shift);
 }
 
 /// @notice Replace the 64-bit field beginning at `shift` with `field`.
 /// @dev Reverts when `field` does not fit in 64 bits.
+/// @param value Full-width value to encode or transform.
+/// @param shift Bit offset of the field to update.
+/// @param field Replacement field value.
+/// @return Word with the selected bit field updated.
 function replace64(uint value, uint shift, uint field) pure returns (uint) {
     return clear64(value, shift) | (uint(max64(field)) << shift);
 }
 
 /// @notice Assert that `n` is evenly divisible by `divisor`.
 /// No-op when `divisor` is zero.
+/// @param n Unsigned dividend.
+/// @param divisor Divisor; zero skips the divisibility check.
 function divisible(uint n, uint divisor) pure {
     if (divisor != 0 && n % divisor != 0) revert NotDivisible();
 }
 
 /// @notice Return `addr` if non-zero, otherwise return `or`.
+/// @param addr Native address to check.
+/// @param or Fallback address.
+/// @return Input address, or the fallback when it is zero.
 function addrOr(address addr, address or) pure returns (address) {
     return addr == address(0) ? or : addr;
 }
 
 /// @notice Assert that `addr` is non-zero and return it unchanged.
+/// @param addr Native address to check.
+/// @return Validated nonzero address.
 function ensureAddr(address addr) pure returns (address) {
     if (addr == address(0)) revert ZeroAddress();
     return addr;
 }
 
 /// @notice Convert a signed integer to its 32-byte two's-complement representation.
+/// @param value Full-width value to encode or transform.
+/// @return Two's-complement word preserving the signed value.
 function intToBytes32(int value) pure returns (bytes32) {
     return bytes32(uint(value));
 }
 
 /// @notice Convert a 32-byte two's-complement representation to a signed integer.
+/// @param value Full-width value to encode or transform.
+/// @return Signed integer represented by the two's-complement word.
 function bytes32ToInt(bytes32 value) pure returns (int) {
     return int(uint(value));
 }
 
 /// @notice Convert a null-terminated `bytes32` value to a Solidity string.
 /// Stops at the first zero byte and returns only the meaningful prefix.
+/// @param value Full-width value to encode or transform.
+/// @return result String containing the bytes before the first zero byte.
 function bytes32ToString(bytes32 value) pure returns (string memory result) {
     uint len;
     while (len < 32 && value[len] != 0) {
@@ -168,6 +227,8 @@ function bytes32ToString(bytes32 value) pure returns (string memory result) {
 }
 
 /// @notice Keccak256-hash a single bytes32 word.
+/// @param value Full-width value to encode or transform.
+/// @return hash Keccak256 digest of the 32-byte word.
 function hash32(bytes32 value) pure returns (bytes32 hash) {
     assembly ("memory-safe") {
         mstore(0x00, value)
@@ -220,16 +281,16 @@ function matchesBase(bytes32 value, uint base) pure returns (bool) {
 
 /// @notice Apply a basis-points fee to an amount (round down).
 /// @param amount Base amount.
-/// @param bps Fee rate in basis points (0–10_000).
+/// @param bps Fee rate in basis points; 10_000 equals 100%, with no rate cap enforced.
 /// @return `amount * bps / 10_000`, or 0 if either input is zero.
 function applyBps(uint amount, uint16 bps) pure returns (uint) {
     if (amount == 0 || bps == 0) return 0;
     return (amount * bps) / MAX_BPS;
 }
 
-/// @notice Compute the pre-fee amount given a post-fee amount and a basis-points rate.
-/// Useful for back-calculating how much to charge so that the net result equals `amount`.
-/// @param amount Desired post-fee (net) amount.
+/// @notice Recover a base amount from a total that includes a basis-points surcharge.
+/// @dev Rounds down. Returns zero when either input is zero; multiplication is checked.
+/// @param amount Total amount including the surcharge.
 /// @param bps Fee rate in basis points.
 /// @return `amount * 10_000 / (10_000 + bps)`, or 0 if either input is zero.
 function beforeBps(uint amount, uint16 bps) pure returns (uint) {

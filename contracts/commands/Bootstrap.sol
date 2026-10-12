@@ -8,6 +8,7 @@ import {Sizes, ASSET_AMOUNT_HEADER, BALANCE_HEADER} from "../codec/Specs.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
 import {UnexpectedState, INVALID_BLOCK} from "../utils/Errors.sol";
 
+/// @title ExecuteBootstrap
 /// @notice Pipeline-local balance funding with a minimum remaining native budget.
 abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     uint private immutable id;
@@ -17,6 +18,7 @@ abstract contract ExecuteBootstrap is CommandBase, DebitAccountHook {
     }
 
     /// @notice Return the registered BOOTSTRAP command ID.
+    /// @return Registered command node identifier.
     function bootstrapId() internal view returns (uint) {
         return id;
     }

@@ -35,26 +35,36 @@ library Assets {
     uint32 constant Erc20 = (uint32(Layout.Evm) << 24) | (uint32(Layout.Asset) << 16) | (uint32(Layout.Erc20) << 8);
 
     /// @notice Return true if `asset` belongs to the EVM asset family.
+    /// @param asset Asset identifier.
+    /// @return True if `asset` belongs to the EVM asset family.
     function isEvm(bytes32 asset) internal pure returns (bool) {
         return isFamily(uint(asset), Family);
     }
 
     /// @notice Return true if `asset` is opaque.
+    /// @param asset Asset identifier.
+    /// @return True if `asset` is opaque.
     function isOpaque(bytes32 asset) internal pure returns (bool) {
         return Ids.isOpaque(asset, Layout.Asset);
     }
 
     /// @notice Return true if `asset` is the singleton global Rootzero asset.
+    /// @param asset Asset identifier.
+    /// @return True if `asset` is the singleton global Rootzero asset.
     function isRootzero(bytes32 asset) internal pure returns (bool) {
         return asset == Rootzero;
     }
 
     /// @notice Return true if `asset` is the local chain coin/token asset.
+    /// @param asset Asset identifier.
+    /// @return True if `asset` is the local chain coin/token asset.
     function isChain(bytes32 asset) internal view returns (bool) {
         return asset == toChain();
     }
 
     /// @notice Return true if `asset` is a local ERC-20 asset.
+    /// @param asset Asset identifier.
+    /// @return True if `asset` is a local ERC-20 asset.
     function isErc20(bytes32 asset) internal view returns (bool) {
         return matchesBase(asset, toLocalBase(Erc20));
     }

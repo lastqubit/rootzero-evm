@@ -27,8 +27,10 @@ interface IHostIntroduction {
 /// Ordinary deployments call a deployed commander during construction without adding an inbound
 /// introduction endpoint to the inheriting host.
 abstract contract HostAnnouncer is Runtime {
+    /// @notice Introduce an ordinary deployment to its contract commander.
     /// @dev Implementations bound to another execution address introduce through that address later.
     /// Ordinary deployment reverts if a contract commander does not accept `introduce(uint,uint,string)`.
+    /// @param name Discovery hint emitted with the introduction.
     constructor(string memory name) {
         if (commander == host || hostAddr() != address(this)) return;
         address target = commanderAddr;
@@ -66,12 +68,16 @@ abstract contract HostIntroduction is HostAnnouncer, IHostIntroduction {
 /// introductions, generic execution, or a native-token receive function.
 /// Pipelines must separately compose a `CommandAccess` policy.
 abstract contract CommandHost is CallerAccess, HostAnnouncer {
+    /// @notice Initialize a host restricted to a nonzero local commander.
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
     /// @param name Discovery hint emitted only when introducing this host.
     constructor(uint cmdr, string memory name) Runtime(cmdr, address(0)) HostAnnouncer(name) {
         if (cmdr == 0) revert InvalidCommander();
     }
 
+    /// @notice Require the caller to be the configured commander.
+    /// @param caller Caller address to check.
+    /// @return Authorized caller address.
     function enforceCaller(address caller) internal view virtual override returns (address) {
         if (caller == address(0) || caller != commanderAddr) revert AccessDenied();
         return caller;
@@ -102,16 +108,19 @@ abstract contract Host is
     /// @dev Active guardian user accounts.
     mapping(bytes32 account => bool) internal guardians;
 
+    /// @notice Initialize host identity, administration, and constructor-time introduction.
     /// @param cmdr Commander host ID; used by the composed access capabilities.
-    ///        Ordinary deployments call `introduce` during construction when
-    ///        the encoded native target is a deployed contract.
+    /// Ordinary deployments call `introduce` during construction when
+    /// the encoded native target is a deployed contract.
     /// @param name Discovery hint emitted only when introducing this host.
     /// @param self Execution address, or zero for an ordinary deployment.
     constructor(uint cmdr, string memory name, address self) Runtime(cmdr, self) HostAnnouncer(name) {
         admin = Accounts.toAdmin(commanderAddr);
     }
 
-    // Publish explicit node authorization transitions, including internal calls.
+    /// @notice Set local node authorization and log a change when its value differs.
+    /// @param node Node identifier.
+    /// @param enabled Whether authorization is enabled.
     function setAccess(uint node, bool enabled) internal virtual override {
         node = Nodes.local(node);
         if (nodes[node] == enabled) return;
@@ -119,57 +128,90 @@ abstract contract Host is
         Logs.access(node, enabled);
     }
 
+    /// @notice Validate a user account and grant it the guardian role.
+    /// @param account Account identifier.
     function appointGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = true;
     }
 
+    /// @notice Validate a user account and revoke its guardian role.
+    /// @param account Account identifier.
     function dismissGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
         guardians[account] = false;
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.
+    /// @param caller Caller address to check.
+    /// @return True if `caller` is the commander, this host, or an authorized host.
     function isTrustedCaller(address caller) internal view returns (bool) {
         if (caller == address(0)) return false;
         return caller == commanderAddr || caller == address(this) || nodes[Nodes.toHost(caller)];
     }
 
     /// @notice Return true if `addr` belongs to an active guardian account.
+    /// @param addr Native address to check.
+    /// @return True if `addr` belongs to an active guardian account.
     function isGuardian(address addr) internal view returns (bool) {
         return guardians[Accounts.toUser(addr)];
     }
 
+    /// @notice Require the admin account and its commander caller.
+    /// @param account Account identifier.
+    /// @param caller Caller address to check.
+    /// @return Authorized administrative account.
     function enforceAdmin(bytes32 account, address caller) internal view virtual override returns (bytes32) {
         if (caller == address(0) || account != admin || caller != commanderAddr) revert AccessDenied();
         return account;
     }
 
+    /// @notice Require a nonzero caller with an active guardian account.
+    /// @param caller Caller address to check.
+    /// @return Authorized caller address.
     function enforceGuardian(address caller) internal view virtual override returns (address) {
         if (caller == address(0) || !isGuardian(caller)) revert AccessDenied();
         return caller;
     }
 
+    /// @notice Require the commander, this host, or an explicitly authorized host caller.
+    /// @param caller Caller address to check.
+    /// @return Authorized caller address.
     function enforceCaller(address caller) internal view virtual override returns (address) {
         if (!isTrustedCaller(caller)) revert AccessDenied();
         return caller;
     }
 
+    /// @notice Require a trusted host caller other than the commander.
+    /// @param caller Caller address to check.
+    /// @return Authorized caller address.
     function enforcePeer(address caller) internal view virtual override returns (address) {
         if (caller == commanderAddr || !isTrustedCaller(caller)) revert AccessDenied();
         return caller;
     }
 
+    /// @notice Require explicit node authorization and resolve its EVM endpoint.
+    /// @param node Node identifier.
+    /// @return selector ABI selector encoded in the authorized node.
+    /// @return target Contract address encoded in the authorized node.
     function enforceNode(uint node) internal view returns (bytes4 selector, address target) {
         if (!nodes[node]) revert AccessDenied();
         selector = bytes4(uint32(node >> 160));
         target = address(uint160(node));
     }
 
+    /// @notice Validate and authorize a local command node, then resolve its endpoint.
+    /// @param command Command node identifier to authorize.
+    /// @return selector ABI selector encoded in the authorized endpoint.
+    /// @return target Contract address encoded in the authorized endpoint.
     function enforceCommand(uint command) internal view virtual override returns (bytes4 selector, address target) {
         return enforceNode(Nodes.command(command));
     }
 
+    /// @notice Validate and authorize a local port node, then resolve its endpoint.
+    /// @param port Port node identifier to authorize.
+    /// @return selector ABI selector encoded in the authorized endpoint.
+    /// @return target Contract address encoded in the authorized endpoint.
     function enforcePort(uint port) internal view virtual override returns (bytes4 selector, address target) {
         return enforceNode(Nodes.port(port));
     }

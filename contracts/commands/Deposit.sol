@@ -6,6 +6,7 @@ import {Execution, Executions, CommandBase, Flags, Specs} from "./Base.sol";
 
 using Executions for Execution;
 
+/// @title DepositHook
 /// @notice Hook implemented by hosts that accept account deposits.
 abstract contract DepositHook {
     /// @notice Override to receive externally sourced funds for `account`.
@@ -16,6 +17,7 @@ abstract contract DepositHook {
     function deposit(bytes32 account, bytes32 asset, uint amount) internal virtual returns (uint balance);
 }
 
+/// @title DepositPayableHook
 /// @notice Hook implemented by hosts that accept value-funded deposits.
 abstract contract DepositPayableHook {
     /// @notice Override to receive externally sourced funds for `account`.
@@ -45,7 +47,7 @@ abstract contract Deposit is CommandBase, DepositHook {
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks into the command account and output matching BALANCE blocks.
-    /// @dev Logs the complete Output stream with the amounts returned by the hooks.
+    /// @dev Logs the complete OUTPUT stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
@@ -53,6 +55,8 @@ abstract contract Deposit is CommandBase, DepositHook {
         return runCommand(id, descriptor, context, depositOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT item for the Deposit endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function depositOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         amount = deposit(exec.account, asset, amount);
@@ -72,7 +76,7 @@ abstract contract DepositPayable is CommandBase, DepositPayableHook {
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks with access to a mutable native-value budget.
-    /// @dev Logs the complete Output stream with the amounts returned by the hooks.
+    /// @dev Logs the complete OUTPUT stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.
@@ -80,6 +84,8 @@ abstract contract DepositPayable is CommandBase, DepositPayableHook {
         return runCommand(id, descriptor, context, depositPayableOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT item for the DepositPayable endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function depositPayableOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         amount = deposit(exec.account, asset, amount, exec);

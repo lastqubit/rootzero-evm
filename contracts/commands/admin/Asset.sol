@@ -6,6 +6,7 @@ import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
 
 using Executions for Execution;
 
+/// @title AllowAssetHook
 /// @notice Hook implemented by hosts that allow assets.
 abstract contract AllowAssetHook {
     /// @notice Allow a single asset.
@@ -14,6 +15,7 @@ abstract contract AllowAssetHook {
     function allowAsset(bytes32 asset) internal virtual;
 }
 
+/// @title DenyAssetHook
 /// @notice Hook implemented by hosts that deny assets.
 abstract contract DenyAssetHook {
     /// @notice Deny a single asset.
@@ -44,6 +46,8 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
         return runAdmin(id, descriptor, context, allowAssetOne);
     }
 
+    /// @dev Process one ASSET item for the AllowAsset endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function allowAssetOne(Execution memory exec) private {
         bytes32 asset = exec.unpackAsset();
         allowAsset(asset);
@@ -72,6 +76,8 @@ abstract contract DenyAsset is AdminBase, DenyAssetHook {
         return runAdmin(id, descriptor, context, denyAssetOne);
     }
 
+    /// @dev Process one ASSET item for the DenyAsset endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function denyAssetOne(Execution memory exec) private {
         bytes32 asset = exec.unpackAsset();
         denyAsset(asset);

@@ -522,6 +522,8 @@ library Blocks {
     /// @dev Requires current <= end <= calldatasize; otherwise reverts OutOfBounds.
     /// A zero cursor returns msg.data[0:0]. Ignores metadata and performs no block
     /// or schema validation. Neither advances the cursor nor copies or allocates memory.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata bytes view of the remaining range.
     function toBytesChecked(uint cur) internal pure returns (bytes calldata data) {
         return Cursors.toBytesChecked(cur);
     }
@@ -540,6 +542,8 @@ library Blocks {
     /// @dev Shares toBytesChecked's bounds checks and OutOfBounds error.
     /// Performs no UTF-8, block, or schema validation. Ignores metadata;
     /// neither advances the cursor nor copies or allocates memory.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return data Calldata string view of the remaining range.
     function toStringChecked(uint cur) internal pure returns (string calldata data) {
         return Cursors.toStringChecked(cur);
     }
@@ -553,6 +557,8 @@ library Blocks {
     /// Empty ranges pass. Reverts OutOfBounds for reversed or truncated ranges and
     /// InvalidBlock for key mismatches. Does not advance or inspect payload contents.
     /// Callers establish calldata provenance; cursor metadata is ignored.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param key Block key.
     function expectRun(uint cur, bytes4 key) internal pure {
         uint abs = uint32(cur);
         uint end = uint32(cur >> 32);
@@ -1074,7 +1080,7 @@ library Blocks {
         amount = uint(a);
     }
 
-    /// @notice Decode ASSETLIABILITY and return the advanced source cursor.
+    /// @notice Decode ASSET_LIABILITY and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return asset Decoded payload value.
@@ -1084,7 +1090,7 @@ library Blocks {
         (asset, liability, nextCur) = unpack64(cur, Keys.AssetLiability);
     }
 
-    /// @notice Decode ACCOUNTASSET and return the advanced source cursor.
+    /// @notice Decode ACCOUNT_ASSET and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return account Decoded payload value.
@@ -1094,7 +1100,7 @@ library Blocks {
         (account, asset, nextCur) = unpack64(cur, Keys.AccountAsset);
     }
 
-    /// @notice Decode HOSTASSET and return the advanced source cursor.
+    /// @notice Decode HOST_ASSET and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return host Decoded payload value.
@@ -1109,6 +1115,10 @@ library Blocks {
     /// @notice Decode PIPELINE and return the advanced bounded calldata cursor.
     /// @dev Validates the exact key, 64-byte payload and containment; performs no
     /// account authorization or budget validation.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return account Account identifier.
+    /// @return budget Native-value budget, in wei.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackPipeline(uint cur) internal pure returns (bytes32 account, uint budget, uint nextCur) {
         bytes32 a;
         (account, a, nextCur) = unpack64(cur, Keys.Pipeline);
@@ -1118,6 +1128,10 @@ library Blocks {
     /// @notice Decode BOOTSTRAP's budget and final LIST payload.
     /// @dev Validates parent containment and exact final child framing. Consumers
     /// validate ASSET_AMOUNT contents and any exactly-one-outer-block requirement.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return budget Native-value budget, in wei.
+    /// @return balancesCur Clean calldata cursor over the ASSET_AMOUNT list payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackBootstrap(uint cur) internal pure returns (uint budget, uint balancesCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
@@ -1132,6 +1146,9 @@ library Blocks {
     /// @dev Requires the block to fill the source range. Invalid outer framing,
     /// truncation, trailing data and invalid LIST framing revert InvalidBlock.
     /// Returns a clean child cursor; consumers validate ASSET_AMOUNT contents.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return budget Native-value budget, in wei.
+    /// @return balancesCur Clean calldata cursor over the ASSET_AMOUNT list payload.
     function unpackBootstrapExact(uint cur) internal pure returns (uint budget, uint balancesCur) {
         uint payloadCur = unpackExact(cur, Specs.Bootstrap);
         uint abs = uint32(payloadCur);
@@ -1216,7 +1233,7 @@ library Blocks {
         amount = uint(a);
     }
 
-    /// @notice Decode ACCOUNTAMOUNT and return the advanced source cursor.
+    /// @notice Decode ACCOUNT_AMOUNT and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return account Decoded payload value.
@@ -1246,7 +1263,7 @@ library Blocks {
         amount = uint(b);
     }
 
-    /// @notice Decode HOSTACCOUNTASSET and return the advanced source cursor.
+    /// @notice Decode HOSTACCOUNT_ASSET and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
     /// @return host Decoded payload value.
@@ -1261,8 +1278,11 @@ library Blocks {
         host = uint(a);
     }
 
-    /// @notice Decode BALANCECONSTRAINTS without enforcing its quantity constraints.
+    /// @notice Decode BALANCE_CONSTRAINTS without enforcing its quantity constraints.
     /// @dev Validates header and containment once, then copies the full-width fields into the struct.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return value Decoded BalanceConstraints value in independent memory.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackBalanceConstraints(uint cur) internal pure returns (BalanceConstraints memory value, uint nextCur) {
         uint abs = uint32(cur);
         expectHeader(abs, Headers.BalanceConstraints);
@@ -1324,8 +1344,11 @@ library Blocks {
         amount = uint(b);
     }
 
-    /// @notice Decode POSITIONCONSTRAINTS without enforcing its quantity constraints.
+    /// @notice Decode POSITION_CONSTRAINTS without enforcing its quantity constraints.
     /// @dev Validates header and containment once, then copies the full-width fields into the struct.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return value Decoded PositionConstraints value in independent memory.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackPositionConstraints(
         uint cur
     ) internal pure returns (PositionConstraints memory value, uint nextCur) {
@@ -1364,6 +1387,9 @@ library Blocks {
     /// @dev Validates the exact header and full containment before copying both legs.
     /// Preserves source end/metadata; the returned struct owns independent memory.
     /// Account policy and debit/credit semantics belong to the caller.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return value Decoded Booking value in independent memory.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackBooking(uint cur) internal pure returns (Booking memory value, uint nextCur) {
         uint payloadCur;
         (payloadCur, nextCur) = unpackFixed(cur, Headers.Booking);
@@ -1377,6 +1403,11 @@ library Blocks {
     /// @notice Decode SWAP and return its LIST payload as a clean hops cursor.
     /// @dev Validates parent containment and the exact final LIST child. Does not validate
     /// hop contents, route semantics, or amount; consumers enforce those requirements.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
+    /// @return hopsCur Clean calldata cursor over the hop LIST payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackSwap(uint cur) internal pure returns (bytes32 asset, uint amount, uint hopsCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
@@ -1406,6 +1437,10 @@ library Blocks {
     /// @notice Decode SCHEMA and retain its final STRING payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return spec Packed block specification or named lane.
+    /// @return bodyCur Clean calldata cursor over the schema STRING payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackSchema(uint cur) internal pure returns (uint spec, uint bodyCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
@@ -1438,6 +1473,10 @@ library Blocks {
     /// @dev Requires calldata provenance. Rejects malformed children, truncation,
     /// and trailing bytes with InvalidBlock. Child cursors have no metadata;
     /// account semantics and the contents of the STATE/INPUT lanes are not checked.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return account Account identifier.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function unpackContextExact(uint cur) internal pure returns (bytes32 account, uint stateCur, uint inputCur) {
         uint abs = uint32(cur);
         uint endAbs = uint32(cur >> 32);
@@ -1446,6 +1485,11 @@ library Blocks {
     }
 
     /// @dev Decode children within a validated CONTEXT boundary before reading account.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @param endAbs Exclusive source end position.
+    /// @return account Account identifier.
+    /// @return stateCur Clean calldata cursor over the STATE payload.
+    /// @return inputCur Clean calldata cursor over the INPUT payload.
     function contextPayload(
         uint abs,
         uint endAbs
@@ -1479,6 +1523,11 @@ library Blocks {
     /// @notice Decode CALL and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return target Target node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return payloadCur Clean calldata cursor over the payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackCall(uint cur) internal pure returns (uint target, uint value, uint payloadCur, uint nextCur) {
         uint abs = uint32(cur);
         unchecked {
@@ -1493,6 +1542,11 @@ library Blocks {
     /// @notice Decode DISPATCH and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return portal Transport portal node identifier.
+    /// @return resources Transport resource descriptor.
+    /// @return payloadCur Clean calldata cursor over the payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackDispatch(
         uint cur
     ) internal pure returns (uint portal, uint resources, uint payloadCur, uint nextCur) {
@@ -1509,6 +1563,12 @@ library Blocks {
     /// @notice Decode RECOVER and retain its final BYTES payload as a cursor.
     /// @dev Checks the parent once; exact final-child validation also proves the fixed prefix fits.
     /// Returned child ranges are clean; the advanced source retains its end and metadata.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return handler Recovery handler node identifier.
+    /// @return value Native value assigned to the operation, in wei.
+    /// @return key Forwarding or recovery lookup key.
+    /// @return witnessCur Clean calldata cursor over the recovery witness payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function unpackRecover(
         uint cur
     ) internal pure returns (uint handler, uint value, bytes32 key, uint witnessCur, uint nextCur) {
@@ -1526,6 +1586,10 @@ library Blocks {
     /// @notice Check LIMITS against full-width quantities and advance the source.
     /// @dev Validates header and containment once. The high 128 bits are the inclusive
     /// minimum amount; the low 128 bits are the literal inclusive maximum debt.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param amount Quantity in the asset's native units.
+    /// @param debt Quantity in the liability's native units.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
     function expectLimits(uint cur, uint amount, uint debt) internal pure returns (uint nextCur) {
         uint limits;
         (limits, nextCur) = unpackLimits(cur);

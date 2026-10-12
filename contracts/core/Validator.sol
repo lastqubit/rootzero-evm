@@ -21,6 +21,9 @@ abstract contract Validator {
     mapping(address account => mapping(uint192 key => uint64)) internal nonces;
 
     /// @dev Recover the signer from an Ethereum signed message hash and signature.
+    /// @param hash Message hash before the Ethereum signed-message prefix is applied.
+    /// @param sig ECDSA signature bytes.
+    /// @return Recovered signer address, or zero if recovery fails.
     function recover(bytes32 hash, bytes calldata sig) private pure returns (address) {
         return hash.toEthSignedMessageHash().tryRecoverCalldata(sig);
     }

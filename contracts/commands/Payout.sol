@@ -7,6 +7,7 @@ import {Accounts} from "../utils/Accounts.sol";
 
 using Executions for Execution;
 
+/// @title PayoutHook
 /// @notice Hook implemented by hosts that pay balances to accounts.
 abstract contract PayoutHook {
     /// @notice Override to pay `amount` from `account` to `to`.
@@ -42,6 +43,8 @@ abstract contract Payout is CommandBase, PayoutHook {
         return runCommand(id, descriptor, context, payoutOne);
     }
 
+    /// @dev Process one BALANCE / ACCOUNT item for the Payout endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function payoutOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         bytes32 to = Accounts.account(exec.unpackAccount());

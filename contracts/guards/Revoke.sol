@@ -24,10 +24,13 @@ abstract contract Revoke is NodeAccess, GuardBase {
 
     /// @notice Revoke every NODE block in `input` as the active guardian.
     /// @dev Node mutation hooks publish Access events for authorization changes.
+    /// @param input NODE blocks to deauthorize.
     function revoke(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeOne);
     }
 
+    /// @dev Decode one node and revoke its authorization.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function revokeOne(Execution memory exec) private {
         uint node = exec.unpackNode();
         setAccess(node, false);
@@ -47,10 +50,13 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 
     /// @notice Revoke every HOST_ASSET allowance in `input` as the active guardian.
     /// @dev Logs INPUT after hooks; each allowance is set to zero.
+    /// @param input HOST_ASSET blocks whose allowances are revoked.
     function revokeAllowance(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAllowanceOne);
     }
 
+    /// @dev Decode one host/asset pair and set its allowance to zero.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function revokeAllowanceOne(Execution memory exec) private {
         (uint peer, bytes32 asset) = exec.unpackHostAsset();
         allowance(peer, asset, 0);
@@ -70,10 +76,13 @@ abstract contract RevokeAsset is GuardBase, DenyAssetHook {
 
     /// @notice Deny every ASSET block in `input` as the active guardian.
     /// @dev Logs INPUT after the asset hooks.
+    /// @param input ASSET blocks to deny.
     function revokeAsset(bytes calldata input) external onlyGuardian {
         runGuard(id, descriptor, input, revokeAssetOne);
     }
 
+    /// @dev Decode one asset and invoke the denial hook.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function revokeAssetOne(Execution memory exec) private {
         bytes32 asset = exec.unpackAsset();
         denyAsset(asset);

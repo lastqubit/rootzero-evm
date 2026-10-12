@@ -11,6 +11,7 @@ import {UnexpectedInput} from "../utils/Errors.sol";
 
 using Executions for Execution;
 
+/// @title SettlePayableHook
 /// @notice Hook implemented by hosts that fully settle positions using native value.
 abstract contract SettlePayableHook {
     /// @notice Override to settle one position for `account` with a shared value budget.
@@ -36,6 +37,7 @@ abstract contract Settle is CommandBase, SettleHook {
     }
 
     /// @notice Return the registered SETTLE command ID.
+    /// @return Registered command node identifier.
     function settleId() internal view returns (uint) {
         return id;
     }
@@ -49,6 +51,8 @@ abstract contract Settle is CommandBase, SettleHook {
         return runCommand(id, descriptor, context, settleOne);
     }
 
+    /// @dev Process one POSITION item for the Settle endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function settleOne(Execution memory exec) private {
         Position memory position = exec.unpackPositionValue();
         settle(exec.account, position);
@@ -74,6 +78,8 @@ abstract contract SettlePayable is CommandBase, SettlePayableHook {
         return runCommand(id, descriptor, context, settlePayableOne);
     }
 
+    /// @dev Process one POSITION item for the SettlePayable endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function settlePayableOne(Execution memory exec) private {
         Position memory position = exec.unpackPositionValue();
         settle(exec.account, position, exec);

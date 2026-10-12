@@ -23,6 +23,10 @@ library Execute {
     /// @dev Requires a validated cursor and nonzero size including the header.
     /// Does not inspect headers, advance cur, or repeat provenance checks.
     /// Metadata is ignored. A partial trailing block reverts before any hook runs.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param size Nonzero complete block size, including its header, in bytes.
+    /// @return abs Absolute calldata position of the selected bytes.
+    /// @return end Exclusive source end.
     function bounds(uint cur, uint size) internal pure returns (uint abs, uint end) {
         return Cursors.bounds(cur, size);
     }
@@ -31,6 +35,10 @@ library Execute {
     /// @dev Requires a live bytes allocation and nonzero complete block size.
     /// Does not inspect headers or copy memory. A partial trailing block reverts
     /// before any hook runs. Memory addresses remain full-width.
+    /// @param source Memory source bytes.
+    /// @param size Nonzero complete block size, including its header, in bytes.
+    /// @return abs Absolute memory position of the first block.
+    /// @return end Exclusive absolute memory end of the stream.
     function bounds(bytes memory source, uint size) internal pure returns (uint abs, uint end) {
         uint remainder;
         assembly ("memory-safe") {
@@ -46,6 +54,8 @@ library Execute {
 
     /// @notice Decode a NODE at an in-bounds absolute calldata position.
     /// @dev Checks the exact header; caller establishes containment for 40 bytes.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return node Node identifier.
     function unpackNode(uint abs) internal pure returns (uint node) {
         uint header;
         assembly ("memory-safe") {
@@ -57,6 +67,8 @@ library Execute {
 
     /// @notice Decode an AMOUNT at an in-bounds absolute calldata position.
     /// @dev Checks the exact header; caller establishes containment for 40 bytes.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return amount Quantity in the asset's native units.
     function unpackAmount(uint abs) internal pure returns (uint amount) {
         uint header;
         assembly ("memory-safe") {
@@ -68,6 +80,9 @@ library Execute {
 
     /// @notice Decode an ASSET_AMOUNT at an in-bounds absolute calldata position.
     /// @dev Checks the exact header; caller establishes containment for 72 bytes.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
     function unpackAssetAmount(uint abs) internal pure returns (bytes32 asset, uint amount) {
         uint header;
         assembly ("memory-safe") {
@@ -82,6 +97,9 @@ library Execute {
 
     /// @notice Decode a BALANCE at an in-bounds absolute memory position.
     /// @dev Checks the exact header; caller establishes containment for 72 bytes.
+    /// @param abs Absolute memory byte position; not a packed cursor.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
     function unpackBalanceMemory(uint abs) internal pure returns (bytes32 asset, uint amount) {
         uint header;
         assembly ("memory-safe") {
@@ -96,6 +114,8 @@ library Execute {
     /// @dev Checks the exact header; caller establishes containment for 168 bytes.
     /// Copies all five words, including counterparty. Hooks may mutate or retain
     /// this struct without modifying the source or a subsequently decoded value.
+    /// @param abs Absolute memory byte position; not a packed cursor.
+    /// @return value Decoded Position value in independent memory.
     function unpackPositionMemory(uint abs) internal pure returns (Position memory value) {
         uint header;
         assembly ("memory-safe") { header := shr(192, mload(abs)) }
@@ -114,6 +134,7 @@ library Execute {
     /// final length but uninitialized contents: fill every block before exposing
     /// it. Hooks may allocate between writes because each write stays inside
     /// the reserved logical range. No growable cursor or finalization is needed.
+    /// @param count Number of BALANCE blocks to allocate.
     /// @return abs Absolute memory position of the first output block.
     /// @return output Exactly sized BALANCE stream with zero trailing padding.
     function allocateBalances(uint count) internal pure returns (uint abs, bytes memory output) {
@@ -125,6 +146,9 @@ library Execute {
     /// @dev Requires at least 72 writable bytes at abs. Performs no bounds check,
     /// growth, or allocation. All stores remain within those 72 bytes.
     /// @param abs Absolute output memory position, not a packed cursor.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @return nextAbs Absolute memory position immediately after the written BALANCE block.
     function writeBalance(uint abs, bytes32 asset, uint amount) internal pure returns (uint nextAbs) {
         abs = Encoder.writeHeader(abs, Keys.Balance, 64);
         abs = Encoder.write32(abs, asset);
@@ -137,6 +161,8 @@ library Execute {
     /// @dev Requires a validated input cursor and live state allocation. Validates
     /// stream sizes before any block, then headers, identifiers, and quantities
     /// in that order. Leaves state unchanged and does not allocate or advance inputCur.
+    /// @param state State block stream, excluding the enclosing container header.
+    /// @param inputCur Bounded calldata cursor over the paired constraint blocks.
     function checkBalances(bytes memory state, uint inputCur) internal pure {
         assembly ("memory-safe") {
             function fail(selector) {
@@ -180,6 +206,8 @@ library Execute {
     /// @dev Requires a validated input cursor and live state allocation. Validates
     /// stream sizes before any block, then headers, identifiers, and quantities
     /// in that order. Leaves state unchanged and does not allocate or advance inputCur.
+    /// @param state State block stream, excluding the enclosing container header.
+    /// @param inputCur Bounded calldata cursor over the paired constraint blocks.
     function checkPositions(bytes memory state, uint inputCur) internal pure {
         assembly ("memory-safe") {
             function fail(selector) {

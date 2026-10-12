@@ -7,6 +7,7 @@ import {QueryBase} from "./Base.sol";
 
 using Executions for Execution;
 
+/// @title GetBalanceHook
 /// @notice Hook implemented by hosts that expose account balance queries.
 abstract contract GetBalanceHook {
     /// @notice Resolve one account's balance for one supported asset.
@@ -35,6 +36,8 @@ abstract contract GetBalance is QueryBase, GetBalanceHook {
         return runQuery(descriptor, input, getBalanceOne);
     }
 
+    /// @dev Process one ACCOUNT_ASSET item for the GetBalance endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function getBalanceOne(Execution memory exec) private view {
         (bytes32 account, bytes32 asset) = exec.unpackAccountAsset();
         uint amount = getBalance(account, asset);

@@ -35,6 +35,9 @@ abstract contract EndpointBase is SchemaAnnot {
 /// and input together through `openCommand`.
 abstract contract InputEndpointBase is EndpointBase {
     /// @notice Open a bounded endpoint input stream.
+    /// @param input Input block stream, excluding the enclosing container header.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @return exec Initialized execution over the supplied input.
     function openInput(bytes calldata input, uint descriptor) internal view returns (Execution memory exec) {
         exec.openInput(descriptor, msg.value, input);
     }

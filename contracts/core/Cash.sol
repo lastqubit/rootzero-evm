@@ -21,6 +21,7 @@ function sendChainAsset(bytes32 account, uint amount) {
     if (!success) revert SendFailed();
 }
 
+/// @title CashinHook
 /// @notice Hook implemented by hosts that credit native value to accounts.
 abstract contract CashinHook {
     /// @notice Credit an exact chain-asset amount already held by the host to `account`.
@@ -36,6 +37,7 @@ abstract contract CashinHook {
     function cashin(bytes32 account, uint amount) internal virtual;
 }
 
+/// @title CashoutHook
 /// @notice Hook implemented by hosts that pay chain assets to accounts.
 abstract contract CashoutHook {
     /// @notice Pay an exact chain-asset amount to `account`.

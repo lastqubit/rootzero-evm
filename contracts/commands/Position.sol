@@ -5,6 +5,7 @@ import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Execute} from "../codec/Execute.sol";
 import {Position} from "../core/Types.sol";
 
+/// @title CheckPosition
 /// @notice Check each POSITION against a paired POSITION_CONSTRAINTS block and preserve the position.
 /// @dev Checks identifiers and inclusive quantity bounds, not counterparty authorization or backing.
 abstract contract CheckPosition is CommandBase {
@@ -18,6 +19,7 @@ abstract contract CheckPosition is CommandBase {
     }
 
     /// @notice Return the registered checkPosition command ID.
+    /// @return Registered command node identifier.
     function checkPositionId() internal view returns (uint) {
         return id;
     }
@@ -30,6 +32,8 @@ abstract contract CheckPosition is CommandBase {
         return runCommand(id, descriptor, context, checkPositionOne);
     }
 
+    /// @dev Check one position against its paired constraints and append the unchanged position.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function checkPositionOne(Execution memory exec) private pure {
         Position memory position = exec.unpackPositionValue();
         exec.expectPositionConstraints(position);
@@ -37,6 +41,7 @@ abstract contract CheckPosition is CommandBase {
     }
 }
 
+/// @title ExecuteCheckPosition
 /// @notice Extends checkPosition with direct validation of memory-backed pipeline state.
 abstract contract ExecuteCheckPosition is CheckPosition {
     /// @notice Validate positions in place without unpacking or copying their blocks.

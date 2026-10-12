@@ -7,6 +7,7 @@ import {QueryBase} from "./Base.sol";
 
 using Executions for Execution;
 
+/// @title GetQuoteHook
 /// @notice Hook implemented by hosts that expose exact-asset-amount quotes.
 abstract contract GetQuoteHook {
     /// @notice Quote the liability required to receive exactly the requested asset amount.
@@ -18,6 +19,7 @@ abstract contract GetQuoteHook {
     function getQuote(bytes32 asset, uint amount, bytes32 liability) internal view virtual returns (uint debt);
 }
 
+/// @title GetQuote
 /// @notice Read-only batched quotes, with one complete QUOTE per QUOTE_REQUEST in input order.
 abstract contract GetQuote is QueryBase, GetQuoteHook {
     uint private immutable descriptor;
@@ -33,6 +35,8 @@ abstract contract GetQuote is QueryBase, GetQuoteHook {
         return runQuery(descriptor, input, getQuoteOne);
     }
 
+    /// @dev Process one QUOTE_REQUEST item for the GetQuote endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function getQuoteOne(Execution memory exec) private view {
         (bytes32 asset, uint amount, bytes32 liability) = exec.unpackQuoteRequest();
         uint debt = getQuote(asset, amount, liability);

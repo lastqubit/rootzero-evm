@@ -22,6 +22,7 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
     }
 
     /// @notice Return the registered DEBIT_ACCOUNT command ID.
+    /// @return Registered command node identifier.
     function debitAccountId() internal view returns (uint) {
         return id;
     }
@@ -34,6 +35,8 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
         return runCommand(id, descriptor, context, debitAccountOne);
     }
 
+    /// @dev Process one ASSET_AMOUNT item for the DebitAccount endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function debitAccountOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackAssetAmount();
         debitAccount(exec.account, asset, amount);

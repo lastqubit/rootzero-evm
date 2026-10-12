@@ -22,6 +22,7 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
     }
 
     /// @notice Return the registered CREDIT_ACCOUNT command ID.
+    /// @return Registered command node identifier.
     function creditAccountId() internal view returns (uint) {
         return id;
     }
@@ -34,6 +35,8 @@ abstract contract CreditAccount is CommandBase, CreditAccountHook {
         return runCommand(id, descriptor, context, creditAccountOne);
     }
 
+    /// @dev Process one BALANCE item for the CreditAccount endpoint.
+    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function creditAccountOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         creditAccount(exec.account, asset, amount);

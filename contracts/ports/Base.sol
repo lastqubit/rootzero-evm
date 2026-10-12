@@ -24,7 +24,7 @@ using Executions for Execution;
 /// need not repeat account-format validation. A faulty trusted integration can
 /// supply malformed accounts, and the receiving host does not guarantee rejection.
 abstract contract PortBase is PeerAccess, InputEndpointBase {
-    /// @dev Restrict execution to trusted callers, excluding the commander.
+    /// @dev Apply the composed peer-access policy to the current caller.
     modifier onlyPeer() {
         enforcePeer(msg.sender);
         _;
@@ -73,6 +73,13 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     }
 
     /// @notice Attribute a port invocation explicitly; never infer an account from its peer.
+    /// @param id Registered endpoint node identifier.
+    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @param account Account identifier.
+    /// @param input Input block stream, excluding the enclosing container header.
+    /// @param process Internal callback that consumes and processes one item.
+    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return credit Native value returned to the caller budget, in wei.
     function runPort(
         uint id,
         uint descriptor,
