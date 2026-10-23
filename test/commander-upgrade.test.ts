@@ -9,6 +9,7 @@ import {
   authorizeCommander, commanderCashout, commanderCodeSize, commanderDeadline,
   commanderRoundtrip, deployCommanderPair, upgradeCommander,
 } from "./helpers/commander-proxy.js";
+import { Category } from "./helpers/event-records.js";
 import "./helpers/matchers.js";
 
 describe("Main-style commander upgrade", function () {
@@ -35,8 +36,11 @@ describe("Main-style commander upgrade", function () {
       await host.rootzero(await commanderCashout(host, 7n), commanderDeadline);
       expect(await host.balanceOf(account, native)).eq(993n);
       expect(await (await getProvider()).getBalance(await host.getAddress())).eq(993n);
-      // The local roundtrip emits identical account-balance records at each host.
-      observations.push(local.logs.map((log: any) => log.data));
+      // The local roundtrip emits identical account-balance records at each host. Start
+      // records list command IDs, which embed each host's own address, so compare them apart.
+      const start = local.logs.filter((log: any) => Number(ethers.dataSlice(log.data, 0, 1)) === Category.Pipeline);
+      expect(start.map((log: any) => ethers.dataSlice(log.data, 1, 33))).deep.eq([account]);
+      observations.push(local.logs.filter((log: any) => !start.includes(log)).map((log: any) => log.data));
     }
     expect(observations[1]).deep.eq(observations[0]);
   });

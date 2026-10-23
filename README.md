@@ -103,7 +103,7 @@ const host = await ethers.deployContract("ExampleHost", [commander]);
 const account = encodeUserAccount(user.address); // receiving account
 const input = encodeAssetAmountBlock(asset, 100n); // what to deposit
 const context = encodeContextBlock(account, "0x", input);
-await host.deposit(context); // logs the credited amount in the Deposit OUTPUT lane
+await host.deposit(context); // returns the credited BALANCE; pipelines record it as the next STATE
 ```
 
 The rest of this guide explains the ideas this example leans on — blocks, IDs,
@@ -467,8 +467,8 @@ the input asset. Both routes exclude the asset named in the fixed fields.
 For an A -> B -> C swap, exact-input encodes A with hops [B, C], while exact-output
 encodes C with hops [B, A].
 Commands validate each ASSET block. Empty routes call no hook and produce a
-Position with equal asset/liability and amount/debt; the position is still returned
-and logged, and normal settlement rules apply. The exact-input
+Position with equal asset/liability and amount/debt; the position is still returned,
+and normal settlement rules apply. The exact-input
 hook takes `(liability, debt, asset)` and returns the amount received; the
 exact-output hook takes `(asset, amount, liability)` and returns the debt required.
 The command feeds each result into the next hop and builds one aggregate Position
@@ -495,7 +495,7 @@ Both commands require every incoming counterparty to equal the host's configured
 `Counterparty`, reverting `UnexpectedValue` on mismatch even for an empty route.
 An empty route leaves the position unchanged without calling a hook. Empty state
 with empty input is valid after access checks. Outputs preserve position order
-and use OUTPUT logging. Malformed blocks, unmatched positions/routes, and trailing
+and carry the Output logging hint. Malformed blocks, unmatched positions/routes, and trailing
 data revert the batch. All four swap commands can share one implementation of
 each hook and one `Counterparty(account)` initialization. Pricing, amount and
 pair validation, reserves, custody, and settlement remain host responsibilities.
@@ -507,7 +507,7 @@ state automatically; generic and custom-schema decoding consumes input:
 
 ```solidity
 function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-    return runCommand(id, descriptor, context, depositOne);
+    return runCommand(descriptor, context, depositOne);
 }
 
 function depositOne(Execution memory exec) private {
@@ -518,21 +518,20 @@ function depositOne(Execution memory exec) private {
 ```
 
 A command announces itself when the host is deployed. Its constructor emits a
-discovery event carrying pure state/input/output specs and logging flags encoded in the endpoint ID, plus a
+discovery event carrying pure state/input/output specs and logging hints encoded in the endpoint ID, plus a
 human-readable registration name. Flags are carried by the endpoint ID; the helper separately
 returns an execution descriptor for efficient opening:
 
 ```solidity
 abstract contract MyCommand is CommandBase {
-    uint private immutable id;
     uint private immutable descriptor;
 
     constructor() {
-        (id, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
+        (, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     function myCommand(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, myCommandOne);
+        return runCommand(descriptor, context, myCommandOne);
     }
 
     function myCommandOne(Execution memory exec) private pure {
@@ -543,44 +542,39 @@ abstract contract MyCommand is CommandBase {
 ```
 
 Callback runners in `CommandBase`, `AdminBase`, `PortBase`, `GuardBase`, and `QueryBase` provide the standard lifecycle:
-`runCommand(id, descriptor, context, callback)` processes command batches,
-`runCommandOnce(id, descriptor, context, callback)` invokes its callback exactly once,
-`runAdmin(id, descriptor, context, callback)` authorizes the admin context before
+`runCommand(descriptor, context, callback)` processes command batches,
+`runCommandOnce(descriptor, context, callback)` invokes its callback exactly once,
+`runAdmin(descriptor, context, callback)` authorizes the admin context before
 processing a batch, including when its sources are empty,
-`runPort(id, descriptor, input, callback)` processes port batches and returns output plus
+`runGuard(descriptor, input, callback)` processes guardian input,
+`runPort(descriptor, input, callback)` processes port batches and returns output plus
 remaining value credit, and `runQuery(descriptor, input, callback)` processes queries
 through an `internal view` callback and returns only response bytes. Each callback
 receives the shared `Execution memory`. Batch callbacks must consume an item on
 every invocation; `runCommandOnce` also invokes its callback for empty sources and rejects
 leftover data afterward. Entry-point access modifiers remain in place.
 
-Execution logging is selected at registration with the endpoint ID flags, combining
-`Logs.State`, `Logs.Input`, or `Logs.Output`. Zero disables
-logging and log preparation entirely. For example:
+Endpoints never log their own execution; callers do. Registration can add logging
+hints to the endpoint ID flags, combining `Logs.State`, `Logs.Input`, or `Logs.Output`
+to say which lanes are worth recording. Hints are not rules and endpoints ignore them:
 
 ```solidity
 uint private constant FLAGS = Logs.State | Logs.Output;
 
 // In the constructor:
-(id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, FLAGS);
+(, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, FLAGS);
 ```
 
-A logged command emits one completion record:
-`[Execution category:1][endpoint id:32][account:32][STATE?][INPUT?][OUTPUT?]`.
-`Logs.Execution` alone emits just the fixed header. Guards record the
-authorized caller; ports default to zero with an explicit account override. Queries are silent. Tags and action classifications are defined offchain.
+The protocol `Pipeline` follows the hints. It emits one Pipeline record per pipeline,
+then before each step a State record for the state it receives (once per boundary)
+and a Step record for hinted input or a nonzero assigned value. Calls made outside a
+pipeline, including guards and ports, emit no execution record. Tags and action
+classifications are defined offchain. See [pipeline records](docs/Indexing.md#pipeline-records).
 
-Opening snapshots selected sources and initializes one growable buffer shared
-with output. `finish(id, descriptor)` emits the record, then exposes the output
-region as `bytes memory` without copying it. Hook and nested events precede the
-completion record. Ordinary external Solidity ABI return encoding still applies.
-See [the event category layouts](docs/Indexing.md#event-categories).
-
-Custom loops open normally and call `finish(id, descriptor)` once after processing.
-Use `drainBudget()` to return and clear credit, or `close(id, descriptor)` to check
-consumption, emit, finalize, and drain credit together. The no-argument variants
-remain pure and silent. Finalization consumes the buffer prefix: never append or
-log again afterward, and do not call `Encoder.finish` on an execution buffer.
+Custom loops open normally and call `finish()` once after processing. Use
+`drainBudget()` to return and clear credit, or `close()` to check consumption,
+finalize, and drain credit together. `finish` exposes the written output in place
+as `bytes memory` without copying; never append to the buffer afterward.
 
 Use `<endpoint>One` for per-item private callbacks, such as `depositOne` and
 `portCreditAccountOne`, and `<endpoint>Once` for whole-input callbacks passed to
@@ -635,8 +629,8 @@ The same flags byte is copied into the endpoint ID, keeping runtime behavior and
 published endpoint metadata aligned. `Flags.Handoff` marks a command that
 takes ownership of the remaining pipeline, while `Flags.HandoffFunded` combines
 handoff behavior with native-value funding;
-bits 2 through 5 select logging, and bit 6 remains endpoint-defined.
-Logging is part of the endpoint ID: Execution=4, State=12, Input=20, Output=36.
+bits 3 through 5 are logging hints, and bits 2 and 6 (`Logs.Pipeline`, `Logs.Value`) are reserved potential hints.
+Hints are part of the endpoint ID: State=8, Input=16, Output=32.
 Combine these with behavior flags, e.g. `Logs.Input | Flags.Admin`.
 
 `CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
@@ -999,16 +993,17 @@ of an existing pool. The host defines pair ordering, pool-existence checks, and
 reserve/pricing policy; updates imply no transfer of actual funds. The external
 `updatePool(bytes input)` entrypoint takes raw block-stream input, requires an
 active guardian, accepts empty batches, and returns nothing. Incomplete pairs
-or hook failures revert the entire batch. Successful calls log the full INPUT
-after all hooks, identifying the guardian as the acting account.
+or hook failures revert the entire batch. The guard carries the Input logging hint;
+it emits no execution record itself.
 
 ## Events and Discovery
 
 Hosts publish category-specific Endpoint and Metadata events for discovery, schemas
-and labels. Protocol logs use LOG0 with a leading category byte; Execution records
-identify the endpoint and account followed by selected typed lanes. Indexers keep
-raw events and use versioned offchain endpoint definitions for custom semantics.
-Endpoint flags select lanes only; Envelope records carry no codes. Core categories
+and labels. Protocol logs use LOG0 with a leading category byte. Pipelines record
+their account, steps, hinted inputs, assigned values and the states between steps
+in Pipeline, Step and State records. Indexers keep raw events and use versioned
+offchain endpoint definitions for custom semantics. Endpoint flags only hint
+lanes; Envelope records carry no codes. Core categories
 such as Access and Balance define their state effects directly. See [Indexing](docs/Indexing.md).
 Applications can also declare ordinary Solidity events.
 
@@ -1088,10 +1083,12 @@ Use this library to create a new rootzero host, implement a command, or reuse
 the protocol's block format in tooling. It is the shared protocol foundation,
 not an end-user application.
 
-### Optional output logs
+### Output logging hint
 
-Include `Logs.Output` in the endpoint identity flags to have the endpoint runner
-emit one `[Execution category][endpoint ID][account][OUTPUT block]` log after processing the batch. Output helpers
-only append blocks; returned streams remain unchanged. Both swap commands log their output in this format, including empty batches.
-Action classification is maintained offchain. See [runner logs](docs/Indexing.md#execution-records)
-for indexer rules. Application-defined ordinary events use their own supplied ABIs.
+Include `Logs.Output` in the endpoint identity flags to hint that callers should
+record the command's output. A pipeline records it as the State of the following
+step, once, even when that step also carries the State hint. Output helpers only
+append blocks; returned streams remain unchanged. The deposit and swap commands
+carry this hint. Action classification is maintained offchain. See
+[pipeline records](docs/Indexing.md#pipeline-records) for indexer rules.
+Application-defined ordinary events use their own supplied ABIs.

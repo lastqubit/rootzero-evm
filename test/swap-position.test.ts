@@ -51,9 +51,7 @@ describe("Position swap commands", () => {
         expect(callsFrom(receipt)).deep.eq(hops.map((hop, i) => [exactInput,
           i === 0 ? start : hops[i - 1], (exactInput ? 100n : 40n) + (exactInput ? -3n : 3n) * BigInt(i), hop,
         ]));
-        expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expected)),
-        ]);
+        expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([]);
       }
     });
 
@@ -69,9 +67,7 @@ describe("Position swap commands", () => {
         [exactInput, middle, exactInput ? 97n : 43n, target],
         [exactInput, start, exactInput ? 300n : 120n, target],
       ]);
-      expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-        concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expected)),
-      ]);
+      expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([]);
       expect(await host.calls()).eq(3n);
     });
 
@@ -82,9 +78,7 @@ describe("Position swap commands", () => {
         expect(await host[method].staticCall(context)).deep.eq([state, 0n]);
         const receipt = await (await host[method](context)).wait();
         expect(callsFrom(receipt)).deep.eq([]);
-        expect(receipt.logs.map((log: any) => log.data)).deep.eq([
-          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(state)),
-        ]);
+        expect(receipt.logs.map((log: any) => log.data)).deep.eq([]);
         await expect(host.connect(await getSigner(1))[method](context)).revertedWithCustomError(host, "AccessDenied");
       }
       expect(await host.calls()).eq(0n);

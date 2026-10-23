@@ -24,15 +24,15 @@ contract TestCommandLogs is CommandBase {
     function setNested(bytes calldata context) external { nested = context; }
 
     function run(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, process);
+        return runCommand(descriptor, context, process);
     }
 
     function underallocated(bytes calldata context) external payable returns (bytes memory output, bool aliases) {
         Execution memory exec;
         exec.openContext(descriptor, msg.value, context, 0, 1);
         while (exec.more()) process(exec);
-        uint abs = Encoder.pos(exec.buffer, exec.outputOffset());
-        output = exec.finish(id, descriptor);
+        uint abs = Encoder.pos(exec.buffer, 0);
+        output = exec.finish();
         aliases = Encoder.pos(output, 0) == abs;
         bytes32 digest = keccak256(output);
         bytes memory neighbor = abi.encode(exec.account, uint(0xabcdef));

@@ -32,7 +32,7 @@ abstract contract DebitAccount is CommandBase, DebitAccountHook {
     /// @return BALANCE block stream matching the debited amounts.
     /// @return Zero native budget credit.
     function debitAccount(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, debitAccountOne);
+        return runCommand(descriptor, context, debitAccountOne);
     }
 
     /// @dev Process one ASSET_AMOUNT item for the DebitAccount endpoint.

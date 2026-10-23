@@ -26,21 +26,20 @@ abstract contract Payout is CommandBase, PayoutHook {
     uint private constant LOGS = Logs.State | Logs.Input;
 
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, LOGS);
+        (, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, LOGS);
     }
 
     /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.
     /// @dev Validates the destination account category before calling the hook, even
     /// for zero amounts. Authorization and payout-specific requirements remain with the host.
-    /// @dev Logs STATE and INPUT together, preserving balance-to-recipient pairing.
+    /// @dev Hints callers to record STATE and INPUT, preserving balance-to-recipient pairing.
     /// @param context Command context carrying BALANCE state and matching ACCOUNT input.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function payout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, payoutOne);
+        return runCommand(descriptor, context, payoutOne);
     }
 
     /// @dev Process one BALANCE / ACCOUNT item for the Payout endpoint.

@@ -20,7 +20,7 @@ abstract contract QueryBase is InputEndpointBase {
     /// @param input Input block spec or named lane.
     /// @param output Output block spec or named lane.
     /// @return id Query node ID.
-    /// @return descriptor Packed execution allocation hints and explicit logging selections.
+    /// @return descriptor Packed execution allocation hints.
     function query(
         string memory name,
         uint input,

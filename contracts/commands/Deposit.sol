@@ -40,19 +40,18 @@ abstract contract DepositPayableHook {
 /// For internal balance deductions, use `debitAccount` instead.
 abstract contract Deposit is CommandBase, DepositHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output);
+        (, descriptor) = command("deposit", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks into the command account and output matching BALANCE blocks.
-    /// @dev Logs the complete OUTPUT stream with the amounts returned by the hooks.
+    /// @dev Hints callers to record the OUTPUT stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Zero native budget credit.
     function deposit(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, depositOne);
+        return runCommand(descriptor, context, depositOne);
     }
 
     /// @dev Process one ASSET_AMOUNT item for the Deposit endpoint.
@@ -69,19 +68,18 @@ abstract contract Deposit is CommandBase, DepositHook {
 /// Use `depositPayable` when the hook needs tracked access to `msg.value` via a mutable budget.
 abstract contract DepositPayable is CommandBase, DepositPayableHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output | Flags.Funded);
+        (, descriptor) = command("depositPayable", Specs.Empty, Specs.AssetAmount, Specs.Balance, Logs.Output | Flags.Funded);
     }
 
     /// @notice Deposit ASSET_AMOUNT input blocks with access to a mutable native-value budget.
-    /// @dev Logs the complete OUTPUT stream with the amounts returned by the hooks.
+    /// @dev Hints callers to record the OUTPUT stream with the amounts returned by the hooks.
     /// @param context Command context carrying the ASSET_AMOUNT input stream.
     /// @return BALANCE block stream matching the deposited amounts.
     /// @return Native value to add to the caller's budget.
     function depositPayable(bytes calldata context) external payable onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, depositPayableOne);
+        return runCommand(descriptor, context, depositPayableOne);
     }
 
     /// @dev Process one ASSET_AMOUNT item for the DepositPayable endpoint.

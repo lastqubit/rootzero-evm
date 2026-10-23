@@ -76,27 +76,23 @@ describe("Swap commands", () => {
         expect(callsFrom(receipt)).deep.eq(hops.map((hop, i) => [
           exactInput, i === 0 ? specifiedAsset : hops[i - 1], quantity + delta * BigInt(i), hop,
         ]));
-        expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)),
-        ]);
+        expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([]);
       }
       expect(await host.calls()).eq(8n);
     });
 
-    it(`${method} preserves full-width quantities and logs the aggregate output`, async () => {
+    it(`${method} preserves full-width quantities in the aggregate output`, async () => {
       const max96 = (1n << 96n) - 1n;
       for (const quantity of [0n, max96, max96 + 1n, ethers.MaxUint256]) {
         const context = encodeContextBlock(account, "0x", encodeSwapBlock(specifiedAsset, quantity, middle, finalHop));
         const expectedOutput = result(specifiedAsset, quantity, finalHop, quantity);
         expect(await host[method].staticCall(context)).deep.eq([expectedOutput, 0n]);
         const receipt = await (await host[method](context)).wait();
-        const logs = receipt.logs.filter((log: any) => log.topics.length === 0);
-        expect(logs).to.have.length(1);
-        expect(logs[0].data).eq(concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)));
+        expect(receipt.logs.filter((log: any) => log.topics.length === 0)).to.have.length(0);
       }
     });
 
-    it(`${method} accepts zero hops without calling a hook and logs the equal-sided position`, async () => {
+    it(`${method} accepts zero hops without calling a hook and returns the equal-sided position`, async () => {
       await host.configure(0n, 1n); // Any hook call would revert.
       for (const quantity of [0n, 1n, ethers.MaxUint256]) {
         const context = encodeContextBlock(account, "0x", encodeSwapBlock(specifiedAsset, quantity));
@@ -104,9 +100,7 @@ describe("Swap commands", () => {
         expect(await host[method].staticCall(context)).deep.eq([expectedOutput, 0n]);
         const receipt = await (await host[method](context)).wait();
         expect(callsFrom(receipt)).deep.eq([]);
-        expect(receipt.logs.map((log: any) => log.data)).deep.eq([
-          concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput)),
-        ]);
+        expect(receipt.logs.map((log: any) => log.data)).deep.eq([]);
       }
       expect(await host.calls()).eq(0n);
     });
@@ -133,7 +127,7 @@ describe("Swap commands", () => {
       const emptyContext = encodeContextBlock(account, "0x", "0x");
       expect(await host[method].staticCall(emptyContext)).deep.eq(["0x", 0n]);
       expect((await (await host[method](emptyContext)).wait()).logs.map((log: any) => log.data))
-        .deep.eq([concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock("0x"))]);
+        .deep.eq([]);
       const input = concat(encodeSwapBlock(specifiedAsset, 10n, middle), encodeSwapBlock(middle, 20n, finalHop));
       const context = encodeContextBlock(account, "0x", input);
       const expectedOutput = concat(result(specifiedAsset, 10n, middle, 10n), result(middle, 20n, finalHop, 20n));
@@ -143,9 +137,8 @@ describe("Swap commands", () => {
         [exactInput, specifiedAsset, 10n, middle],
         [exactInput, middle, 20n, finalHop],
       ]);
-      expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-        concat("0x04", pad32(await commandId(method + "(bytes)", host)), account, encodeOutputBlock(expectedOutput))]);
-      expect(receipt.logs.map((log: any) => log.topics.length === 0)).deep.eq([false, false, true]);
+      expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([]);
+      expect(receipt.logs.map((log: any) => log.topics.length === 0)).deep.eq([false, false]);
       expect(await host.calls()).eq(2n);
     });
 

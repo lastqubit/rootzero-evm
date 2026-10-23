@@ -29,21 +29,20 @@ abstract contract DenyAssetHook {
 /// Each ASSET block in the input calls `allowAsset`. Only callable by the admin account.
 abstract contract AllowAsset is AdminBase, AllowAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("allowAsset", Specs.Empty, Specs.Asset, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("allowAsset", Specs.Empty, Specs.Asset, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Allow each ASSET block in the admin input.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param context Admin command context carrying the ASSET input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function allowAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, allowAssetOne);
+        return runAdmin(descriptor, context, allowAssetOne);
     }
 
     /// @dev Process one ASSET item for the AllowAsset endpoint.
@@ -59,21 +58,20 @@ abstract contract AllowAsset is AdminBase, AllowAssetHook {
 /// Each ASSET block in the input calls `denyAsset`. Only callable by the admin account.
 abstract contract DenyAsset is AdminBase, DenyAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("denyAsset", Specs.Empty, Specs.Asset, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("denyAsset", Specs.Empty, Specs.Asset, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Deny each ASSET block in the admin input.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param context Admin command context carrying the ASSET input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function denyAsset(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, denyAssetOne);
+        return runAdmin(descriptor, context, denyAssetOne);
     }
 
     /// @dev Process one ASSET item for the DenyAsset endpoint.

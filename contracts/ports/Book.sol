@@ -14,10 +14,9 @@ using Executions for Execution;
 /// differ. Any failure reverts the entire call, including hook-emitted logs.
 abstract contract BookPort is PortBase, BookHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portBook", Specs.Booking, Specs.Empty, 0);
+        (, descriptor) = port("portBook", Specs.Booking, Specs.Empty, 0);
     }
 
     /// @notice Debit then credit each BOOKING in the input stream.
@@ -28,7 +27,7 @@ abstract contract BookPort is PortBase, BookHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portBook(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(id, descriptor, data, portBookOne);
+        return runPort(descriptor, data, portBookOne);
     }
 
     /// @dev Process one BOOKING item for the BookPort endpoint.

@@ -16,17 +16,16 @@ using Executions for Execution;
 /// Only callable by active guardian addresses.
 abstract contract Revoke is NodeAccess, GuardBase {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revoke", Specs.Node, 0);
+        (, descriptor) = guard("revoke", Specs.Node, 0);
     }
 
     /// @notice Revoke every NODE block in `input` as the active guardian.
     /// @dev Node mutation hooks publish Access events for authorization changes.
     /// @param input NODE blocks to deauthorize.
     function revoke(bytes calldata input) external onlyGuardian {
-        runGuard(id, descriptor, input, revokeOne);
+        runGuard(descriptor, input, revokeOne);
     }
 
     /// @dev Decode one node and revoke its authorization.
@@ -42,17 +41,16 @@ abstract contract Revoke is NodeAccess, GuardBase {
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing AllowanceHook.
 abstract contract RevokeAllowance is GuardBase, AllowanceHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAllowance", Specs.HostAsset, Logs.Input);
+        (, descriptor) = guard("revokeAllowance", Specs.HostAsset, Logs.Input);
     }
 
     /// @notice Revoke every HOST_ASSET allowance in `input` as the active guardian.
-    /// @dev Logs INPUT after hooks; each allowance is set to zero.
+    /// @dev Each allowance is set to zero. Hints callers to record INPUT.
     /// @param input HOST_ASSET blocks whose allowances are revoked.
     function revokeAllowance(bytes calldata input) external onlyGuardian {
-        runGuard(id, descriptor, input, revokeAllowanceOne);
+        runGuard(descriptor, input, revokeAllowanceOne);
     }
 
     /// @dev Decode one host/asset pair and set its allowance to zero.
@@ -68,17 +66,16 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
 /// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
 abstract contract RevokeAsset is GuardBase, DenyAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = guard("revokeAsset", Specs.Asset, Logs.Input);
+        (, descriptor) = guard("revokeAsset", Specs.Asset, Logs.Input);
     }
 
     /// @notice Deny every ASSET block in `input` as the active guardian.
-    /// @dev Logs INPUT after the asset hooks.
+    /// @dev Hints callers to record INPUT.
     /// @param input ASSET blocks to deny.
     function revokeAsset(bytes calldata input) external onlyGuardian {
-        runGuard(id, descriptor, input, revokeAssetOne);
+        runGuard(descriptor, input, revokeAssetOne);
     }
 
     /// @dev Decode one asset and invoke the denial hook.

@@ -33,7 +33,7 @@ abstract contract Authorize is AdminBase {
     function authorize(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, authorizeOne);
+        return runAdmin(descriptor, context, authorizeOne);
     }
 
     /// @dev Process one NODE item for the Authorize endpoint.

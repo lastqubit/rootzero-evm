@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { Category } from "./helpers/event-records.js";
 import { ethers } from "ethers";
 import { deploy } from "./helpers/setup.js";
 import { concat, encodeStepBlock, encodePipelineBlock, Keys } from "./helpers/blocks.js";
@@ -21,12 +22,13 @@ describe("Pipeline parser and credit security", function () {
     external = await host.externalId();
   });
 
-  it("emits only step effects and preserves the budget, including empty pipelines", async () => {
+  it("emits Start plus step effects and preserves the budget, including empty pipelines", async () => {
     for (const budget of [0n, 42n, ethers.MaxUint256]) {
       for (const steps of ["0x", encodeStepBlock(local, 0n, ethers.toBeHex(0n, 32))]) {
         const receipt = await (await host.measure(steps, budget, "0x")).wait();
-        expect(receipt.logs.length).eq(steps === "0x" ? 0 : 1);
-        expect(receipt.logs.every((log: any) => log.topics.length > 0)).eq(true);
+        expect(receipt.logs.length).eq(steps === "0x" ? 1 : 2);
+        const records = receipt.logs.filter((log: any) => !log.topics.length);
+        expect(records.map((log: any) => Number(ethers.dataSlice(log.data, 0, 1)))).deep.eq([Category.Pipeline]);
         expect((await host.measure.staticCall(steps, budget, "0x"))[1]).eq(budget);
       }
     }

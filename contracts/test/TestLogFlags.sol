@@ -4,8 +4,8 @@ pragma solidity ^0.8.33;
 import {Logs} from "../Codec.sol";
 
 contract TestLogFlags {
-    function logFlags() external pure returns (uint[4] memory) {
-        return [Logs.Execution, Logs.State, Logs.Input, Logs.Output];
+    function logFlags() external pure returns (uint[3] memory) {
+        return [Logs.State, Logs.Input, Logs.Output];
     }
 
 }

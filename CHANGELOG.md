@@ -8,6 +8,44 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: pipelines own execution logging.** `Pipeline` emits one Pipeline
+  record (category `0x04`: account and every step's command ID through the first
+  handoff), then before each step a State record (`0x08`: step index and the state
+  passed to it, once per boundary) and a Step record (`0x10`: step index, the
+  assigned value when nonzero, and the input payload when hinted). Pipelines accept
+  at most 64 steps and revert `TooManySteps` beyond that. See `docs/Indexing.md`.
+
+- **Breaking: endpoints no longer log.** Commands, admin commands, guards and ports
+  emit no Execution records. `ExecuteCashout` no longer logs its state. Callers log
+  what they need; direct calls outside a pipeline emit no execution record.
+  `Logs.execution` is removed; `Logs.step` and `Logs.state` encode Step and State
+  records.
+
+- **Breaking: renumbered log categories.** `Logs.Pipeline=4`, `State=8`, `Input=16`,
+  `Output=32` and `Value=64` are both endpoint-ID flag bits and record categories.
+  The other categories follow: Access `0x41`, Introduction `0x42`, Metadata `0x43`,
+  Endpoint `0x44`, Balance `0x45`, Envelope `0x46`, Resolution `0x47`. Every other
+  value is reserved. Select decoders by deployment version.
+
+- **Breaking: logging flags become hints.** `Logs.State=8`, `Logs.Input=16` and
+  `Logs.Output=32` no longer include the removed `Logs.Execution` bit. Endpoint IDs
+  of built-in logged endpoints change, so re-grant their access. Hints tell callers
+  which lanes to record; endpoints ignore them. Bits 2 and 6 become `Logs.Pipeline`
+  and `Logs.Value`, reserved potential hints; bit 6 is no longer endpoint-defined.
+  Guards and ports accept any one-byte flags, like commands.
+
+- **Breaking: runners and finalization drop the endpoint ID.** Use
+  `runCommand(descriptor, …)`, `runCommandOnce`, `runAdmin`, `runAdminOnce`,
+  `runGuard` and `runPort` without the ID; the account-attributed `runPort`
+  overload is removed. `Executions.finish(exec, id, descriptor)`,
+  `close(exec, id, descriptor)`, `outputOffset` and the four-argument `describe`
+  are removed. Guards no longer derive an acting account. `Logs.endpoint`
+  parameters are renamed `stateSpec`, `inputSpec` and `outputSpec`.
+
+- **Breaking: Encoder buffers drop the reserved event-prefix word.** `allocate`
+  and `grow` start at the free memory pointer, and the output cursor no longer
+  carries an output-start offset.
+
 ## 1.55.0
 
 - **Breaking: expand swap command and hook names to Input/Output.** Rename

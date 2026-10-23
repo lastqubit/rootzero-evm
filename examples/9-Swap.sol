@@ -106,10 +106,9 @@ abstract contract SwapInput is SchemaAnnot {
 
 abstract contract SwapCommand is CommandBase, SwapHopInput, SwapInput {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() SwapHopInput(2) SwapInput(1) {
-        (id, descriptor) = command("swap", Specs.Empty, swapSpec, Specs.Empty, 0);
+        (, descriptor) = command("swap", Specs.Empty, swapSpec, Specs.Empty, 0);
     }
 
     function swap(Position memory, SwapContext memory, uint hopsCur) internal virtual {
@@ -119,7 +118,7 @@ abstract contract SwapCommand is CommandBase, SwapHopInput, SwapInput {
     function swap(
         bytes calldata commandContext
     ) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, commandContext, swapOne);
+        return runCommand(descriptor, commandContext, swapOne);
     }
 
     function swapOne(Execution memory exec) private {

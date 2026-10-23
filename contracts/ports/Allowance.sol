@@ -14,10 +14,9 @@ using Executions for Execution;
 /// the shared authoritative allowance hook.
 abstract contract RequestAllowancePort is PortBase, AllowanceHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portRequestAllowance", Specs.AssetAmount, Specs.Empty, 0);
+        (, descriptor) = port("portRequestAllowance", Specs.AssetAmount, Specs.Empty, 0);
     }
 
     /// @notice Set asset allowances for the calling peer.
@@ -25,7 +24,7 @@ abstract contract RequestAllowancePort is PortBase, AllowanceHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portRequestAllowance(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(id, descriptor, data, portRequestAllowanceOne);
+        return runPort(descriptor, data, portRequestAllowanceOne);
     }
 
     /// @dev Process one ASSET_AMOUNT item for the RequestAllowancePort endpoint.

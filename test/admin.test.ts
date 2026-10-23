@@ -1,4 +1,4 @@
-import { expectInputLog, expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectNoExecutionRecords, expectAccessLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, getProvider, hostId } from "./helpers/setup.js";
@@ -175,7 +175,7 @@ describe("Admin Commands", () => {
       const guardianAccount = await utils.testToUserAccount(guardianAddress);
       const input = encodeAccountBlock(guardianAccount);
 
-      await expectInputLog(callAs(0, "appoint", adminCtx(input)), host, "appoint", encodeAccountBlock(guardianAccount));
+      await expectNoExecutionRecords(callAs(0, "appoint", adminCtx(input)));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
     });
@@ -215,7 +215,7 @@ describe("Admin Commands", () => {
 
       await callAs(0, "appoint", adminCtx(input));
 
-      await expectInputLog(callAs(0, "dismiss", adminCtx(input)), host, "dismiss", encodeAccountBlock(guardianAccount));
+      await expectNoExecutionRecords(callAs(0, "dismiss", adminCtx(input)));
 
       expect(await host.isGuardianAddress(guardianAddress)).to.be.false;
     });

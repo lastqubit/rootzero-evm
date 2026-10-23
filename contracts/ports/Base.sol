@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {Logs} from "../codec/Logs.sol";
-
 import {PeerAccess} from "../core/Access.sol";
 import {Specs} from "../codec/Specs.sol";
 import {InputEndpointBase} from "../core/Endpoint.sol";
@@ -42,11 +40,11 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     /// match the Solidity port function name used by the canonical ABI.
     /// @param input Input block specification.
     /// @param output Output block specification.
-    /// @param flags Combined behavior and logging identity flags.
+    /// @param flags Combined behavior flags and logging hints for callers.
     /// @return id Port node ID.
-    /// @return descriptor Packed execution allocation hints and explicit logging selections.
+    /// @return descriptor Packed execution allocation hints.
     function port(string memory name, uint input, uint output, uint flags) internal returns (uint id, uint descriptor) {
-        if (flags > 255 || flags & (Logs.State ^ Logs.Execution) != 0) revert Specs.InvalidSpec();
+        if (flags > 255) revert Specs.InvalidSpec();
         id = Nodes.toPort(name, hostAddr(), uint8(flags));
         descriptor = endpoint(id, name, Specs.Empty, input, output);
     }
@@ -56,44 +54,22 @@ abstract contract PortBase is PeerAccess, InputEndpointBase {
     /// and no state source. The callback must advance input on each iteration; empty
     /// input invokes no callback. No progress guard is enforced. Access control
     /// remains the caller's responsibility. Callbacks must preserve bounded cursors;
-    /// finalization does not recheck them. Emits one selected INPUT/OUTPUT record after processing.
-    /// @param id Registered endpoint ID used as the log prefix.
+    /// finalization does not recheck them. Ports emit no execution record.
     /// @param descriptor Packed input-only endpoint descriptor.
     /// @param input Input block stream.
     /// @param process Internal callback that consumes and processes one item.
     /// @return output Final encoded response block stream.
     /// @return credit Remaining native-value budget.
     function runPort(
-        uint id,
         uint descriptor,
         bytes calldata input,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
-        return runPort(id, descriptor, bytes32(0), input, process);
-    }
-
-    /// @notice Attribute a port invocation explicitly; never infer an account from its peer.
-    /// @param id Registered endpoint node identifier.
-    /// @param descriptor Packed allocation hints and execution logging selections.
-    /// @param account Account identifier.
-    /// @param input Input block stream, excluding the enclosing container header.
-    /// @param process Internal callback that consumes and processes one item.
-    /// @return output Final output block stream, excluding the execution log prefix.
-    /// @return credit Native value returned to the caller budget, in wei.
-    function runPort(
-        uint id,
-        uint descriptor,
-        bytes32 account,
-        bytes calldata input,
-        function(Execution memory) internal process
-    ) internal returns (bytes memory output, uint credit) {
-        Execution memory exec;
-        exec.account = account;
-        exec.openInput(descriptor, msg.value, input);
+        Execution memory exec = openInput(input, descriptor);
         while (exec.more()) {
             process(exec);
         }
-        output = exec.finish(id, descriptor);
+        output = exec.finish();
         credit = exec.drainBudget();
     }
 }

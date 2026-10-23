@@ -111,11 +111,36 @@ lengths and ASSET_AMOUNT stride, then checks every item header during processing
 remain available to other callers. Bootstrap reserves exactly the returned
 balances in one allocation before hooks run, with inline fixed-size writes and
 zeroed output padding. Account hooks own updated-balance logging; Bootstrap,
-Credit, Debit, and Settle adapters emit no redundant operation records. Cashout
-and Authorize retain their logs. Debit continues
+Credit, Debit, Settle and Cashout adapters emit no operation records; the
+pipeline records the steps. Authorize retains its Access records. Debit continues
 to use allocateBalances and writeBalance for an exactly sized output stream. Hooks may allocate between
 writes. Counts are bounded by validated source lengths; the helper rejects byte
 sizes exceeding uint32.max. See the [output benchmark](ExecuteOutputPreallocation.md).
+
+## Endpoint logging removal
+
+Endpoints no longer log; pipelines emit Pipeline, Step and State records instead
+(see [Indexing](Indexing.md#pipeline-records)). With logging gone, the runners
+drop the endpoint ID, the descriptor's log selections, the output prefix and its
+offset lane, and Encoder's reserved prefix word. `finish` is one in-place length
+write.
+
+Measured against v1.55.0 (Solidity 0.8.35, viaIR, optimizer 200, Cancun):
+
+- **Runner:** `command-runner.bench.test.ts` saves 281-282 receipt gas per call
+  for every batch shape and count whose receipt is not at the calldata floor.
+- **Code size:** the Main-style commander's runtime shrinks by 1,537 bytes
+  (14,092 to 12,555); the UUPS implementation by the same amount.
+- **Pipeline records:** an empty pipeline costs about 820 more, mostly the Pipeline
+  record (375 + 8 per byte over 33 bytes). Each step whose command carries no
+  hints adds about 500 gas (`pipeline-optimization.bench.test.ts`, 8 to 16 local
+  steps: 3,251 to 3,748 per step), of which 256 is its 32-byte Pipeline-record entry. Steps
+  with hints also pay for their State and Step records. The loop scans the Pipeline record in
+  one pass, checks the step limit once, and tests lane hints with bitwise ORs;
+  together these saved about 165 gas per step against the first implementation.
+
+`COMMANDER_PROXY.json` records the commander workloads; most of them run commands
+without hints, which previously logged nothing and now appear in the Pipeline record.
 
 ## Unlogged runner experiment
 

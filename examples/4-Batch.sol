@@ -15,17 +15,16 @@ using Executions for Execution;
 
 abstract contract MyCommand is CommandBase {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
+        (, descriptor) = command("myCommand", Specs.Empty, Specs.AssetAmount, Specs.Balance, 0);
     }
 
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
         // runCommand owns opening, batch iteration, and finalization. Empty input is valid.
-        return runCommand(id, descriptor, context, myCommandOne);
+        return runCommand(descriptor, context, myCommandOne);
     }
 
     function myCommandOne(Execution memory exec) private pure {

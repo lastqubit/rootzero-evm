@@ -2,8 +2,9 @@
 pragma solidity ^0.8.33;
 
 import {CommandAccess} from "./Access.sol";
+import {Logs} from "../codec/Logs.sol";
 import {STEP_KEY, STATE_KEY, INPUT_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
-import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS} from "../utils/Errors.sol";
+import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS, TOO_MANY_STEPS} from "../utils/Errors.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 
@@ -62,7 +63,51 @@ abstract contract ExecuteHook {
 /// layout and the CONTEXT, STATE, INPUT, BYTES, and RELAY block encodings. Changes to command
 /// selector, target, or flag placement, or to those block layouts, must update
 /// the corresponding assembly and packed-cursor logic here.
+/// Pipeline owns execution logging: one Pipeline record, then per step the State and
+/// Step records its command's logging hints select (see Logs). Pipelines on one
+/// host must not nest; hosts guard or restrict their pipeline entrypoints.
 abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
+    /// @dev Maximum steps per pipeline; Step records reserve index bit 6 for Logs.Value.
+    uint private constant MaxSteps = 64;
+
+    /// @dev Emit the Pipeline record before any step runs: the account and each command ID
+    /// through the first handoff. Writes free memory without allocating, so the
+    /// first call encoding reuses it. Reverts TooManySteps beyond MaxSteps. Step
+    /// structure is validated later by takeStep; a malformed stream reverts there,
+    /// discarding this record.
+    /// @param account Account identifier used for each dispatched step.
+    /// @param stepsCur Bounded calldata cursor over the STEP stream to execute.
+    function logPipeline(bytes32 account, uint stepsCur) private {
+        uint category = Logs.Pipeline;
+        uint words = MaxSteps * 32;
+        // Flags.Handoff is bit 7 of the flags byte at bits 224..231.
+        uint handoff = uint(Flags.Handoff) << 224;
+        assembly ("memory-safe") {
+            let abs := and(stepsCur, 0xffffffff)
+            let end := and(shr(32, stepsCur), 0xffffffff)
+            let start := mload(0x40)
+            let at := add(start, 33)
+            for {} lt(abs, end) {} {
+                let cmd := calldataload(add(abs, 8))
+                mstore(at, cmd)
+                at := add(at, 32)
+                if and(cmd, handoff) {
+                    break
+                }
+                // STEP length is the header's bits 192..223.
+                abs := add(add(abs, 8), shr(224, shl(32, calldataload(abs))))
+            }
+            // Bounded writes: any oversized stream reverts before the record is emitted.
+            if gt(sub(at, add(start, 33)), words) {
+                mstore(0, TOO_MANY_STEPS)
+                revert(28, 4)
+            }
+            mstore8(start, category)
+            mstore(add(start, 1), account)
+            log0(start, sub(at, start))
+        }
+    }
+
     /// @dev Decode one STEP into its command, value, clean input cursor, and
     /// advanced stream cursor. Both cursors use standard absolute start/end lanes.
     /// The exact child end and stream bound prove both cursors fit uint32 lanes.
@@ -111,7 +156,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @param value Native value assigned to the operation, in wei.
     /// @param inputCur Bounded calldata cursor over command input payload.
     /// @param stepsCur Bounded calldata cursor over the continuation STEP stream.
-    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return output Final output block stream.
     /// @return credit Native value returned to the caller budget, in wei.
     /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function invokeCommand(
@@ -229,7 +274,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @param value Native value assigned to the operation, in wei.
     /// @param inputCur Bounded calldata cursor over command input payload.
     /// @param cur Bounded calldata cursor over the remaining STEP stream.
-    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return output Final output block stream.
     /// @return credit Native value returned to the caller budget, in wei.
     /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function run(
@@ -248,8 +293,11 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         return invokeCommand(cmd, account, state, value, inputCur, cur);
     }
 
-    /// @notice Execute a STEP block stream through the pipeline.
-    /// @dev Reverts with `UnexpectedState` if the final threaded state is non-empty.
+    /// @notice Execute a STEP block stream through the pipeline and record it.
+    /// @dev Emits the Pipeline record, then before each step i its State record (when step i carries
+    /// the State hint or step i - 1 the Output hint) and its Step record (when step i
+    /// carries the Input hint or receives nonzero value). Reverts `TooManySteps` beyond
+    /// 64 steps and `UnexpectedState` if the final threaded state is non-empty.
     /// Callers remain responsible for settling the returned unspent value.
     /// @param account Account identifier used for each dispatched step.
     /// @param state Initial state block stream passed to the first step.
@@ -262,11 +310,24 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         uint stepsCur,
         uint budget
     ) internal virtual override returns (uint remaining) {
+        logPipeline(account, stepsCur);
+        uint outputHint;
+        uint index;
         while (Cursors.more(stepsCur)) {
             uint cmd;
             uint value;
             uint inputCur;
             (cmd, value, inputCur, stepsCur) = takeStep(stepsCur);
+            // Lane hints are flag-byte bits; masking cmd >> 224 ignores the other prefix bits.
+            uint hints = cmd >> 224;
+            // logPipeline bounds the step count, so index stays below the Value bit.
+            if (outputHint | (hints & Logs.State) != 0) Logs.state(state, index);
+            uint inputHint = hints & Logs.Input;
+            if (inputHint | value != 0) Logs.step(index, value, inputCur, inputHint != 0);
+            outputHint = hints & Logs.Output;
+            unchecked {
+                ++index;
+            }
             if (value > budget) revert InsufficientValue();
             unchecked {
                 budget -= value;

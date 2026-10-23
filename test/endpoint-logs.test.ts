@@ -15,7 +15,7 @@ describe("Endpoint category logs", () => {
       const receipt = await (await helper.publish(...values)).wait();
       expect(receipt.logs.length).eq(1);
       expect(receipt.logs[0].topics).deep.eq([]);
-      expect(receipt.logs[0].data).eq(ethers.concat(["0x05", ethers.dataSlice(block, 8)]));
+      expect(receipt.logs[0].data).eq(ethers.concat(["0x44", ethers.dataSlice(block, 8)]));
       expect(decodeEndpointLog(receipt.logs[0])).deep.eq([...values, ""]);
     }
   });

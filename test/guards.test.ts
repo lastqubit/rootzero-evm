@@ -1,5 +1,5 @@
 import { encodeUserAccount } from "./helpers/blocks.js";
-import { expectInputLog, expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectNoExecutionRecords, expectAccessLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
@@ -95,9 +95,7 @@ describe("Guard Actions", () => {
     const input = ethers.concat([encodeAssetBlock(asset1), encodeAssetBlock(asset2)]);
     const tx = host.connect(guardianSigner).revokeAsset(input);
     const receipt = await (await tx).wait();
-    const expected = ethers.concat(["0x04", ethers.toBeHex(await guard("revokeAsset"), 32), encodeUserAccount(receipt.from), encodeInputBlock(input)]);
-    expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([expected]);
-    expect(receipt.logs.at(-1).data).eq(expected);
+    expect(receipt.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
     await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset1);
     await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset2);
   });
@@ -108,7 +106,7 @@ describe("Guard Actions", () => {
   });
 
   it("revokeAsset accepts an empty batch", async () => {
-    await expectInputLog(host.connect(guardianSigner).revokeAsset("0x"), host, "revokeAsset", "0x", true);
+    await expectNoExecutionRecords(host.connect(guardianSigner).revokeAsset("0x"));
   });
 
   it("guardian can revoke host asset allowances", async () => {
@@ -120,9 +118,7 @@ describe("Guard Actions", () => {
     const input = ethers.concat([encodeHostAssetBlock(peer1, asset1), encodeHostAssetBlock(peer2, asset2)]);
     const tx = host.connect(guardianSigner).revokeAllowance(input);
     const receipt = await (await tx).wait();
-    const expected = ethers.concat(["0x04", ethers.toBeHex(await guard("revokeAllowance"), 32), encodeUserAccount(receipt.from), encodeInputBlock(input)]);
-    expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([expected]);
-    expect(receipt.logs.at(-1).data).eq(expected);
+    expect(receipt.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
     await expect(tx).to.emit(host, "AllowanceCalled").withArgs(peer1, asset1, 0n);
     await expect(tx).to.emit(host, "AllowanceCalled").withArgs(peer2, asset2, 0n);
   });
@@ -133,7 +129,7 @@ describe("Guard Actions", () => {
   });
 
   it("revokeAllowance accepts an empty batch", async () => {
-    await expectInputLog(host.connect(guardianSigner).revokeAllowance("0x"), host, "revokeAllowance", "0x", true);
+    await expectNoExecutionRecords(host.connect(guardianSigner).revokeAllowance("0x"));
   });
 
   it("revokeAllowance rejects allowance blocks carrying an amount", async () => {
@@ -216,7 +212,7 @@ describe("Guard Actions", () => {
   it("appointing the same guardian twice is idempotent", async () => {
     const guardianAccount = await utils.testToUserAccount(guardianAddress);
 
-    await expectInputLog(host.appoint(...adminCtx(encodeAccountBlock(guardianAccount))), host, "appoint", encodeAccountBlock(guardianAccount));
+    await expectNoExecutionRecords(host.appoint(...adminCtx(encodeAccountBlock(guardianAccount))));
 
     expect(await host.isGuardianAddress(guardianAddress)).to.be.true;
   });

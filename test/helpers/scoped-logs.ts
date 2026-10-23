@@ -1,15 +1,12 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { Category, eventRecord, word } from "./event-records.js";
-import { commandId, guardId } from "./setup.js";
-import { encodeUserAccount, encodeInputBlock } from "./blocks.js";
 
-export async function expectInputLog(tx: Promise<any>, host: any, method: string, input: string, guard = false) {
-  const id = await (guard ? guardId(`${method}(bytes)`, host) : commandId(`${method}(bytes)`, host, 2n));
+// Endpoints emit no execution records; only Access records may accompany direct calls.
+export async function expectNoExecutionRecords(tx: Promise<any>) {
   const receipt = await (await tx).wait();
-  expect(receipt.logs.filter((log: any) => log.topics.length || log.data.slice(0, 4) !== ethers.toBeHex(Category.Access, 1)).map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-    { topics: [], data: ethers.concat(["0x04", ethers.toBeHex(id, 32), guard ? encodeUserAccount(receipt.from) : await host.getAdminAccount(), encodeInputBlock(input)]) },
-  ]);
+  expect(receipt.logs.filter((log: any) => !log.topics.length && Number(ethers.dataSlice(log.data, 0, 1)) !== Category.Access)
+    .map((log: any) => log.data)).deep.eq([]);
 }
 
 export async function expectAccessLogs(tx: Promise<any>, nodes: bigint[], enabled: boolean) {

@@ -25,11 +25,10 @@ abstract contract UpdatePoolHook {
 /// @notice Opt-in guardian action for immediate updates of virtual pool reserves.
 abstract contract UpdatePool is GuardBase, UpdatePoolHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
         uint input = lane("#assetAmount[2] as (a, b)", "updatePool", Specs.AssetAmount);
-        (id, descriptor) = guard("updatePool", input, Logs.Input);
+        (, descriptor) = guard("updatePool", input, Logs.Input);
     }
 
     /// @notice Update existing pools from consecutive ASSET_AMOUNT pairs.
@@ -37,7 +36,7 @@ abstract contract UpdatePool is GuardBase, UpdatePoolHook {
     /// pair or hook failure reverts the entire batch. Logs INPUT after all hooks.
     /// @param input Raw ASSET_AMOUNT pairs; amounts replace reserves rather than add deltas.
     function updatePool(bytes calldata input) external onlyGuardian {
-        runGuard(id, descriptor, input, updatePoolOne);
+        runGuard(descriptor, input, updatePoolOne);
     }
 
     /// @dev Decode one pair of reserves and invoke the pool update hook.

@@ -21,12 +21,11 @@ abstract contract MyCommand is CommandBase {
     string private constant INPUT = "{ uint host, #assetAmount as amount }";
     uint private immutable inputSpec;
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
         uint32 size = uint32(32 + Sizes.AssetAmount);
         inputSpec = schema(INPUT, 1, size);
-        (id, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Custody, 0);
+        (, descriptor) = command("myCommand", Specs.Empty, inputSpec, Specs.Custody, 0);
     }
 
     // sendToHost is the virtual hook implementers override to move the asset.
@@ -45,7 +44,7 @@ abstract contract MyCommand is CommandBase {
     function myCommand(
         bytes calldata context
     ) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, myCommandOne);
+        return runCommand(descriptor, context, myCommandOne);
     }
 
     function myCommandOne(Execution memory exec) private {

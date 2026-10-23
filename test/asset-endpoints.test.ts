@@ -27,17 +27,13 @@ describe("Singular asset endpoints", () => {
     const input = concat(...assets.map(encodeAssetBlock));
     const peer = host.connect(await getSigner(1)) as any;
     const allowed = await (await peer.portAllowAsset(input)).wait();
-    expect(allowed.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-      concat("0x04", ethers.toBeHex(await portId("portAllowAsset(bytes)", host), 32), ethers.ZeroHash, encodeInputBlock(input)),
-    ]);
+    expect(allowed.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(true);
     const stranger = host.connect(await getSigner(2)) as any;
     await expect(stranger.portAllowAsset(input)).to.be.revertedWithCustomError(host, "AccessDenied");
     await expect(stranger.portDenyAsset(input)).to.be.revertedWithCustomError(host, "AccessDenied");
     const denied = await (await peer.portDenyAsset(input)).wait();
-    expect(denied.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-      concat("0x04", ethers.toBeHex(await portId("portDenyAsset(bytes)", host), 32), ethers.ZeroHash, encodeInputBlock(input)),
-    ]);
+    expect(denied.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
     for (const asset of assets) expect(await host.allowed(asset)).to.equal(false);
     for (const method of ["portAllowAsset", "portDenyAsset"]) {
       expect(Array.from(await peer[method].staticCall("0x"))).to.deep.equal(["0x", 0n]);

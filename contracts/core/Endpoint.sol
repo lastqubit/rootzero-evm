@@ -16,7 +16,7 @@ abstract contract EndpointBase is SchemaAnnot {
     /// @param state State block spec or named lane.
     /// @param input Input block spec or named lane.
     /// @param output Output block spec or named lane.
-    /// @return descriptor Packed execution allocation hints and explicit logging selections.
+    /// @return descriptor Packed execution allocation hints.
     function endpoint(
         uint id,
         string memory name,
@@ -24,7 +24,7 @@ abstract contract EndpointBase is SchemaAnnot {
         uint input,
         uint output
     ) internal returns (uint descriptor) {
-        descriptor = Executions.describe(state, input, output, uint8(id >> 224));
+        descriptor = Executions.describe(state, input, output);
         Logs.endpoint(id, state, input, output, name);
     }
 }
@@ -36,7 +36,7 @@ abstract contract EndpointBase is SchemaAnnot {
 abstract contract InputEndpointBase is EndpointBase {
     /// @notice Open a bounded endpoint input stream.
     /// @param input Input block stream, excluding the enclosing container header.
-    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @param descriptor Packed execution allocation hints.
     /// @return exec Initialized execution over the supplied input.
     function openInput(bytes calldata input, uint descriptor) internal view returns (Execution memory exec) {
         exec.openInput(descriptor, msg.value, input);

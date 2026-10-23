@@ -11,10 +11,9 @@ using Executions for Execution;
 /// @notice Repay each POSITION debt and return the position with debt cleared.
 abstract contract Repay is CommandBase, RepayHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("repay", Specs.Position, Specs.Empty, Specs.Position, 0);
+        (, descriptor) = command("repay", Specs.Position, Specs.Empty, Specs.Position, 0);
     }
 
     /// @notice Fully repay each debt and return its remaining position.
@@ -22,7 +21,7 @@ abstract contract Repay is CommandBase, RepayHook {
     /// @return Positions with zero debt and all other fields preserved.
     /// @return Zero native budget credit.
     function repay(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, repayOne);
+        return runCommand(descriptor, context, repayOne);
     }
 
     /// @dev Process one POSITION item for the Repay endpoint.

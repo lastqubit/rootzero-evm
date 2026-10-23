@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, queryId } from "./helpers/setup.js";
-import { concat, encodeUserAccount, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, encodeStateBlock, encodeInputBlock, encodeOutputBlock, exactSpec, Keys } from "./helpers/blocks.js";
+import { concat, encodeBalanceBlock, encodeAssetAmountBlock, encodeContextBlock, exactSpec, Keys } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Endpoint runner lifecycle", () => {
@@ -9,7 +9,7 @@ describe("Endpoint runner lifecycle", () => {
   const state = encodeBalanceBlock(asset, 4n);
   const input = encodeAssetAmountBlock(asset, 3n);
   const output = encodeAssetAmountBlock(asset, 6n);
-  it("logs each selected lane for commands, once, admin, ports and guards", async () => {
+  it("runs commands, once, admin, ports and guards without records for any hint mask", async () => {
     for (let mask = 0; mask < 8; mask++) {
       const helper = await deploy("TestEndpointRunners", mask);
       for (const [i, name] of ["batch", "once", "admin", "peer", "protect"].entries()) {
@@ -21,14 +21,8 @@ describe("Endpoint runner lifecycle", () => {
           const opts = i === 4 ? {} : { value: 9n };
           if(i !== 4) expect(Array.from(await helper.getFunction(name).staticCall(arg, opts))).deep.eq([out, 9n - BigInt(count)]);
           const receipt = await (await helper.getFunction(name)(arg, opts)).wait();
-          const prefix = ethers.toBeHex(await helper.ids(i), 32);
-          const expected = [concat("0x04", prefix, i < 3 ? account : i === 4 ? encodeUserAccount(receipt.from) : ethers.ZeroHash,
-            i < 3 && (mask & 1) ? encodeStateBlock(st) : "0x",
-            mask & 2 ? encodeInputBlock(inp) : "0x",
-            i < 4 && (mask & 4) ? encodeOutputBlock(out) : "0x")];
-          expect(receipt.logs.filter((l: any) => !l.topics.length).map((l: any) => l.data)).deep.eq(expected);
-          expect(receipt.logs.length).eq(count + 1);
-          expect(receipt.logs.at(-1).data).eq(expected[0]);
+          expect(receipt.logs.filter((l: any) => !l.topics.length)).deep.eq([]);
+          expect(receipt.logs.length).eq(count);
         }
       }
       expect(await helper.read(concat(input, input))).eq(concat(output, output));
@@ -44,14 +38,13 @@ describe("Endpoint runner lifecycle", () => {
     await expect(helper.peer(bad,{value: 9n})).revertedWithCustomError(helper,"Rejected");
     await expect(helper.protect(bad)).revertedWithCustomError(helper,"Rejected");
   });
-  it("runs admin once with logging, budget settlement and complete consumption", async () => {
+  it("runs admin once with budget settlement and complete consumption", async () => {
     const helper = await deploy("TestEndpointRunners", 7);
     const context = encodeContextBlock(account, state, input);
     expect(Array.from(await helper.adminOnce.staticCall(context, { value: 9n }))).deep.eq([output, 8n]);
     const receipt = await (await helper.adminOnce(context, { value: 9n })).wait();
-    const prefix = ethers.toBeHex(await helper.ids(6), 32);
-    expect(receipt.logs.length).eq(2);
-    expect(receipt.logs[1].data).eq(concat("0x04", prefix, account, encodeStateBlock(state), encodeInputBlock(input), encodeOutputBlock(output)));
+    expect(receipt.logs.length).eq(1);
+    expect(receipt.logs[0].topics.length).eq(1);
     await expect(helper.adminOnce(encodeContextBlock(ethers.ZeroHash, "0x", "0x")))
       .revertedWithCustomError(helper, "Rejected");
     // An authorized empty context still invokes the callback, which requires a balance.
@@ -61,11 +54,6 @@ describe("Endpoint runner lifecycle", () => {
       .revertedWithCustomError(helper, "UnconsumedData");
     await expect(helper.adminOnce(encodeContextBlock(account, state, encodeAssetAmountBlock(asset, 13n)), { value: 9n }))
       .revertedWithCustomError(helper, "Rejected");
-  });
-  it("allows explicit port attribution without inferring it from the peer", async () => {
-    const helper = await deploy("TestEndpointRunners", 6);
-    const receipt = await (await helper.attributedPeer(account, input, {value: 1n})).wait();
-    expect(receipt.logs.at(-1).data).eq(concat("0x04", ethers.toBeHex(await helper.ids(3),32), account, encodeInputBlock(input), encodeOutputBlock(output)));
   });
   it("preserves lane keys in view query registration without adding logging flags", async () => {
     const spec = exactSpec(Keys.AssetAmount, 64);

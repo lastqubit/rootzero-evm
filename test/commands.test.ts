@@ -1,4 +1,5 @@
 import { decodeMetadataLog } from "./helpers/metadata-logs.js";
+import { pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
@@ -153,7 +154,7 @@ describe("Commands", () => {
         expect(annotations.some((log: any) => log.data === encodeActionBlock(action))).eq(false);
       });
 
-      it(`${method} respects its lane logging selection`, async () => {
+      it(`${method} emits no execution record when called directly`, async () => {
         const asset = ethers.id("account-log-asset");
         for (const count of [0, 1, 3]) {
           const amount = method === "depositPayable" ? 100n : ethers.MaxUint256;
@@ -161,22 +162,25 @@ describe("Commands", () => {
           const input = concat(...Array(count).fill(encodeAssetAmountBlock(asset, amount)));
           const receipt = await (await callAs(0, method, ctx(stateLane ? { state: balances } : { input }),
             { value: method === "depositPayable" ? BigInt(count) * amount : 0n })).wait();
-          const expected = concat("0x04", ethers.toBeHex(await cmd(method), 32), userAccount,
-            stateLane ? encodeStateBlock(balances) : encodeOutputBlock(balances));
-          expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq(method.startsWith("deposit") ? [expected] : []);
-          if (method.startsWith("deposit")) expect(receipt.logs[receipt.logs.length - 1].data).eq(expected);
+          expect(receipt.logs.filter((log: any) => log.topics.length === 0)).deep.eq([]);
         }
       });
     }
 
-    it("logs hook-adjusted deposit amounts", async () => {
+    it("pipelines record hook-adjusted deposit output once as the next state", async () => {
       await withDepositFee(7n, async () => {
         const asset = ethers.id("adjusted-deposit");
         for (const method of ["deposit", "depositPayable"]) {
-          const receipt = await (await callAs(0, method, ctx({ input: encodeAssetAmountBlock(asset, 50n) }),
-            { value: method === "depositPayable" ? 50n : 0n })).wait();
+          const value = method === "depositPayable" ? 50n : 0n;
+          const id = await commandId(`${method}(bytes)`, host, value ? 1n : 0n);
+          await host.authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(id)));
+          const steps = concat(encodeStepBlock(id, value, encodeAssetAmountBlock(asset, 50n)),
+            encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
+          const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps, { value })).wait();
           expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq([
-            concat("0x04", ethers.toBeHex(await cmd(method), 32), userAccount, encodeOutputBlock(encodeBalanceBlock(asset, 43n))),
+            pipelineRecord(userAccount, [id, await cmd("creditAccount")]),
+            ...(value ? [stepRecord(0, value)] : []),
+            stateRecord(1, encodeBalanceBlock(asset, 43n)),
           ]);
         }
       });
@@ -195,7 +199,11 @@ describe("Commands", () => {
         const steps = concat(encodeStepBlock(await cmd("debitAccount"), 0n, input),
           encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
         const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps)).wait();
-        expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq(direct);
+        const hooks = receipt.logs.filter((log: any) => log.topics.length);
+        expect(hooks.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq(direct);
+        expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
+          pipelineRecord(userAccount, [await cmd("debitAccount"), await cmd("creditAccount")]),
+        ]);
       }
     });
   });
@@ -385,17 +393,14 @@ describe("Commands", () => {
       expect(annotations.some((log: any) => log.data === encodeActionBlock(35n))).eq(false);
     });
 
-    it("logs one complete state after withdrawal hooks, including empty and full-width batches", async () => {
-      const prefix = ethers.toBeHex(await cmd("withdraw"), 32);
+    it("withdraws empty and full-width batches without execution records", async () => {
       for (const count of [0, 1, 3]) {
         const state = concat(...Array(count).fill(encodeBalanceBlock(asset, ethers.MaxUint256)));
         const context = ctx({ state });
         expect(Array.from(await host.withdraw.staticCall(...context))).deep.eq(["0x", 0n]);
         const receipt = await (await callAs(0, "withdraw", context)).wait();
-        const logs = receipt.logs.filter((log: any) => log.topics.length === 0);
-        expect(logs.map((log: any) => log.data)).deep.eq([concat("0x04", prefix, userAccount, encodeStateBlock(state))]);
-        expect(receipt.logs.at(-1).data).eq(logs[0].data);
-        expect(receipt.logs.length).eq(count + 1);
+        expect(receipt.logs.filter((log: any) => log.topics.length === 0)).deep.eq([]);
+        expect(receipt.logs.length).eq(count);
       }
     });
 

@@ -15,7 +15,8 @@ describe("Output prefix and logical capacity", () => {
       for (const extra of [false, true]) {
         const r = await helper.exact.staticCall(input, extra);
         expect(r.initialCapacity).eq(BigInt(count * 72));
-        expect(r.initialFootprint).eq(((BigInt(count * 72) + 31n) & ~31n) + 96n);
+        // Length word plus retained scratch word; no reserved event-prefix word.
+        expect(r.initialFootprint).eq(((BigInt(count * 72) + 31n) & ~31n) + 64n);
         expect(r.sameBuffer).eq(!extra);
         if (extra) expect(r.finalCapacity).gt(r.initialCapacity);
         else expect(r.finalCapacity).eq(r.initialCapacity);

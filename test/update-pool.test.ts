@@ -27,7 +27,7 @@ describe("UpdatePool guard", () => {
       encodeBlock(blockKey("#lane"), concat(ethers.toBeHex(lane, 32), encodeStringBlock("#assetAmount[2] as (a, b)"))));
   });
 
-  it("passes ordered pairs to the hook and logs the complete input after replacing reserves", async () => {
+  it("passes ordered pairs to the hook and replaces reserves without execution records", async () => {
     const input = concat(pair(100n, 200n), pair(7n, 9n));
     const tx = caller.updatePool(input);
     await expect(tx).to.emit(host, "PoolUpdated").withArgs(a, 100n, b, 200n);
@@ -36,9 +36,7 @@ describe("UpdatePool guard", () => {
     expect(await host.reserves(a, b, 1)).eq(9n);
     expect(await host.updates()).eq(2n);
     const receipt = await (await tx).wait();
-    expect(receipt.logs.at(-1).data).eq(concat("0x04", ethers.toBeHex(await guardId("updatePool(bytes)", host), 32),
-      encodeUserAccount(await guardian.getAddress()), encodeInputBlock(input)));
-    expect(receipt.logs.at(-1).topics).deep.eq([]);
+    expect(receipt.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
   });
 
   it("accepts empty batches and leaves zero/full-width reserve policy to the hook", async () => {

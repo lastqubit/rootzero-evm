@@ -49,10 +49,9 @@ abstract contract SwapExactOutputHook {
 /// @notice Swap each SWAP input's exact input amount and return one POSITION per item.
 abstract contract SwapExactInput is CommandBase, SwapExactInputHook, Counterparty {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapExactInput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapExactInput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
     }
 
     /// @notice Process a SWAP batch with empty state; empty input is a valid empty batch.
@@ -66,7 +65,7 @@ abstract contract SwapExactInput is CommandBase, SwapExactInputHook, Counterpart
     /// @return Aggregate POSITION blocks, one per SWAP in input order.
     /// @return Zero native budget credit.
     function swapExactInput(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, swapExactInputOne);
+        return runCommand(descriptor, context, swapExactInputOne);
     }
 
     /// @dev Decode one exact-input swap, traverse its hops, and append the aggregate position.
@@ -91,10 +90,9 @@ abstract contract SwapExactInput is CommandBase, SwapExactInputHook, Counterpart
 /// @notice Swap for each SWAP input's exact output amount and return one POSITION per item.
 abstract contract SwapExactOutput is CommandBase, SwapExactOutputHook, Counterparty {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapExactOutput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapExactOutput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
     }
 
     /// @notice Process a SWAP batch with empty state; hops run from output toward input.
@@ -108,7 +106,7 @@ abstract contract SwapExactOutput is CommandBase, SwapExactOutputHook, Counterpa
     /// @return Aggregate POSITION blocks, one per SWAP in input order.
     /// @return Zero native budget credit.
     function swapExactOutput(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, swapExactOutputOne);
+        return runCommand(descriptor, context, swapExactOutputOne);
     }
 
     /// @dev Decode one exact-output swap, traverse its reverse route, and append the aggregate position.
@@ -133,10 +131,9 @@ abstract contract SwapExactOutput is CommandBase, SwapExactOutputHook, Counterpa
 /// @notice Swap each POSITION's exact asset amount while preserving its debt side.
 abstract contract SwapAssetExactInput is CommandBase, SwapExactInputHook, Counterparty {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapAssetExactInput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapAssetExactInput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
     }
 
     /// @notice Transform POSITION state using exactly one LIST of ASSET hops per position.
@@ -151,7 +148,7 @@ abstract contract SwapAssetExactInput is CommandBase, SwapExactInputHook, Counte
     /// liability, debt, and counterparty are preserved. The runner logs OUTPUT.
     /// @return Zero native budget credit.
     function swapAssetExactInput(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, swapAssetExactInputOne);
+        return runCommand(descriptor, context, swapAssetExactInputOne);
     }
 
     /// @dev Decode a position and its route, swap its asset side, and append the updated position.
@@ -176,10 +173,9 @@ abstract contract SwapAssetExactInput is CommandBase, SwapExactInputHook, Counte
 /// @notice Replace each POSITION's debt side while obtaining its exact existing debt.
 abstract contract SwapDebtExactOutput is CommandBase, SwapExactOutputHook, Counterparty {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("swapDebtExactOutput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapDebtExactOutput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
     }
 
     /// @notice Transform POSITION state using exactly one LIST of ASSET hops per position.
@@ -195,7 +191,7 @@ abstract contract SwapDebtExactOutput is CommandBase, SwapExactOutputHook, Count
     /// asset, amount, and counterparty are preserved. The runner logs OUTPUT.
     /// @return Zero native budget credit.
     function swapDebtExactOutput(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, swapDebtExactOutputOne);
+        return runCommand(descriptor, context, swapDebtExactOutputOne);
     }
 
     /// @dev Decode a position and its route, swap its debt side, and append the updated position.

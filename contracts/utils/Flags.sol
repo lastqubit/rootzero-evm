@@ -3,8 +3,9 @@ pragma solidity ^0.8.33;
 
 /// @title Flags
 /// @notice Public endpoint behavior flags encoded in endpoint IDs.
-/// @dev Bits 2-5 are logging policy flags defined by Logs; bit 6 is endpoint-defined.
-/// Logging and behavior share the endpoint ID flags byte.
+/// @dev Bits 3-5 are lane logging hints defined by Logs; callers such as Pipeline
+/// may follow them, and endpoints ignore them. Bits 2 and 6 are Logs.Pipeline and
+/// Logs.Value, reserved potential hints. Hints and behavior share the flags byte.
 library Flags {
     /// @dev Endpoint accepts nonzero native value.
     uint8 internal constant Funded = 1 << 0;

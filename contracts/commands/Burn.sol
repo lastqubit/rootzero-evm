@@ -25,19 +25,18 @@ abstract contract BurnHook {
 /// Produces no output state.
 abstract contract Burn is CommandBase, BurnHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
+        (, descriptor) = command("burn", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Burn each BALANCE block from the command state.
-    /// @dev Logs requested BALANCE state; the hook return is not an actual-burn receipt.
+    /// @dev Hints callers to record requested BALANCE state; the hook return is not an actual-burn receipt.
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function burn(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, burnOne);
+        return runCommand(descriptor, context, burnOne);
     }
 
     /// @dev Process one BALANCE item for the Burn endpoint.

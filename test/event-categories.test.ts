@@ -25,7 +25,7 @@ describe("Event category framing", () => {
     const unknown = {topics:[],data:eventRecord(255,word(0))};
     expect(decodeEndpointLog(unknown)).eq(null);
     expect(decodeMetadataLog(unknown)).deep.eq([]);
-    expect(categoryPayload({topics:[],data:"0x"},Category.Execution)).eq(null);
+    expect(categoryPayload({topics:[],data:"0x"},Category.Input)).eq(null);
     expect(() => decodeEndpointLog({topics:[],data:eventRecord(Category.Endpoint)})).throws("length");
     expect(() => decodeMetadataLog({topics:[],data:eventRecord(Category.Metadata)})).throws("Truncated");
     expect(() => decodeResolutionLog({topics:[],data:eventRecord(Category.Resolution,word(0),word(0),"0x02")})).throws("status");

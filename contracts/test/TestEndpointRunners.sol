@@ -16,34 +16,31 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
         uint st = Specs.Balance;
         uint inp = Specs.AssetAmount;
         uint out = Specs.AssetAmount;
-        (ids[0], descriptors[0]) = command("batch", st, inp, out, 4 | (mask << 3));
-        (ids[1], descriptors[1]) = command("once", st, inp, out, 4 | (mask << 3));
-        (ids[2], descriptors[2]) = command("admin", st, inp, out, 4 | (mask << 3));
-        (ids[6], descriptors[6]) = command("adminOnce", st, inp, out, 4 | (mask << 3));
-        (ids[3], descriptors[3]) = port("peer", inp, out, 4 | ((mask & 6) << 3));
-        (ids[4], descriptors[4]) = guard("protect", inp, 4 | ((mask & 2) << 3));
+        (ids[0], descriptors[0]) = command("batch", st, inp, out, mask << 3);
+        (ids[1], descriptors[1]) = command("once", st, inp, out, mask << 3);
+        (ids[2], descriptors[2]) = command("admin", st, inp, out, mask << 3);
+        (ids[6], descriptors[6]) = command("adminOnce", st, inp, out, mask << 3);
+        (ids[3], descriptors[3]) = port("peer", inp, out, (mask & 6) << 3);
+        (ids[4], descriptors[4]) = guard("protect", inp, (mask & 2) << 3);
         (ids[5], descriptors[5]) = query("read", Specs.AssetAmount, Specs.AssetAmount);
     }
     function batch(bytes calldata context) external payable returns(bytes memory,uint) {
-        return runCommand(ids[0], descriptors[0], context, contextOne);
+        return runCommand(descriptors[0], context, contextOne);
     }
     function once(bytes calldata context) external payable returns(bytes memory,uint) {
-        return runCommandOnce(ids[1], descriptors[1], context, contextOne);
+        return runCommandOnce(descriptors[1], context, contextOne);
     }
     function admin(bytes calldata context) external payable returns(bytes memory,uint) {
-        return runAdmin(ids[2], descriptors[2], context, contextOne);
+        return runAdmin(descriptors[2], context, contextOne);
     }
     function adminOnce(bytes calldata context) external payable returns(bytes memory,uint) {
-        return runAdminOnce(ids[6], descriptors[6], context, contextOne);
+        return runAdminOnce(descriptors[6], context, contextOne);
     }
     function peer(bytes calldata input) external payable onlyPeer returns(bytes memory,uint) {
-        return runPort(ids[3], descriptors[3], input, inputOne);
-    }
-    function attributedPeer(bytes32 account, bytes calldata input) external payable onlyPeer returns(bytes memory,uint) {
-        return runPort(ids[3], descriptors[3], account, input, inputOne);
+        return runPort(descriptors[3], input, inputOne);
     }
     function protect(bytes calldata input) external onlyGuardian {
-        runGuard(ids[4], descriptors[4], input, guardOne);
+        runGuard(descriptors[4], input, guardOne);
     }
     function read(bytes calldata input) external view returns(bytes memory) {
         return runQuery(descriptors[5], input, readOne);

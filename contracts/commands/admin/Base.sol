@@ -11,7 +11,7 @@ using Executions for Execution;
 abstract contract AdminBase is NodeAccess, CommandBase {
     /// @notice Open and authorize one admin command context.
     /// @param context Exactly one CONTEXT block containing the account, state, and input streams.
-    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @param descriptor Packed execution allocation hints.
     /// @return exec Initialized command execution with administrative access checked.
     function openAdminCommand(
         bytes calldata context,
@@ -28,15 +28,12 @@ abstract contract AdminBase is NodeAccess, CommandBase {
     /// iteration until both sources are consumed. No progress guard is enforced.
     /// Callbacks must preserve bounded cursors; finalization does not recheck them.
     /// Source pairing and parent boundaries remain the callback's responsibility.
-    /// Emits one selected execution record after processing.
-    /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed admin endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that consumes and processes one batch item.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runAdmin(
-        uint id,
         uint descriptor,
         bytes calldata context,
         function(Execution memory) internal process
@@ -47,28 +44,25 @@ abstract contract AdminBase is NodeAccess, CommandBase {
             process(exec);
         }
 
-        output = exec.finish(id, descriptor);
+        output = exec.finish();
         credit = exec.drainBudget();
     }
 
     /// @notice Run an authorized admin context through a callback exactly once.
-    /// @dev Authorizes even empty batches before logging or processing. The callback
+    /// @dev Authorizes even empty batches before processing. The callback
     /// defines source shapes and must consume both bounded sources completely.
-    /// Emits one selected execution record on close.
-    /// @param id Registered endpoint ID used as the log prefix.
     /// @param descriptor Packed admin endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that processes the complete execution.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runAdminOnce(
-        uint id,
         uint descriptor,
         bytes calldata context,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openAdminCommand(context, descriptor);
         process(exec);
-        return exec.close(id, descriptor);
+        return exec.close();
     }
 }

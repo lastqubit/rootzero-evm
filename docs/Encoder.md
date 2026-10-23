@@ -611,15 +611,12 @@ The category layouts and emission rules are defined at the top of
 [`Logs.sol`](../contracts/codec/Logs.sol) and in [Indexing](Indexing.md).
 Event headers are not standard block headers.
 
-Execution opening reserves 65 bytes for category, endpoint and account, followed
-by selected STATE/INPUT snapshots and an optional OUTPUT header. The output cursor
-tracks its payload offset through buffer growth. `finish(id, descriptor)` seals
-the output header and calls `Logs.execution` on the same buffer, then returns a
-bytes view of output without copying. The external ABI encoder still applies.
-With no logging bits in the endpoint ID, opening reserves no event prefix and finish emits nothing.
-
-Ports initialize the account to zero unless their implementation explicitly
-supplies an account. Guards set the authorized caller account before opening.
+Endpoints emit no execution records, so execution buffers hold only output.
+`finish()` writes the bytes length in place and returns the written output without
+copying; the external ABI encoder still applies. Buffers reserve no event-prefix
+word. The pipeline emits Pipeline, Step and State records itself: Step copies input
+from calldata into temporary memory, and State is emitted in place over the state
+bytes, with the category and index written temporarily over the length word.
 
 `Logs.metadata(subject, data)` accepts ordinary bytes, including shared empty
 values, and copies the block stream into temporary memory for a subject-prefixed

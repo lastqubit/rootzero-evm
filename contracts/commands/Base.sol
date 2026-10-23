@@ -40,9 +40,9 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// @param state State block spec or named lane.
     /// @param input Input block spec or named lane.
     /// @param output Output block spec or named lane.
-    /// @param flags Combined behavior and logging identity flags.
+    /// @param flags Combined behavior flags and logging hints for callers.
     /// @return id Command node ID.
-    /// @return descriptor Packed execution allocation hints and explicit logging selections.
+    /// @return descriptor Packed execution allocation hints.
     function command(
         string memory name,
         uint state,
@@ -75,18 +75,13 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// Callbacks must preserve bounded cursors; the completed batch is finalized
     /// without a separate consumption check.
     /// Source pairing, parent boundaries, and access control remain the caller's
-    /// responsibility.
-    /// Logging bits in the endpoint ID select one completion record:
-    /// [category:1][id:32][account:32][STATE?][INPUT?][OUTPUT?]. Opening snapshots selected
-    /// sources; output shares the same buffer. Nested/hook logs precede this record.
-    /// @param id Registered command endpoint ID used as the log prefix.
+    /// responsibility. Commands emit no execution record; callers log invocations.
     /// @param descriptor Packed endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that consumes and processes one batch item.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runCommand(
-        uint id,
         uint descriptor,
         bytes calldata context,
         function(Execution memory) internal process
@@ -95,7 +90,7 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
         while (exec.more()) {
             process(exec);
         }
-        output = exec.finish(id, descriptor);
+        output = exec.finish();
         credit = exec.drainBudget();
     }
 
@@ -104,21 +99,19 @@ abstract contract CommandBase is CallerAccess, EndpointBase {
     /// Invokes the callback even when both sources are empty, then requires both
     /// sources to be fully consumed. The callback defines required input and
     /// state shapes; parent boundaries and access control remain the caller's
-    /// responsibility. Emits one selected execution record on close.
-    /// @param id Registered endpoint ID used as the log prefix.
+    /// responsibility.
     /// @param descriptor Packed endpoint descriptor.
     /// @param context Exactly one CONTEXT block carrying account, state, and input.
     /// @param process Internal callback that processes the complete execution.
     /// @return output Final encoded output block stream.
     /// @return credit Remaining native-value budget.
     function runCommandOnce(
-        uint id,
         uint descriptor,
         bytes calldata context,
         function(Execution memory) internal process
     ) internal returns (bytes memory output, uint credit) {
         Execution memory exec = openCommand(context, descriptor);
         process(exec);
-        return exec.close(id, descriptor);
+        return exec.close();
     }
 }

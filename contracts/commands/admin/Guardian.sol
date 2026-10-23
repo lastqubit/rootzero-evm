@@ -12,21 +12,20 @@ using Executions for Execution;
 /// Only callable by the admin account.
 abstract contract Appoint is AdminBase, GuardianAccess {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("appoint", Specs.Empty, Specs.Account, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("appoint", Specs.Empty, Specs.Account, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Appoint each user ACCOUNT block in the admin input as a guardian.
-    /// @dev Logs the complete INPUT batch under the endpoint host after the hooks.
+    /// @dev Hints callers to record the complete INPUT batch.
     /// @param context Admin command context carrying the ACCOUNT input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function appoint(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, appointOne);
+        return runAdmin(descriptor, context, appointOne);
     }
 
     /// @dev Process one ACCOUNT item for the Appoint endpoint.
@@ -43,21 +42,20 @@ abstract contract Appoint is AdminBase, GuardianAccess {
 /// Only callable by the admin account.
 abstract contract Dismiss is AdminBase, GuardianAccess {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("dismiss", Specs.Empty, Specs.Account, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("dismiss", Specs.Empty, Specs.Account, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Dismiss each user ACCOUNT block in the admin input from guardian status.
-    /// @dev Logs the complete INPUT batch under the endpoint host after the hooks.
+    /// @dev Hints callers to record the complete INPUT batch.
     /// @param context Admin command context carrying the ACCOUNT input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function dismiss(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, dismissOne);
+        return runAdmin(descriptor, context, dismissOne);
     }
 
     /// @dev Process one ACCOUNT item for the Dismiss endpoint.

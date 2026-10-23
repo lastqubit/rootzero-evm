@@ -27,13 +27,12 @@ describe("Node Access events", () => {
 
     const guardian = await getSigner(1);
     const guardianInput = encodeAccountBlock(encodeUserAccount(await guardian.getAddress()));
-    const appointed = await records(host.appoint(context(guardianInput)));
-    expect(appointed).length(1);
-    expect(appointed[0].data.slice(0, 4)).eq(ethers.toBeHex(Category.Execution, 1));
+    // Guardian changes are not Access records, and endpoints emit no execution records.
+    expect(await records(host.appoint(context(guardianInput)))).length(0);
     await host.authorize(context(input));
     expectTransition(await records((host.connect(guardian) as any).revoke(input)), false);
     expect(await host.isAuthorized(node)).eq(false);
-    expect(await records(host.dismiss(context(guardianInput)))).length(1);
+    expect(await records(host.dismiss(context(guardianInput)))).length(0);
   });
 
   it("rolls back a grant when a later node in the batch is invalid", async () => {
@@ -44,11 +43,11 @@ describe("Node Access events", () => {
       .revertedWithCustomError(host, "InvalidId");
     expect(await host.isAuthorized(node)).eq(false);
   });
-  it("keeps access grants distinct when only logging identity bits differ", async () => {
+  it("keeps access grants distinct when only logging hint bits differ", async () => {
     const host = await deploy("TestHost", await hostId(await (await getSigner(0)).getAddress()));
     const logged = await commandId("withdraw(bytes)", host);
-    expect((logged >> 224n) & 255n).eq(12n);
-    const silent = logged & ~(60n << 224n);
+    expect((logged >> 224n) & 255n).eq(8n);
+    const silent = logged & ~(56n << 224n);
     const account = await host.getAdminAccount();
     const context = (node: bigint) => encodeContextBlock(account, "0x", encodeNodeBlock(node));
     await host.authorize(context(logged));

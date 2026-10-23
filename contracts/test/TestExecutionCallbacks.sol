@@ -38,23 +38,23 @@ contract TestExecutionCallbacks is CommandBase, PortBase {
 
     // Test entrypoint deliberately bypasses access control.
     function execute(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommand(executeId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
+        return runCommand(Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
     }
 
     function executeState(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommand(executeStateId, Executions.describe(Specs.Balance, 0, Specs.AssetAmount), context, processState);
+        return runCommand(Executions.describe(Specs.Balance, 0, Specs.AssetAmount), context, processState);
     }
 
     function executeOnce(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommandOnce(onceId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
+        return runCommandOnce(Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), context, processOne);
     }
 
     function executeOnceEmpty(bytes calldata context) external payable returns (bytes memory, uint) {
-        return runCommandOnce(emptyId, Executions.describe(0, 0, 0), context, processEmpty);
+        return runCommandOnce(Executions.describe(0, 0, 0), context, processEmpty);
     }
 
     function executePort(bytes calldata input) external payable returns (bytes memory, uint) {
-        return runPort(portId, Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), input, processPort);
+        return runPort(Executions.describe(0, Specs.AssetAmount, Specs.AssetAmount), input, processPort);
     }
 
     function processPort(Execution memory exec) private {

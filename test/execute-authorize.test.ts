@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { deploy, getSigner, hostId } from "./helpers/setup.js";
 import { concat, encodeNodeBlock, encodeStepBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
-import { Category, eventRecord } from "./helpers/event-records.js";
+import { Category, eventRecord, pipelineRecord } from "./helpers/event-records.js";
 
 describe("ExecuteAuthorize", () => {
   let host: Awaited<ReturnType<typeof deploy>>;
@@ -21,6 +21,7 @@ describe("ExecuteAuthorize", () => {
   async function expectPipelineAccess(input: string) {
     const receipt = await (await host.testPipe(admin, "0x", encodeStepBlock(command, 0n, input))).wait();
     expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
+      { topics: [], data: pipelineRecord(admin, [command]) },
       ...Array.from({ length: ethers.dataLength(input) / 40 }, (_, i) => ({ topics: [], data: eventRecord(Category.Access, ethers.dataSlice(input, i * 40 + 8, i * 40 + 40), "0x01") })),
     ]);
   }

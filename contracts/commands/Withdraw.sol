@@ -22,20 +22,19 @@ abstract contract WithdrawHook {
 /// For internal balance credits, use `creditAccount` instead.
 abstract contract Withdraw is CommandBase, WithdrawHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
+        (, descriptor) = command("withdraw", Specs.Balance, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.
-    /// @dev Logs the complete STATE after processing, including an empty batch.
+    /// @dev Hints callers to record the complete STATE, including an empty batch.
     /// The state spec identifies Balance; endpoint interpretation is defined offchain.
     /// @param context Command context carrying the BALANCE state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function withdraw(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, withdrawOne);
+        return runCommand(descriptor, context, withdrawOne);
     }
 
     /// @dev Process one BALANCE item for the Withdraw endpoint.

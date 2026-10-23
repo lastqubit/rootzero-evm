@@ -3,9 +3,7 @@ pragma solidity ^0.8.33;
 
 import {Headers} from "../codec/Headers.sol";
 import {Blocks} from "../codec/Blocks.sol";
-import {Logs} from "../codec/Logs.sol";
 import {Encoder} from "../codec/Encoder.sol";
-import {Keys} from "../codec/Keys.sol";
 import {Specs, Sizes} from "../codec/Specs.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Math} from "../utils/Math.sol";
@@ -46,8 +44,7 @@ struct Execution {
     uint input;
     /// @dev Packed calldata cursor over unconsumed state blocks.
     uint state;
-    /// @dev Written offset:32, capacity:32, output start offset:32. The optional
-    /// event prefix shares the buffer; Encoder preserves the upper cursor metadata.
+    /// @dev Packed output writer: written offset in bits 0-31, capacity in bits 32-63.
     uint output;
     /// @dev Growable memory backing the output cursor; finish exposes only written bytes.
     bytes buffer;
@@ -67,46 +64,22 @@ library Executions {
 
     /// @dev Internal execution flags; distinct from public endpoint Flags.
     uint internal constant StateSource = 1 << 0;
-    /// @dev Internal descriptor flag selecting the STATE log lane.
-    uint private constant LogState = 1 << 1;
-    /// @dev Internal descriptor flag selecting the INPUT log lane.
-    uint private constant LogInput = 1 << 2;
-    /// @dev Internal descriptor flag selecting the OUTPUT log lane.
-    uint private constant LogOutput = 1 << 3;
-    /// @dev Internal descriptor flag enabling an execution record.
-    uint private constant LogEnabled = 1 << 4;
     /// @dev Internal descriptor flag allowing byte-for-byte output capacity estimation.
     uint internal constant ByteCapacity = 1 << 5;
 
-    /// @notice Precompute allocation hints and explicit logging selections for execution.
+    /// @notice Precompute allocation hints for execution.
     /// @dev Layout: [source key:4][source block size:4][output block size:4]
     /// [reserved:19][flags:1]. Sizes include headers and require 25 bits at maximum hint.
     /// Declared state takes precedence over input, even when supplied state is empty.
     /// Zero output size disables preallocation; no source reserves one output block.
     /// State/input/output may carry low 32-bit lane keys, ignored by the descriptor.
-    /// The low byte contains internal source, capacity, and logging selections.
-    /// This overload disables execution logging.
+    /// The low byte contains internal source and capacity selections.
     /// @param state State block specification or named lane.
     /// @param input Input block specification or named lane.
     /// @param output Output block specification or named lane.
     /// @return descriptor Packed source and output allocation hints with internal execution flags.
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
-        return describe(state, input, output, 0);
-    }
-
-    /// @notice Describe block specs or named lanes and one endpoint-wide logging policy.
-    /// @dev Logging bits 2-5 select records; lane bits require Logs.Execution.
-    /// Only one byte is accepted; behavior bits do not affect the logging descriptor.
-    /// @param state State block specification or named lane.
-    /// @param input Input block specification or named lane.
-    /// @param output Output block specification or named lane.
-    /// @param flags Endpoint behavior and logging flags.
-    /// @return descriptor Packed source and output allocation hints with internal execution flags.
-    function describe(uint state, uint input, uint output, uint flags)
-        internal pure returns (uint descriptor)
-    {
-        if (uint104((state | input | output) >> 32) != 0 || flags > 255 || (flags & 56 != 0 && flags & Logs.Execution == 0))
-            revert Specs.InvalidSpec();
+        if (uint104((state | input | output) >> 32) != 0) revert Specs.InvalidSpec();
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
         uint sourceSize = Specs.blockSize(source);
@@ -119,77 +92,13 @@ library Executions {
             (sourceSize != 0 && sourceSize == outputSize
                 && uint32(source >> 160) != 0 && uint32(output >> 160) != 0
                 && uint32(source >> 192) == uint32(source >> 160)
-                && uint32(output >> 192) == uint32(output >> 160) ? ByteCapacity : 0) |
-            (flags & Logs.Execution != 0 ? LogEnabled | ((flags >> 2) & 14) : 0);
-    }
-
-    /// @dev Initialize one writer for optional log prefix and returned output.
-    /// Sources remain calldata cursors. Snapshot selected lanes once, before callbacks.
-    /// All endpoint kinds share the same account-bearing header.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @param descriptor Packed allocation hints and execution logging selections.
-    /// @param capacity Logical output capacity, in bytes.
-    /// @param context Whether the execution has a CONTEXT state lane to include in logging.
-    function initOutput(Execution memory exec, uint descriptor, uint capacity, bool context) private pure {
-        if (descriptor & LogEnabled == 0) {
-            (exec.buffer, exec.output) = Encoder.init(capacity);
-            return;
-        }
-        uint stateSize = context && descriptor & LogState != 0 ? Encoder.length(exec.state) + 8 : 0;
-        uint inputSize = descriptor & LogInput != 0 ? Encoder.length(exec.input) + 8 : 0;
-        uint prefix = 65 + stateSize + inputSize + (descriptor & LogOutput != 0 ? 8 : 0);
-        (exec.buffer, exec.output) = Encoder.init(prefix + capacity);
-        exec.output |= prefix | (prefix << 64);
-        uint abs = Encoder.write32(Encoder.pos(exec.buffer, 0) + 33, exec.account);
-        if (stateSize != 0 && inputSize != 0) {
-            // Context containers are adjacent, with their original headers intact.
-            abs = Encoder.copy(abs, uint32(exec.state) - 8, stateSize + inputSize);
-        } else {
-            if (stateSize != 0) abs = Encoder.wrap(abs, Keys.State, exec.state);
-            if (inputSize != 0) abs = Encoder.wrap(abs, Keys.Input, exec.input);
-        }
-        if (descriptor & LogOutput != 0) Encoder.writeHeader(abs, Keys.Output, 0);
-    }
-
-    /// @notice Relative start of the output payload within the shared writer.
-    /// @dev Zero for an unlogged writer. Survives Encoder reserve/grow operations.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @return Byte offset of returned output within the shared buffer.
-    function outputOffset(Execution memory exec) internal pure returns (uint) {
-        return uint32(exec.output >> 64);
-    }
-
-    /// @dev Patch only the trailing header bytes, preserving preceding context and output.
-    /// @param abs Absolute memory byte position; not a packed cursor.
-    /// @param size Final OUTPUT payload length, in bytes.
-    function sealOutput(uint abs, uint size) private pure {
-        uint header = (uint(uint32(Keys.Output)) << 32) | size;
-        assembly ("memory-safe") {
-            let at := sub(abs, 32)
-            mstore(at, or(and(mload(at), not(0xffffffffffffffff)), header))
-        }
-    }
-
-    /// @dev Emit the initialized prefix and selected output before exposing returned bytes.
-    /// Reacquires the buffer address after growth. Prefix is consumed by finish.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @param id Registered endpoint node identifier.
-    /// @param descriptor Packed allocation hints and execution logging selections.
-    function emitExecution(Execution memory exec, uint id, uint descriptor) private {
-        uint prefix = outputOffset(exec);
-        uint size = prefix;
-        uint abs = Encoder.pos(exec.buffer, 0);
-        if (descriptor & LogOutput != 0) {
-            size = uint32(exec.output);
-            sealOutput(abs + prefix, size - prefix);
-        }
-        Logs.execution(id, abs, size);
+                && uint32(output >> 192) == uint32(output >> 160) ? ByteCapacity : 0);
     }
 
     /// @dev Capacity is only a hint; decoding validates the stream and buffers can grow.
     /// @param input Bounded calldata cursor over the input stream.
     /// @param state Bounded calldata cursor over the state stream.
-    /// @param descriptor Packed allocation hints and execution logging selections.
+    /// @param descriptor Packed execution allocation hints.
     /// @return capacity Suggested initial output capacity, in bytes.
     function outputCapacity(uint input, uint state, uint descriptor) private pure returns (uint capacity) {
         if (uint32(descriptor >> 160) == 0) return 0;
@@ -232,7 +141,7 @@ library Executions {
     function openInput(Execution memory exec, uint descriptor, uint budget, bytes calldata input) internal pure {
         exec.input = Cursors.wrap(input);
         exec.budget = budget;
-        initOutput(exec, descriptor, outputCapacity(exec.input, 0, descriptor), false);
+        (exec.buffer, exec.output) = Encoder.init(outputCapacity(exec.input, 0, descriptor));
     }
 
     /// @notice Open an execution with its output-capacity hint scaled before allocation.
@@ -256,7 +165,7 @@ library Executions {
         exec.input = Cursors.wrap(input);
         exec.budget = budget;
         uint capacity = outputCapacity(exec.input, 0, descriptor);
-        initOutput(exec, descriptor, Math.scale(capacity, numerator, denominator), false);
+        (exec.buffer, exec.output) = Encoder.init(Math.scale(capacity, numerator, denominator));
     }
 
     /// @notice Decode exactly one context and initialize a complete command execution.
@@ -269,7 +178,7 @@ library Executions {
     function openContext(Execution memory exec, uint descriptor, uint budget, bytes calldata context) internal pure {
         (exec.account, exec.state, exec.input) = Blocks.unpackContextExact(Cursors.wrap(context));
         exec.budget = budget;
-        initOutput(exec, descriptor, outputCapacity(exec.input, exec.state, descriptor), true);
+        (exec.buffer, exec.output) = Encoder.init(outputCapacity(exec.input, exec.state, descriptor));
     }
 
     /// @notice Open an execution with its output-capacity hint scaled before allocation.
@@ -293,7 +202,7 @@ library Executions {
         (exec.account, exec.state, exec.input) = Blocks.unpackContextExact(Cursors.wrap(context));
         exec.budget = budget;
         uint capacity = outputCapacity(exec.input, exec.state, descriptor);
-        initOutput(exec, descriptor, Math.scale(capacity, numerator, denominator), true);
+        (exec.buffer, exec.output) = Encoder.init(Math.scale(capacity, numerator, denominator));
     }
 
     // -------------------------------------------------------------------------
@@ -1849,36 +1758,16 @@ library Executions {
     /// @dev Ends the writer lifecycle. Caller must establish source consumption
     /// through a complete loop over valid cursors, expectEnd, or close.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @return out Final output block stream, excluding the execution log prefix.
+    /// @return out Final output block stream.
     function finish(Execution memory exec) internal pure returns (bytes memory out) {
+        // An unopened execution has no owned buffer to finalize in place.
         if (exec.buffer.length == 0) return Encoder.allocate(0);
-        uint offset = outputOffset(exec);
-        uint size = uint32(exec.output) - offset;
-        bytes memory buffer = exec.buffer;
-        // Destructive finalization: the event has already captured the prefix.
-        // The preceding word becomes the Solidity length, without copying output.
-        assembly ("memory-safe") {
-            out := add(buffer, offset)
-            mstore(out, size)
-            mstore(add(add(out, 32), size), 0)
-        }
-    }
-
-    /// @notice Emit one selected execution record and expose output from the same buffer.
-    /// @dev Call once after processing. Absent logging bits disable logging at registration.
-    /// Returned bytes exclude the log prefix; no further writes or logging are allowed.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @param id Registered endpoint node identifier.
-    /// @param descriptor Packed allocation hints and execution logging selections.
-    /// @return out Final output block stream, excluding the execution log prefix.
-    function finish(Execution memory exec, uint id, uint descriptor) internal returns (bytes memory out) {
-        if (descriptor & LogEnabled != 0) emitExecution(exec, id, descriptor);
-        out = finish(exec);
+        return Encoder.finish(exec.output, exec.buffer);
     }
 
     /// @notice Check consumption, finalize output, and return and clear the budget.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @return output Final output block stream, excluding the execution log prefix.
+    /// @return output Final output block stream.
     /// @return credit Native value returned to the caller budget, in wei.
     function close(Execution memory exec) internal pure returns (bytes memory output, uint credit) {
         expectEnd(exec);
@@ -1886,19 +1775,5 @@ library Executions {
         credit = drainBudget(exec);
     }
 
-    /// @notice Checked close with descriptor-selected output logging.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    /// @param id Registered endpoint node identifier.
-    /// @param descriptor Packed allocation hints and execution logging selections.
-    /// @return output Final output block stream, excluding the execution log prefix.
-    /// @return credit Native value returned to the caller budget, in wei.
-    function close(
-        Execution memory exec,
-        uint id,
-        uint descriptor
-    ) internal returns (bytes memory output, uint credit) {
-        expectEnd(exec);
-        output = finish(exec, id, descriptor);
-        credit = drainBudget(exec);
-    }
+
 }

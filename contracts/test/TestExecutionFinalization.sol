@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
-import {Logs} from "../codec/Logs.sol";
 
 import {Encoder, Execution, Executions} from "../Codec.sol";
 import {Specs} from "../codec/Specs.sol";
@@ -9,7 +8,7 @@ import {Cursors} from "../utils/Cursors.sol";
 contract TestExecutionFinalization {
     using Executions for Execution;
 
-    // flags: 1 = close, 2 = log output, 4 = initialize writer.
+    // flags: 1 = close, 2 = open scaled input, 4 = initialize writer.
     function finalize(uint flags, uint budget, uint capacity, uint count,
         bytes calldata input, bytes calldata state)
         external returns (bytes memory output, uint credit, uint remaining)
@@ -18,14 +17,14 @@ contract TestExecutionFinalization {
         exec.budget = budget;
         exec.input = Cursors.wrap(input);
         exec.state = Cursors.wrap(state);
-        uint descriptor = Executions.describe(0, 0, Specs.Balance, flags & 2 != 0 ? Logs.Output : 0);
+        uint descriptor = Executions.describe(0, 0, Specs.Balance);
         if (flags & 2 != 0) {
             exec.openInput(descriptor, budget, input, 0, 1);
             exec.state = Cursors.wrap(state);
         } else if ((flags & 4) != 0) (exec.buffer, exec.output) = Encoder.init(capacity);
         for (uint i; i < count; ++i) exec.outputBalance(bytes32(i + 1), type(uint).max - i);
-        if ((flags & 1) != 0) (output, credit) = exec.close(123, descriptor);
-        else output = exec.finish(123, descriptor);
+        if ((flags & 1) != 0) (output, credit) = exec.close();
+        else output = exec.finish();
         remaining = exec.budget;
     }
     function checkEnd(uint input, uint state) external pure {

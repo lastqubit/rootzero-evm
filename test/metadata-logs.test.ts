@@ -12,7 +12,7 @@ describe("Metadata records", () => {
       expect(await helper.publish.staticCall(entity, data)).eq(data);
       const receipt = await (await helper.publish(entity, data)).wait();
       expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-        { topics: [], data: ethers.concat(["0x03", ethers.toBeHex(entity, 32), data]) },
+        { topics: [], data: ethers.concat(["0x43", ethers.toBeHex(entity, 32), data]) },
       ]);
     }
   });

@@ -27,7 +27,7 @@ describe("Envelope category logs", () => {
       expect(await helper.publish.staticCall(...values)).eq(block);
       const receipt = await (await helper.publish(...values)).wait();
       expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-        { topics: [], data: ethers.concat(["0x08", ethers.dataSlice(block, 8)]) },
+        { topics: [], data: ethers.concat(["0x46", ethers.dataSlice(block, 8)]) },
       ]);
     }
   });

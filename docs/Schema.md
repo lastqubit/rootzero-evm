@@ -502,21 +502,21 @@ for discovery; the standard block schema above describes only the fixed fields.
 
 The canonical `#endpoint` schema is `uint id, uint state, uint input, uint output`.
 Its payload is exactly 128 bytes (136 including the block header). Lane words retain block specs;
-flags select logged lanes. `Keys.Endpoint`, `Specs.Endpoint`, `Sizes.Endpoint`,
+ID flags hint which lanes callers should log. `Keys.Endpoint`, `Specs.Endpoint`, `Sizes.Endpoint`,
 `Headers.Endpoint` and `Schemas.Endpoint` define this layout. `Encoder.createEndpoint`
-constructs the block; `Logs.endpoint` emits category 0x05, those four fields, and
+constructs the block; `Logs.endpoint` emits category 0x44, those four fields, and
 the registration name as trailing raw UTF-8 bytes (129 + name byte length).
 There is no block wrapper, name length field or padding. Indexers preload this
 layout to decode discovery. Endpoint names no longer require LABEL metadata.
 
 ## Endpoint Lanes
 
-Logging policy is encoded in the endpoint ID flags byte alongside behavior flags.
-Bits 2/3/4/5 mean Execution/State/Input/Output; lane flags include Execution:
-`Logs.Execution=4`, `Logs.State=12`, `Logs.Input=20`, `Logs.Output=36`.
-Bit 0 is Funded, bit 1 Admin, bit 6 endpoint-defined and bit 7 Handoff.
-Registration takes one flags argument; lane bits without Execution are rejected.
-Endpoint identity and logging policy are fixed at deployment. Tags and custom effects are
+Logging hints are encoded in the endpoint ID flags byte alongside behavior flags.
+Bits 3/4/5 hint State/Input/Output: `Logs.State=8`, `Logs.Input=16`, `Logs.Output=32`.
+Bit 0 is Funded, bit 1 Admin, bits 2 and 6 Pipeline and Value (reserved potential hints) and bit 7 Handoff.
+Registration takes one flags argument. Hints tell callers which lanes to record;
+endpoints ignore them and the protocol Pipeline follows them.
+Endpoint identity and hints are fixed at deployment. Tags and custom effects are
 maintained offchain; see [Indexing](Indexing.md#offchain-interpretation).
 Endpoint helpers accept plain block specs or packed lanes. Their layout is:
 
@@ -597,13 +597,9 @@ and the output writer. Input-only endpoints use `exec.openInput`, which accepts
 an explicit budget but no command account. Passing the budget explicitly keeps
 both opening helpers pure and supports callers that forward an existing budget.
 Both in-place helpers expect a newly allocated or otherwise empty `Execution`.
-When logging is enabled, opening snapshots selected sources into a prefix of the
-output buffer. Commands reserve ID and account, input-only endpoints only ID.
-Selected empty lanes retain their container headers. `finish(id, descriptor)`
-emits one completion event and returns an alias to output after replacing part
-of the prefix with a bytes length word. `finish()` is silent. Both finalize once;
-the old event prefix must not be reused. No log prefix is allocated when disabled.
-The output cursor retains its payload-start offset in bits 64-95 across growth.
+`finish()` writes the bytes length in place and returns an alias to the written
+output; it finalizes once. Endpoints emit no execution records, and the output
+writer holds only output.
 
 `Cursors` supplies shared range primitives: `create(abs, endAbs)` validates bounds,
 while `pack(abs, endAbs)` packs already validated positions without repeating checks.
@@ -624,8 +620,9 @@ these conversions and hashing. Positions used by `seek`, `expect`, and `slice`
 are absolute. Encoder continues to use its separate relative offset/capacity model.
 
 Flag bits 0 and 1 are the protocol-defined `funded` and `admin` flags. Bit 7 is
-the protocol-defined `handoff` flag, bit 6 is reserved for endpoint-defined
-behavior, and bits 2 through 5 select logging as part of the same endpoint identity.
+the protocol-defined `handoff` flag, bits 3 through 5 are logging hints, and bits 2
+and 6 (`Logs.Pipeline`, `Logs.Value`) are reserved potential hints, all part of the
+same endpoint identity.
 
 Execution stores input and state in independent uint cursors, each using bits
 0-63 for current/end. Source selection belongs to the descriptor, not
@@ -1452,9 +1449,8 @@ There is no deadline; expiry enforcement belongs to the invoking entrypoint.
 encode it; `Blocks.unpackPipeline` validates and decodes it. Executions provides
 `outputPipeline` and `unpackPipeline`.
 
-Pipeline execution emits no entry event. The former Pipeline category (6) is
-reserved and is not reused. Execution records carry their own account context;
-Balance records carry actual balances. The standard block codecs above remain
+Pipelines emit Pipeline, Step and State records (categories 0x04, 0x10, 0x08); see
+[Indexing](Indexing.md#pipeline-records). Balance records carry actual balances. The standard block codecs above remain
 available for explicit block data, independently of the removed event.
 
 This replaces the Rooted schema and helper APIs and removes RootedEvent and its
@@ -1465,17 +1461,13 @@ the historical three-word Rooted layout. Historical logs retain their original d
 
 `Output`, like `State` and `Input`, is an unbounded block-stream container with
 an empty schema body and a 128-byte payload allocation hint. Its key is
-`bytes4(keccak256("#output"))`. Logging wraps the entire finalized output in this
-block; return values remain unwrapped.
+`bytes4(keccak256("#output"))`. Return values remain unwrapped.
 
-Encoder reserves one owned 32-byte word before the bytes length on allocation
-and every growth. It is separate from logical capacity, length, cursor offsets,
-and trailing scratch. Descriptor allocation hints and growth thresholds are
-unchanged: filling an exact initial capacity does not resize the buffer.
-Execution logging reserves its category, endpoint, account and selected lane
-headers inside the shared writer. `Logs.execution` emits that initialized range
-without copying. `finish` then exposes only the output region as returned bytes.
-Resolve addresses after growth; the output-start offset survives buffer resizing.
+Encoder allocations start at the free memory pointer with no reserved word before
+the bytes length; trailing scratch is separate from logical capacity. Descriptor
+allocation hints and growth thresholds are unchanged: filling an exact initial
+capacity does not resize the buffer. `finish` exposes the written output region as
+returned bytes. Resolve addresses after growth.
 
 ### Account balances and requested amounts
 

@@ -23,7 +23,7 @@ describe("Balance events and historical stream primitives", () => {
           const receipt = await (await helper.emitBalance(account, asset, amount)).wait();
           expect(receipt.logs).to.have.length(1);
           expect(receipt.logs[0].topics).deep.eq([]);
-          expect(receipt.logs[0].data).eq(concat("0x07", account, asset, ethers.toBeHex(amount, 32)));
+          expect(receipt.logs[0].data).eq(concat("0x45", account, asset, ethers.toBeHex(amount, 32)));
           expect(ethers.dataLength(receipt.logs[0].data)).eq(97);
         }
   });

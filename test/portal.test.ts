@@ -1,4 +1,5 @@
 import { expectResolution } from "./helpers/resolution-logs.js";
+import { pipelineRecord } from "./helpers/event-records.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getProvider, getSigner, hostId, portId } from "./helpers/setup.js";
@@ -89,8 +90,10 @@ describe("Portal", () => {
     const tx = await portal.testForward(key, message, 7n, { value: 7n, gasLimit: 500_000 });
     await expect(tx).to.emit(commander, "CashinCalled").withArgs(await portal.getAdminAccount(), 7n);
     const receipt = await tx.wait();
-    expect(receipt!.logs).to.have.length(1);
-    expect(receipt!.logs[0].topics.length).greaterThan(0);
+    // The commander's pipeline emits its Start record, then the cashin hook event.
+    expect(receipt!.logs).to.have.length(2);
+    expect(receipt!.logs[0].data).eq(pipelineRecord(await portal.getAdminAccount(), []));
+    expect(receipt!.logs[1].topics.length).greaterThan(0);
 
     const after = BigInt(await provider.send("eth_getBalance", [commanderAddr, "latest"]));
     expect(after).to.equal(before + 7n);

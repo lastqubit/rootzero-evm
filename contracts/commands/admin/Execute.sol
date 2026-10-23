@@ -15,10 +15,9 @@ using Executions for Execution;
 /// Unspent top-level `msg.value` is returned as native budget credit.
 abstract contract ExecutePayable is AdminBase {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("executePayable", Specs.Empty, Specs.Call, Specs.Empty, Flags.AdminFunded);
+        (, descriptor) = command("executePayable", Specs.Empty, Specs.Call, Specs.Empty, Flags.AdminFunded);
     }
 
     /// @dev Execute arbitrary calldata while ignoring successful returndata.
@@ -65,7 +64,7 @@ abstract contract ExecutePayable is AdminBase {
     function executePayable(
         bytes calldata context
     ) external payable returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, executePayableOne);
+        return runAdmin(descriptor, context, executePayableOne);
     }
 
     /// @dev Process one CALL item for the ExecutePayable endpoint.

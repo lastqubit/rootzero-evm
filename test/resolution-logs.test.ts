@@ -15,7 +15,7 @@ describe("Resolution category logs", () => {
         expect(await helper.publish.staticCall(key, digest, resolved)).eq(block);
         const receipt = await (await helper.publish(key, digest, resolved)).wait();
         expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
-          { topics: [], data: ethers.concat(["0x09", key, digest, resolved ? "0x01" : "0x00"]) },
+          { topics: [], data: ethers.concat(["0x47", key, digest, resolved ? "0x01" : "0x00"]) },
         ]);
       }
     }

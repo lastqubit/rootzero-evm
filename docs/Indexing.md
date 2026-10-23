@@ -17,17 +17,26 @@ means an ordinary `[key:4][payload length:4][payload]` stream without ABI paddin
 
 | Category | Name | Fields after category | Total bytes |
 |---|---|---|---|
-| `0x01` | Access | node, enabled flag:1 | 34 |
-| `0x02` | Introduction | peer, origin account, claimed block number, name | 97 + name bytes |
-| `0x03` | Metadata | subject, blocks | 33 + blocks |
-| `0x04` | Execution | endpoint, account, selected STATE/INPUT/OUTPUT blocks | 65 + blocks |
-| `0x05` | Endpoint | endpoint, stateSpec, inputSpec, outputSpec, name | 129 + name bytes |
-| `0x06` | Reserved | Former Pipeline category; never reuse | - |
-| `0x07` | Balance | account, asset, actual balance | 97 |
-| `0x08` | Envelope | portal, resources, key, digest | 129 |
-| `0x09` | Resolution | key, digest, resolved flag:1 | 66 |
+| `0x04` | Pipeline | account, command IDs | 33 + 32 per step |
+| `0x08` | State | index:1, state payload | 2 + state |
+| `0x10` | Input (Step record) | index:1, value if index bit 6, hinted input payload | 2 + value + input |
+| `0x20` | Output | Reserved; a step's output is recorded as the next State | - |
+| `0x40` | Value | Reserved; also the Step index value bit | - |
+| `0x41` | Access | node, enabled flag:1 | 34 |
+| `0x42` | Introduction | peer, origin account, claimed block number, name | 97 + name bytes |
+| `0x43` | Metadata | subject, blocks | 33 + blocks |
+| `0x44` | Endpoint | endpoint, stateSpec, inputSpec, outputSpec, name | 129 + name bytes |
+| `0x45` | Balance | account, asset, actual balance | 97 |
+| `0x46` | Envelope | portal, resources, key, digest | 129 |
+| `0x47` | Resolution | key, digest, resolved flag:1 | 66 |
 
-Zero is reserved. Unknown categories must be preserved or skipped, never parsed
+Pipeline, State, Input, Output and Value are also endpoint-ID flag bits (`Logs.Pipeline`
+through `Logs.Value`); the other categories are numbered after them.
+
+Pipeline, State, Input, Output and Value are also endpoint-ID flag bits (`Logs.Pipeline`
+through `Logs.Value`); the other categories are numbered after them.
+
+Zero and every unassigned value are reserved. Unknown categories must be preserved or skipped, never parsed
 as another header. Reject incorrect lengths for known fixed layouts and truncated
 headers for variable layouts. A category identifies a stable wire layout;
 incompatible layouts get a new category value rather than inserting header fields.
@@ -49,7 +58,7 @@ or grant access. Indexers retain provenance and apply their own display override
 
 ## Node access
 
-Access records explicit node authorization transitions: `[0x01][node:32][enabled:1]`. The emitting host owns the authorization; enabled is exactly 0 or 1. Repeated grants or revocations without a change emit no Access record. The host implements this through `setAccess(uint node, bool enabled)`; internal mutation calls emit too. `authorize`, `unauthorize`, the `revoke` guard and internal authorization adapter rely on these Access events, with execution logging disabled (no logging bits in their IDs). Empty and unchanged batches emit no Access or Execution records. Guardians and account permissions remain outside this category.
+Access records explicit node authorization transitions: `[0x41][node:32][enabled:1]`. The emitting host owns the authorization; enabled is exactly 0 or 1. Repeated grants or revocations without a change emit no Access record. The host implements this through `setAccess(uint node, bool enabled)`; internal mutation calls emit too. `authorize`, `unauthorize`, the `revoke` guard and internal authorization adapter rely on these Access events; they carry no logging hints. Empty and unchanged batches emit no Access records. Guardians and account permissions remain outside this category.
 
 ## Endpoint discovery
 
@@ -60,54 +69,72 @@ with the event header. Specs are pure specifications, without embedded codes.
 
 Decode endpoint ID kind, selector, address and public behavior flags using the
 node layout. Register the specs and policy under `(chain, emitter, endpoint ID)`.
-Behavior and logging flags are both part of the ID. Query endpoints
-are registered normally but do not emit execution records.
+Behavior flags and logging hints are both part of the ID. No endpoint, query or
+otherwise, emits execution records.
 
-## Execution records
+## Pipeline records
+
+Endpoints never log their own execution; whoever calls them does. The protocol
+`Pipeline` records every pipeline it runs with three categories:
 
 ```text
-[0x04][endpoint:32][account:32][STATE?][INPUT?][OUTPUT?]
+Pipeline  [0x04][account:32][command:32 × n]
+State     [0x08][index:1][state payload]
+Step      [0x10][index:1][value:32 if index bit 6][input payload if Input hint]
 ```
 
-Each logged invocation emits one completion record, including empty batches.
-Selected empty containers retain their eight-byte block headers. Callback and
-nested execution logs precede the containing completion record. Reverts discard
-all records, including earlier hook logs from that reverted invocation.
+- **Pipeline** is emitted once, before the first step. It holds the pipeline account
+  and every step's command ID, through the first handoff. A handoff's continuation
+  belongs to the destination host, which records it in its own pipeline. The step
+  count is the record length: `(size - 33) / 32`.
+- **Step** (category Input) is emitted for step `i` when its command carries the
+  Input hint or the pipeline assigns it a nonzero native value. Bit 6 of the index
+  byte (`Logs.Value`) marks a
+  following 32-byte value: the wei the pipeline assigned to the step, whether or
+  not the command used it. The input payload follows when the command carries the
+  Input hint. It is the step's INPUT payload without the INPUT block header, so a
+  handoff step's relayed continuation is not included.
+- **State** `i` is the state block stream passed to step `i`, without its STATE
+  header. It is emitted once when step `i` carries the State hint or step `i - 1`
+  carries the Output hint, so a step's output and the next step's state are never
+  recorded twice. The final state is always empty and never recorded.
 
-The account is the active context account for commands. Guards derive the acting
-account with `Accounts.toUser(msg.sender)` after guardian authorization and before
-opening the buffer. Ports default to zero, meaning no acting account is attributed;
-a port implementation can explicitly supply an account through the `runPort`
-overload. The peer address is not automatically treated as an acting account.
-Affected subjects can differ from this account and remain in the lane blocks.
+For each step, State precedes Step, and both precede any records the step's own
+hooks emit, such as Balance. The index is zero-based. A pipeline has at most 64
+steps, so the index stays below the Value bit; longer pipelines revert with
+`TooManySteps`.
 
-Source lanes are snapshots from opening. Output is the callback result. They share
-one growable memory buffer; emission precedes returning its output region in place.
-External Solidity ABI return encoding still applies. Returned bytes contain only
-output blocks, not the category or event header.
+Pair records by emitter, Pipeline record and index. Pipelines on one emitter do
+not nest: hosts guard or restrict the entrypoints that run them, so each Pipeline
+record ends the
+previous pipeline from that emitter. Record lengths give every variable payload
+length; the records carry no other length fields.
 
-### Execution policy
+Calls made outside a pipeline emit no execution record. This includes direct
+command calls from a commander or trusted host, guards called by guardians, and
+ports called by peers. Their callers, or hooks with custom records, log what they
+need. Reverts discard every record of the reverted call.
 
-Pass a single lane flag directly at registration, such as `Logs.Input`.
-For combined lanes, a named constant keeps the policy readable:
+### Logging hints
+
+The endpoint ID flags byte is at bits 224..231. Bit 0 is Funded, bit 1 Admin,
+bit 2 Pipeline, bits 3/4/5 State/Input/Output logging hints, bit 6 Value,
+and bit 7 Handoff. `Logs.State=8`, `Logs.Input=16`, `Logs.Output=32`.
+
+Hints tell callers which lanes of an endpoint are worth recording. They are not
+rules: endpoints ignore them, the protocol `Pipeline` follows them, and other
+callers may follow them, ignore them or record more. Commands, guards and ports
+accept any one-byte flag combination. Combine hints and behavior flags at
+registration; for combined lanes, a named constant keeps the policy readable:
 
 ```solidity
 uint private constant FLAGS = Logs.State | Logs.Output;
 // Constructor:
-(id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, FLAGS);
+(, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, FLAGS);
 ```
 
-The endpoint ID flags byte is at bits 224..231. Bit 0 is Funded, bit 1 Admin,
-bit 2 logging Execution, bits 3/4/5 State/Input/Output, bit 6 endpoint-defined,
-and bit 7 Handoff. `Logs.Execution=4`, `Logs.State=12`, `Logs.Input=20`, `Logs.Output=36`.
-Every lane flag includes Execution. Combine flags at registration, for example
-`Logs.Input | Flags.Admin`. No logging bits means no record or buffer preparation.
-Lane bits without Execution, or flags exceeding one byte, are rejected. Ports cannot
-select state; guards allow only input logging. `Logs.Execution` alone logs the header.
-
-There is no separate logging field in Endpoint events. Endpoint IDs and logging policy are fixed at deployment. `Logs.Execution=4` is
-both the event category and the header-only logging flag. Other category values
-are identifiers, not logging flags. Access and indexing use the complete ID.
+There is no separate logging field in Endpoint events. Hints are part of the
+endpoint ID, fixed at deployment, and access and indexing use the complete ID.
 
 ### Offchain interpretation
 
@@ -117,8 +144,8 @@ endpoint and applicable block range. The endpoint identifies its host; the event
 emitter supplies provenance. Retain raw events and schemas so projections can be
 rebuilt as interpretations change. Unknown endpoints remain browsable typed data.
 
-For example, a registry may interpret INPUT asset blocks from an allowAsset
-endpoint as allowed assets. That interpretation relies on the implementation's
+For example, a registry may interpret the input payload of an allowAsset Step
+record as allowed assets. That interpretation relies on the implementation's
 promised effect; input data alone does not prove it. Core Access and Balance events
 retain their category-defined state meaning. Asset and entity code queries have been removed. Normal application reads come
 from indexer projections; `GetBalance` and `GetQuote` are the built-in queries. `QueryBase`
@@ -128,7 +155,7 @@ onchain classification vocabularies have been removed.
 ## Metadata
 
 ```text
-[0x03][subject:32][standard blocks...]
+[0x43][subject:32][standard blocks...]
 ```
 
 `Logs.metadata(subject, data)` publishes one or more blocks about one subject.
@@ -173,9 +200,8 @@ including a resulting zero balance. Zero-amount mutations need not emit.
 The ACCOUNT_BALANCE block remains the query/output schema, but the Balance event
 has fixed fields with no block wrapper or codes.
 
-Pipeline entry emits no event. Execution records identify their own accounts,
-and Balance records capture actual balance changes. Category 6 remains reserved
-for historical Pipeline events; initial budgets are not indexed as balances.
+Pipeline records identify the pipeline account, and Balance records capture actual
+balance changes. Initial budgets are not indexed as balances.
 
 ## Introduction and transport
 
@@ -201,8 +227,10 @@ Select decoders by deployment/version; do not guess old formats from a byte that
 coincidentally matches a new category. There is no implicit backwards-compatible
 fallback. Historical benchmark fixtures retain their original event encodings.
 
-The public helpers are access, execution, endpoint, balance, metadata,
-introduction, envelope and resolution. Untagged mem/copy/wrap and correlated stream
+The public helpers are access, endpoint, balance, metadata, introduction,
+envelope, resolution, step and state; Pipeline emits its Pipeline record itself.
+Endpoint Execution records are removed, and categories were renumbered; select
+decoders by deployment version. Untagged mem/copy/wrap and correlated stream
 helpers are retired from production. Standard blocks remain usable independently
 of event headers, except the removed execution-cost and action blocks.
 

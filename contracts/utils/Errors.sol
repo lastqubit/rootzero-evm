@@ -13,6 +13,9 @@ uint constant UNEXPECTED_VALUE = 0x123146a6;
 /// @dev Right-aligned OutOfRange() selector for direct assembly use.
 uint constant OUT_OF_RANGE = 0x7db3aba7;
 
+/// @dev Right-aligned TooManySteps() selector for direct assembly use.
+uint constant TOO_MANY_STEPS = 0x5cdc2c78;
+
 /// @dev A block key or payload size does not match its expected shape.
 error InvalidBlock();
 
@@ -78,3 +81,6 @@ error UnexpectedState();
 
 /// @dev Thrown when an operation requires empty input but receives input data.
 error UnexpectedInput();
+
+/// @dev Thrown when a pipeline exceeds the 64 steps its record index can address.
+error TooManySteps();

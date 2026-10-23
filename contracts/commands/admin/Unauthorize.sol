@@ -30,7 +30,7 @@ abstract contract Unauthorize is AdminBase {
     function unauthorize(
         bytes calldata context
     ) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, unauthorizeOne);
+        return runAdmin(descriptor, context, unauthorizeOne);
     }
 
     /// @dev Process one NODE item for the Unauthorize endpoint.

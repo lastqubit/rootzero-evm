@@ -20,9 +20,7 @@ library Encoder {
     // General primitives: allocation, positions, sequential writes, and copies.
 
     /// @notice Allocate an uninitialized uint32-sized result with zero padding.
-    /// @dev Reserves an owned word before the bytes length for temporary event prefixes.
-    /// That word is outside the returned length and all logical block offsets.
-    /// Use pos(value, 0) for the first write position. Fill all logical bytes before
+    /// @dev Use pos(value, 0) for the first write position. Fill all logical bytes before
     /// exposing the result. Only the rounded final allocation is retained: writes
     /// may interleave allocations if they stay inside that owned extent. Any
     /// scratch beyond it must be used before further allocations.
@@ -31,7 +29,7 @@ library Encoder {
     function allocate(uint size) internal pure returns (bytes memory value) {
         if (size > type(uint32).max) revert ValueOverflow();
         assembly ("memory-safe") {
-            value := add(mload(0x40), 32)
+            value := mload(0x40)
             let abs := add(value, 32)
             mstore(value, size)
             mstore(add(abs, size), 0)
@@ -174,9 +172,8 @@ library Encoder {
 
     // Growable buffers: allocation, initialization, growth, reservation, finalization.
 
-    /// @notice Reserve a leading event-prefix word outside logical capacity, then
-    /// allocate uninitialized capacity plus one retained scratch word and copy
-    /// only the written prefix.
+    /// @notice Allocate uninitialized capacity plus one retained scratch word and
+    /// copy only the written prefix.
     /// @dev Requires written <= capacity <= uint32.max and
     /// written <= dst.length. Unwritten bytes must never be exposed or read.
     /// @param dst Destination memory buffer.
@@ -185,7 +182,7 @@ library Encoder {
     /// @return value Output buffer; retain this value because growth may relocate it.
     function grow(bytes memory dst, uint written, uint capacity) internal pure returns (bytes memory value) {
         assembly ("memory-safe") {
-            value := add(mload(0x40), 32)
+            value := mload(0x40)
             let padded := add(and(add(capacity, 31), not(31)), 32)
             mstore(value, padded)
             mstore(0x40, add(add(value, 32), padded))

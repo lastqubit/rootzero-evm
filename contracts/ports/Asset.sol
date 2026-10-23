@@ -26,19 +26,18 @@ abstract contract RequestAssetHook {
 /// Each ASSET block in the input calls `allowAsset`. Restricted to trusted peers.
 abstract contract AllowAssetPort is PortBase, AllowAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portAllowAsset", Specs.Asset, Specs.Empty, Logs.Input);
+        (, descriptor) = port("portAllowAsset", Specs.Asset, Specs.Empty, Logs.Input);
     }
 
     /// @notice Execute the allow-asset peer call.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portAllowAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(id, descriptor, data, portAllowAssetOne);
+        return runPort(descriptor, data, portAllowAssetOne);
     }
 
     /// @dev Process one ASSET item for the AllowAssetPort endpoint.
@@ -54,19 +53,18 @@ abstract contract AllowAssetPort is PortBase, AllowAssetHook {
 /// Each ASSET block in the input calls `denyAsset`. Restricted to trusted peers.
 abstract contract DenyAssetPort is PortBase, DenyAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portDenyAsset", Specs.Asset, Specs.Empty, Logs.Input);
+        (, descriptor) = port("portDenyAsset", Specs.Asset, Specs.Empty, Logs.Input);
     }
 
     /// @notice Execute the deny-asset peer call.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param data ASSET block stream supplied by the trusted peer.
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portDenyAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(id, descriptor, data, portDenyAssetOne);
+        return runPort(descriptor, data, portDenyAssetOne);
     }
 
     /// @dev Process one ASSET item for the DenyAssetPort endpoint.
@@ -84,10 +82,9 @@ abstract contract DenyAssetPort is PortBase, DenyAssetHook {
 /// any accounting and transfer required by the host.
 abstract contract RequestAssetPort is PortBase, RequestAssetHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = port("portRequestAsset", Specs.AssetAmount, Specs.Empty, 0);
+        (, descriptor) = port("portRequestAsset", Specs.AssetAmount, Specs.Empty, 0);
     }
 
     /// @notice Request assets for the calling peer.
@@ -95,7 +92,7 @@ abstract contract RequestAssetPort is PortBase, RequestAssetHook {
     /// @return Empty response bytes.
     /// @return Zero native budget credit.
     function portRequestAsset(bytes calldata data) external onlyPeer returns (bytes memory, uint) {
-        return runPort(id, descriptor, data, portRequestAssetOne);
+        return runPort(descriptor, data, portRequestAssetOne);
     }
 
     /// @dev Process one ASSET_AMOUNT item for the RequestAssetPort endpoint.

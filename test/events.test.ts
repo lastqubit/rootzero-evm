@@ -1,4 +1,4 @@
-import { expectInputLog, expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectNoExecutionRecords, expectAccessLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
@@ -25,7 +25,7 @@ describe("Host access and guardian logs", () => {
             const changed = input !== "0x" && (await host.isAuthorized(subject)) !== active;
             await expectAccessLogs(host[method](encodeContextBlock(account, "0x", input)), changed ? [subject as bigint] : [], active);
           } else {
-            await expectInputLog(host[method](encodeContextBlock(account, "0x", input)), host, method, input);
+            await expectNoExecutionRecords(host[method](encodeContextBlock(account, "0x", input)));
           }
           if (input !== "0x") expect(kind === "Node" ? await host.isAuthorized(subject) : await host.isGuardianAddress(target)).eq(active);
         }
@@ -55,7 +55,7 @@ describe("Asset block logs", () => {
         const block = encodeBlock(Keys.AssetPreimage, ethers.concat([asset, encodeBlock(Keys.Bytes, preimage)]));
         expect(await emitter.emitPreimage.staticCall(asset, preimage)).eq(block);
         const receipt = await (await emitter.emitPreimage(asset, preimage)).wait();
-        expect(logs(receipt)).deep.eq([{ topics: [], data: ethers.concat(["0x03", asset, block]) }]);
+        expect(logs(receipt)).deep.eq([{ topics: [], data: ethers.concat(["0x43", asset, block]) }]);
       }
     }
   });

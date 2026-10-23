@@ -41,7 +41,7 @@ abstract contract PreviousCommandCheckBalance is CommandBase {
     /// @return Unchanged BALANCE blocks.
     /// @return Zero native budget credit.
     function checkBalance(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, checkBalanceOne);
+        return runCommand(descriptor, context, checkBalanceOne);
     }
 
     function checkBalanceOne(Execution memory exec) private pure {
@@ -68,10 +68,9 @@ abstract contract PreviousCommandWithdrawHook {
 abstract contract PreviousCommandWithdraw is CommandBase, PreviousCommandWithdrawHook {
     uint private constant STATE = Specs.Balance;
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, Logs.State);
+        (, descriptor) = command("withdraw", STATE, Specs.Empty, Specs.Empty, Logs.State);
     }
 
     /// @notice Withdraw each BALANCE block from the command state to the command account.
@@ -79,7 +78,7 @@ abstract contract PreviousCommandWithdraw is CommandBase, PreviousCommandWithdra
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function withdraw(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, withdrawOne);
+        return runCommand(descriptor, context, withdrawOne);
     }
 
     function withdrawOne(Execution memory exec) private {

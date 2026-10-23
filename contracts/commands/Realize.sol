@@ -31,19 +31,18 @@ abstract contract Realize is CommandBase, RealizeHook {
     uint private constant LOGS = Logs.State | Logs.Output;
 
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, LOGS);
+        (, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, LOGS);
     }
 
     /// @notice Realize POSITION state blocks without caller-supplied outcome constraints.
-    /// @dev Logs original POSITION state and fulfilled OUTPUT together after hooks.
+    /// @dev Hints callers to record original POSITION state and fulfilled OUTPUT.
     /// @param context Command context carrying POSITION state and empty input.
     /// @return POSITION blocks returned by the realization hook.
     /// @return Zero native budget credit.
     function realize(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(id, descriptor, context, realizeOne);
+        return runCommand(descriptor, context, realizeOne);
     }
 
     /// @dev Process one POSITION item for the Realize endpoint.

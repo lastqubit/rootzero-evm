@@ -16,7 +16,7 @@ describe("Introduction category logs", () => {
       const receipt = await (await helper.publish(value, origin, value)).wait();
       expect(receipt.logs.length).eq(1);
       expect(receipt.logs[0].topics).deep.eq([]);
-      expect(receipt.logs[0].data).eq(ethers.concat(["0x02", ethers.dataSlice(block, 8)]));
+      expect(receipt.logs[0].data).eq(ethers.concat(["0x42", ethers.dataSlice(block, 8)]));
       expect(decodeIntroductionLog(receipt.logs[0])).deep.eq({ peer: value, origin, blocknum: value, name: "" });
     }
   });

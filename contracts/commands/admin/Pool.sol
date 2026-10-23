@@ -33,21 +33,20 @@ abstract contract RemovePoolHook {
 /// @notice Admin command that adds one pool per pair of ASSET_AMOUNT inputs.
 abstract contract AddPool is AdminBase, AddPoolHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
         uint input = lane("#assetAmount[2] as (a, b)", "addPool", Specs.AssetAmount);
-        (id, descriptor) = command("addPool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("addPool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Add pools from consecutive ASSET_AMOUNT pairs.
     /// @dev Empty batches are accepted. An incomplete pair or hook failure reverts the entire batch.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param context Admin context containing the ASSET_AMOUNT input pairs.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function addPool(bytes calldata context) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, addPoolOne);
+        return runAdmin(descriptor, context, addPoolOne);
     }
 
     /// @dev Process one ASSET_AMOUNT / ASSET_AMOUNT item for the AddPool endpoint.
@@ -63,21 +62,20 @@ abstract contract AddPool is AdminBase, AddPoolHook {
 /// @notice Admin command that removes one pool per pair of ASSET inputs.
 abstract contract RemovePool is AdminBase, RemovePoolHook {
     uint private immutable descriptor;
-    uint private immutable id;
 
     constructor() {
         uint input = lane("#asset[2] as (a, b)", "removePool", Specs.Asset);
-        (id, descriptor) = command("removePool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("removePool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
     }
 
     /// @notice Remove pools from consecutive ASSET pairs.
     /// @dev Empty batches are accepted. An incomplete pair or hook failure reverts the entire batch.
-    /// @dev Logs the complete host-scoped INPUT batch after hooks.
+    /// @dev Hints callers to record the complete host-scoped INPUT batch.
     /// @param context Admin context containing the ASSET input pairs.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function removePool(bytes calldata context) external returns (bytes memory, uint) {
-        return runAdmin(id, descriptor, context, removePoolOne);
+        return runAdmin(descriptor, context, removePoolOne);
     }
 
     /// @dev Process one ASSET / ASSET item for the RemovePool endpoint.
