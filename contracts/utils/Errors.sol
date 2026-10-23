@@ -16,6 +16,9 @@ uint constant OUT_OF_RANGE = 0x7db3aba7;
 /// @dev Right-aligned TooManySteps() selector for direct assembly use.
 uint constant TOO_MANY_STEPS = 0x5cdc2c78;
 
+/// @dev Right-aligned StepFailed(uint256,uint256,bytes) selector for direct assembly use.
+uint constant STEP_FAILED = 0x7837be7d;
+
 /// @dev A block key or payload size does not match its expected shape.
 error InvalidBlock();
 
@@ -84,3 +87,10 @@ error UnexpectedInput();
 
 /// @dev Thrown when a pipeline exceeds the 64 steps its record index can address.
 error TooManySteps();
+
+/// @dev Thrown by a pipeline when an external step call fails. Host-local steps revert
+/// with their own errors unwrapped. A handoff target's pipeline failure nests as `err`.
+/// @param index Zero-based step index, matching the pipeline's Step and State records.
+/// @param cmd Full command ID of the failing step, including its flags byte.
+/// @param err Complete revert data returned by the failed call.
+error StepFailed(uint index, uint cmd, bytes err);

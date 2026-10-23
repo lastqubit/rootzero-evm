@@ -15,6 +15,12 @@ sections are immutable and must continue to describe the tagged release.
   assigned value when nonzero, and the input payload when hinted). Pipelines accept
   at most 64 steps and revert `TooManySteps` beyond that. See `docs/Indexing.md`.
 
+- **Breaking: pipeline step failures report the step.** External step failures
+  revert `StepFailed(uint index, uint cmd, bytes err)` with the zero-based step
+  index and full command ID (including flags) instead of
+  `FailedCall(address, bytes4, bytes)`. Host-local steps still revert unwrapped.
+  `FailedCall` remains for `Calls` helpers and `ExecutePayable`.
+
 - **Breaking: endpoints no longer log.** Commands, admin commands, guards and ports
   emit no Execution records. `ExecuteCashout` no longer logs its state. Callers log
   what they need; direct calls outside a pipeline emit no execution record.

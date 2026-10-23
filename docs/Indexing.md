@@ -136,6 +136,15 @@ uint private constant FLAGS = Logs.State | Logs.Output;
 There is no separate logging field in Endpoint events. Hints are part of the
 endpoint ID, fixed at deployment, and access and indexing use the complete ID.
 
+### Failures
+
+A reverted transaction keeps no records. When an external step fails, the pipeline
+reverts `StepFailed(uint index, uint cmd, bytes err)`; `index` is the same
+zero-based step index the Pipeline, Step and State records use, and `cmd` is the
+full command ID. Pair it with the step decoded from the transaction input.
+Host-local steps revert unwrapped, and a handoff target's pipeline failure nests
+inside `err`.
+
 ### Offchain interpretation
 
 Endpoint and Envelope events carry no semantic codes. Tags, action names and

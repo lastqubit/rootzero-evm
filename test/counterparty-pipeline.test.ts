@@ -55,11 +55,12 @@ describe("Counterparty pipeline", () => {
           data = failure.data ?? failure.info?.error?.data;
         }
         expect(data, "pipeline must revert with error data").to.be.a("string");
-        const wrapper = new ethers.Interface(["error FailedCall(address addr, bytes4 selector, bytes err)"]);
-        if (data!.startsWith(wrapper.getError("FailedCall")!.selector)) {
+        const wrapper = new ethers.Interface(["error StepFailed(uint256 index, uint256 cmd, bytes err)"]);
+        if (data!.startsWith(wrapper.getError("StepFailed")!.selector)) {
           const failure = wrapper.parseError(data!)!;
-          expect(failure.args.addr).to.equal(await host.getAddress());
-          expect(failure.args.selector).to.be.oneOf([
+          // Index is the failing step; the full command ID keeps its (possibly remote) host and selector.
+          expect(failure.args.index).to.be.oneOf([0n, 1n, 2n]);
+          expect(ethers.toBeHex((failure.args.cmd >> 160n) & 0xffffffffn, 4)).to.be.oneOf([
             ethers.id("checkPosition(bytes)").slice(0, 10), ethers.id("realize(bytes)").slice(0, 10), ethers.id("settle(bytes)").slice(0, 10),
           ]);
           data = failure.args.err;

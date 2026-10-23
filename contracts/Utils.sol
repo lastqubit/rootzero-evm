@@ -35,6 +35,8 @@ import {
     OutOfRange,
     QueryFailed,
     SendFailed,
+    StepFailed,
+    TooManySteps,
     UnauthorizedAsset,
     UnconsumedData,
     UnexpectedAmount,

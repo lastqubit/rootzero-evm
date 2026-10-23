@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {CommandAccess} from "./Access.sol";
 import {Logs} from "../codec/Logs.sol";
 import {STEP_KEY, STATE_KEY, INPUT_KEY, BYTES_KEY, CONTEXT_KEY, RELAY_KEY} from "../codec/Keys.sol";
-import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS, TOO_MANY_STEPS} from "../utils/Errors.sol";
+import {InsufficientValue, UnexpectedState, INVALID_BLOCK, OUT_OF_BOUNDS, TOO_MANY_STEPS, STEP_FAILED} from "../utils/Errors.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Flags} from "../utils/Flags.sol";
 
@@ -150,6 +150,8 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @dev Authorize and invoke a command, strictly decoding (bytes, uint).
     /// Handoffs receive the remaining STEP stream and exhaust the returned cursor;
     /// ordinary calls receive only inputCur and preserve the remaining cursor.
+    /// A failed call reverts `StepFailed(index, cmd, err)` with the complete revert data.
+    /// @param index Zero-based step index reported on failure.
     /// @param cmd Command node identifier.
     /// @param account Account identifier.
     /// @param state State block stream, excluding the enclosing container header.
@@ -160,6 +162,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @return credit Native value returned to the caller budget, in wei.
     /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function invokeCommand(
+        uint index,
         uint cmd,
         bytes32 account,
         bytes memory state,
@@ -220,12 +223,12 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
                 size := add(68, and(add(contextLength, 31), not(31)))
             }
 
-            // Preserve the failing endpoint and its complete revert data.
-            function revertCall(ptr, callTarget, callSelector) {
+            // Preserve the failing step, its full command ID and its complete revert data.
+            function revertCall(ptr, stepIndex, command) {
                 let length := returndatasize()
-                mstore(ptr, shl(224, 0x20577b07)) // FailedCall(address,bytes4,bytes)
-                mstore(add(ptr, 4), callTarget)
-                mstore(add(ptr, 36), shl(224, shr(224, callSelector)))
+                mstore(ptr, shl(224, STEP_FAILED))
+                mstore(add(ptr, 4), stepIndex)
+                mstore(add(ptr, 36), command)
                 mstore(add(ptr, 68), 96)
                 mstore(add(ptr, 100), length)
                 mstore(add(add(ptr, 132), length), 0)
@@ -261,13 +264,15 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             let size := encodeCall(scratch, selector, account, state, inputCur, stepsCur)
             let callTarget := and(target, 0xffffffffffffffffffffffffffffffffffffffff)
             if iszero(call(gas(), callTarget, value, scratch, size, 0, 0)) {
-                revertCall(scratch, callTarget, selector)
+                revertCall(scratch, index, cmd)
             }
             output,credit := decodeResult(scratch)
         }
     }
 
     /// @dev Try host-local execution, then delegate unhandled commands to their authorized endpoint.
+    /// Host-local failures revert with their own errors; external failures revert `StepFailed`.
+    /// @param index Zero-based step index reported on external failure.
     /// @param cmd Command node identifier.
     /// @param account Account identifier.
     /// @param state State block stream, excluding the enclosing container header.
@@ -278,6 +283,7 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
     /// @return credit Native value returned to the caller budget, in wei.
     /// @return nextCur Remaining STEP cursor; exhausted when a handoff consumes the continuation.
     function run(
+        uint index,
         uint cmd,
         bytes32 account,
         bytes memory state,
@@ -290,14 +296,15 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             (handled, output, credit) = execute(cmd, account, state, inputCur, value);
             if (handled) return (output, credit, cur);
         }
-        return invokeCommand(cmd, account, state, value, inputCur, cur);
+        return invokeCommand(index, cmd, account, state, value, inputCur, cur);
     }
 
     /// @notice Execute a STEP block stream through the pipeline and record it.
     /// @dev Emits the Pipeline record, then before each step i its State record (when step i carries
     /// the State hint or step i - 1 the Output hint) and its Step record (when step i
     /// carries the Input hint or receives nonzero value). Reverts `TooManySteps` beyond
-    /// 64 steps and `UnexpectedState` if the final threaded state is non-empty.
+    /// 64 steps and `UnexpectedState` if the final threaded state is non-empty. An external
+    /// step failure reverts `StepFailed(index, cmd, err)`; host-local steps revert unwrapped.
     /// Callers remain responsible for settling the returned unspent value.
     /// @param account Account identifier used for each dispatched step.
     /// @param state Initial state block stream passed to the first step.
@@ -325,15 +332,15 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
             uint inputHint = hints & Logs.Input;
             if (inputHint | value != 0) Logs.step(index, value, inputCur, inputHint != 0);
             outputHint = hints & Logs.Output;
-            unchecked {
-                ++index;
-            }
             if (value > budget) revert InsufficientValue();
             unchecked {
                 budget -= value;
             }
-            (state, value, stepsCur) = run(cmd, account, state, value, inputCur, stepsCur);
+            (state, value, stepsCur) = run(index, cmd, account, state, value, inputCur, stepsCur);
             budget += value;
+            unchecked {
+                ++index;
+            }
         }
 
         if (state.length != 0) revert UnexpectedState();

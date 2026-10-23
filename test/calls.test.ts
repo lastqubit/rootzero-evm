@@ -381,15 +381,13 @@ describe("Command calls", () => {
     ).to.equal(BigInt(ethers.keccak256(context)) ^ value);
   });
 
-  it("wraps failed command calls in FailedCall", async () => {
+  it("wraps failed command calls in StepFailed", async () => {
     const helper = await deploy("TestCommandCalls");
-    const selector = helper.interface.getFunction("failing")!.selector;
-    const target = await helper.getAddress();
     const command = await commandId("failing(bytes)", helper);
     const steps = encodeStepBlock(command, 0n, "0x");
     const reason = helper.interface.encodeErrorResult("TargetFailure", [7n]);
     const errors = new ethers.Interface([
-      "error FailedCall(address addr, bytes4 selector, bytes err)",
+      "error StepFailed(uint256 index, uint256 cmd, bytes err)",
     ]);
 
     let data: string | undefined;
@@ -400,12 +398,8 @@ describe("Command calls", () => {
     }
 
     const failure = errors.parseError(data!);
-    expect(failure?.name).to.equal("FailedCall");
-    expect(failure?.args).to.deep.equal([
-      await helper.getAddress(),
-      selector,
-      reason,
-    ]);
+    expect(failure?.name).to.equal("StepFailed");
+    expect(failure?.args).to.deep.equal([0n, command, reason]);
   });
 
   it("rejects command return data with an invalid bytes offset", async () => {

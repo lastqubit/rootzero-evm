@@ -1193,14 +1193,10 @@ describe("Commands", () => {
         data = error.data ?? error.info?.error?.data;
       }
       expect(data, "pipeline must revert with encoded failure data").to.be.a("string");
-      const errors = new ethers.Interface(["error FailedCall(address addr, bytes4 selector, bytes err)"]);
+      const errors = new ethers.Interface(["error StepFailed(uint256 index, uint256 cmd, bytes err)"]);
       const failure = errors.parseError(data!);
-      expect(failure?.name).to.equal("FailedCall");
-      expect(failure?.args).to.deep.equal([
-        await host.getAddress(),
-        host.interface.getFunction(method)!.selector,
-        host.interface.encodeErrorResult(errorName),
-      ]);
+      expect(failure?.name).to.equal("StepFailed");
+      expect(failure?.args).to.deep.equal([0n, await cmd(method), host.interface.encodeErrorResult(errorName)]);
     }
 
     const forbidden = [

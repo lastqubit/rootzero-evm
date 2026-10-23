@@ -115,6 +115,21 @@ describe("Pipeline records", () => {
       .revertedWithCustomError(host, "TooManySteps");
   });
 
+  it("reports an external step failure by index and full command ID", async () => {
+    const first = encodeStepBlock(ids.deposit, 0n, encodeAssetAmountBlock(asset, 7n));
+    const failing = encodeStepBlock(ids.deposit, 0n, "0x12");
+    let data: string | undefined;
+    try {
+      await host.testPipe.staticCall(account, "0x", concat(first, encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
+    } catch (error: any) {
+      data = error.data ?? error.info?.error?.data;
+    }
+    const errors = new ethers.Interface(["error StepFailed(uint256 index, uint256 cmd, bytes err)"]);
+    const failure = errors.parseError(data!);
+    expect(failure?.name).eq("StepFailed");
+    expect([failure!.args.index, failure!.args.cmd]).deep.eq([2n, ids.deposit]);
+  });
+
   it("leaves direct endpoint calls unlogged", async () => {
     const receipt = await (await host.deposit(encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 7n)))).wait();
     expect(records(receipt)).deep.eq([]);

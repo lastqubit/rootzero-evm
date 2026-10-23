@@ -714,6 +714,13 @@ if (state.length != 0) revert UnexpectedState();
 the remaining budget after every step has executed. The enclosing entrypoint
 settles that final value once.
 
+When an external step call fails, `Pipeline.pipe` reverts
+`StepFailed(uint index, uint cmd, bytes err)`: the zero-based step index (matching
+the pipeline's Step and State records), the full command ID including its flags,
+and the complete revert data. Host-local steps revert with their own errors,
+unwrapped. A failing handoff target's pipeline nests its own `StepFailed` in `err`,
+with indexes relative to each pipeline.
+
 `portPipePayable` shares one native-value budget across all supplied CONTEXT
 blocks. After all contexts execute, it calls `cashin` once for any nonzero
 remainder when the last context's account is nonzero, and returns zero native credit.
@@ -874,7 +881,8 @@ Settlement also calls it for both exact exchange transfers, liability first.
 `Calls.raw` (from `Core.sol`) calls ports returning `(bytes output, uint credit)`,
 with overloads for `bytes memory data` and validated calldata `uint dataCur`.
 They take `(selector, target, value, data, expectEmpty)`, strictly decode the
-tuple, and preserve target failures in `FailedCall`. `expectEmpty` constrains
+tuple, and preserve target failures in `FailedCall(address, bytes4, bytes)`;
+pipeline steps use `StepFailed` instead. `expectEmpty` constrains
 the output bytes only. Callers authorize the target and must ensure returned
 credit is backed before adding it to their budget; the helpers do not transfer
 ETH back. All ports return this tuple. Nonpayable ports return zero credit;
@@ -1064,8 +1072,8 @@ Import from the package entry points rather than deep paths:
   cursor, layout, and value helpers
 
 `Core.sol`, `Commands.sol`, `Endpoints.sol`, and `Utils.sol` each export all
-shared protocol errors from `utils/Errors.sol`, including `QueryFailed` and
-`SendFailed`. Core-specific errors such as `AccessDenied` and `FailedCall`
+shared protocol errors from `utils/Errors.sol`, including `QueryFailed`,
+`SendFailed` and `StepFailed`. Core-specific errors such as `AccessDenied` and `FailedCall`
 are exported by `Core.sol`.
 
 Repo layout:
