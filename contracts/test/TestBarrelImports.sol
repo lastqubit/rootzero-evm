@@ -26,12 +26,9 @@ import {
     ExecuteCheckBalance,
     CheckPosition,
     ExecuteCheckPosition,
-    AllowAsset,
-    AllowAssetHook,
-    AllowAssetPort,
-    DenyAsset,
-    DenyAssetHook,
-    DenyAssetPort,
+    EndorsePort,
+    UnendorsePort,
+    endorsable,
     ExecuteCreditAccount,
     ExecuteDebitAccount,
     ExecuteBootstrap,
@@ -54,7 +51,6 @@ import {
     BookPort,
     PortPipePayableSelector,
     RevokeAllowance,
-    RevokeAsset,
     SettlePayable,
     SettlePayableHook
 } from "../Endpoints.sol";

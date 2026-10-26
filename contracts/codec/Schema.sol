@@ -130,6 +130,8 @@ library Schemas {
     string constant Custody = "uint host, bytes32 asset, uint amount";
     /// @dev Schema DSL for the POSITION block.
     string constant Position = "bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty";
+    /// @dev Schema DSL for the TRUST block.
+    string constant Trust = "uint id";
 
     // One-word payloads
 
@@ -168,6 +170,8 @@ library Schemas {
     string constant Pipeline = "bytes32 account, uint budget";
     /// @dev Schema DSL for the BOOTSTRAP block.
     string constant Bootstrap = "uint budget, many #assetAmount as balances";
+    /// @dev Schema DSL for the VOUCH block.
+    string constant Vouch = "uint budget, many #entity as ids";
     /// @dev Schema DSL for the ALLOCATION block.
     string constant Allocation = "uint host, bytes32 asset, uint amount";
     /// @dev Schema DSL for the ALLOWANCE block.

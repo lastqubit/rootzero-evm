@@ -1,5 +1,5 @@
 import { encodeUserAccount } from "./helpers/blocks.js";
-import { expectNoExecutionRecords, expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectNoExecutionRecords, expectTrustLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
@@ -11,7 +11,7 @@ import {
   encodeContextBlock,
   encodeHostAssetBlock,
   encodeInputBlock,
-  encodeNodeBlock,
+  encodeEntityBlock,
   endpointSpecs,
   exactSpec,
   Keys,
@@ -62,7 +62,7 @@ describe("Guard Actions", () => {
     await deployed.waitForDeployment();
 
     await expect(deploymentTx)
-      .to.emitEndpoint(deployed).withArgs(await guard("revoke", deployed), 0n, exactSpec(Keys.Node, 32), 0n);
+      .to.emitEndpoint(deployed).withArgs(await guard("revoke", deployed), 0n, exactSpec(Keys.Entity, 32), 0n);
     await expect(deploymentTx)
       .to.emitEndpoint(deployed)
       .withArgs(await guard("revoke", deployed), undefined, undefined, undefined, "revoke");
@@ -76,37 +76,13 @@ describe("Guard Actions", () => {
         await guard("revokeAllowance", deployed),
         undefined, undefined, undefined, "revokeAllowance",
       );
-    await expect(deploymentTx)
-      .to.emitEndpoint(deployed).withArgs(await guard("revokeAsset", deployed),
-        ...endpointSpecs({ input: Keys.Asset, inputHint: 32, }),
-      );
-    await expect(deploymentTx)
-      .to.emitEndpoint(deployed)
-      .withArgs(
-        await guard("revokeAsset", deployed),
-        undefined, undefined, undefined, "revokeAsset",
-      );
   });
 
-  it("guardian can revoke assets", async () => {
-    const asset1 = ethers.id("asset-1");
-    const asset2 = ethers.id("asset-2");
-
-    const input = ethers.concat([encodeAssetBlock(asset1), encodeAssetBlock(asset2)]);
-    const tx = host.connect(guardianSigner).revokeAsset(input);
-    const receipt = await (await tx).wait();
-    expect(receipt.logs.filter((log: any) => !log.topics.length)).deep.eq([]);
-    await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset1);
-    await expect(tx).to.emit(host, "DenyAssetCalled").withArgs(asset2);
-  });
-
-  it("non-guardians cannot revoke assets", async () => {
-    await expect(host.revokeAsset(encodeAssetBlock(ethers.id("asset"))))
-      .to.be.revertedWithCustomError(host, "AccessDenied");
-  });
-
-  it("revokeAsset accepts an empty batch", async () => {
-    await expectNoExecutionRecords(host.connect(guardianSigner).revokeAsset("0x"));
+  it("guardian can revoke trust for non-node IDs", async () => {
+    const asset = (0x0203n << 240n) | 1n; // opaque asset ID
+    await host.authorize(...adminCtx(encodeEntityBlock(asset)));
+    await expectTrustLogs(host.connect(guardianSigner).revoke(encodeEntityBlock(asset)), [asset], false);
+    expect(await host.isAuthorized(asset)).eq(false);
   });
 
   it("guardian can revoke host asset allowances", async () => {
@@ -148,10 +124,10 @@ describe("Guard Actions", () => {
   it("guardian can revoke an authorized node directly", async () => {
     const node = await hostId(await (await getSigner(2)).getAddress());
 
-    await host.authorize(...adminCtx(encodeNodeBlock(node)));
+    await host.authorize(...adminCtx(encodeEntityBlock(node)));
     expect(await host.isAuthorized(node)).to.be.true;
 
-    await expectAccessLogs(host.connect(guardianSigner).revoke(encodeNodeBlock(node)), [node], false);
+    await expectTrustLogs(host.connect(guardianSigner).revoke(encodeEntityBlock(node)), [node], false);
 
     expect(await host.isAuthorized(node)).to.be.false;
   });
@@ -160,10 +136,10 @@ describe("Guard Actions", () => {
     const node1 = await hostId(await (await getSigner(2)).getAddress());
     const node2 = await hostId(await (await getSigner(3)).getAddress());
 
-    await host.authorize(...adminCtx(ethers.concat([encodeNodeBlock(node1), encodeNodeBlock(node2)])));
+    await host.authorize(...adminCtx(ethers.concat([encodeEntityBlock(node1), encodeEntityBlock(node2)])));
 
-    const input = ethers.concat([encodeNodeBlock(node1), encodeNodeBlock(node2)]);
-    await expectAccessLogs(host.connect(guardianSigner).revoke(input), [node1, node2], false);
+    const input = ethers.concat([encodeEntityBlock(node1), encodeEntityBlock(node2)]);
+    await expectTrustLogs(host.connect(guardianSigner).revoke(input), [node1, node2], false);
 
     expect(await host.isAuthorized(node1)).to.be.false;
     expect(await host.isAuthorized(node2)).to.be.false;
@@ -172,12 +148,12 @@ describe("Guard Actions", () => {
   it("reverts AccessDenied for non-guardian callers", async () => {
     const node = await hostId(await (await getSigner(2)).getAddress());
 
-    await expect(host.revoke(encodeNodeBlock(node)))
+    await expect(host.revoke(encodeEntityBlock(node)))
       .to.be.revertedWithCustomError(host, "AccessDenied");
   });
 
   it("accepts an empty revoke batch", async () => {
-    await expectAccessLogs(host.connect(guardianSigner).revoke("0x"), [], false);
+    await expectTrustLogs(host.connect(guardianSigner).revoke("0x"), [], false);
   });
 
   it("reverts InvalidBlock when revoke input is not NODE blocks", async () => {
@@ -187,9 +163,9 @@ describe("Guard Actions", () => {
       .to.be.revertedWithCustomError(host, "InvalidBlock");
   });
 
-  it("reverts OutOfBounds when revoke input has a truncated NODE block", async () => {
+  it("reverts OutOfBounds when revoke input has a truncated ENTITY block", async () => {
     const truncated = ethers.concat([
-      Keys.Node,
+      Keys.Entity,
       ethers.toBeHex(32, 4),
       ethers.dataSlice(pad32(1n), 0, 31),
     ]);
@@ -200,12 +176,12 @@ describe("Guard Actions", () => {
 
   it("dismissed guardian cannot revoke nodes", async () => {
     const node = await hostId(await (await getSigner(2)).getAddress());
-    await host.authorize(...adminCtx(encodeNodeBlock(node)));
+    await host.authorize(...adminCtx(encodeEntityBlock(node)));
 
     const guardianAccount = await utils.testToUserAccount(guardianAddress);
     await host.dismiss(...adminCtx(encodeAccountBlock(guardianAccount)));
 
-    await expect(host.connect(guardianSigner).revoke(encodeNodeBlock(node)))
+    await expect(host.connect(guardianSigner).revoke(encodeEntityBlock(node)))
       .to.be.revertedWithCustomError(host, "AccessDenied");
   });
 

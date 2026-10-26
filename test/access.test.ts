@@ -1,10 +1,10 @@
-import { expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectTrustLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import hre from "hardhat";
 import "./helpers/matchers.js";
 import { commandId, deploy, getSigner, getSigners, hostId, portId } from "./helpers/setup.js";
-import { encodeContextBlock, encodeNodeBlock, pad32 } from "./helpers/blocks.js";
+import { encodeContextBlock, encodeEntityBlock, pad32 } from "./helpers/blocks.js";
 
 describe("Access Control", () => {
   let host: Awaited<ReturnType<typeof deploy>>;
@@ -79,17 +79,17 @@ describe("Access Control", () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(3);
-    const nodeBlock = encodeNodeBlock(dummyNode);
+    const nodeBlock = encodeEntityBlock(dummyNode);
     const ctx = [encodeContextBlock(adminAccount, "0x", nodeBlock)] as const;
 
-    await expectAccessLogs(host.connect(signers[0]).authorize(...ctx), [dummyNode], true);
+    await expectTrustLogs(host.connect(signers[0]).authorize(...ctx), [dummyNode], true);
   });
 
   it("node is authorized after authorize call", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(4);
-    const nodeBlock = encodeNodeBlock(dummyNode);
+    const nodeBlock = encodeEntityBlock(dummyNode);
     const ctx = [encodeContextBlock(adminAccount, "0x", nodeBlock)] as const;
     await host.connect(signers[0]).authorize(...ctx);
     expect(await host.isAuthorized(dummyNode)).to.be.true;
@@ -100,17 +100,17 @@ describe("Access Control", () => {
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(5);
     // First authorize
-    await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)));
+    await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(dummyNode)));
     // Then unauthorize
-    await expectAccessLogs(host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode))), [dummyNode], false);
+    await expectTrustLogs(host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(dummyNode))), [dummyNode], false);
   });
 
   it("node is not authorized after unauthorize call", async () => {
     const signers = await getSigners(1);
     const adminAccount: string = await host.getAdminAccount();
     const dummyNode = await localNode(6);
-    await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)));
-    await host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(dummyNode)));
+    await host.connect(signers[0]).authorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(dummyNode)));
+    await host.connect(signers[0]).unauthorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(dummyNode)));
     expect(await host.isAuthorized(dummyNode)).to.be.false;
   });
 
@@ -126,7 +126,7 @@ describe("Access Control", () => {
 
     for (const node of [command, port]) {
       await host.connect(signers[0]).authorize(
-        encodeContextBlock(adminAccount, "0x", encodeNodeBlock(node)),
+        encodeContextBlock(adminAccount, "0x", encodeEntityBlock(node)),
       );
     }
 

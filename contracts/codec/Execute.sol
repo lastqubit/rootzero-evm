@@ -65,6 +65,32 @@ library Execute {
         if (header != Headers.Node) revert InvalidBlock();
     }
 
+    /// @notice Decode an ENTITY at an in-bounds absolute calldata position.
+    /// @dev Checks the exact header; caller establishes containment for 40 bytes.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return entity Identifier of any kind.
+    function unpackEntity(uint abs) internal pure returns (uint entity) {
+        uint header;
+        assembly ("memory-safe") {
+            header := shr(192, calldataload(abs))
+            entity := calldataload(add(abs, 8))
+        }
+        if (header != Headers.Entity) revert InvalidBlock();
+    }
+
+    /// @notice Decode a TRUST at an in-bounds absolute calldata position.
+    /// @dev Checks the exact header; caller establishes containment for 40 bytes.
+    /// @param abs Source byte position; not a packed cursor.
+    /// @return id Trusted identifier of any kind.
+    function unpackTrust(uint abs) internal pure returns (uint id) {
+        uint header;
+        assembly ("memory-safe") {
+            header := shr(192, calldataload(abs))
+            id := calldataload(add(abs, 8))
+        }
+        if (header != Headers.Trust) revert InvalidBlock();
+    }
+
     /// @notice Decode an AMOUNT at an in-bounds absolute calldata position.
     /// @dev Checks the exact header; caller establishes containment for 40 bytes.
     /// @param abs Source byte position; not a packed cursor.

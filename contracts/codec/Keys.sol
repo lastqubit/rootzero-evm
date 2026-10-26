@@ -19,6 +19,9 @@ uint constant ACCOUNT_BALANCE_KEY = 0x2da7f737;
 /// @dev Right-aligned Keys.Bootstrap for direct assembly use: bytes4(keccak256("#bootstrap")).
 uint constant BOOTSTRAP_KEY = 0x440f90da;
 
+/// @dev Right-aligned Keys.Vouch for direct assembly use: bytes4(keccak256("#vouch")).
+uint constant VOUCH_KEY = 0x0ddefe28;
+
 /// @dev Right-aligned Keys.Step for direct assembly use: bytes4(keccak256("#step")).
 uint constant STEP_KEY = 0x53a8ad94;
 
@@ -60,6 +63,8 @@ library Keys {
     bytes4 constant Custody = bytes4(keccak256("#custody"));
     /// @dev Asset-liability position state - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
     bytes4 constant Position = bytes4(keccak256("#position"));
+    /// @dev Trusted-ID state vouched for by a commander - (uint id)
+    bytes4 constant Trust = bytes4(keccak256("#trust"));
     /// @dev Account debit/credit booking - (bytes32 from, bytes32 to, bytes32 asset, uint amount, bytes32 liability, uint debt).
     bytes4 constant Booking = bytes4(keccak256("#booking"));
 
@@ -82,6 +87,8 @@ library Keys {
     bytes4 constant AssetAmount = bytes4(keccak256("#assetAmount"));
     /// @dev Pipeline bootstrap request - minimum budget and LIST of ASSET_AMOUNT blocks.
     bytes4 constant Bootstrap = bytes4(keccak256("#bootstrap"));
+    /// @dev Vouch request - (uint budget, #list of ENTITY blocks)
+    bytes4 constant Vouch = bytes4(keccak256("#vouch"));
     /// @dev Host-scoped input amount - (uint host, bytes32 asset, uint amount)
     bytes4 constant Allocation = bytes4(keccak256("#allocation"));
     /// @dev Host-scoped allowance cap - (uint host, bytes32 asset, uint amount)

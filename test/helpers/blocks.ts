@@ -82,6 +82,7 @@ export const Keys = {
   Quote: blockKey("#quote"),
   Pipeline: blockKey("#pipeline"),
   Bootstrap: blockKey("#bootstrap"),
+  Vouch: blockKey("#vouch"),
   Allocation: blockKey("#allocation"),
   Allowance: blockKey("#allowance"),
   Account: blockKey("#account"),
@@ -91,6 +92,7 @@ export const Keys = {
   // Composite and annotation blocks
   Node: blockKey("#node"),
   Entity: blockKey("#entity"),
+  Trust: blockKey("#trust"),
   Asset: blockKey("#asset"),
   Step: blockKey("#step"),
   Swap: blockKey("#swap"),
@@ -152,6 +154,10 @@ export function encodeAmountBlock(amount: bigint): string {
 
 export function encodeAssetAmountBlock(asset: string, amount: bigint): string {
   return encodeBlock(Keys.AssetAmount, ethers.concat([pad32(asset), pad32(amount)]));
+}
+
+export function encodeVouchBlock(budget: bigint, ids: string = "0x"): string {
+  return encodeBlock(Keys.Vouch, ethers.concat([pad32(budget), encodeListBlock(ids)]));
 }
 
 export function encodeBootstrapBlock(budget: bigint, balances: string = "0x"): string {
@@ -256,6 +262,10 @@ export function encodeNodeBlock(id: bigint): string {
 
 export function encodeEntityBlock(id: bigint): string {
   return encodeBlock(Keys.Entity, pad32(id));
+}
+
+export function encodeTrustBlock(id: bigint): string {
+  return encodeBlock(Keys.Trust, pad32(id));
 }
 
 export function encodeAssetBlock(asset: string): string {

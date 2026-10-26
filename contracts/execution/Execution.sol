@@ -470,6 +470,14 @@ library Executions {
     // Expectations
     // -------------------------------------------------------------------------
 
+    /// @notice Consume one TRUST from state and check that it vouches for `id`.
+    /// @dev Unlike the input expectations, TRUST is state. Reverts UnexpectedValue on a mismatch.
+    /// @param exec Execution whose state cursor is advanced by one TRUST block.
+    /// @param id Expected trusted identifier, for example an asset the command already knows.
+    function expectTrust(Execution memory exec, uint id) internal pure {
+        exec.state = exec.state.expectTrust(id);
+    }
+
     /// @notice Consume one LIMITS input and check final quantities directly against calldata.
     /// @param exec Execution whose input cursor is bounded and advanced by one block.
     /// @param amount Final asset amount, checked against the inclusive minimum.
@@ -534,6 +542,14 @@ library Executions {
     /// @return entity Decoded entity identifier.
     function unpackEntity(Execution memory exec) internal pure returns (uint entity) {
         (entity, exec.input) = exec.input.unpackEntity();
+    }
+
+    /// @notice Decode and consume one TRUST block from state.
+    /// @dev TRUST is state, so it is never read from user-supplied input.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return id Trusted identifier vouched for by the producing commander.
+    function unpackTrust(Execution memory exec) internal pure returns (uint id) {
+        (id, exec.state) = exec.state.unpackTrust();
     }
 
     /// @notice Decode and consume one LIMITS block.
@@ -642,6 +658,14 @@ library Executions {
     /// @return balancesCur Cursor over the ASSET_AMOUNT blocks inside the balances list.
     function unpackBootstrap(Execution memory exec) internal pure returns (uint budget, uint balancesCur) {
         (budget, balancesCur, exec.input) = exec.input.unpackBootstrap();
+    }
+
+    /// @notice Decode and consume one VOUCH block from input.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return budget Minimum native credit to retain after vouching.
+    /// @return idsCur Cursor over the ENTITY blocks inside the ids list.
+    function unpackVouch(Execution memory exec) internal pure returns (uint budget, uint idsCur) {
+        (budget, idsCur, exec.input) = exec.input.unpackVouch();
     }
 
     /// @notice Decode and consume one ALLOCATION block from input.
@@ -992,6 +1016,14 @@ library Executions {
     /// @param entity Entity identifier to encode.
     function outputEntity(Execution memory exec, uint entity) internal pure {
         (exec.buffer, exec.output) = exec.output.writeEntity(exec.buffer, entity);
+    }
+
+    /// @notice Append a TRUST block to execution output.
+    /// @dev Performs no registry check; only a commander that verified `id` should emit it.
+    /// @param exec Execution receiving the block.
+    /// @param id Trusted identifier to encode.
+    function outputTrust(Execution memory exec, uint id) internal pure {
+        (exec.buffer, exec.output) = exec.output.writeTrust(exec.buffer, id);
     }
 
     /// @notice Append a STATUS block to execution output.

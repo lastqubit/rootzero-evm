@@ -14,7 +14,7 @@ import {
   encodeAssetAmountBlock,
   MaxUint128, encodeLimitsBlock, encodeQuoteBlock, encodeHostAccount,
   encodeBalanceBlock, encodeLiabilityPosition, encodePositionBlock, encodeCustodyBlock,
-  encodeAccountBlock, encodeNodeBlock, encodeStepBlock, encodeUserAccount,
+  encodeAccountBlock, encodeAmountBlock, encodeEntityBlock, encodeStepBlock, encodeTrustBlock, encodeUserAccount,
   encodeActionBlock, encodeOutputBlock, encodeStateBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
   encodeTxBlock, encodeSchemaBlock, localKey,
   concat
@@ -56,7 +56,7 @@ describe("Commands", () => {
       encodeContextBlock(
         adminAccount,
         "0x",
-        concat(...trustedCommands.map((command) => encodeNodeBlock(command))),
+        concat(...trustedCommands.map((command) => encodeEntityBlock(command))),
       ),
     );
 
@@ -69,6 +69,13 @@ describe("Commands", () => {
     );
     await host.setAcceptedSettleCounterparty(userAccount);
   });
+
+  // Deposits take TRUST state paired in order with AMOUNT input.
+  const trustState = (...assets: string[]) => concat(...assets.map((a) => encodeTrustBlock(BigInt(a))));
+  const amounts = (...values: bigint[]) => concat(...values.map(encodeAmountBlock));
+  function depositCtx(...items: [string, bigint][]) {
+    return ctx({ state: trustState(...items.map(([a]) => a)), input: amounts(...items.map(([, n]) => n)) });
+  }
 
   function ctx(overrides: Partial<{ account: string; state: string; input: string }> = {}) {
     return [
@@ -125,7 +132,7 @@ describe("Commands", () => {
   function commandFlags(method: string): bigint {
     if (method === "relayPayable" || method === "relayBalancePayable") return HandoffFunded;
     if (method === "executePayable") return 0x03n;
-    if (["authorize", "unauthorize", "appoint", "dismiss", "allowAsset", "denyAsset", "allowance"].includes(method)) {
+    if (["authorize", "unauthorize", "appoint", "dismiss", "allowance"].includes(method)) {
       return 0x02n;
     }
     if (["depositPayable", "settlePayable", "recoverPayable"].includes(method)) {
@@ -147,8 +154,9 @@ describe("Commands", () => {
         const id = await cmd(method);
         const logged = method.startsWith("deposit");
         const lane = exactSpec(Keys.Balance, 64);
-        await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, stateLane ? lane : 0n,
-          stateLane ? 0n : exactSpec(Keys.AssetAmount, 64), stateLane ? 0n : lane);
+        const [state, input, output] = logged ? [exactSpec(Keys.Trust, 32), exactSpec(Keys.Amount, 32), lane]
+          : [stateLane ? lane : 0n, stateLane ? 0n : exactSpec(Keys.AssetAmount, 64), stateLane ? 0n : lane];
+        await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, state, input, output);
         const receipt = await host.deploymentTransaction().wait();
         const annotations = receipt.logs.flatMap((log: any) => decodeMetadataLog(log)).filter((log: any) => log.entity === id);
         expect(annotations.some((log: any) => log.data === encodeActionBlock(action))).eq(false);
@@ -160,7 +168,10 @@ describe("Commands", () => {
           const amount = method === "depositPayable" ? 100n : ethers.MaxUint256;
           const balances = concat(...Array(count).fill(encodeBalanceBlock(asset, amount)));
           const input = concat(...Array(count).fill(encodeAssetAmountBlock(asset, amount)));
-          const receipt = await (await callAs(0, method, ctx(stateLane ? { state: balances } : { input }),
+          const context = method.startsWith("deposit")
+            ? depositCtx(...Array.from({ length: count }, () => [asset, amount] as [string, bigint]))
+            : ctx(stateLane ? { state: balances } : { input });
+          const receipt = await (await callAs(0, method, context,
             { value: method === "depositPayable" ? BigInt(count) * amount : 0n })).wait();
           expect(receipt.logs.filter((log: any) => log.topics.length === 0)).deep.eq([]);
         }
@@ -173,10 +184,10 @@ describe("Commands", () => {
         for (const method of ["deposit", "depositPayable"]) {
           const value = method === "depositPayable" ? 50n : 0n;
           const id = await commandId(`${method}(bytes)`, host, value ? 1n : 0n);
-          await host.authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(id)));
-          const steps = concat(encodeStepBlock(id, value, encodeAssetAmountBlock(asset, 50n)),
+          await host.authorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(id)));
+          const steps = concat(encodeStepBlock(id, value, encodeAmountBlock(50n)),
             encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
-          const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps, { value })).wait();
+          const receipt = await (await callAs(0, "testPipe", userAccount, trustState(asset), steps, { value })).wait();
           expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq([
             pipelineRecord(userAccount, [id, await cmd("creditAccount")]),
             ...(value ? [stepRecord(0, value)] : []),
@@ -229,46 +240,31 @@ describe("Commands", () => {
   // â”€â”€ Deposit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe("deposit", () => {
-    it("emits DepositCalled for a single ASSET_AMOUNT block and returns BALANCE blocks", async () => {
+    it("deposits each TRUST asset by its paired AMOUNT", async () => {
       const asset = ethers.zeroPadValue("0x01", 32);
-      const amount = 100n;
-      const input = encodeAssetAmountBlock(asset, amount);
-
-      const tx = await callAs(0, "deposit", ctx({ input: input }));
-      await expect(tx).to.emit(host, "DepositCalled")
-        .withArgs(userAccount, asset, amount);
+      const tx = await callAs(0, "deposit", depositCtx([asset, 100n]));
+      await expect(tx).to.emit(host, "DepositCalled").withArgs(userAccount, asset, 100n);
     });
 
     it("returns BALANCE blocks matching the deposited amounts", async () => {
       const asset = ethers.zeroPadValue("0x01", 32);
-      const amount = 50n;
-      const input = encodeAssetAmountBlock(asset, amount);
-
-      const [result, transactions] = await host.deposit.staticCall(...ctx({ input: input }));
-      expect(result).to.equal(encodeBalanceBlock(asset, amount));
+      const [result, transactions] = await host.deposit.staticCall(...depositCtx([asset, 50n]));
+      expect(result).to.equal(encodeBalanceBlock(asset, 50n));
       expect(transactions).to.equal(0n);
     });
 
-    it("processes multiple ASSET_AMOUNT blocks", async () => {
+    it("pairs multiple TRUST and AMOUNT blocks in order", async () => {
       const asset1 = ethers.zeroPadValue("0x01", 32);
       const asset2 = ethers.zeroPadValue("0x02", 32);
-      const input = concat(
-        encodeAssetAmountBlock(asset1, 10n),
-        encodeAssetAmountBlock(asset2, 20n)
-      );
-
-      const [result, transactions] = await host.deposit.staticCall(...ctx({ input: input }));
-      expect(result).to.equal(concat(
-        encodeBalanceBlock(asset1, 10n),
-        encodeBalanceBlock(asset2, 20n)
-      ));
+      const [result, transactions] = await host.deposit.staticCall(...depositCtx([asset1, 10n], [asset2, 20n]));
+      expect(result).to.equal(concat(encodeBalanceBlock(asset1, 10n), encodeBalanceBlock(asset2, 20n)));
       expect(transactions).to.equal(0n);
     });
 
     it("uses the amount actually received from the deposit hook", async () => {
       const asset = ethers.zeroPadValue("0x01", 32);
       await withDepositFee(3n, async () => {
-        const [result] = await host.deposit.staticCall(...ctx({ input: encodeAssetAmountBlock(asset, 50n) }));
+        const [result] = await host.deposit.staticCall(...depositCtx([asset, 50n]));
         expect(result).to.equal(encodeBalanceBlock(asset, 47n));
       });
     });
@@ -276,83 +272,77 @@ describe("Commands", () => {
     it("accepts an ordinary command call from an authorized node", async () => {
       const caller = await deploy("TestExecuteTarget");
       const node = await utils.testToHostId(await caller.getAddress());
-      await host.authorize(encodeContextBlock(adminAccount, "0x", encodeNodeBlock(node)));
-
+      await host.authorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(node)));
       const asset = ethers.zeroPadValue("0x03", 32);
-      const input = encodeAssetAmountBlock(asset, 25n);
-      const data = host.interface.encodeFunctionData("deposit", ctx({ input }));
-
+      const data = host.interface.encodeFunctionData("deposit", depositCtx([asset, 25n]));
       await expect(caller.callTarget(await host.getAddress(), data))
         .to.emit(host, "DepositCalled")
         .withArgs(userAccount, asset, 25n);
     });
 
     it("reverts AccessDenied for untrusted caller", async () => {
-      const asset = ethers.zeroPadValue("0x01", 32);
-      const input = encodeAssetAmountBlock(asset, 1n);
-      await expect(
-        callAs(1, "deposit", ctx({ input: input }))
-      ).to.be.revertedWithCustomError(host, "AccessDenied");
+      await expect(callAs(1, "deposit", depositCtx([ethers.zeroPadValue("0x01", 32), 1n])))
+        .to.be.revertedWithCustomError(host, "AccessDenied");
     });
 
-    it("treats empty input as an empty batch", async () => {
+    it("treats empty state and input as an empty batch", async () => {
       expect(await host.deposit.staticCall(...ctx())).to.deep.equal(["0x", 0n]);
     });
 
-    it("reverts InvalidBlock for input with only 4 garbage bytes", async () => {
-      await expect(
-        callAs(0, "deposit", ctx({ input: "0xdeadbeef" }))
-      ).to.be.revertedWithCustomError(host, "InvalidBlock");
+    it("rejects unpaired TRUST or AMOUNT blocks", async () => {
+      const asset = ethers.zeroPadValue("0x01", 32);
+      for (const context of [
+        ctx({ state: trustState(asset) }),                                   // TRUST without AMOUNT
+        ctx({ input: amounts(1n) }),                                          // AMOUNT without TRUST
+        ctx({ state: trustState(asset, asset), input: amounts(1n) }),         // one TRUST left over
+      ]) {
+        let failed = false;
+        try { await host.deposit.staticCall(...context); } catch { failed = true; }
+        expect(failed, "unpaired deposit must revert").eq(true);
+      }
+    });
+
+    it("rejects input that is not AMOUNT, including the old ASSET_AMOUNT shape", async () => {
+      const asset = ethers.zeroPadValue("0x01", 32);
+      for (const input of ["0xdeadbeef", encodeAssetAmountBlock(asset, 1n)]) {
+        await expect(callAs(0, "deposit", ctx({ state: trustState(asset), input })))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      }
     });
 
     it("rejects more than one context block", async () => {
-      const input = encodeAssetAmountBlock(ethers.zeroPadValue("0x01", 32), 1n);
-      const context = ctx({ input })[0];
-
+      const context = depositCtx([ethers.zeroPadValue("0x01", 32), 1n])[0];
       await expect(callAs(0, "deposit", [concat(context, context)]))
         .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
-    it("rejects state when the command declares an empty state source", async () => {
+    it("rejects state other than TRUST", async () => {
       const asset = ethers.zeroPadValue("0x01", 32);
-      const liability = ethers.zeroPadValue("0x02", 32);
-      const state = encodePositionBlock(asset, 10n, liability, 5n);
-      const input = encodeAssetAmountBlock(asset, 10n);
-
-      await expect(callAs(0, "deposit", ctx({ state, input })))
-        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      for (const state of [encodePositionBlock(asset, 10n, ethers.zeroPadValue("0x02", 32), 5n), encodeBalanceBlock(asset, 10n)]) {
+        await expect(callAs(0, "deposit", ctx({ state, input: amounts(10n) })))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      }
     });
   });
   describe("depositPayable", () => {
     it("passes a shared value budget through to the hook", async () => {
       const asset1 = ethers.zeroPadValue("0x03", 32);
       const asset2 = ethers.zeroPadValue("0x04", 32);
-      const input = concat(
-        encodeAssetAmountBlock(asset1, 3n),
-        encodeAssetAmountBlock(asset2, 7n)
-      );
-
-      const tx = await callAs(0, "depositPayable", ctx({ input: input }), { value: 10n });
-      await expect(tx).to.emit(host, "DepositPayableCalled")
-        .withArgs(userAccount, asset1, 3n, 7n);
-      await expect(tx).to.emit(host, "DepositPayableCalled")
-        .withArgs(userAccount, asset2, 7n, 0n);
+      const tx = await callAs(0, "depositPayable", depositCtx([asset1, 3n], [asset2, 7n]), { value: 10n });
+      await expect(tx).to.emit(host, "DepositPayableCalled").withArgs(userAccount, asset1, 3n, 7n);
+      await expect(tx).to.emit(host, "DepositPayableCalled").withArgs(userAccount, asset2, 7n, 0n);
     });
 
     it("returns BALANCE blocks matching the deposited amounts", async () => {
       const asset = ethers.zeroPadValue("0x05", 32);
-      const input = encodeAssetAmountBlock(asset, 8n);
-
-      const [result, transactions] = await host.depositPayable.staticCall(...ctx({ input: input }), { value: 8n });
+      const [result, transactions] = await host.depositPayable.staticCall(...depositCtx([asset, 8n]), { value: 8n });
       expect(result).to.equal(encodeBalanceBlock(asset, 8n));
       expect(transactions).to.equal(0n);
     });
 
     it("returns output and remaining native credit separately", async () => {
       const asset = ethers.zeroPadValue("0x06", 32);
-      const input = encodeAssetAmountBlock(asset, 8n);
-
-      const [result, transactions] = await host.depositPayable.staticCall(...ctx({ input: input }), { value: 9n });
+      const [result, transactions] = await host.depositPayable.staticCall(...depositCtx([asset, 8n]), { value: 9n });
       expect(result).to.equal(encodeBalanceBlock(asset, 8n));
       expect(transactions).to.equal(1n);
     });
@@ -360,10 +350,7 @@ describe("Commands", () => {
     it("uses the amount actually received from the payable deposit hook", async () => {
       const asset = ethers.zeroPadValue("0x05", 32);
       await withDepositFee(2n, async () => {
-        const [result, credit] = await host.depositPayable.staticCall(
-          ...ctx({ input: encodeAssetAmountBlock(asset, 8n) }),
-          { value: 8n },
-        );
+        const [result, credit] = await host.depositPayable.staticCall(...depositCtx([asset, 8n]), { value: 8n });
         expect(result).to.equal(encodeBalanceBlock(asset, 6n));
         expect(credit).to.equal(0n);
       });
@@ -371,12 +358,9 @@ describe("Commands", () => {
 
     it("keeps plain deposit values full-width", async () => {
       const asset = ethers.zeroPadValue("0x07", 32);
-      const input = encodeAssetAmountBlock(asset, 1n << 128n);
-
-      await expect(callAs(0, "depositPayable", ctx({ input })))
+      await expect(callAs(0, "depositPayable", depositCtx([asset, 1n << 128n])))
         .to.be.revertedWithCustomError(host, "InsufficientValue");
     });
-
   });
 
 
@@ -1597,11 +1581,11 @@ describe("Commands", () => {
       const asset = ethers.zeroPadValue("0xa4", 32);
       const amount = 43n;
       const input = concat(
-        encodeStepBlock(await cmd("deposit"), 0n, encodeAssetAmountBlock(asset, amount)),
+        encodeStepBlock(await cmd("deposit"), 0n, encodeAmountBlock(amount)),
         encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
       );
 
-      const tx = await callAs(0, "testPipe", userAccount, "0x", input);
+      const tx = await callAs(0, "testPipe", userAccount, trustState(asset), input);
 
       await expect(tx)
         .to.emit(host, "DepositCalled")
@@ -1955,7 +1939,7 @@ describe("Commands", () => {
         const trustInput = encodeContextBlock(
           adminAccount,
           "0x",
-          encodeNodeBlock(command),
+          encodeEntityBlock(command),
         );
 
         await host.unauthorize(trustInput);

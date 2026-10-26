@@ -5,34 +5,32 @@ import {Logs} from "../codec/Logs.sol";
 import {GuardBase} from "./Base.sol";
 import {Specs} from "../Codec.sol";
 import {AllowanceHook} from "../commands/admin/Allowance.sol";
-import {DenyAssetHook} from "../commands/admin/Asset.sol";
-import {NodeAccess} from "../core/Access.sol";
+import {TrustAccess} from "../core/Access.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 using Executions for Execution;
 
 /// @title Revoke
-/// @notice Guardian action that quickly revokes authorization from a list of node IDs.
-/// Each NODE block in the input is deauthorized on the host.
+/// @notice Guardian action that quickly removes a list of IDs from the host's trusted set.
+/// Each ENTITY block in the input is untrusted, whatever its kind.
 /// Only callable by active guardian addresses.
-abstract contract Revoke is NodeAccess, GuardBase {
+abstract contract Revoke is TrustAccess, GuardBase {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = guard("revoke", Specs.Node, 0);
+        (, descriptor) = guard("revoke", Specs.Entity, 0);
     }
 
-    /// @notice Revoke every NODE block in `input` as the active guardian.
-    /// @dev Node mutation hooks publish Access events for authorization changes.
-    /// @param input NODE blocks to deauthorize.
+    /// @notice Revoke every ENTITY block in `input` as the active guardian.
+    /// @dev The trust hook publishes Trust records for changes.
+    /// @param input ENTITY blocks to untrust.
     function revoke(bytes calldata input) external onlyGuardian {
         runGuard(descriptor, input, revokeOne);
     }
 
-    /// @dev Decode one node and revoke its authorization.
+    /// @dev Decode one ID and untrust it.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function revokeOne(Execution memory exec) private {
-        uint node = exec.unpackNode();
-        setAccess(node, false);
+        setTrust(exec.unpackEntity(), false);
     }
 }
 
@@ -58,30 +56,5 @@ abstract contract RevokeAllowance is GuardBase, AllowanceHook {
     function revokeAllowanceOne(Execution memory exec) private {
         (uint peer, bytes32 asset) = exec.unpackHostAsset();
         allowance(peer, asset, 0);
-    }
-}
-
-/// @title RevokeAsset
-/// @notice Guardian action that denies assets through the host's existing asset hook.
-/// @dev Opt-in guard. Hosts expose it by inheriting this contract and implementing DenyAssetHook.
-abstract contract RevokeAsset is GuardBase, DenyAssetHook {
-    uint private immutable descriptor;
-
-    constructor() {
-        (, descriptor) = guard("revokeAsset", Specs.Asset, Logs.Input);
-    }
-
-    /// @notice Deny every ASSET block in `input` as the active guardian.
-    /// @dev Hints callers to record INPUT.
-    /// @param input ASSET blocks to deny.
-    function revokeAsset(bytes calldata input) external onlyGuardian {
-        runGuard(descriptor, input, revokeAssetOne);
-    }
-
-    /// @dev Decode one asset and invoke the denial hook.
-    /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    function revokeAssetOne(Execution memory exec) private {
-        bytes32 asset = exec.unpackAsset();
-        denyAsset(asset);
     }
 }

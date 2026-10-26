@@ -1022,6 +1022,17 @@ library Blocks {
         entity = uint(a);
     }
 
+    /// @notice Decode TRUST and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return id Trusted identifier of any kind.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackTrust(uint cur) internal pure returns (uint id, uint nextCur) {
+        bytes32 a;
+        (a, nextCur) = unpack32(cur, Keys.Trust);
+        id = uint(a);
+    }
+
     /// @notice Decode STATUS and return the advanced source cursor.
     /// @dev Validates the exact header and containment through unpack32.
     /// @param cur Bounded source cursor at the block header.
@@ -1123,6 +1134,23 @@ library Blocks {
         bytes32 a;
         (account, a, nextCur) = unpack64(cur, Keys.Pipeline);
         budget = uint(a);
+    }
+
+    /// @notice Decode VOUCH's budget and final LIST payload.
+    /// @dev Validates parent containment and exact final child framing. Consumers
+    /// validate ENTITY contents and any exactly-one-outer-block requirement.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @return budget Native-value budget, in wei.
+    /// @return idsCur Clean calldata cursor over the ENTITY list payload.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
+    function unpackVouch(uint cur) internal pure returns (uint budget, uint idsCur, uint nextCur) {
+        uint abs = uint32(cur);
+        unchecked {
+            nextCur = advance(cur, 8 + expectKey(abs, Keys.Vouch));
+            abs += 8;
+            idsCur = tail(abs + 32, uint32(nextCur), Keys.List);
+            budget = uint(read32(abs));
+        }
     }
 
     /// @notice Decode BOOTSTRAP's budget and final LIST payload.
@@ -1581,6 +1609,18 @@ library Blocks {
             key = read32(abs + 64);
             witnessCur = tail(abs + 96, uint32(nextCur), Keys.Bytes);
         }
+    }
+
+    /// @notice Check that TRUST vouches for `id` and advance the source.
+    /// @dev Validates the exact header and containment through unpackTrust, then the ID.
+    /// Reverts UnexpectedValue when the vouched ID differs from `id`.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param id Expected trusted identifier.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
+    function expectTrust(uint cur, uint id) internal pure returns (uint nextCur) {
+        uint vouched;
+        (vouched, nextCur) = unpackTrust(cur);
+        if (vouched != id) revert UnexpectedValue();
     }
 
     /// @notice Check LIMITS against full-width quantities and advance the source.

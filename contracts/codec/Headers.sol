@@ -46,6 +46,8 @@ library Headers {
     uint constant Allowance = Specs.Allowance >> 192;
     /// @dev Right-aligned CUSTODY key and exact payload length.
     uint constant Custody = Specs.Custody >> 192;
+    /// @dev Right-aligned TRUST key and exact payload length.
+    uint constant Trust = Specs.Trust >> 192;
     /// @dev Right-aligned ACCOUNT_BALANCE key and exact payload length.
     uint constant AccountBalance = Specs.AccountBalance >> 192;
     /// @dev Right-aligned ACCOUNT_AMOUNT key and exact payload length.

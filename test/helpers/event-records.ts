@@ -3,7 +3,7 @@ import type { RawLog } from "./log-blocks.js";
 // Pipeline, State, Input, Output and Value double as endpoint-ID flag bits.
 export const Category = {
   Pipeline: 4, State: 8, Input: 16, Output: 32, Value: 64,
-  Access: 65, Introduction: 66, Metadata: 67, Endpoint: 68, Balance: 69, Envelope: 70, Resolution: 71,
+  Trust: 65, Introduction: 66, Metadata: 67, Endpoint: 68, Balance: 69, Envelope: 70, Resolution: 71,
 } as const;
 export const word = (value: bigint | number | string) => ethers.toBeHex(value, 32);
 export const eventRecord = (category: number, ...fields: string[]) => ethers.concat([ethers.toBeHex(category, 1), ...fields]);

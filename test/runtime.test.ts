@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, hostId } from "./helpers/setup.js";
-import { encodeHostAccount, encodeNodeBlock, encodeStepBlock } from "./helpers/blocks.js";
+import { encodeHostAccount, encodeEntityBlock, encodeStepBlock } from "./helpers/blocks.js";
 import { decodeEndpointLog } from "./helpers/endpoint-logs.js";
 import { decodeIntroductionLog } from "./helpers/introduction-logs.js";
 
@@ -96,7 +96,7 @@ describe("Runtime execution identity", () => {
     const node = await hostId(await (await getSigner(2)).getAddress());
     expect(await host.hostAddr()).eq(self);
     expect(await host.isAuthorized(command)).eq(false);
-    await host.testPipe(admin, encodeStepBlock(command, 0n, encodeNodeBlock(node)));
+    await host.testPipe(admin, encodeStepBlock(command, 0n, encodeEntityBlock(node)));
     expect(await host.isAuthorized(node)).eq(true);
     expect(await implementation.isAuthorized(node)).eq(false);
 
@@ -111,7 +111,7 @@ describe("Runtime execution identity", () => {
     await upgraded.testPipe(admin, steps, { value: 3n });
     expect(await upgraded.markers()).eq(1n);
     expect(await next.markers()).eq(0n);
-    await upgraded.testPipe(admin, encodeStepBlock(command, 0n, encodeNodeBlock(await hostId(self))));
+    await upgraded.testPipe(admin, encodeStepBlock(command, 0n, encodeEntityBlock(await hostId(self))));
     expect(await upgraded.isAuthorized(await hostId(self))).eq(true);
   });
 

@@ -90,8 +90,11 @@ return the authorized endpoint's selector and address for direct use with the
 free raw-call helpers.
 
 Deploy it with the local host ID encoding your native identity as commander and you can call its commands
-directly. An input is a run of binary blocks — here, a single `#assetAmount` block
-asking to deposit an asset (the encoders are a few lines each; see
+directly. An input is a run of binary blocks — here, a single `#amount` block
+paired with a `#trust` state block that names the asset. In a pipeline, the
+commander's `vouch` step produces that state after checking its trusted set;
+calling the command directly as its commander, you supply it (the encoders are a
+few lines each; see
 [`test/helpers/setup.ts`](test/helpers/setup.ts) and
 [`test/helpers/blocks.ts`](test/helpers/blocks.ts) for reference
 implementations):
@@ -101,8 +104,9 @@ const commander = await hostId(deployer.address);
 const host = await ethers.deployContract("ExampleHost", [commander]);
 
 const account = encodeUserAccount(user.address); // receiving account
-const input = encodeAssetAmountBlock(asset, 100n); // what to deposit
-const context = encodeContextBlock(account, "0x", input);
+const state = encodeTrustBlock(asset); // which (vouched) asset
+const input = encodeAmountBlock(100n); // how much to deposit
+const context = encodeContextBlock(account, state, input);
 await host.deposit(context); // returns the credited BALANCE; pipelines record it as the next STATE
 ```
 
@@ -121,7 +125,8 @@ payload:
 
 The key is usually `bytes4(keccak256("#name"))`, and the payload layout is
 described by a schema body published under an alias. For example, the standard
-`assetAmount` block that requests a deposit:
+`assetAmount` block that requests an amount of an asset, as bootstrap and
+`debitAccount` do:
 
 ```txt
 assetAmount: { bytes32 asset, uint amount }
@@ -133,7 +138,7 @@ already defines the asset or unit. It has a distinct 32-byte payload.
 
 is 72 bytes on the wire: an 8-byte header followed by two big-endian 32-byte
 fields. There is no ABI encoding and no chain-specific type anywhere in the
-format — field types are chain-neutral integers, bytes, and booleans. A deposit
+format — field types are chain-neutral integers, bytes, and booleans. An
 input built for an EVM host is byte-for-byte the input a CosmWasm or Solana
 port would parse; what differs per chain is how a host *resolves* the
 identifiers inside, never how the bytes are laid out.
@@ -173,7 +178,7 @@ continues to use the generic `#list` key.
 ## Batches
 
 An input is not a single struct; it is a run of blocks. One `#assetAmount` block
-asks for one deposit, five blocks ask for five, and the code path is identical
+asks for one debit, five blocks ask for five, and the code path is identical
 — every endpoint parses with a cursor and loops until the stream is exhausted.
 The published lane's embedded block key identifies the prime item: it is the block type that may repeat
 for batching. A lane description may group consecutive blocks into one operation;
@@ -190,7 +195,7 @@ const input = concat([
   encodeAssetAmountBlock(usdc, 250_000_000n),
   encodeAssetAmountBlock(dai, 250n * 10n ** 18n),
 ]);
-// deposit(input) returns two #balance blocks and zero native budget credit
+// debitAccount(input) returns two #balance blocks and zero native budget credit
 ```
 
 Everything downstream keeps this shape: commands loop over input blocks,
@@ -350,6 +355,22 @@ host's trusted set, and **guardians** are accounts allowed to take protective
 actions. At deployment, a host introduces itself to its commander, which is how
 host topology becomes discoverable.
 
+The trusted set holds self-describing IDs of any kind, stored per ID in a salted
+slot (`TrustSlots`). On ordinary hosts it lists the nodes allowed to call them. On
+a commander it is also the global registry of trusted entities such as assets:
+hosts check IDs against it with `requireTrusted(id)` or `requireTrusted(ptr, count)`
+(from `Runtime`), a raw STATICCALL to the commander's `checkTrust()` entrypoint
+(`TrustRegistry`) that reverts `Untrusted(id)`. Boundary commands that cannot start
+from `#trust` state call it with the IDs they are about to accept; callers gather
+the IDs themselves. `deposit` and `depositPayable` need no call: they take the
+asset from `#trust` state produced by the commander's `vouch`. Admins change trust with `authorize` and
+`unauthorize`, guardians with `revoke`, and authorized peers may add or remove
+non-node IDs through the `portEndorse` and `portUnendorse` ports, so a trusted
+factory can register the assets it creates. Peers can never endorse node IDs.
+The chain asset and the global Rootzero asset are always trusted: every check
+passes them without a storage read (`requireTrusted(id)` returns before calling
+the commander), and the trusted set refuses to record them.
+
 The `ExampleHost` in the quick start shows the resulting split, and it runs
 through the whole library: mixins implement the protocol mechanics (parsing,
 batching, discovery events), and small virtual hooks let the host decide
@@ -501,8 +522,9 @@ each hook and one `Counterparty(account)` initialization. Pricing, amount and
 pair validation, reserves, custody, and settlement remain host responsibilities.
 
 The standard `Deposit` mixin shows the canonical shape: open the execution,
-decode its input, call the hook, and write the output run. Execution helpers
-route known state blocks (`#balance`, `#custody`, and `#position`) to
+decode its state and input, call the hook, and write the output run. Each `#trust`
+state block names a vouched asset and pairs, in order, with one `#amount` input. Execution helpers
+route known state blocks (`#balance`, `#custody`, `#position`, and `#trust`) to
 state automatically; generic and custom-schema decoding consumes input:
 
 ```solidity
@@ -511,7 +533,8 @@ function deposit(bytes calldata context) external onlyCommand returns (bytes mem
 }
 
 function depositOne(Execution memory exec) private {
-    (bytes32 asset, uint amount) = exec.unpackAssetAmount();
+    bytes32 asset = bytes32(exec.unpackTrust()); // vouched asset, from state
+    uint amount = exec.unpackAmount(); // paired amount, from input
     amount = deposit(exec.account, asset, amount); // host policy hook
     exec.outputBalance(asset, amount);
 }
@@ -690,7 +713,17 @@ An empty balances list supports budget-only funding. Bootstrap logs actual nonze
 debits in one Account/Bootstrap Balance stream after funding, with the combined
 chainAsset debit last. No debit means no log.
 Bootstrap is registered with command metadata but is only executable through
-local pipeline execution. This is the core of
+local pipeline execution.
+
+The commander's `vouch` command is bootstrap's counterpart for trust. It consumes
+exactly one `#vouch { uint budget, many #entity as ids }` block and returns one
+`#trust` per requested ID, in order, reverting `Untrusted(id)` unless the ID is in
+the commander's trusted set. The budget works like bootstrap's: when assigned value
+falls short, the shortfall debits the account's chainAsset balance once. Like
+bootstrap it starts from empty state, so a pipeline can begin with vouched IDs, for
+example a deposit or an exchange that relies on both assets being trusted, and its
+`#trust` state must be consumed by a later step. Commands that need balances check
+trust with `requireTrusted` instead. This is the core of
 `Pipeline.pipe`:
 
 ```solidity
@@ -791,10 +824,11 @@ The paired balance/position checks validate streams in place, and settlement
 copies each position into an independent struct. See [Execute](docs/Execute.md).
 
 Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
-`ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
+`ExecuteVouch`, `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
 `ExecuteSettle` to register canonical command metadata while executing
-their local command IDs through `executeBootstrap`, `executeCashout`,
-`executeDebitAccount`, `executeCreditAccount`, and `executeSettle`. The bootstrap and debit adapters decode fixed-stride AssetAmount calldata
+their local command IDs through `executeBootstrap`, `executeVouch`, `executeCashout`,
+`executeDebitAccount`, `executeCreditAccount`, and `executeSettle`. The vouch adapter
+decodes fixed-stride Entity calldata and reads trust slots directly. The bootstrap and debit adapters decode fixed-stride AssetAmount calldata
 input directly; cashout, credit, and settle decode memory-backed pipeline
 state. All return `handled = true` and avoid an
 external self-call. The host's `execute` hook must authorize a command before
@@ -974,9 +1008,9 @@ bytes and produce the same output bytes for every endpoint.
 ## Guards and Admin
 
 Admin commands use the regular command shape but are gated to the host's admin
-account: trust management (`authorize`, `unauthorize`), guardian management
-(`appoint`, `dismiss`), optional asset gating
-(`allowAsset`, `denyAsset`, `allowance`), and raw calls (`executePayable`).
+account: trust management (`authorize`, `unauthorize`, taking `#entity` IDs of any
+kind), guardian management (`appoint`, `dismiss`), optional allowances
+(`allowance`), and raw calls (`executePayable`).
 `AddPool` and `RemovePool` in `commands/admin/Pool.sol` provide optional pool
 administration. `addPool` consumes consecutive pairs of ASSET_AMOUNT blocks and calls
 its hook with two `AssetAmount` values; `removePool` consumes ASSET pairs and

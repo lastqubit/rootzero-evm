@@ -11,8 +11,8 @@ contract TestEventCategories {
             mstore(beforeFree, not(0))
             mstore(add(beforeFree, 32), not(0))
         }
-        Logs.access(value, false);
-        Logs.access(value, true);
+        Logs.trust(value, false);
+        Logs.trust(value, true);
         Logs.endpoint(value, value, value, value, emptyName);
         Logs.balance(subject, subject, value);
         Logs.introduction(value, subject, value, emptyName);

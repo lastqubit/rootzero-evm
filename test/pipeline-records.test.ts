@@ -3,8 +3,8 @@ import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceBlock, encodeBootstrapBlock,
-  encodeContextBlock, encodeNodeBlock, encodePositionBlock, encodeRelayInputBlock, encodeStepBlock,
-  encodeUserAccount, pad32,
+  encodeContextBlock, encodeEntityBlock, encodePositionBlock, encodeRelayInputBlock, encodeStepBlock,
+  encodeAmountBlock, encodeTrustBlock, encodeUserAccount, pad32,
 } from "./helpers/blocks.js";
 import { Category, pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
 import { authorizeCommander, commanderDeadline, deployCommanderPair } from "./helpers/commander-proxy.js";
@@ -18,6 +18,8 @@ const pipelineRecords = (receipt: any) => records(receipt)
 describe("Pipeline records", () => {
   const asset = pad32(0x1234n);
   const liability = pad32(0x5678n);
+  // Deposits start from TRUST state, as a commander's vouch step would produce.
+  const trust = encodeTrustBlock(0x1234n);
   let host: any;
   let account: string;
   let ids: Record<string, bigint>;
@@ -37,7 +39,7 @@ describe("Pipeline records", () => {
       relayBalancePayable: await commandId("relayBalancePayable(bytes)", host, 0x81n),
     };
     await host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x",
-      concat(...Object.values(ids).map(encodeNodeBlock))));
+      concat(...Object.values(ids).map(encodeEntityBlock))));
   });
 
   const pipe = async (state: string, steps: string, value = 0n) =>
@@ -48,9 +50,9 @@ describe("Pipeline records", () => {
   });
 
   it("logs a boundary state once when Output feeds a State hint", async () => {
-    const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAssetAmountBlock(asset, 7n)),
+    const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n)),
       encodeStepBlock(ids.withdraw, 0n, "0x"));
-    expect(records(await pipe("0x", steps))).deep.eq([
+    expect(records(await pipe(trust, steps))).deep.eq([
       pipelineRecord(account, [ids.deposit, ids.withdraw]),
       stateRecord(1, encodeBalanceBlock(asset, 7n)),
     ]);
@@ -68,9 +70,9 @@ describe("Pipeline records", () => {
   });
 
   it("logs nonzero assigned value without unhinted input", async () => {
-    const steps = concat(encodeStepBlock(ids.depositPayable, 5n, encodeAssetAmountBlock(asset, 5n)),
+    const steps = concat(encodeStepBlock(ids.depositPayable, 5n, encodeAmountBlock(5n)),
       encodeStepBlock(ids.creditAccount, 0n, "0x"));
-    expect(records(await pipe("0x", steps, 5n))).deep.eq([
+    expect(records(await pipe(trust, steps, 5n))).deep.eq([
       pipelineRecord(account, [ids.depositPayable, ids.creditAccount]),
       stepRecord(0, 5n),
       stateRecord(1, encodeBalanceBlock(asset, 5n)),
@@ -99,9 +101,9 @@ describe("Pipeline records", () => {
 
   it("stops the Pipeline record at a handoff; the continuation belongs to the destination", async () => {
     const continuation = encodeStepBlock(ids.withdraw, 0n, "0x");
-    const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAssetAmountBlock(asset, 7n)),
+    const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n)),
       encodeStepBlock(ids.relayBalancePayable, 0n, encodeRelayInputBlock(7n, 9n)), continuation);
-    expect(records(await pipe("0x", steps))).deep.eq([
+    expect(records(await pipe(trust, steps))).deep.eq([
       pipelineRecord(account, [ids.deposit, ids.relayBalancePayable]),
       stateRecord(1, encodeBalanceBlock(asset, 7n)),
     ]);
@@ -116,11 +118,11 @@ describe("Pipeline records", () => {
   });
 
   it("reports an external step failure by index and full command ID", async () => {
-    const first = encodeStepBlock(ids.deposit, 0n, encodeAssetAmountBlock(asset, 7n));
+    const first = encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n));
     const failing = encodeStepBlock(ids.deposit, 0n, "0x12");
     let data: string | undefined;
     try {
-      await host.testPipe.staticCall(account, "0x", concat(first, encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
+      await host.testPipe.staticCall(account, trust, concat(first, encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
     } catch (error: any) {
       data = error.data ?? error.info?.error?.data;
     }
@@ -131,7 +133,7 @@ describe("Pipeline records", () => {
   });
 
   it("leaves direct endpoint calls unlogged", async () => {
-    const receipt = await (await host.deposit(encodeContextBlock(account, "0x", encodeAssetAmountBlock(asset, 7n)))).wait();
+    const receipt = await (await host.deposit(encodeContextBlock(account, trust, encodeAmountBlock(7n)))).wait();
     expect(records(receipt)).deep.eq([]);
   });
 

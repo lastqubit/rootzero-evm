@@ -6,7 +6,7 @@ import { deploy, getProvider, getSigner, hostId, portId } from "./helpers/setup.
 import {
   encodeDispatchBlock,
   encodeContextBlock,
-  encodeNodeBlock,
+  encodeEntityBlock,
   encodePipelineBlock,
   encodeRecoverBlock,
 } from "./helpers/blocks.js";
@@ -18,7 +18,7 @@ describe("Portal", () => {
   }
 
   async function authorize(host: any, node: bigint) {
-    return host.authorize(...await commandCtx(host, encodeNodeBlock(node)));
+    return host.authorize(...await commandCtx(host, encodeEntityBlock(node)));
   }
 
   async function deployPortal() {
@@ -56,7 +56,7 @@ describe("Portal", () => {
       commander,
       portal,
       "authorize",
-      await commandCtx(portal, encodeNodeBlock(node)),
+      await commandCtx(portal, encodeEntityBlock(node)),
     );
   }
 

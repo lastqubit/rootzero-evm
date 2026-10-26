@@ -8,7 +8,7 @@ import {
   encodeAssetAmountBlock,
   encodeAccountAmountBlock,
   encodeBalanceBlock,
-  encodeNodeBlock,
+  encodeEntityBlock,
   encodeStepBlock,
   encodeBookingBlock,
   encodeDispatchBlock,
@@ -35,7 +35,7 @@ describe("Port Entrypoints", () => {
       encodeContextBlock(
         adminAccount,
         "0x",
-        concat(encodeNodeBlock(trustedPeer), ...trustedCommands.map((command) => encodeNodeBlock(command))),
+        concat(encodeEntityBlock(trustedPeer), ...trustedCommands.map((command) => encodeEntityBlock(command))),
       ),
     );
   });

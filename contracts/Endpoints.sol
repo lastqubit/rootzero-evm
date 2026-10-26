@@ -15,6 +15,7 @@ import {CommandBase} from "./commands/Base.sol";
 import {CheckBalance, ExecuteCheckBalance} from "./commands/Balance.sol";
 import {Burn, BurnHook} from "./commands/Burn.sol";
 import {ExecuteBootstrap} from "./commands/Bootstrap.sol";
+import {ExecuteVouch} from "./commands/Vouch.sol";
 import {Cashout, ExecuteCashout} from "./commands/Cashout.sol";
 import {CreditAccount, ExecuteCreditAccount} from "./commands/Credit.sol";
 import {DebitAccount, ExecuteDebitAccount} from "./commands/Debit.sol";
@@ -31,7 +32,6 @@ import {Withdraw, WithdrawHook} from "./commands/Withdraw.sol";
 
 // Admin commands
 import {AdminBase} from "./commands/admin/Base.sol";
-import {AllowAsset, AllowAssetHook, DenyAsset, DenyAssetHook} from "./commands/admin/Asset.sol";
 import {Allowance, AllowanceHook} from "./commands/admin/Allowance.sol";
 import {Appoint, Dismiss} from "./commands/admin/Guardian.sol";
 import {Authorize, ExecuteAuthorize} from "./commands/admin/Authorize.sol";
@@ -41,7 +41,8 @@ import {Unauthorize} from "./commands/admin/Unauthorize.sol";
 
 // Port endpoints
 import {PortBase} from "./ports/Base.sol";
-import {AllowAssetPort, DenyAssetPort, RequestAssetPort, RequestAssetHook} from "./ports/Asset.sol";
+import {RequestAssetPort, RequestAssetHook} from "./ports/Asset.sol";
+import {EndorsePort, UnendorsePort, endorsable} from "./ports/Endorse.sol";
 import {RequestAllowancePort} from "./ports/Allowance.sol";
 import {CreditAccountPort} from "./ports/Credit.sol";
 import {BookPort} from "./ports/Book.sol";
@@ -51,7 +52,7 @@ import {DispatchPayablePort, DispatchPayableHook} from "./ports/Dispatch.sol";
 
 // Guard endpoints
 import {GuardBase} from "./guards/Base.sol";
-import {Revoke, RevokeAllowance, RevokeAsset} from "./guards/Revoke.sol";
+import {Revoke, RevokeAllowance} from "./guards/Revoke.sol";
 import {UpdatePool, UpdatePoolHook} from "./guards/Pool.sol";
 
 // Query endpoints

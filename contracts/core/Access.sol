@@ -62,14 +62,15 @@ abstract contract AdminAccess {
     function enforceAdmin(bytes32 account, address caller) internal view virtual returns (bytes32);
 }
 
-/// @title NodeAccess
-/// @notice Aggregate hook surface required by node administration and guards.
+/// @title TrustAccess
+/// @notice Aggregate hook surface required by trust administration, endorsement and guards.
 /// @dev Contains declarations only; hosts provide the policy and storage.
-abstract contract NodeAccess is PeerAccess, AdminAccess, CommandAccess, PortAccess {
-    /// @notice Set a node's authorization under the host's policy.
-    /// @param node Node ID whose authorization is updated.
-    /// @param enabled Whether the node should be authorized.
-    function setAccess(uint node, bool enabled) internal virtual;
+abstract contract TrustAccess is PeerAccess, AdminAccess, CommandAccess, PortAccess {
+    /// @notice Set whether an ID is trusted under the host's policy.
+    /// @dev IDs are self-describing: nodes, assets, accounts and other entities share one set.
+    /// @param id ID whose trust is updated.
+    /// @param trusted Whether the ID should be trusted.
+    function setTrust(uint id, bool trusted) internal virtual;
 }
 
 /// @title GuardianAccess

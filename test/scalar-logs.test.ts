@@ -10,8 +10,8 @@ describe("Category scalar logs", () => {
       const subject = word(value), n = word(value);
       const receipt = await (await helper.emitScalars(subject, value, "0x" + "ab".repeat(97))).wait();
       expect(receipt.logs.map((l: any) => ({ topics: l.topics, data: l.data }))).deep.eq([
-        eventRecord(Category.Access,n,"0x00"),
-        eventRecord(Category.Access,n,"0x01"),
+        eventRecord(Category.Trust,n,"0x00"),
+        eventRecord(Category.Trust,n,"0x01"),
         eventRecord(Category.Endpoint,n,n,n,n),
         eventRecord(Category.Balance,subject,subject,n),
         eventRecord(Category.Introduction,n,subject,n),

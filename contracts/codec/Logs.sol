@@ -17,7 +17,7 @@ pragma solidity ^0.8.33;
 // 0x10 Input        Step: [category:1][index:1][value?][input payload?]      2 + value + input
 // 0x20 Output       Reserved; a step's output is recorded as the next State.
 // 0x40 Value        Reserved; also the Step index bit marking a value word.
-// 0x41 Access       [category:1][node][enabled:1]                            34
+// 0x41 Trust        [category:1][id][enabled:1]                              34
 // 0x42 Introduction [category:1][peer][origin][claimed block number][name...] 97 + name
 // 0x43 Metadata     [category:1][subject][blocks...]                         33 + blocks
 // 0x44 Endpoint     [category:1][endpoint][state][input][output][name...]    129 + name
@@ -68,11 +68,12 @@ pragma solidity ^0.8.33;
 //   and projections can be rebuilt. Unknown endpoints remain readable typed data.
 // - Raw invocation values alone do not prove custom effects; the registry must
 //   describe the guarantees of the endpoint implementation. Core categories such
-//   as Access and Balance retain their defined onchain state meanings.
+//   as Trust and Balance retain their defined onchain state meanings.
 //
 // Other categories:
-// - Access records explicit node authorization changes owned by the emitter.
-//   enabled is exactly 0 or 1. Guardians and account permissions are excluded.
+// - Trust records changes to the emitter's trusted set. The ID is self-describing:
+//   nodes the host authorizes, and on a commander also assets and other entities
+//   in the global registry. enabled is exactly 0 or 1. Guardians are excluded.
 // - Balance identity is (host, account, asset), with host derived from chain and
 //   emitter address. The same account/asset on different hosts has independent
 //   balances. Each record replaces only that compound identity's balance; no delta.
@@ -102,8 +103,8 @@ library Logs {
     uint internal constant Value = 1 << 6;
 
     // Record categories only, numbered after the flag bits.
-    /// @dev Access record category.
-    uint internal constant Access = 65;
+    /// @dev Trust record category.
+    uint internal constant Trust = 65;
     /// @dev Introduction record category.
     uint internal constant Introduction = 66;
     /// @dev Metadata record category.
@@ -117,14 +118,14 @@ library Logs {
     /// @dev Resolution record category.
     uint internal constant Resolution = 71;
 
-    /// @notice Record a node authorization change; accounts are not subjects.
-    /// @param node Node identifier.
-    /// @param enabled Whether authorization is enabled.
-    function access(uint node, bool enabled) internal {
+    /// @notice Record a change to the emitter's trusted set.
+    /// @param id Self-describing ID of any kind.
+    /// @param enabled Whether the ID is now trusted.
+    function trust(uint id, bool enabled) internal {
         assembly ("memory-safe") {
             let start := mload(0x40)
-            mstore8(start, Access)
-            mstore(add(start, 1), node)
+            mstore8(start, Trust)
+            mstore(add(start, 1), id)
             mstore8(add(start, 33), iszero(iszero(enabled)))
             log0(start, 34)
         }

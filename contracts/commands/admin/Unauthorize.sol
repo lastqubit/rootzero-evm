@@ -5,15 +5,14 @@ import {AdminBase, Execution, Executions, Flags, Specs} from "./Base.sol";
 using Executions for Execution;
 
 /// @title Unauthorize
-/// @notice Admin command that revokes authorization from a list of node IDs.
-/// Each NODE block in the input is deauthorized on the host.
-/// Only callable by the admin account.
+/// @notice Admin command that removes a list of IDs from the host's trusted set.
+/// Each ENTITY block in the input is untrusted. Only callable by the admin account.
 abstract contract Unauthorize is AdminBase {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("unauthorize", Specs.Empty, Specs.Node, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("unauthorize", Specs.Empty, Specs.Entity, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Return the registered UNAUTHORIZE command ID.
@@ -22,9 +21,9 @@ abstract contract Unauthorize is AdminBase {
         return id;
     }
 
-    /// @notice Unauthorize each NODE block in the admin input.
-    /// @dev Node mutation hooks publish Access events for authorization changes.
-    /// @param context Admin command context carrying the NODE input stream.
+    /// @notice Untrust each ENTITY block in the admin input.
+    /// @dev The trust hook publishes Trust records for changes.
+    /// @param context Admin command context carrying the ENTITY input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function unauthorize(
@@ -33,10 +32,9 @@ abstract contract Unauthorize is AdminBase {
         return runAdmin(descriptor, context, unauthorizeOne);
     }
 
-    /// @dev Process one NODE item for the Unauthorize endpoint.
+    /// @dev Process one ENTITY item for the Unauthorize endpoint.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function unauthorizeOne(Execution memory exec) private {
-        uint node = exec.unpackNode();
-        setAccess(node, false);
+        setTrust(exec.unpackEntity(), false);
     }
 }

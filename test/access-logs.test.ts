@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeAccountBlock, encodeContextBlock, encodeNodeBlock, encodeUserAccount } from "./helpers/blocks.js";
+import { concat, encodeAccountBlock, encodeContextBlock, encodeEntityBlock, encodeUserAccount } from "./helpers/blocks.js";
 import { Category, eventRecord, word } from "./helpers/event-records.js";
 import "./helpers/matchers.js";
 
@@ -10,13 +10,13 @@ describe("Node Access events", () => {
     const host = await deploy("TestHost", await hostId(await (await getSigner(0)).getAddress()));
     const account = await host.getAdminAccount();
     const node = await hostId(await (await getSigner(4)).getAddress());
-    const input = encodeNodeBlock(node);
+    const input = encodeEntityBlock(node);
     const context = (data: string) => encodeContextBlock(account, "0x", data);
     const records = async (tx: Promise<any>) => (await (await tx).wait()).logs;
     const expectTransition = (logs: any[], enabled: boolean) => {
       expect(logs).length(1);
       expect(logs[0].topics).deep.eq([]);
-      expect(logs[0].data).eq(eventRecord(Category.Access, word(node), enabled ? "0x01" : "0x00"));
+      expect(logs[0].data).eq(eventRecord(Category.Trust, word(node), enabled ? "0x01" : "0x00"));
     };
     expectTransition(await records(host.authorize(context(concat(input, input)))), true);
     expect(await host.isAuthorized(node)).eq(true);
@@ -39,7 +39,7 @@ describe("Node Access events", () => {
     const host = await deploy("TestHost", await hostId(await (await getSigner(0)).getAddress()));
     const node = await hostId(await (await getSigner(4)).getAddress());
     await expect(host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x",
-      concat(encodeNodeBlock(node), encodeNodeBlock(1n)))))
+      concat(encodeEntityBlock(node), encodeEntityBlock(0n)))))
       .revertedWithCustomError(host, "InvalidId");
     expect(await host.isAuthorized(node)).eq(false);
   });
@@ -49,7 +49,7 @@ describe("Node Access events", () => {
     expect((logged >> 224n) & 255n).eq(8n);
     const silent = logged & ~(56n << 224n);
     const account = await host.getAdminAccount();
-    const context = (node: bigint) => encodeContextBlock(account, "0x", encodeNodeBlock(node));
+    const context = (node: bigint) => encodeContextBlock(account, "0x", encodeEntityBlock(node));
     await host.authorize(context(logged));
     expect(await host.isAuthorized(logged)).eq(true);
     expect(await host.isAuthorized(silent)).eq(false);

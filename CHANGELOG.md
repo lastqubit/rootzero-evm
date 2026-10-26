@@ -15,6 +15,45 @@ sections are immutable and must continue to describe the tagged release.
   assigned value when nonzero, and the input payload when hinted). Pipelines accept
   at most 64 steps and revert `TooManySteps` beyond that. See `docs/Indexing.md`.
 
+- **Breaking: deposits take vouched assets.** `deposit` and `depositPayable` now
+  take `#trust` state paired in order with `#amount` input (instead of empty state
+  and `#assetAmount` input), so only assets the commander vouched for can be
+  deposited. Pipelines start with `vouch`; their endpoint IDs and specs change.
+  `DepositHook` and `DepositPayableHook` are unchanged.
+
+- **New `vouch` command (`ExecuteVouch`).** The commander counterpart of
+  `bootstrap`: it consumes exactly one `#vouch { uint budget, many #entity as ids }`
+  block, checks each ID against the trusted set (reverting `Untrusted(id)`), and
+  starts the pipeline with one `#trust` state block per ID. The budget tops up from
+  the account's chainAsset balance like bootstrap. Adds `Keys.Vouch`, `VOUCH_KEY`,
+  `Specs.Vouch`, `Schemas.Vouch`, `ENTITY_HEADER`, `TRUST_HEADER`,
+  `Blocks.unpackVouch`, `Encoder.createVouch` and `exec.unpackVouch()`.
+
+- **New `#trust` state block.** `#trust { uint id }` is a typed state block next to
+  `#balance`, `#custody` and `#position`: the vouched form of an `#entity` request,
+  emitted by a commander that checked its trusted set. Adds `Keys.Trust`,
+  `Specs.Trust`, `Sizes.Trust`, `Headers.Trust`, `Schemas.Trust`,
+  `Blocks.unpackTrust`, `Execute.unpackTrust`, `Encoder.writeTrust`/`createTrust`,
+  state-lane `exec.unpackTrust()` / `exec.outputTrust(id)`, and `Blocks.expectTrust` /
+  `exec.expectTrust(id)`, which check a vouched ID without returning it.
+
+- **Breaking: one trust system for nodes and entities.** A host's trusted set now
+  holds self-describing IDs of any kind in salted slots (`TrustSlots`). On a
+  commander it is the global registry of trusted entities: hosts call
+  `Runtime.requireTrusted(id)` or `requireTrusted(ptr, count)`, a raw STATICCALL to
+  the commander's `checkTrust()` (`TrustRegistry`) that reverts `Untrusted(id)`.
+  `NodeAccess.setAccess` becomes `TrustAccess.setTrust`, which rejects zero and
+  non-local node IDs. `authorize`, `unauthorize` and the `revoke` guard take
+  `#entity` input, changing their IDs. New `portEndorse`/`portUnendorse` ports let
+  authorized peers add or remove non-node IDs. The asset-specific `allowAsset`,
+  `denyAsset`, `portAllowAsset`, `portDenyAsset`, `revokeAsset` endpoints and their
+  hooks are removed. The Access record becomes the Trust record (`Logs.trust`,
+  `Logs.Trust`, still `0x41` with the same layout). The chain asset and the
+  Rootzero asset are always trusted: checks skip their storage read,
+  `requireTrusted(id)` returns without calling the commander, and `setTrust`
+  rejects them with `InvalidId`. Guardian roles move from a
+  mapping to their own salted slots (`GuardianSlots`), separate from the trusted set.
+
 - **Breaking: pipeline step failures report the step.** External step failures
   revert `StepFailed(uint index, uint cmd, bytes err)` with the zero-based step
   index and full command ID (including flags) instead of

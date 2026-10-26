@@ -7,6 +7,7 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Accounts} from "../utils/Accounts.sol";
 
 import {Host} from "../core/Host.sol";
+import {TrustSlots} from "../core/Trust.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {ExecuteCashout} from "../commands/Cashout.sol";
 import {Deposit, DepositPayable} from "../commands/Deposit.sol";
@@ -21,9 +22,10 @@ import {ExecuteSettle, SettlePayable} from "../commands/Settle.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {BookPort} from "../ports/Book.sol";
-import {AllowAsset, DenyAsset} from "../commands/admin/Asset.sol";
+import {EndorsePort, UnendorsePort} from "../ports/Endorse.sol";
+import {TrustRegistry} from "../core/Trust.sol";
 import {Allowance} from "../commands/admin/Allowance.sol";
-import {RevokeAllowance, RevokeAsset} from "../guards/Revoke.sol";
+import {RevokeAllowance} from "../guards/Revoke.sol";
 import {Position} from "../core/Types.sol";
 import {Execution, Executions} from "../execution/Execution.sol";
 
@@ -51,11 +53,11 @@ contract TestHost is
     Settlement,
     Pipeline,
     BookPort,
-    AllowAsset,
-    DenyAsset,
+    EndorsePort,
+    UnendorsePort,
+    TrustRegistry,
     Allowance,
-    RevokeAllowance,
-    RevokeAsset
+    RevokeAllowance
 {
     event CashoutCalled(bytes32 account, uint amount);
     event DepositCalled(bytes32 account, bytes32 asset, uint amount);
@@ -82,8 +84,6 @@ contract TestHost is
         uint debt,
         uint remaining
     );
-    event AllowAssetCalled(bytes32 asset);
-    event DenyAssetCalled(bytes32 asset);
     event AllowanceCalled(uint host_, bytes32 asset, uint amount);
     event SettleCounterpartyChecked(bytes32 counterparty);
     bytes32 private acceptedSettleCounterparty;
@@ -194,14 +194,6 @@ contract TestHost is
         emit RecoverCalled(handler, value, key, Blocks.toBytes(witnessCur), funds.useValue(value));
     }
 
-    function allowAsset(bytes32 asset) internal override {
-        emit AllowAssetCalled(asset);
-    }
-
-    function denyAsset(bytes32 asset) internal override {
-        emit DenyAssetCalled(asset);
-    }
-
     function allowance(uint peer, bytes32 asset, uint amount) internal override {
         emit AllowanceCalled(peer, asset, amount);
     }
@@ -259,7 +251,7 @@ contract TestHost is
     }
 
     function isAuthorized(uint node) external view returns (bool) {
-        return nodes[node];
+        return TrustSlots.get(node);
     }
 
     function testEnforceNode(uint node) external view returns (bytes4, address) {

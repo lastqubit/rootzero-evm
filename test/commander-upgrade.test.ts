@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { commandId, deploy, getProvider, getSigner } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceConstraintsBlock,
-  encodeBootstrapBlock, encodeNodeBlock, encodeStepBlock, encodeUserAccount,
+  encodeBootstrapBlock, encodeEntityBlock, encodeStepBlock, encodeUserAccount,
 } from "./helpers/blocks.js";
 import {
   authorizeCommander, commanderCashout, commanderCodeSize, commanderDeadline,
@@ -68,7 +68,7 @@ describe("Main-style commander upgrade", function () {
     expect(await upgraded.hostAccount()).eq(oldAccount);
     expect(await upgraded.owner()).eq(owner);
     expect(await upgraded.pendingOwner()).eq(nextOwner);
-    await upgraded.revoke(encodeNodeBlock(appoint));
+    await upgraded.revoke(encodeEntityBlock(appoint));
     expect(await upgraded.isAuthorized(appoint)).eq(false);
     expect(await upgraded.isAuthorized(remoteId)).eq(true);
     expect(await upgraded.balanceOf(account, native)).eq(1_000n);

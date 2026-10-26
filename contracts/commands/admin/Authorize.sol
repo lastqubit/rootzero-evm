@@ -8,15 +8,16 @@ import {UnexpectedState} from "../../utils/Errors.sol";
 using Executions for Execution;
 
 /// @title Authorize
-/// @notice Admin command that grants authorization to a list of node IDs.
-/// Each NODE block in the input is authorized on the host.
+/// @notice Admin command that adds a list of IDs to the host's trusted set.
+/// Each ENTITY block in the input is trusted. IDs of any kind are accepted: nodes the
+/// host authorizes and, on a commander, assets and other entities in its registry.
 /// Only callable by the admin account.
 abstract contract Authorize is AdminBase {
     uint private immutable descriptor;
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("authorize", Specs.Empty, Specs.Node, Specs.Empty, Flags.Admin);
+        (id, descriptor) = command("authorize", Specs.Empty, Specs.Entity, Specs.Empty, Flags.Admin);
     }
 
     /// @notice Return the registered AUTHORIZE command ID.
@@ -25,9 +26,9 @@ abstract contract Authorize is AdminBase {
         return id;
     }
 
-    /// @notice Authorize each NODE block in the admin input.
-    /// @dev Node mutation hooks publish Access events for authorization changes.
-    /// @param context Admin command context carrying the NODE input stream.
+    /// @notice Trust each ENTITY block in the admin input.
+    /// @dev The trust hook publishes Trust records for changes.
+    /// @param context Admin command context carrying the ENTITY input stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
     function authorize(
@@ -36,11 +37,10 @@ abstract contract Authorize is AdminBase {
         return runAdmin(descriptor, context, authorizeOne);
     }
 
-    /// @dev Process one NODE item for the Authorize endpoint.
+    /// @dev Process one ENTITY item for the Authorize endpoint.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function authorizeOne(Execution memory exec) private {
-        uint node = exec.unpackNode();
-        setAccess(node, true);
+        setTrust(exec.unpackEntity(), true);
     }
 }
 
@@ -50,10 +50,10 @@ abstract contract Authorize is AdminBase {
 /// policy, this requires a self-managed host. Pipeline entrypoints must authenticate
 /// the account and prevent peers from supplying the admin account.
 abstract contract ExecuteAuthorize is Authorize {
-    /// @notice Authorize each NODE input block from an internal pipeline.
+    /// @notice Trust each ENTITY input block from an internal pipeline.
     /// @param account Authenticated pipeline account, required to be the admin.
     /// @param state Empty command state.
-    /// @param inputCur Cursor over NODE block stream.
+    /// @param inputCur Cursor over ENTITY block stream.
     /// @param value Assigned native value, returned unused as credit.
     /// @return handled Always true after successful execution.
     /// @return output Empty output state.
@@ -69,7 +69,7 @@ abstract contract ExecuteAuthorize is Authorize {
 
         (uint abs, uint end) = Execute.bounds(inputCur, Sizes.B32);
         while (abs < end) {
-            setAccess(Execute.unpackNode(abs), true);
+            setTrust(Execute.unpackEntity(abs), true);
             unchecked {
                 abs += Sizes.B32;
             }

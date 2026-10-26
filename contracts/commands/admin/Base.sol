@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {NodeAccess} from "../../core/Access.sol";
+import {TrustAccess} from "../../core/Access.sol";
 import {CommandBase, Execution, Executions, Flags, Specs} from "../Base.sol";
 
 using Executions for Execution;
 
 /// @title AdminBase
 /// @notice Shared base for admin commands.
-abstract contract AdminBase is NodeAccess, CommandBase {
+abstract contract AdminBase is TrustAccess, CommandBase {
     /// @notice Open and authorize one admin command context.
     /// @param context Exactly one CONTEXT block containing the account, state, and input streams.
     /// @param descriptor Packed execution allocation hints.

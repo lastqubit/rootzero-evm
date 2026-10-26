@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { commandId, deploy, getProvider, getSigner } from "./setup.js";
 import {
   concat, encodeAssetAmountBlock, encodeBalanceConstraintsBlock, encodeBootstrapBlock,
-  encodeNodeBlock, encodeStepBlock,
+  encodeEntityBlock, encodeStepBlock,
 } from "./blocks.js";
 
 export const commanderDeadline = ethers.MaxUint256;
@@ -30,7 +30,7 @@ export async function upgradeCommander(proxy: any) {
 
 export async function authorizeCommander(host: any, nodes: bigint[]) {
   const steps = encodeStepBlock(await commandId("authorize(bytes)", host, 2n), 0n,
-    concat(...nodes.map(encodeNodeBlock)));
+    concat(...nodes.map(encodeEntityBlock)));
   await (await host.govern(steps, commanderDeadline)).wait();
 }
 

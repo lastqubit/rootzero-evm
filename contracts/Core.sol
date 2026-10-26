@@ -6,12 +6,13 @@ pragma solidity ^0.8.33;
 
 import { CounterpartyAnnot } from "./annotations/Counterparty.sol";
 import { SchemaAnnot } from "./annotations/Schema.sol";
-import { AccessDenied, AdminAccess, CallerAccess, CommandAccess, enforceSender, GuardianAccess, NodeAccess, PeerAccess, PortAccess } from "./core/Access.sol";
+import { AccessDenied, AdminAccess, CallerAccess, CommandAccess, enforceSender, GuardianAccess, PeerAccess, PortAccess, TrustAccess } from "./core/Access.sol";
 import { Balances, InsufficientFunds } from "./core/Balances.sol";
 import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
 import { Counterparty } from "./core/Counterparty.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, Runtime } from "./core/Runtime.sol";
+import { GUARDIAN_SALT, GuardianSlots, TRUST_CHECK, TRUST_SALT, TrustRegistry, TrustSlots, UNTRUSTED, Untrusted } from "./core/Trust.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
 import { Calls, FailedCall } from "./core/Calls.sol";
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";

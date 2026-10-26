@@ -20,10 +20,10 @@
     "No gas thresholds; opcode traces verify one delegation for local/external pipelines versus N+1 for self-calls."
   ],
   "bytecodes": {
-    "direct": 12522,
-    "implementationV1": 14247,
+    "direct": 12626,
+    "implementationV1": 14351,
     "proxy": 130,
-    "implementationV2": 15015
+    "implementationV2": 15119
   },
   "rows": [
     {
@@ -39,9 +39,9 @@
     {
       "workload": "deposit",
       "count": 0,
-      "directGas": 30277,
-      "proxyGas": 35096,
-      "upgradedGas": 35096,
+      "directGas": 30276,
+      "proxyGas": 35095,
+      "upgradedGas": 35095,
       "proxyExecutionOverhead": 4819,
       "upgradedExecutionOverhead": 4819,
       "proxyTxPercent": 15.92
@@ -49,9 +49,9 @@
     {
       "workload": "local checks",
       "count": 0,
-      "directGas": 35015,
-      "proxyGas": 39888,
-      "upgradedGas": 40066,
+      "directGas": 35012,
+      "proxyGas": 39885,
+      "upgradedGas": 40063,
       "proxyExecutionOverhead": 4873,
       "upgradedExecutionOverhead": 5051,
       "proxyTxPercent": 13.92
@@ -59,9 +59,9 @@
     {
       "workload": "local checks",
       "count": 1,
-      "directGas": 37965,
-      "proxyGas": 42874,
-      "upgradedGas": 43140,
+      "directGas": 37962,
+      "proxyGas": 42871,
+      "upgradedGas": 43137,
       "proxyExecutionOverhead": 4909,
       "upgradedExecutionOverhead": 5175,
       "proxyTxPercent": 12.93
@@ -69,9 +69,9 @@
     {
       "workload": "local checks",
       "count": 4,
-      "directGas": 46687,
-      "proxyGas": 51700,
-      "upgradedGas": 52230,
+      "directGas": 46684,
+      "proxyGas": 51697,
+      "upgradedGas": 52227,
       "proxyExecutionOverhead": 5013,
       "upgradedExecutionOverhead": 5543,
       "proxyTxPercent": 10.74
@@ -79,9 +79,9 @@
     {
       "workload": "local checks",
       "count": 8,
-      "directGas": 58371,
-      "proxyGas": 63526,
-      "upgradedGas": 64408,
+      "directGas": 58368,
+      "proxyGas": 63523,
+      "upgradedGas": 64405,
       "proxyExecutionOverhead": 5155,
       "upgradedExecutionOverhead": 6037,
       "proxyTxPercent": 8.83
@@ -90,98 +90,98 @@
       "workload": "local checks",
       "count": 16,
       "directGas": 82400,
-      "proxyGas": 87186,
-      "upgradedGas": 88772,
+      "proxyGas": 87183,
+      "upgradedGas": 88769,
       "proxyExecutionOverhead": 5446,
       "upgradedExecutionOverhead": 7032,
-      "proxyTxPercent": 5.81
+      "proxyTxPercent": 5.8
     },
     {
       "workload": "external commands",
       "count": 1,
-      "directGas": 44821,
-      "proxyGas": 49712,
-      "upgradedGas": 49890,
+      "directGas": 44787,
+      "proxyGas": 49678,
+      "upgradedGas": 49856,
       "proxyExecutionOverhead": 4891,
       "upgradedExecutionOverhead": 5069,
-      "proxyTxPercent": 10.91
+      "proxyTxPercent": 10.92
     },
     {
       "workload": "external commands",
       "count": 4,
-      "directGas": 60485,
-      "proxyGas": 65419,
-      "upgradedGas": 65597,
+      "directGas": 60358,
+      "proxyGas": 65292,
+      "upgradedGas": 65470,
       "proxyExecutionOverhead": 4934,
       "upgradedExecutionOverhead": 5112,
-      "proxyTxPercent": 8.16
+      "proxyTxPercent": 8.17
     },
     {
       "workload": "external commands",
       "count": 8,
-      "directGas": 81458,
-      "proxyGas": 86453,
-      "upgradedGas": 86631,
+      "directGas": 81207,
+      "proxyGas": 86202,
+      "upgradedGas": 86380,
       "proxyExecutionOverhead": 4995,
       "upgradedExecutionOverhead": 5173,
-      "proxyTxPercent": 6.13
+      "proxyTxPercent": 6.15
     },
     {
       "workload": "external commands",
       "count": 16,
-      "directGas": 123410,
-      "proxyGas": 128528,
-      "upgradedGas": 128706,
+      "directGas": 122911,
+      "proxyGas": 128029,
+      "upgradedGas": 128207,
       "proxyExecutionOverhead": 5118,
       "upgradedExecutionOverhead": 5296,
-      "proxyTxPercent": 4.15
+      "proxyTxPercent": 4.16
     },
     {
       "workload": "self-call governance",
       "count": 1,
-      "directGas": 33175,
-      "proxyGas": 38372,
-      "upgradedGas": 38482,
+      "directGas": 33144,
+      "proxyGas": 38341,
+      "upgradedGas": 38451,
       "proxyExecutionOverhead": 5197,
       "upgradedExecutionOverhead": 5307,
-      "proxyTxPercent": 15.67
+      "proxyTxPercent": 15.68
     },
     {
       "workload": "self-call governance",
       "count": 4,
-      "directGas": 49756,
-      "proxyGas": 55997,
-      "upgradedGas": 56371,
+      "directGas": 49632,
+      "proxyGas": 55873,
+      "upgradedGas": 56247,
       "proxyExecutionOverhead": 6241,
       "upgradedExecutionOverhead": 6615,
-      "proxyTxPercent": 12.54
+      "proxyTxPercent": 12.57
     },
     {
       "workload": "self-call governance",
       "count": 8,
-      "directGas": 71933,
-      "proxyGas": 79571,
-      "upgradedGas": 80297,
+      "directGas": 71685,
+      "proxyGas": 79323,
+      "upgradedGas": 80049,
       "proxyExecutionOverhead": 7638,
       "upgradedExecutionOverhead": 8364,
-      "proxyTxPercent": 10.62
+      "proxyTxPercent": 10.65
     },
     {
       "workload": "self-call governance",
       "count": 16,
-      "directGas": 116280,
-      "proxyGas": 126712,
-      "upgradedGas": 128142,
+      "directGas": 115784,
+      "proxyGas": 126216,
+      "upgradedGas": 127646,
       "proxyExecutionOverhead": 10432,
       "upgradedExecutionOverhead": 11862,
-      "proxyTxPercent": 8.97
+      "proxyTxPercent": 9.01
     },
     {
       "workload": "cashout",
       "count": 1,
-      "directGas": 44290,
-      "proxyGas": 49163,
-      "upgradedGas": 49341,
+      "directGas": 44288,
+      "proxyGas": 49161,
+      "upgradedGas": 49339,
       "proxyExecutionOverhead": 4873,
       "upgradedExecutionOverhead": 5051,
       "proxyTxPercent": 11
@@ -227,29 +227,29 @@
       "workload": "deposit",
       "count": 0,
       "stepsBytes": 0,
-      "gas": 30277,
-      "execution": 8433,
+      "gas": 30276,
+      "execution": 8432,
       "samples": [
         {
-          "gas": 30277,
+          "gas": 30276,
           "intrinsic": 21844,
-          "execution": 8433,
+          "execution": 8432,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 30277,
+          "gas": 30276,
           "intrinsic": 21844,
-          "execution": 8433,
+          "execution": 8432,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 30277,
+          "gas": 30276,
           "intrinsic": 21844,
-          "execution": 8433,
+          "execution": 8432,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 0
@@ -261,29 +261,29 @@
       "workload": "local checks",
       "count": 0,
       "stepsBytes": 280,
-      "gas": 35015,
-      "execution": 13631,
+      "gas": 35012,
+      "execution": 13628,
       "samples": [
         {
-          "gas": 35015,
+          "gas": 35012,
           "intrinsic": 24184,
-          "execution": 13631,
+          "execution": 13628,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 35015,
+          "gas": 35012,
           "intrinsic": 24184,
-          "execution": 13631,
+          "execution": 13628,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 35015,
+          "gas": 35012,
           "intrinsic": 24184,
-          "execution": 13631,
+          "execution": 13628,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 0
@@ -295,29 +295,29 @@
       "workload": "local checks",
       "count": 1,
       "stepsBytes": 464,
-      "gas": 37965,
-      "execution": 15213,
+      "gas": 37962,
+      "execution": 15210,
       "samples": [
         {
-          "gas": 37965,
+          "gas": 37962,
           "intrinsic": 25552,
-          "execution": 15213,
+          "execution": 15210,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 37965,
+          "gas": 37962,
           "intrinsic": 25552,
-          "execution": 15213,
+          "execution": 15210,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 37965,
+          "gas": 37962,
           "intrinsic": 25552,
-          "execution": 15213,
+          "execution": 15210,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 0
@@ -329,29 +329,29 @@
       "workload": "local checks",
       "count": 4,
       "stepsBytes": 1016,
-      "gas": 46687,
-      "execution": 19959,
+      "gas": 46684,
+      "execution": 19956,
       "samples": [
         {
-          "gas": 46687,
+          "gas": 46684,
           "intrinsic": 29528,
-          "execution": 19959,
+          "execution": 19956,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 46687,
+          "gas": 46684,
           "intrinsic": 29528,
-          "execution": 19959,
+          "execution": 19956,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 46687,
+          "gas": 46684,
           "intrinsic": 29528,
-          "execution": 19959,
+          "execution": 19956,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 0
@@ -363,29 +363,29 @@
       "workload": "local checks",
       "count": 8,
       "stepsBytes": 1752,
-      "gas": 58371,
-      "execution": 26299,
+      "gas": 58368,
+      "execution": 26296,
       "samples": [
         {
-          "gas": 58371,
+          "gas": 58368,
           "intrinsic": 34872,
-          "execution": 26299,
+          "execution": 26296,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 58371,
+          "gas": 58368,
           "intrinsic": 34872,
-          "execution": 26299,
+          "execution": 26296,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 58371,
+          "gas": 58368,
           "intrinsic": 34872,
-          "execution": 26299,
+          "execution": 26296,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 0
@@ -398,12 +398,12 @@
       "count": 16,
       "stepsBytes": 3224,
       "gas": 82400,
-      "execution": 38980,
+      "execution": 38977,
       "samples": [
         {
           "gas": 82400,
           "intrinsic": 45560,
-          "execution": 38980,
+          "execution": 38977,
           "calldataFloor": 82400,
           "floorBound": true,
           "delegatecalls": 0
@@ -411,7 +411,7 @@
         {
           "gas": 82400,
           "intrinsic": 45560,
-          "execution": 38980,
+          "execution": 38977,
           "calldataFloor": 82400,
           "floorBound": true,
           "delegatecalls": 0
@@ -419,7 +419,7 @@
         {
           "gas": 82400,
           "intrinsic": 45560,
-          "execution": 38980,
+          "execution": 38977,
           "calldataFloor": 82400,
           "floorBound": true,
           "delegatecalls": 0
@@ -431,29 +431,29 @@
       "workload": "external commands",
       "count": 1,
       "stepsBytes": 360,
-      "gas": 44821,
-      "execution": 22597,
+      "gas": 44787,
+      "execution": 22563,
       "samples": [
         {
-          "gas": 44821,
+          "gas": 44787,
           "intrinsic": 25024,
-          "execution": 22597,
+          "execution": 22563,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 44821,
+          "gas": 44787,
           "intrinsic": 25024,
-          "execution": 22597,
+          "execution": 22563,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 44821,
+          "gas": 44787,
           "intrinsic": 25024,
-          "execution": 22597,
+          "execution": 22563,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 0
@@ -465,29 +465,29 @@
       "workload": "external commands",
       "count": 4,
       "stepsBytes": 600,
-      "gas": 60485,
-      "execution": 35997,
+      "gas": 60358,
+      "execution": 35870,
       "samples": [
         {
-          "gas": 60485,
+          "gas": 60358,
           "intrinsic": 27288,
-          "execution": 35997,
+          "execution": 35870,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 60485,
+          "gas": 60358,
           "intrinsic": 27288,
-          "execution": 35997,
+          "execution": 35870,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 60485,
+          "gas": 60358,
           "intrinsic": 27288,
-          "execution": 35997,
+          "execution": 35870,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 0
@@ -499,29 +499,29 @@
       "workload": "external commands",
       "count": 8,
       "stepsBytes": 920,
-      "gas": 81458,
-      "execution": 53866,
+      "gas": 81207,
+      "execution": 53615,
       "samples": [
         {
-          "gas": 81458,
+          "gas": 81207,
           "intrinsic": 30392,
-          "execution": 53866,
+          "execution": 53615,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 81458,
+          "gas": 81207,
           "intrinsic": 30392,
-          "execution": 53866,
+          "execution": 53615,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 81458,
+          "gas": 81207,
           "intrinsic": 30392,
-          "execution": 53866,
+          "execution": 53615,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 0
@@ -533,29 +533,29 @@
       "workload": "external commands",
       "count": 16,
       "stepsBytes": 1560,
-      "gas": 123410,
-      "execution": 89610,
+      "gas": 122911,
+      "execution": 89111,
       "samples": [
         {
-          "gas": 123410,
+          "gas": 122911,
           "intrinsic": 36600,
-          "execution": 89610,
+          "execution": 89111,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 123410,
+          "gas": 122911,
           "intrinsic": 36600,
-          "execution": 89610,
+          "execution": 89111,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 123410,
+          "gas": 122911,
           "intrinsic": 36600,
-          "execution": 89610,
+          "execution": 89111,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 0
@@ -567,29 +567,29 @@
       "workload": "self-call governance",
       "count": 1,
       "stepsBytes": 80,
-      "gas": 33175,
-      "execution": 10479,
+      "gas": 33144,
+      "execution": 10448,
       "samples": [
         {
-          "gas": 33175,
+          "gas": 33144,
           "intrinsic": 22696,
-          "execution": 10479,
+          "execution": 10448,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 33175,
+          "gas": 33144,
           "intrinsic": 22696,
-          "execution": 10479,
+          "execution": 10448,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 33175,
+          "gas": 33144,
           "intrinsic": 22696,
-          "execution": 10479,
+          "execution": 10448,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 0
@@ -601,29 +601,29 @@
       "workload": "self-call governance",
       "count": 4,
       "stepsBytes": 320,
-      "gas": 49756,
-      "execution": 24784,
+      "gas": 49632,
+      "execution": 24660,
       "samples": [
         {
-          "gas": 49756,
+          "gas": 49632,
           "intrinsic": 24972,
-          "execution": 24784,
+          "execution": 24660,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 49756,
+          "gas": 49632,
           "intrinsic": 24972,
-          "execution": 24784,
+          "execution": 24660,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 49756,
+          "gas": 49632,
           "intrinsic": 24972,
-          "execution": 24784,
+          "execution": 24660,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 0
@@ -635,29 +635,29 @@
       "workload": "self-call governance",
       "count": 8,
       "stepsBytes": 640,
-      "gas": 71933,
-      "execution": 43857,
+      "gas": 71685,
+      "execution": 43609,
       "samples": [
         {
-          "gas": 71933,
+          "gas": 71685,
           "intrinsic": 28076,
-          "execution": 43857,
+          "execution": 43609,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 71933,
+          "gas": 71685,
           "intrinsic": 28076,
-          "execution": 43857,
+          "execution": 43609,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 71933,
+          "gas": 71685,
           "intrinsic": 28076,
-          "execution": 43857,
+          "execution": 43609,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 0
@@ -669,29 +669,29 @@
       "workload": "self-call governance",
       "count": 16,
       "stepsBytes": 1280,
-      "gas": 116280,
-      "execution": 82008,
+      "gas": 115784,
+      "execution": 81512,
       "samples": [
         {
-          "gas": 116280,
+          "gas": 115784,
           "intrinsic": 34272,
-          "execution": 82008,
+          "execution": 81512,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 116280,
+          "gas": 115784,
           "intrinsic": 34272,
-          "execution": 82008,
+          "execution": 81512,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 116280,
+          "gas": 115784,
           "intrinsic": 34272,
-          "execution": 82008,
+          "execution": 81512,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 0
@@ -703,29 +703,29 @@
       "workload": "cashout",
       "count": 1,
       "stepsBytes": 280,
-      "gas": 44290,
-      "execution": 20094,
+      "gas": 44288,
+      "execution": 20092,
       "samples": [
         {
-          "gas": 44290,
+          "gas": 44288,
           "intrinsic": 24196,
-          "execution": 20094,
+          "execution": 20092,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 44290,
+          "gas": 44288,
           "intrinsic": 24196,
-          "execution": 20094,
+          "execution": 20092,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 0
         },
         {
-          "gas": 44290,
+          "gas": 44288,
           "intrinsic": 24196,
-          "execution": 20094,
+          "execution": 20092,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 0
@@ -771,29 +771,29 @@
       "workload": "deposit",
       "count": 0,
       "stepsBytes": 0,
-      "gas": 35096,
-      "execution": 13252,
+      "gas": 35095,
+      "execution": 13251,
       "samples": [
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
@@ -805,29 +805,29 @@
       "workload": "local checks",
       "count": 0,
       "stepsBytes": 280,
-      "gas": 39888,
-      "execution": 18504,
+      "gas": 39885,
+      "execution": 18501,
       "samples": [
         {
-          "gas": 39888,
+          "gas": 39885,
           "intrinsic": 24184,
-          "execution": 18504,
+          "execution": 18501,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 39888,
+          "gas": 39885,
           "intrinsic": 24184,
-          "execution": 18504,
+          "execution": 18501,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 39888,
+          "gas": 39885,
           "intrinsic": 24184,
-          "execution": 18504,
+          "execution": 18501,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
@@ -839,29 +839,29 @@
       "workload": "local checks",
       "count": 1,
       "stepsBytes": 464,
-      "gas": 42874,
-      "execution": 20122,
+      "gas": 42871,
+      "execution": 20119,
       "samples": [
         {
-          "gas": 42874,
+          "gas": 42871,
           "intrinsic": 25552,
-          "execution": 20122,
+          "execution": 20119,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 42874,
+          "gas": 42871,
           "intrinsic": 25552,
-          "execution": 20122,
+          "execution": 20119,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 42874,
+          "gas": 42871,
           "intrinsic": 25552,
-          "execution": 20122,
+          "execution": 20119,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
@@ -873,29 +873,29 @@
       "workload": "local checks",
       "count": 4,
       "stepsBytes": 1016,
-      "gas": 51700,
-      "execution": 24972,
+      "gas": 51697,
+      "execution": 24969,
       "samples": [
         {
-          "gas": 51700,
+          "gas": 51697,
           "intrinsic": 29528,
-          "execution": 24972,
+          "execution": 24969,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 51700,
+          "gas": 51697,
           "intrinsic": 29528,
-          "execution": 24972,
+          "execution": 24969,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 51700,
+          "gas": 51697,
           "intrinsic": 29528,
-          "execution": 24972,
+          "execution": 24969,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
@@ -907,29 +907,29 @@
       "workload": "local checks",
       "count": 8,
       "stepsBytes": 1752,
-      "gas": 63526,
-      "execution": 31454,
+      "gas": 63523,
+      "execution": 31451,
       "samples": [
         {
-          "gas": 63526,
+          "gas": 63523,
           "intrinsic": 34872,
-          "execution": 31454,
+          "execution": 31451,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 63526,
+          "gas": 63523,
           "intrinsic": 34872,
-          "execution": 31454,
+          "execution": 31451,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 63526,
+          "gas": 63523,
           "intrinsic": 34872,
-          "execution": 31454,
+          "execution": 31451,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
@@ -941,29 +941,29 @@
       "workload": "local checks",
       "count": 16,
       "stepsBytes": 3224,
-      "gas": 87186,
-      "execution": 44426,
+      "gas": 87183,
+      "execution": 44423,
       "samples": [
         {
-          "gas": 87186,
+          "gas": 87183,
           "intrinsic": 45560,
-          "execution": 44426,
+          "execution": 44423,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 87186,
+          "gas": 87183,
           "intrinsic": 45560,
-          "execution": 44426,
+          "execution": 44423,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 87186,
+          "gas": 87183,
           "intrinsic": 45560,
-          "execution": 44426,
+          "execution": 44423,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
@@ -975,29 +975,29 @@
       "workload": "external commands",
       "count": 1,
       "stepsBytes": 360,
-      "gas": 49712,
-      "execution": 27488,
+      "gas": 49678,
+      "execution": 27454,
       "samples": [
         {
-          "gas": 49712,
+          "gas": 49678,
           "intrinsic": 25024,
-          "execution": 27488,
+          "execution": 27454,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49712,
+          "gas": 49678,
           "intrinsic": 25024,
-          "execution": 27488,
+          "execution": 27454,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49712,
+          "gas": 49678,
           "intrinsic": 25024,
-          "execution": 27488,
+          "execution": 27454,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
@@ -1009,29 +1009,29 @@
       "workload": "external commands",
       "count": 4,
       "stepsBytes": 600,
-      "gas": 65419,
-      "execution": 40931,
+      "gas": 65292,
+      "execution": 40804,
       "samples": [
         {
-          "gas": 65419,
+          "gas": 65292,
           "intrinsic": 27288,
-          "execution": 40931,
+          "execution": 40804,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 65419,
+          "gas": 65292,
           "intrinsic": 27288,
-          "execution": 40931,
+          "execution": 40804,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 65419,
+          "gas": 65292,
           "intrinsic": 27288,
-          "execution": 40931,
+          "execution": 40804,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
@@ -1043,29 +1043,29 @@
       "workload": "external commands",
       "count": 8,
       "stepsBytes": 920,
-      "gas": 86453,
-      "execution": 58861,
+      "gas": 86202,
+      "execution": 58610,
       "samples": [
         {
-          "gas": 86453,
+          "gas": 86202,
           "intrinsic": 30392,
-          "execution": 58861,
+          "execution": 58610,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 86453,
+          "gas": 86202,
           "intrinsic": 30392,
-          "execution": 58861,
+          "execution": 58610,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 86453,
+          "gas": 86202,
           "intrinsic": 30392,
-          "execution": 58861,
+          "execution": 58610,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
@@ -1077,29 +1077,29 @@
       "workload": "external commands",
       "count": 16,
       "stepsBytes": 1560,
-      "gas": 128528,
-      "execution": 94728,
+      "gas": 128029,
+      "execution": 94229,
       "samples": [
         {
-          "gas": 128528,
+          "gas": 128029,
           "intrinsic": 36600,
-          "execution": 94728,
+          "execution": 94229,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 128528,
+          "gas": 128029,
           "intrinsic": 36600,
-          "execution": 94728,
+          "execution": 94229,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 128528,
+          "gas": 128029,
           "intrinsic": 36600,
-          "execution": 94728,
+          "execution": 94229,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
@@ -1111,29 +1111,29 @@
       "workload": "self-call governance",
       "count": 1,
       "stepsBytes": 80,
-      "gas": 38372,
-      "execution": 15676,
+      "gas": 38341,
+      "execution": 15645,
       "samples": [
         {
-          "gas": 38372,
+          "gas": 38341,
           "intrinsic": 22696,
-          "execution": 15676,
+          "execution": 15645,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
         },
         {
-          "gas": 38372,
+          "gas": 38341,
           "intrinsic": 22696,
-          "execution": 15676,
+          "execution": 15645,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
         },
         {
-          "gas": 38372,
+          "gas": 38341,
           "intrinsic": 22696,
-          "execution": 15676,
+          "execution": 15645,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
@@ -1145,29 +1145,29 @@
       "workload": "self-call governance",
       "count": 4,
       "stepsBytes": 320,
-      "gas": 55997,
-      "execution": 31025,
+      "gas": 55873,
+      "execution": 30901,
       "samples": [
         {
-          "gas": 55997,
+          "gas": 55873,
           "intrinsic": 24972,
-          "execution": 31025,
+          "execution": 30901,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
         },
         {
-          "gas": 55997,
+          "gas": 55873,
           "intrinsic": 24972,
-          "execution": 31025,
+          "execution": 30901,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
         },
         {
-          "gas": 55997,
+          "gas": 55873,
           "intrinsic": 24972,
-          "execution": 31025,
+          "execution": 30901,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
@@ -1179,29 +1179,29 @@
       "workload": "self-call governance",
       "count": 8,
       "stepsBytes": 640,
-      "gas": 79571,
-      "execution": 51495,
+      "gas": 79323,
+      "execution": 51247,
       "samples": [
         {
-          "gas": 79571,
+          "gas": 79323,
           "intrinsic": 28076,
-          "execution": 51495,
+          "execution": 51247,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
         },
         {
-          "gas": 79571,
+          "gas": 79323,
           "intrinsic": 28076,
-          "execution": 51495,
+          "execution": 51247,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
         },
         {
-          "gas": 79571,
+          "gas": 79323,
           "intrinsic": 28076,
-          "execution": 51495,
+          "execution": 51247,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
@@ -1213,29 +1213,29 @@
       "workload": "self-call governance",
       "count": 16,
       "stepsBytes": 1280,
-      "gas": 126712,
-      "execution": 92440,
+      "gas": 126216,
+      "execution": 91944,
       "samples": [
         {
-          "gas": 126712,
+          "gas": 126216,
           "intrinsic": 34272,
-          "execution": 92440,
+          "execution": 91944,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
         },
         {
-          "gas": 126712,
+          "gas": 126216,
           "intrinsic": 34272,
-          "execution": 92440,
+          "execution": 91944,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
         },
         {
-          "gas": 126712,
+          "gas": 126216,
           "intrinsic": 34272,
-          "execution": 92440,
+          "execution": 91944,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
@@ -1247,29 +1247,29 @@
       "workload": "cashout",
       "count": 1,
       "stepsBytes": 280,
-      "gas": 49163,
-      "execution": 24967,
+      "gas": 49161,
+      "execution": 24965,
       "samples": [
         {
-          "gas": 49163,
+          "gas": 49161,
           "intrinsic": 24196,
-          "execution": 24967,
+          "execution": 24965,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49163,
+          "gas": 49161,
           "intrinsic": 24196,
-          "execution": 24967,
+          "execution": 24965,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49163,
+          "gas": 49161,
           "intrinsic": 24196,
-          "execution": 24967,
+          "execution": 24965,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1
@@ -1315,29 +1315,29 @@
       "workload": "deposit",
       "count": 0,
       "stepsBytes": 0,
-      "gas": 35096,
-      "execution": 13252,
+      "gas": 35095,
+      "execution": 13251,
       "samples": [
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 35096,
+          "gas": 35095,
           "intrinsic": 21844,
-          "execution": 13252,
+          "execution": 13251,
           "calldataFloor": 23110,
           "floorBound": false,
           "delegatecalls": 1
@@ -1349,29 +1349,29 @@
       "workload": "local checks",
       "count": 0,
       "stepsBytes": 280,
-      "gas": 40066,
-      "execution": 18682,
+      "gas": 40063,
+      "execution": 18679,
       "samples": [
         {
-          "gas": 40066,
+          "gas": 40063,
           "intrinsic": 24184,
-          "execution": 18682,
+          "execution": 18679,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 40066,
+          "gas": 40063,
           "intrinsic": 24184,
-          "execution": 18682,
+          "execution": 18679,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 40066,
+          "gas": 40063,
           "intrinsic": 24184,
-          "execution": 18682,
+          "execution": 18679,
           "calldataFloor": 28960,
           "floorBound": false,
           "delegatecalls": 1
@@ -1383,29 +1383,29 @@
       "workload": "local checks",
       "count": 1,
       "stepsBytes": 464,
-      "gas": 43140,
-      "execution": 20388,
+      "gas": 43137,
+      "execution": 20385,
       "samples": [
         {
-          "gas": 43140,
+          "gas": 43137,
           "intrinsic": 25552,
-          "execution": 20388,
+          "execution": 20385,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 43140,
+          "gas": 43137,
           "intrinsic": 25552,
-          "execution": 20388,
+          "execution": 20385,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 43140,
+          "gas": 43137,
           "intrinsic": 25552,
-          "execution": 20388,
+          "execution": 20385,
           "calldataFloor": 32380,
           "floorBound": false,
           "delegatecalls": 1
@@ -1417,29 +1417,29 @@
       "workload": "local checks",
       "count": 4,
       "stepsBytes": 1016,
-      "gas": 52230,
-      "execution": 25502,
+      "gas": 52227,
+      "execution": 25499,
       "samples": [
         {
-          "gas": 52230,
+          "gas": 52227,
           "intrinsic": 29528,
-          "execution": 25502,
+          "execution": 25499,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 52230,
+          "gas": 52227,
           "intrinsic": 29528,
-          "execution": 25502,
+          "execution": 25499,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 52230,
+          "gas": 52227,
           "intrinsic": 29528,
-          "execution": 25502,
+          "execution": 25499,
           "calldataFloor": 42320,
           "floorBound": false,
           "delegatecalls": 1
@@ -1451,29 +1451,29 @@
       "workload": "local checks",
       "count": 8,
       "stepsBytes": 1752,
-      "gas": 64408,
-      "execution": 32336,
+      "gas": 64405,
+      "execution": 32333,
       "samples": [
         {
-          "gas": 64408,
+          "gas": 64405,
           "intrinsic": 34872,
-          "execution": 32336,
+          "execution": 32333,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 64408,
+          "gas": 64405,
           "intrinsic": 34872,
-          "execution": 32336,
+          "execution": 32333,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 64408,
+          "gas": 64405,
           "intrinsic": 34872,
-          "execution": 32336,
+          "execution": 32333,
           "calldataFloor": 55680,
           "floorBound": false,
           "delegatecalls": 1
@@ -1485,29 +1485,29 @@
       "workload": "local checks",
       "count": 16,
       "stepsBytes": 3224,
-      "gas": 88772,
-      "execution": 46012,
+      "gas": 88769,
+      "execution": 46009,
       "samples": [
         {
-          "gas": 88772,
+          "gas": 88769,
           "intrinsic": 45560,
-          "execution": 46012,
+          "execution": 46009,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 88772,
+          "gas": 88769,
           "intrinsic": 45560,
-          "execution": 46012,
+          "execution": 46009,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 88772,
+          "gas": 88769,
           "intrinsic": 45560,
-          "execution": 46012,
+          "execution": 46009,
           "calldataFloor": 82400,
           "floorBound": false,
           "delegatecalls": 1
@@ -1519,29 +1519,29 @@
       "workload": "external commands",
       "count": 1,
       "stepsBytes": 360,
-      "gas": 49890,
-      "execution": 27666,
+      "gas": 49856,
+      "execution": 27632,
       "samples": [
         {
-          "gas": 49890,
+          "gas": 49856,
           "intrinsic": 25024,
-          "execution": 27666,
+          "execution": 27632,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49890,
+          "gas": 49856,
           "intrinsic": 25024,
-          "execution": 27666,
+          "execution": 27632,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49890,
+          "gas": 49856,
           "intrinsic": 25024,
-          "execution": 27666,
+          "execution": 27632,
           "calldataFloor": 31060,
           "floorBound": false,
           "delegatecalls": 1
@@ -1553,29 +1553,29 @@
       "workload": "external commands",
       "count": 4,
       "stepsBytes": 600,
-      "gas": 65597,
-      "execution": 41109,
+      "gas": 65470,
+      "execution": 40982,
       "samples": [
         {
-          "gas": 65597,
+          "gas": 65470,
           "intrinsic": 27288,
-          "execution": 41109,
+          "execution": 40982,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 65597,
+          "gas": 65470,
           "intrinsic": 27288,
-          "execution": 41109,
+          "execution": 40982,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 65597,
+          "gas": 65470,
           "intrinsic": 27288,
-          "execution": 41109,
+          "execution": 40982,
           "calldataFloor": 36720,
           "floorBound": false,
           "delegatecalls": 1
@@ -1587,29 +1587,29 @@
       "workload": "external commands",
       "count": 8,
       "stepsBytes": 920,
-      "gas": 86631,
-      "execution": 59039,
+      "gas": 86380,
+      "execution": 58788,
       "samples": [
         {
-          "gas": 86631,
+          "gas": 86380,
           "intrinsic": 30392,
-          "execution": 59039,
+          "execution": 58788,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 86631,
+          "gas": 86380,
           "intrinsic": 30392,
-          "execution": 59039,
+          "execution": 58788,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 86631,
+          "gas": 86380,
           "intrinsic": 30392,
-          "execution": 59039,
+          "execution": 58788,
           "calldataFloor": 44480,
           "floorBound": false,
           "delegatecalls": 1
@@ -1621,29 +1621,29 @@
       "workload": "external commands",
       "count": 16,
       "stepsBytes": 1560,
-      "gas": 128706,
-      "execution": 94906,
+      "gas": 128207,
+      "execution": 94407,
       "samples": [
         {
-          "gas": 128706,
+          "gas": 128207,
           "intrinsic": 36600,
-          "execution": 94906,
+          "execution": 94407,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 128706,
+          "gas": 128207,
           "intrinsic": 36600,
-          "execution": 94906,
+          "execution": 94407,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 128706,
+          "gas": 128207,
           "intrinsic": 36600,
-          "execution": 94906,
+          "execution": 94407,
           "calldataFloor": 60000,
           "floorBound": false,
           "delegatecalls": 1
@@ -1655,29 +1655,29 @@
       "workload": "self-call governance",
       "count": 1,
       "stepsBytes": 80,
-      "gas": 38482,
-      "execution": 15786,
+      "gas": 38451,
+      "execution": 15755,
       "samples": [
         {
-          "gas": 38482,
+          "gas": 38451,
           "intrinsic": 22696,
-          "execution": 15786,
+          "execution": 15755,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
         },
         {
-          "gas": 38482,
+          "gas": 38451,
           "intrinsic": 22696,
-          "execution": 15786,
+          "execution": 15755,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
         },
         {
-          "gas": 38482,
+          "gas": 38451,
           "intrinsic": 22696,
-          "execution": 15786,
+          "execution": 15755,
           "calldataFloor": 25240,
           "floorBound": false,
           "delegatecalls": 2
@@ -1689,29 +1689,29 @@
       "workload": "self-call governance",
       "count": 4,
       "stepsBytes": 320,
-      "gas": 56371,
-      "execution": 31399,
+      "gas": 56247,
+      "execution": 31275,
       "samples": [
         {
-          "gas": 56371,
+          "gas": 56247,
           "intrinsic": 24972,
-          "execution": 31399,
+          "execution": 31275,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
         },
         {
-          "gas": 56371,
+          "gas": 56247,
           "intrinsic": 24972,
-          "execution": 31399,
+          "execution": 31275,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
         },
         {
-          "gas": 56371,
+          "gas": 56247,
           "intrinsic": 24972,
-          "execution": 31399,
+          "execution": 31275,
           "calldataFloor": 30930,
           "floorBound": false,
           "delegatecalls": 5
@@ -1723,29 +1723,29 @@
       "workload": "self-call governance",
       "count": 8,
       "stepsBytes": 640,
-      "gas": 80297,
-      "execution": 52221,
+      "gas": 80049,
+      "execution": 51973,
       "samples": [
         {
-          "gas": 80297,
+          "gas": 80049,
           "intrinsic": 28076,
-          "execution": 52221,
+          "execution": 51973,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
         },
         {
-          "gas": 80297,
+          "gas": 80049,
           "intrinsic": 28076,
-          "execution": 52221,
+          "execution": 51973,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
         },
         {
-          "gas": 80297,
+          "gas": 80049,
           "intrinsic": 28076,
-          "execution": 52221,
+          "execution": 51973,
           "calldataFloor": 38690,
           "floorBound": false,
           "delegatecalls": 9
@@ -1757,29 +1757,29 @@
       "workload": "self-call governance",
       "count": 16,
       "stepsBytes": 1280,
-      "gas": 128142,
-      "execution": 93870,
+      "gas": 127646,
+      "execution": 93374,
       "samples": [
         {
-          "gas": 128142,
+          "gas": 127646,
           "intrinsic": 34272,
-          "execution": 93870,
+          "execution": 93374,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
         },
         {
-          "gas": 128142,
+          "gas": 127646,
           "intrinsic": 34272,
-          "execution": 93870,
+          "execution": 93374,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
         },
         {
-          "gas": 128142,
+          "gas": 127646,
           "intrinsic": 34272,
-          "execution": 93870,
+          "execution": 93374,
           "calldataFloor": 54180,
           "floorBound": false,
           "delegatecalls": 17
@@ -1791,29 +1791,29 @@
       "workload": "cashout",
       "count": 1,
       "stepsBytes": 280,
-      "gas": 49341,
-      "execution": 25145,
+      "gas": 49339,
+      "execution": 25143,
       "samples": [
         {
-          "gas": 49341,
+          "gas": 49339,
           "intrinsic": 24196,
-          "execution": 25145,
+          "execution": 25143,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49341,
+          "gas": 49339,
           "intrinsic": 24196,
-          "execution": 25145,
+          "execution": 25143,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1
         },
         {
-          "gas": 49341,
+          "gas": 49339,
           "intrinsic": 24196,
-          "execution": 25145,
+          "execution": 25143,
           "calldataFloor": 28990,
           "floorBound": false,
           "delegatecalls": 1

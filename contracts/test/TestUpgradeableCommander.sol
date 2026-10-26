@@ -6,7 +6,7 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {Host, Pipeline, Balances, Settlement, sendChainAsset} from "../Core.sol";
+import {Host, Pipeline, Balances, Settlement, sendChainAsset, TrustSlots} from "../Core.sol";
 import {Cursors, Logs} from "../Codec.sol";
 import {Accounts, Nodes} from "../Utils.sol";
 import {
@@ -72,7 +72,7 @@ abstract contract CommanderTestCore is
     // Inspection only; neither getter participates in timed pipeline execution.
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function balanceOf(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
-    function isAuthorized(uint node) external view returns (bool) { return nodes[node]; }
+    function isAuthorized(uint node) external view returns (bool) { return TrustSlots.get(node); }
 }
 
 contract TestCommanderDirect is CommanderTestCore, Ownable2Step {

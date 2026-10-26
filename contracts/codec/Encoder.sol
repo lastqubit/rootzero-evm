@@ -338,6 +338,25 @@ library Encoder {
         write32(abs, bytes32(entity));
     }
 
+    /// @notice Append TRUST, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements. Performs no registry check;
+    /// only a commander that verified the ID should emit it as state.
+    /// @param cur Packed writer cursor containing the relative position and logical capacity.
+    /// @param dst Destination memory buffer.
+    /// @param id Trusted identifier.
+    /// @return value Output buffer; retain this value because growth may relocate it.
+    /// @return nextCur Updated packed writer cursor with relative position and capacity.
+    function writeTrust(
+        uint cur,
+        bytes memory dst,
+        uint id
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 40);
+        abs = writeHeader(abs, Keys.Trust, 32);
+        write32(abs, bytes32(id));
+    }
+
     /// @notice Append STATUS, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     /// @param cur Packed writer cursor containing the relative position and logical capacity.
@@ -1810,6 +1829,16 @@ library Encoder {
         write32(abs, bytes32(entity));
     }
 
+    /// @notice Create a complete TRUST block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    /// @param id Trusted identifier.
+    /// @return value Complete encoded block.
+    function createTrust(uint id) internal pure returns (bytes memory value) {
+        value = allocate(40);
+        uint abs = writeHeader(pos(value, 0), Keys.Trust, 32);
+        write32(abs, bytes32(id));
+    }
+
     /// @notice Create a complete STATUS block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     /// @param code Full-width status code.
@@ -2294,6 +2323,21 @@ library Encoder {
             uint abs = writeHeader(pos(value, 0), Keys.Bootstrap, size - 8);
             abs = write32(abs, bytes32(budget));
             wrap(abs, Keys.List, balances, balances.length);
+        }
+    }
+
+    /// @notice Create VOUCH with a budget and a LIST wrapping ENTITY bytes.
+    /// @dev Copies the payload once; callers validate inner block contents.
+    /// @param budget Native-value budget, in wei.
+    /// @param ids ENTITY block stream, excluding the LIST child header.
+    /// @return value Complete encoded block.
+    function createVouch(uint budget, bytes memory ids) internal pure returns (bytes memory value) {
+        uint size = 48 + ids.length;
+        value = allocate(size);
+        unchecked {
+            uint abs = writeHeader(pos(value, 0), Keys.Vouch, size - 8);
+            abs = write32(abs, bytes32(budget));
+            wrap(abs, Keys.List, ids, ids.length);
         }
     }
 

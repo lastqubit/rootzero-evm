@@ -1,8 +1,8 @@
-import { expectNoExecutionRecords, expectAccessLogs } from "./helpers/scoped-logs.js";
+import { expectNoExecutionRecords, expectTrustLogs } from "./helpers/scoped-logs.js";
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
-import { exactSpec, rangedSpec, encodeBlock, Keys, encodeAccountBlock, encodeContextBlock, encodeNodeBlock, encodeUserAccount } from "./helpers/blocks.js";
+import { exactSpec, rangedSpec, encodeBlock, Keys, encodeAccountBlock, encodeContextBlock, encodeEntityBlock, encodeUserAccount } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Host access and guardian logs", () => {
@@ -13,17 +13,17 @@ describe("Host access and guardian logs", () => {
       const account = await host.getAdminAccount();
       const target = await (await getSigner(4)).getAddress();
       const subject = kind === "Node" ? await hostId(target) : encodeUserAccount(target);
-      const block = kind === "Node" ? encodeNodeBlock(subject as bigint) : encodeAccountBlock(subject as string);
+      const block = kind === "Node" ? encodeEntityBlock(subject as bigint) : encodeAccountBlock(subject as string);
       expect(host.interface.getEvent("EventAbi")).eq(null);
       expect(host.interface.getEvent(kind)).eq(null);
       for (const active of [true, true, false, false]) {
         const method = kind === "Node" ? (active ? "authorize" : "unauthorize") : (active ? "appoint" : "dismiss");
         const id = await commandId(`${method}(bytes)`, host, 2n);
-        await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, 0n, exactSpec(kind === "Node" ? Keys.Node : Keys.Account, 32), 0n);
+        await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id, 0n, exactSpec(kind === "Node" ? Keys.Entity : Keys.Account, 32), 0n);
         for (const input of ["0x", block, ethers.concat([block, block])]) {
           if (kind === "Node") {
             const changed = input !== "0x" && (await host.isAuthorized(subject)) !== active;
-            await expectAccessLogs(host[method](encodeContextBlock(account, "0x", input)), changed ? [subject as bigint] : [], active);
+            await expectTrustLogs(host[method](encodeContextBlock(account, "0x", input)), changed ? [subject as bigint] : [], active);
           } else {
             await expectNoExecutionRecords(host[method](encodeContextBlock(account, "0x", input)));
           }

@@ -11,7 +11,7 @@ contract TestBurnHost is Host, Burn {
         Host(0, "TestBurnHost", address(0))
         Burn()
     {
-        if (cmdr != 0) setAccess(cmdr, true);
+        if (cmdr != 0) setTrust(cmdr, true);
     }
 
     function burn(bytes32 account, bytes32 asset, uint amount)

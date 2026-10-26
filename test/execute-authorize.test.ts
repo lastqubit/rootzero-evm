@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
 import { deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, encodeNodeBlock, encodeStepBlock } from "./helpers/blocks.js";
+import { concat, encodeEntityBlock, encodeStepBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 import { Category, eventRecord, pipelineRecord } from "./helpers/event-records.js";
 
@@ -22,14 +22,14 @@ describe("ExecuteAuthorize", () => {
     const receipt = await (await host.testPipe(admin, "0x", encodeStepBlock(command, 0n, input))).wait();
     expect(receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq([
       { topics: [], data: pipelineRecord(admin, [command]) },
-      ...Array.from({ length: ethers.dataLength(input) / 40 }, (_, i) => ({ topics: [], data: eventRecord(Category.Access, ethers.dataSlice(input, i * 40 + 8, i * 40 + 40), "0x01") })),
+      ...Array.from({ length: ethers.dataLength(input) / 40 }, (_, i) => ({ topics: [], data: eventRecord(Category.Trust, ethers.dataSlice(input, i * 40 + 8, i * 40 + 40), "0x01") })),
     ]);
   }
 
   it("authorizes nodes without allowlisting the local command", async () => {
     const second = await hostId(await (await getSigner(5)).getAddress());
     expect(await host.isAuthorized(command)).to.equal(false);
-    const input = concat(encodeNodeBlock(node), encodeNodeBlock(second));
+    const input = concat(encodeEntityBlock(node), encodeEntityBlock(second));
     await expectPipelineAccess(input);
     expect(await host.isAuthorized(node)).to.equal(true);
     expect(await host.isAuthorized(second)).to.equal(true);
@@ -41,7 +41,7 @@ describe("ExecuteAuthorize", () => {
 
   it("rejects non-admin accounts", async () => {
     await expect(host.testPipe(ethers.ZeroHash, "0x",
-      encodeStepBlock(command, 0n, encodeNodeBlock(node))))
+      encodeStepBlock(command, 0n, encodeEntityBlock(node))))
       .to.be.revertedWithCustomError(host, "AccessDenied");
   });
 
@@ -49,7 +49,7 @@ describe("ExecuteAuthorize", () => {
     const managed = await deploy("TestExecuteAuthorize",
       await hostId(await (await getSigner(0)).getAddress()));
     await expect(managed.testPipe(await managed.adminAccount(), "0x",
-      encodeStepBlock(await managed.commandId(), 0n, encodeNodeBlock(node))))
+      encodeStepBlock(await managed.commandId(), 0n, encodeEntityBlock(node))))
       .to.be.revertedWithCustomError(managed, "AccessDenied");
   });
 
@@ -60,7 +60,7 @@ describe("ExecuteAuthorize", () => {
 
   it("returns assigned value to the pipeline budget", async () => {
     const steps = concat(
-      encodeStepBlock(command, 3n, encodeNodeBlock(node)),
+      encodeStepBlock(command, 3n, encodeEntityBlock(node)),
       encodeStepBlock(command, 5n, "0x"),
     );
     expect(await host.testPipe.staticCall(admin, "0x", steps, { value: 7n })).to.equal(7n);
@@ -69,14 +69,14 @@ describe("ExecuteAuthorize", () => {
   });
 
   it("rejects malformed streams atomically", async () => {
-    const wrongHeader = "0x00000000" + encodeNodeBlock(node).slice(10);
+    const wrongHeader = "0x00000000" + encodeEntityBlock(node).slice(10);
     for (const [malformed, error] of [
       ["0x01", "InvalidBlock"],
       [wrongHeader, "InvalidBlock"],
-      [encodeNodeBlock(1n), "InvalidId"],
+      [encodeEntityBlock(0n), "InvalidId"],
     ]) {
       await expect(host.testPipe(admin, "0x", encodeStepBlock(command, 0n,
-        concat(encodeNodeBlock(node), malformed)))).to.be.revertedWithCustomError(host, error);
+        concat(encodeEntityBlock(node), malformed)))).to.be.revertedWithCustomError(host, error);
       expect(await host.isAuthorized(node)).to.equal(false);
     }
   });

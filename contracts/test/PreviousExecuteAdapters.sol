@@ -246,7 +246,7 @@ abstract contract PreviousExecuteAuthorize is Authorize {
         (uint abs, uint end) = Cursors.bounds(inputCur, Sizes.B32);
         PreviousLogs.copyWrap(authorizeId(), Keys.Input, abs, end - abs);
         while (abs < end) {
-            setAccess(LegacyBlocks.unpackNode(abs), true);
+            setTrust(LegacyBlocks.unpackNode(abs), true);
             unchecked {
                 abs += Sizes.B32;
             }

@@ -67,9 +67,9 @@ async function nodeId(
     ["deposit", 32n], ["depositPayable", 32n], ["withdraw", 8n], ["cashout", 8n],
     ["burn", 8n], ["realize", 40n], ["payout", 24n], ["swapExactInput", 32n], ["swapExactOutput", 32n],
     ["swapAssetExactInput", 32n], ["swapDebtExactOutput", 32n],
-    ...["appoint", "dismiss", "allowAsset", "denyAsset", "allowance", "addPool", "removePool"].map(name => [name, 16n] as [string, bigint]),
-  ] : prefix === PortPrefix ? [["portAllowAsset", 16n], ["portDenyAsset", 16n]]
-    : prefix === GuardPrefix ? [["revokeAsset", 16n], ["revokeAllowance", 16n], ["updatePool", 16n]] : [];
+    ...["appoint", "dismiss", "allowance", "addPool", "removePool"].map(name => [name, 16n] as [string, bigint]),
+  ] : prefix === PortPrefix ? [["portEndorse", 16n], ["portUnendorse", 16n]]
+    : prefix === GuardPrefix ? [["revokeAllowance", 16n], ["updatePool", 16n]] : [];
   for (const [name, logging] of policies) if (selector(name + "(bytes)") === selector(signature)) flags |= logging;
   const addr = typeof target === "string" ? target : await target.getAddress();
   const provider = await getProvider();

@@ -10,6 +10,12 @@ uint constant ASSET_AMOUNT_HEADER = 0x7010cc7000000040;
 /// @dev Right-aligned Headers.Balance for direct assembly use: key plus 64-byte payload.
 uint constant BALANCE_HEADER = 0x0e170e1400000040;
 
+/// @dev Right-aligned Headers.Entity for direct assembly use: key plus 32-byte payload.
+uint constant ENTITY_HEADER = 0x0016e1bb00000020;
+
+/// @dev Right-aligned Headers.Trust for direct assembly use: key plus 32-byte payload.
+uint constant TRUST_HEADER = 0x3ab9328400000020;
+
 /// @dev Right-aligned Headers.BalanceConstraints for direct assembly use: key plus 96-byte payload.
 uint constant BALANCE_CONSTRAINTS_HEADER = 0x90e9207e00000060;
 
@@ -55,6 +61,8 @@ library Sizes {
     uint constant Custody = B96;
     /// @dev POSITION block: 8 header + five-word position = 168 bytes
     uint constant Position = B160;
+    /// @dev TRUST block: 8 header + 32 id = 40 bytes
+    uint constant Trust = B32;
     /// @dev BOOKING block: header plus debit/credit accounts and both asset quantities.
     uint constant Booking = B192;
 
@@ -163,6 +171,8 @@ library Specs {
     uint constant Custody = uint(bytes32(Keys.Custody)) | Exact96;
     /// @dev POSITION specification with an exact 160-byte payload.
     uint constant Position = uint(bytes32(Keys.Position)) | Exact160;
+    /// @dev TRUST specification with an exact 32-byte payload.
+    uint constant Trust = uint(bytes32(Keys.Trust)) | Exact32;
     /// @dev BOOKING specification with an exact 192-byte payload.
     uint constant Booking = uint(bytes32(Keys.Booking)) | Exact192;
 
@@ -187,6 +197,8 @@ library Specs {
     uint constant Pipeline = uint(bytes32(Keys.Pipeline)) | Exact64;
     /// @dev BOOTSTRAP specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
     uint constant Bootstrap = uint(bytes32(Keys.Bootstrap)) | UnboundedMin40Hint256;
+    /// @dev VOUCH specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
+    uint constant Vouch = uint(bytes32(Keys.Vouch)) | UnboundedMin40Hint256;
     /// @dev ALLOCATION specification with an exact 96-byte payload.
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
     /// @dev ALLOWANCE specification with an exact 96-byte payload.

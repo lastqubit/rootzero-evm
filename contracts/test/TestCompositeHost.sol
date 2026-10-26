@@ -11,7 +11,7 @@ contract TestCompositeHost is Host, Deposit, GetBalance {
         Deposit()
         GetBalance()
     {
-        if (cmdr != 0) setAccess(cmdr, true);
+        if (cmdr != 0) setTrust(cmdr, true);
     }
 
     function deposit(bytes32 account, bytes32 asset, uint amount) internal pure override returns (uint) {

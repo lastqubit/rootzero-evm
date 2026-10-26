@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAllowanceBlock, encodeAssetBlock, encodeAssetAmountBlock,
-  encodeBalanceBlock, encodeContextBlock, encodeHostAccount, encodeNodeBlock,
+  encodeBalanceBlock, encodeContextBlock, encodeHostAccount, encodeEntityBlock,
   encodePositionBlock, encodeStepBlock, encodeUserAccount, exactSpec, Keys,
 } from "./helpers/blocks.js";
 import { pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
@@ -21,9 +21,9 @@ describe("Command operation records", () => {
   });
 
   const authorize = async (...ids: bigint[]) =>
-    host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x", concat(...ids.map(encodeNodeBlock))));
+    host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x", concat(...ids.map(encodeEntityBlock))));
 
-  for (const method of ["allowAsset", "denyAsset", "allowance"]) {
+  for (const method of ["allowance"]) {
     it(`${method} publishes the Input hint and emits no record for empty and repeated batches`, async () => {
       const id = await commandId(`${method}(bytes)`, host, 2n);
       expect((id >> 224n) & 0x38n).eq(16n);
