@@ -440,7 +440,7 @@ Every nonzero position counterparty is an account, including host accounts.
 host. A host account can instead be realized by its host, whose hook compares
 against `Accounts.toHost(host)` and fulfills the obligation before returning zero.
 The subtype identifies the account, not the route: offchain metadata and available
-balances determine where to settle or realize. See [counterparty semantics](docs/Schema.md#counterparty-semantics).
+balances determine where to settle or realize. See [counterparty semantics](../rootzero-main/docs/protocol/schema.md#counterparty-semantics).
 
 Hosts that maintain account balances implement `settle`; hosts without their own
 balance ledger implement `realize`. A production host chooses one model rather
@@ -592,7 +592,7 @@ The protocol `Pipeline` follows the hints. It emits one Pipeline record per pipe
 then before each step a State record for the state it receives (once per boundary)
 and a Step record for hinted input or a nonzero assigned value. Calls made outside a
 pipeline, including guards and ports, emit no execution record. Tags and action
-classifications are defined offchain. See [pipeline records](docs/Indexing.md#pipeline-records).
+classifications are defined offchain. See [pipeline records](../rootzero-main/docs/protocol/records.md#pipeline-records).
 
 Custom loops open normally and call `finish()` once after processing. Use
 `drainBudget()` to return and clear credit, or `close()` to check consumption,
@@ -821,7 +821,7 @@ Local execute adapters use `Execute` for fixed-stride decoding: validate
 stream size once, then decode at absolute positions. Memory unpackers have a
 `Memory` suffix; calldata input stays a cursor until bounds are extracted.
 The paired balance/position checks validate streams in place, and settlement
-copies each position into an independent struct. See [Execute](docs/Execute.md).
+copies each position into an independent struct. See [Execute](../rootzero-main/docs/protocol/codec.md).
 
 Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
 `ExecuteVouch`, `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
@@ -1046,7 +1046,7 @@ their account, steps, hinted inputs, assigned values and the states between step
 in Pipeline, Step and State records. Indexers keep raw events and use versioned
 offchain endpoint definitions for custom semantics. Endpoint flags only hint
 lanes; Envelope records carry no codes. Core categories
-such as Access and Balance define their state effects directly. See [Indexing](docs/Indexing.md).
+such as Trust and Balance define their state effects directly. See [Indexing](../rootzero-main/docs/protocol/records.md).
 Applications can also declare ordinary Solidity events.
 
 ## Development
@@ -1132,5 +1132,5 @@ record the command's output. A pipeline records it as the State of the following
 step, once, even when that step also carries the State hint. Output helpers only
 append blocks; returned streams remain unchanged. The deposit and swap commands
 carry this hint. Action classification is maintained offchain. See
-[pipeline records](docs/Indexing.md#pipeline-records) for indexer rules.
+[pipeline records](../rootzero-main/docs/protocol/records.md#pipeline-records) for indexer rules.
 Application-defined ordinary events use their own supplied ABIs.
