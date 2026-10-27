@@ -7,7 +7,7 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Accounts} from "../utils/Accounts.sol";
 
 import {Host} from "../core/Host.sol";
-import {TrustSlots} from "../core/Trust.sol";
+import {Trust} from "../core/Trust.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {ExecuteCashout} from "../commands/Cashout.sol";
 import {Deposit, DepositPayable} from "../commands/Deposit.sol";
@@ -251,7 +251,7 @@ contract TestHost is
     }
 
     function isAuthorized(uint node) external view returns (bool) {
-        return TrustSlots.get(node);
+        return Trust.isTrusted(node);
     }
 
     function testEnforceNode(uint node) external view returns (bytes4, address) {

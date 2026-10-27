@@ -356,7 +356,7 @@ actions. At deployment, a host introduces itself to its commander, which is how
 host topology becomes discoverable.
 
 The trusted set holds self-describing IDs of any kind, stored per ID in a salted
-slot (`TrustSlots`). On ordinary hosts it lists the nodes allowed to call them. On
+slot (`Trust.isTrusted`/`setTrusted`). On ordinary hosts it lists the nodes allowed to call them. On
 a commander it is also the global registry of trusted entities such as assets:
 hosts check IDs against it with `requireTrusted(id)` or `requireTrusted(ptr, count)`
 (from `Runtime`), a raw STATICCALL to the commander's `checkTrust()` entrypoint

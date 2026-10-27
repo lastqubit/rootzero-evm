@@ -10,7 +10,7 @@ import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Runtime} from "../core/Runtime.sol";
-import {TrustSlots} from "../core/Trust.sol";
+import {Trust} from "../core/Trust.sol";
 import {Position} from "../core/Types.sol";
 import {AccessDenied} from "../core/Access.sol";
 import {InvalidBlock} from "../utils/Errors.sol";
@@ -29,7 +29,7 @@ contract TestVouchCommander is ExecuteVouch, ExecuteSettle, Settlement, Balances
     function settleCommandId() external view returns (uint) { return settleId(); }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setCommand(uint cmd, bool enabled) external { commands[cmd] = enabled; }
-    function setTrusted(bytes32 id, bool trusted) external { TrustSlots.set(uint(id), trusted); }
+    function setTrusted(bytes32 id, bool trusted) external { Trust.setTrusted(uint(id), trusted); }
     function seed(bytes32 account, bytes32 asset, uint amount) external { creditTo(account, asset, amount); }
     function balanceOf(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
 

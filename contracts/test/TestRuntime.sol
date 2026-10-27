@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Host} from "../core/Host.sol";
-import {TrustSlots} from "../core/Trust.sol";
+import {Trust} from "../core/Trust.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Balances} from "../core/Balances.sol";
 import {ExecuteAuthorize, CreditAccountPort, GetBalance} from "../Endpoints.sol";
@@ -33,7 +33,7 @@ contract TestRuntime is Host, Pipeline, ExecuteAuthorize, CreditAccountPort, Get
 
     function adminAccount() external view returns (bytes32) { return admin; }
     function commandId() external view returns (uint) { return authorizeId(); }
-    function isAuthorized(uint node) external view returns (bool) { return TrustSlots.get(node); }
+    function isAuthorized(uint node) external view returns (bool) { return Trust.isTrusted(node); }
     function announce(uint node) external { introduceTo(node, "TestRuntime"); }
 }
 

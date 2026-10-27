@@ -12,7 +12,7 @@ import { CashinHook, CashoutHook, sendChainAsset } from "./core/Cash.sol";
 import { Counterparty } from "./core/Counterparty.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, Runtime } from "./core/Runtime.sol";
-import { GUARDIAN_SALT, GuardianSlots, TRUST_CHECK, TRUST_SALT, TrustRegistry, TrustSlots, UNTRUSTED, Untrusted } from "./core/Trust.sol";
+import { GUARDIAN_SALT, Trust, TRUST_CHECK, TRUST_SALT, TrustRegistry, UNTRUSTED, Untrusted } from "./core/Trust.sol";
 import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
 import { Calls, FailedCall } from "./core/Calls.sol";
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";

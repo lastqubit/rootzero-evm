@@ -22,15 +22,21 @@ uint constant ROOTZERO_ASSET = 0x01030000000000000000000000000000000000000000000
 /// avoiding a mapping hash per lookup. keccak256("rootzero.trust").
 uint constant TRUST_SALT = 0x07c06564bba79277332e68c118f927435830a5f10d6b54ba4e54063da43584a3;
 
-/// @title TrustSlots
-/// @notice Salted direct storage for a host's trusted IDs.
-/// @dev One slot per ID, keyed by `id ^ TRUST_SALT`. IDs are self-describing, so
-/// nodes, assets, accounts and other entities share one set without collisions.
-library TrustSlots {
+/// @dev Storage salt: an account's guardian flag lives at slot `account ^ GUARDIAN_SALT`,
+/// separate from the trusted set. keccak256("rootzero.guardian").
+uint constant GUARDIAN_SALT = 0x43be011033770cfe1eed2b685ae7ccb1fc8b006904ab088a9ddee9a860a259e3;
+
+/// @title Trust
+/// @notice Salted direct storage for a host's trusted IDs and guardian accounts.
+/// @dev Two disjoint slot spaces. Trusted IDs live at `id ^ TRUST_SALT`; IDs are
+/// self-describing, so nodes, assets, accounts and other entities share one set without
+/// collisions. Guardian roles live at `account ^ GUARDIAN_SALT`: a guardian is a role,
+/// not a trusted ID, so endorsing an account cannot make it a guardian.
+library Trust {
     /// @notice Return whether `id` is trusted.
     /// @param id Trusted-set identifier of any kind.
     /// @return trusted Whether the ID is in the set.
-    function get(uint id) internal view returns (bool trusted) {
+    function isTrusted(uint id) internal view returns (bool trusted) {
         assembly ("memory-safe") {
             trusted := sload(xor(id, TRUST_SALT))
         }
@@ -39,26 +45,16 @@ library TrustSlots {
     /// @notice Set whether `id` is trusted.
     /// @param id Trusted-set identifier of any kind.
     /// @param trusted Whether the ID should be in the set.
-    function set(uint id, bool trusted) internal {
+    function setTrusted(uint id, bool trusted) internal {
         assembly ("memory-safe") {
             sstore(xor(id, TRUST_SALT), trusted)
         }
     }
-}
 
-/// @dev Storage salt: an account's guardian flag lives at slot `account ^ GUARDIAN_SALT`,
-/// separate from the trusted set. keccak256("rootzero.guardian").
-uint constant GUARDIAN_SALT = 0x43be011033770cfe1eed2b685ae7ccb1fc8b006904ab088a9ddee9a860a259e3;
-
-/// @title GuardianSlots
-/// @notice Salted direct storage for a host's active guardian accounts.
-/// @dev Mirrors TrustSlots with its own salt, so guardian roles never share a slot with
-/// trusted IDs: endorsing an account cannot make it a guardian.
-library GuardianSlots {
     /// @notice Return whether `account` is an active guardian.
     /// @param account User account identifier.
     /// @return active Whether the account holds the guardian role.
-    function get(bytes32 account) internal view returns (bool active) {
+    function isGuardian(bytes32 account) internal view returns (bool active) {
         assembly ("memory-safe") {
             active := sload(xor(account, GUARDIAN_SALT))
         }
@@ -67,7 +63,7 @@ library GuardianSlots {
     /// @notice Set whether `account` is an active guardian.
     /// @param account User account identifier.
     /// @param active Whether the account should hold the guardian role.
-    function set(bytes32 account, bool active) internal {
+    function setGuardian(bytes32 account, bool active) internal {
         assembly ("memory-safe") {
             sstore(xor(account, GUARDIAN_SALT), active)
         }

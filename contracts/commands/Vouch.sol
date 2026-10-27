@@ -81,7 +81,7 @@ abstract contract ExecuteVouch is CommandBase, DebitAccountHook {
             i = Encoder.pos(output, 0);
         }
 
-        // Native assets are always trusted; other IDs read this host's TrustSlots slot
+        // Native assets are always trusted; other IDs read this host's Trust slot
         // (id ^ TRUST_SALT) directly.
         bytes32 chain = chainAsset;
         assembly ("memory-safe") {

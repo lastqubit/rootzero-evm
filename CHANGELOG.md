@@ -38,7 +38,7 @@ sections are immutable and must continue to describe the tagged release.
   `exec.expectTrust(id)`, which check a vouched ID without returning it.
 
 - **Breaking: one trust system for nodes and entities.** A host's trusted set now
-  holds self-describing IDs of any kind in salted slots (`TrustSlots`). On a
+  holds self-describing IDs of any kind in salted slots (`Trust.isTrusted`/`setTrusted`). On a
   commander it is the global registry of trusted entities: hosts call
   `Runtime.requireTrusted(id)` or `requireTrusted(ptr, count)`, a raw STATICCALL to
   the commander's `checkTrust()` (`TrustRegistry`) that reverts `Untrusted(id)`.
@@ -52,7 +52,7 @@ sections are immutable and must continue to describe the tagged release.
   Rootzero asset are always trusted: checks skip their storage read,
   `requireTrusted(id)` returns without calling the commander, and `setTrust`
   rejects them with `InvalidId`. Guardian roles move from a
-  mapping to their own salted slots (`GuardianSlots`), separate from the trusted set.
+  mapping to their own salted slots (`Trust.isGuardian`/`setGuardian`), separate from the trusted set.
 
 - **Breaking: pipeline step failures report the step.** External step failures
   revert `StepFailed(uint index, uint cmd, bytes err)` with the zero-based step

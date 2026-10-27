@@ -8,7 +8,7 @@ import {Authorize} from "../commands/admin/Authorize.sol";
 import {Unauthorize} from "../commands/admin/Unauthorize.sol";
 import {ExecutePayable} from "../commands/admin/Execute.sol";
 import {Revoke} from "../guards/Revoke.sol";
-import {GuardianSlots, TrustSlots} from "./Trust.sol";
+import {Trust} from "./Trust.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Accounts} from "../utils/Accounts.sol";
 import {Assets} from "../utils/Assets.sol";
@@ -117,7 +117,7 @@ abstract contract Host is
     }
 
     /// @notice Set whether an ID is trusted and log a change when its value differs.
-    /// @dev Stored in TrustSlots. Reverts InvalidId for zero, for the always-trusted chain
+    /// @dev Stored with `Trust.setTrusted`. Reverts InvalidId for zero, for the always-trusted chain
     /// and Rootzero assets, and for node IDs that are not local EVM nodes; other kinds are
     /// stored as given.
     /// @param id ID of any kind.
@@ -125,8 +125,8 @@ abstract contract Host is
     function setTrust(uint id, bool trusted) internal virtual override {
         if (id == 0 || bytes32(id) == chainAsset || bytes32(id) == Assets.Rootzero) revert InvalidId();
         if (uint8(id >> 240) == Layout.Node) Nodes.local(id);
-        if (TrustSlots.get(id) == trusted) return;
-        TrustSlots.set(id, trusted);
+        if (Trust.isTrusted(id) == trusted) return;
+        Trust.setTrusted(id, trusted);
         Logs.trust(id, trusted);
     }
 
@@ -134,14 +134,14 @@ abstract contract Host is
     /// @param account Account identifier.
     function appointGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
-        GuardianSlots.set(account, true);
+        Trust.setGuardian(account, true);
     }
 
     /// @notice Validate a user account and revoke its guardian role.
     /// @param account Account identifier.
     function dismissGuardian(bytes32 account) internal virtual override {
         account = Accounts.user(account);
-        GuardianSlots.set(account, false);
+        Trust.setGuardian(account, false);
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.
@@ -149,14 +149,14 @@ abstract contract Host is
     /// @return True if `caller` is the commander, this host, or an authorized host.
     function isTrustedCaller(address caller) internal view returns (bool) {
         if (caller == address(0)) return false;
-        return caller == commanderAddr || caller == address(this) || TrustSlots.get(Nodes.toHost(caller));
+        return caller == commanderAddr || caller == address(this) || Trust.isTrusted(Nodes.toHost(caller));
     }
 
     /// @notice Return true if `addr` belongs to an active guardian account.
     /// @param addr Native address to check.
     /// @return True if `addr` belongs to an active guardian account.
     function isGuardian(address addr) internal view returns (bool) {
-        return GuardianSlots.get(Accounts.toUser(addr));
+        return Trust.isGuardian(Accounts.toUser(addr));
     }
 
     /// @notice Require the admin account and its commander caller.
@@ -197,7 +197,7 @@ abstract contract Host is
     /// @return selector ABI selector encoded in the authorized node.
     /// @return target Contract address encoded in the authorized node.
     function enforceNode(uint node) internal view returns (bytes4 selector, address target) {
-        if (!TrustSlots.get(node)) revert AccessDenied();
+        if (!Trust.isTrusted(node)) revert AccessDenied();
         selector = bytes4(uint32(node >> 160));
         target = address(uint160(node));
     }
