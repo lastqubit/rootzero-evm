@@ -89,6 +89,15 @@ minimal host can implement narrow custom policies. Both access capabilities
 return the authorized endpoint's selector and address for direct use with the
 free raw-call helpers.
 
+A host that depends on a single port of another host can add `UpstreamPort` next
+to `Host` or `CommandHost`: `contract MyHost is CommandHost, UpstreamPort`. Its
+constructor takes the local port ID and a discovery name, introduces the host to
+the port's host (skipped when that is the commander, which already received an
+introduction, and for proxy-bound hosts), and `callUpstream(data, expectEmpty)` or
+`callUpstream(value, data, expectEmpty)` calls the port, reverting `FailedCall` on failure. The
+upstream host must still authorize the dependent host as a peer. Cross-chain
+delivery into the commander, which must recover rather than revert, uses `Portal`.
+
 Deploy it with the local host ID encoding your native identity as commander and you can call its commands
 directly. An input is a run of binary blocks — here, a single `#amount` block
 paired with a `#trust` state block that names the asset. In a pipeline, the

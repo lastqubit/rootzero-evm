@@ -8,6 +8,13 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **New `UpstreamPort` mixin** (`core/Upstream.sol`, exported from `Core.sol`) for
+  hosts that depend on a single port of another host. It takes a local port ID,
+  introduces the host to the port's host at deployment (skipped for the commander
+  and for proxy-bound hosts), and provides `callUpstream(data, expectEmpty)` and
+  `callUpstream(value, data, expectEmpty)`, which revert `FailedCall` on failure. Compose it with
+  either `Host` or `CommandHost`.
+
 - **Breaking: every host accepts introductions.** `HostAnnouncer` merges into
   `HostIntroduction`, which now announces the host to its commander, provides
   `introduceTo`, and exposes `introduce`. `CommandHost` inherits it, so minimal
