@@ -90,6 +90,20 @@ describe("Host Introduction", () => {
     expect(receipt.logs[0].address.toLowerCase()).eq((await rootzero.getAddress()).toLowerCase());
   });
 
+  it("command hosts accept introductions from other hosts", async () => {
+    const signer = await getSigner(0);
+    const callerAddr = await signer.getAddress();
+    const commandHost = await deploy("TestMinimalCommandHost", await hostId(callerAddr));
+    const peer = await hostId(callerAddr);
+
+    const receipt = await (await commandHost.connect(signer).introduce(peer, 1n, "peer")).wait();
+    expect(receipt.logs.map(decodeIntroductionLog)).deep.eq([{
+      peer, origin: encodeUserAccount(callerAddr), blocknum: 1n, name: "peer",
+    }]);
+    await expect(commandHost.connect(signer).introduce(peer + 1n, 1n, "peer"))
+      .to.be.revertedWithCustomError(commandHost, "InvalidId");
+  });
+
   it("Introduction preserves a caller-supplied full-width block claim", async () => {
     const signer = await getSigner(0);
     const callerAddr = await signer.getAddress();

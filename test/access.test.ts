@@ -233,7 +233,6 @@ describe("Commander Access", () => {
       "dismiss",
       "executePayable",
       "revoke",
-      "introduce",
     ]) {
       expect(host.interface.getFunction(name)).to.equal(null);
     }

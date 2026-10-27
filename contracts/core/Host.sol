@@ -26,11 +26,10 @@ interface IHostIntroduction {
     function introduce(uint peer, uint blocknum, string calldata name) external;
 }
 
-/// @title HostAnnouncer
-/// @notice Shared outbound introduction behavior for rootzero hosts.
-/// Ordinary deployments call a deployed commander during construction without adding an inbound
-/// introduction endpoint to the inheriting host.
-abstract contract HostAnnouncer is Runtime {
+/// @title HostIntroduction
+/// @notice Introduction behavior shared by every rootzero host: announces the host to its
+/// commander at deployment and accepts introduction claims from other hosts.
+abstract contract HostIntroduction is Runtime, IHostIntroduction {
     /// @notice Introduce an ordinary deployment to its contract commander.
     /// @dev Implementations bound to another execution address introduce through that address later.
     /// Ordinary deployment reverts if a contract commander does not accept `introduce(uint,uint,string)`.
@@ -40,6 +39,15 @@ abstract contract HostAnnouncer is Runtime {
         address target = commanderAddr;
         if (target.code.length == 0) return;
         IHostIntroduction(target).introduce(host, block.number, name);
+    }
+
+    /// @notice Record a host introduction claim.
+    /// @dev Validates that `peer` matches `msg.sender`; it does not authorize or trust the introduced host.
+    /// @param peer Host node ID being introduced.
+    /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
+    /// @param name Self-declared discovery name; the peer ID remains the identifier.
+    function introduce(uint peer, uint blocknum, string calldata name) external {
+        Logs.introduction(Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum, name);
     }
 
     /// @notice Introduce this host to the contract address embedded in a local EVM node ID.
@@ -52,30 +60,16 @@ abstract contract HostAnnouncer is Runtime {
     }
 }
 
-/// @title HostIntroduction
-/// @notice Full introduction capability for hosts that both announce themselves
-/// to a commander and accept introduction claims from other hosts.
-abstract contract HostIntroduction is HostAnnouncer, IHostIntroduction {
-    /// @notice Record a host introduction claim.
-    /// @dev Validates that `peer` matches `msg.sender`; it does not authorize or trust the introduced host.
-    /// @param peer Host node ID being introduced.
-    /// @param blocknum Caller-supplied block-number claim; not verified against deployment history.
-    /// @param name Self-declared discovery name; the peer ID remains the identifier.
-    function introduce(uint peer, uint blocknum, string calldata name) external {
-        Logs.introduction(Nodes.matchHost(peer, msg.sender), Accounts.toUser(tx.origin), blocknum, name);
-    }
-}
-
 /// @title CommandHost
 /// @notice Minimal host base for commander-only command execution.
-/// Does not include admin commands, peer authorization, guardians, inbound
-/// introductions, generic execution, or a native-token receive function.
+/// Does not include admin commands, peer authorization, guardians, generic
+/// execution, or a native-token receive function.
 /// Pipelines must separately compose a `CommandAccess` policy.
-abstract contract CommandHost is CallerAccess, HostAnnouncer {
+abstract contract CommandHost is CallerAccess, HostIntroduction {
     /// @notice Initialize a host restricted to a nonzero local commander.
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
     /// @param name Discovery hint emitted only when introducing this host.
-    constructor(uint cmdr, string memory name) Runtime(cmdr, address(0)) HostAnnouncer(name) {
+    constructor(uint cmdr, string memory name) Runtime(cmdr, address(0)) HostIntroduction(name) {
         if (cmdr == 0) revert InvalidCommander();
     }
 
@@ -112,7 +106,7 @@ abstract contract Host is
     /// the encoded native target is a deployed contract.
     /// @param name Discovery hint emitted only when introducing this host.
     /// @param self Execution address, or zero for an ordinary deployment.
-    constructor(uint cmdr, string memory name, address self) Runtime(cmdr, self) HostAnnouncer(name) {
+    constructor(uint cmdr, string memory name, address self) Runtime(cmdr, self) HostIntroduction(name) {
         admin = Accounts.toAdmin(commanderAddr);
     }
 

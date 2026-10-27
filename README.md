@@ -49,8 +49,8 @@ contract ExampleHost is CommandHost, Balances, Deposit {
 
 `CommandHost` requires a nonzero local commander host ID and accepts command
 calls only from its embedded native caller. It has no built-in admin commands, peer registry, guardians,
-inbound introduction endpoint, generic execution command, or native-token
-receive function. Use `Host` instead when the application needs those advanced
+generic execution command, or native-token receive function. Like `Host`, it
+accepts introductions from other hosts. Use `Host` instead when the application needs those advanced
 facilities; its commands accept the commander, the host itself, and explicitly
 authorized host callers.
 

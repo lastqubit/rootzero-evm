@@ -8,6 +8,12 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: every host accepts introductions.** `HostAnnouncer` merges into
+  `HostIntroduction`, which now announces the host to its commander, provides
+  `introduceTo`, and exposes `introduce`. `CommandHost` inherits it, so minimal
+  hosts accept introductions too and hosts that depend on them are discoverable.
+  Replace `HostAnnouncer` with `HostIntroduction`.
+
 - **Breaking: pipelines own execution logging.** `Pipeline` emits one Pipeline
   record (category `0x04`: account and every step's command ID through the first
   handoff), then before each step a State record (`0x08`: step index and the state

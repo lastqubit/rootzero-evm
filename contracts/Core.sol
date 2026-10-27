@@ -13,7 +13,7 @@ import { Counterparty } from "./core/Counterparty.sol";
 import { Escrows, InsufficientEscrow } from "./core/Escrows.sol";
 import { ChainAsset, Runtime } from "./core/Runtime.sol";
 import { GUARDIAN_SALT, Trust, TRUST_CHECK, TRUST_SALT, TrustRegistry, UNTRUSTED, Untrusted } from "./core/Trust.sol";
-import { CommandHost, Host, HostAnnouncer, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
+import { CommandHost, Host, HostIntroduction, IHostIntroduction } from "./core/Host.sol";
 import { Calls, FailedCall } from "./core/Calls.sol";
 import { EndpointBase, InputEndpointBase } from "./core/Endpoint.sol";
 import { ExecuteHook, PipeHook, Pipeline } from "./core/Pipeline.sol";
