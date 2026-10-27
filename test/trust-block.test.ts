@@ -57,4 +57,21 @@ describe("TRUST block", () => {
       await expect(helper.expectId(encodeEntityBlock(asset), asset, mode)).to.be.revertedWithCustomError(helper, "InvalidBlock");
     }
   });
+
+  it("expects a vouched bytes32 ID, such as an asset, through the word overloads", async () => {
+    const helper = await deploy("TestTrustBlock");
+    for (const id of [0n, 7n, (0x0203n << 240n) | 0x1001n, ethers.MaxUint256]) {
+      const word = ethers.toBeHex(id, 32);
+      const source = concat(encodeTrustBlock(id), encodeTrustBlock(7n));
+      for (const mode of [0, 1]) {
+        // Same consumption and result as the uint overload for the same word.
+        expect(Array.from(await helper.expectWord(source, word, mode))).deep.eq([40n, 40n]);
+        expect(Array.from(await helper.expectWord(source, word, mode)))
+          .deep.eq(Array.from(await helper.expectId(source, id, mode)));
+        const other = ethers.toBeHex(id ^ 1n, 32);
+        await expect(helper.expectWord(source, other, mode)).to.be.revertedWithCustomError(helper, "UnexpectedValue");
+        await expect(helper.expectWord(encodeEntityBlock(id), word, mode)).to.be.revertedWithCustomError(helper, "InvalidBlock");
+      }
+    }
+  });
 });

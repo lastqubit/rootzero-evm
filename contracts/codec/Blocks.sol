@@ -1623,6 +1623,16 @@ library Blocks {
         if (vouched != id) revert UnexpectedValue();
     }
 
+    /// @notice Check that TRUST vouches for the word identifier `id`, such as an asset, and advance the source.
+    /// @dev Same check as the `uint` overload: TRUST carries one word, compared bit for bit.
+    /// Reverts UnexpectedValue when the vouched ID differs from `id`.
+    /// @param cur Packed source cursor containing the current position and exclusive end.
+    /// @param id Expected trusted identifier as a word, for example an asset ID.
+    /// @return nextCur Advanced source cursor preserving its end and metadata.
+    function expectTrust(uint cur, bytes32 id) internal pure returns (uint nextCur) {
+        return expectTrust(cur, uint(id));
+    }
+
     /// @notice Check LIMITS against full-width quantities and advance the source.
     /// @dev Validates header and containment once. The high 128 bits are the inclusive
     /// minimum amount; the low 128 bits are the literal inclusive maximum debt.

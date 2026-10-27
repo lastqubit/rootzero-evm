@@ -8,6 +8,13 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **New `bytes32` overloads of `expectTrust`**: `Blocks.expectTrust(cur, bytes32 id)`
+  and `exec.expectTrust(bytes32 id)`, next to the `uint` versions, for word IDs such
+  as assets, which commands already hold as `bytes32` (as `requireTrusted(bytes32)`
+  and `Untrusted(bytes32)` do). Same check and consumption; no wire-format or
+  endpoint-ID change. A bare 32-byte hex literal matches both overloads and needs a
+  typed variable or an explicit conversion.
+
 - **New `UpstreamPort` mixin** (`core/Upstream.sol`, exported from `Core.sol`) for
   hosts that depend on a single port of another host. It takes a local port ID,
   introduces the host to the port's host at deployment (skipped for the commander

@@ -60,6 +60,22 @@ contract TestTrustBlock {
         remaining = Cursors.length(cur);
     }
 
+    /// @dev Checks one TRUST against a word ID through the bytes32 overloads; modes as in expectId.
+    function expectWord(bytes calldata source, bytes32 id, uint mode) external pure returns (uint consumed, uint remaining) {
+        uint abs = Cursors.base(source);
+        uint cur = Cursors.create(abs, abs + source.length);
+        if (mode == 1) {
+            Execution memory exec;
+            exec.state = cur;
+            Executions.expectTrust(exec, id);
+            cur = exec.state;
+        } else {
+            cur = Blocks.expectTrust(cur, id);
+        }
+        consumed = Cursors.position(cur) - abs;
+        remaining = Cursors.length(cur);
+    }
+
     /// @dev Execution reads TRUST from state only: a TRUST block in input is not consumed.
     function stateOnly(bytes calldata source) external pure returns (uint id) {
         Execution memory exec;

@@ -478,6 +478,14 @@ library Executions {
         exec.state = exec.state.expectTrust(id);
     }
 
+    /// @notice Consume one TRUST from state and check that it vouches for the word identifier `id`.
+    /// @dev Same check as the `uint` overload, for `bytes32` IDs such as assets. Reverts UnexpectedValue on a mismatch.
+    /// @param exec Execution whose state cursor is advanced by one TRUST block.
+    /// @param id Expected trusted identifier as a word, for example an asset the command already knows.
+    function expectTrust(Execution memory exec, bytes32 id) internal pure {
+        exec.state = exec.state.expectTrust(id);
+    }
+
     /// @notice Consume one LIMITS input and check final quantities directly against calldata.
     /// @param exec Execution whose input cursor is bounded and advanced by one block.
     /// @param amount Final asset amount, checked against the inclusive minimum.
