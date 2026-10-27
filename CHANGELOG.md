@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.56.0
+
 - **New `bytes32` overloads of `expectTrust`**: `Blocks.expectTrust(cur, bytes32 id)`
   and `exec.expectTrust(bytes32 id)`, next to the `uint` versions, for word IDs such
   as assets, which commands already hold as `bytes32` (as `requireTrusted(bytes32)`
