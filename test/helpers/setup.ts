@@ -64,8 +64,8 @@ async function nodeId(
 ) {
   // Canonical built-in logging hints are part of expected endpoint identities.
   const policies: [string, bigint][] = prefix === CommandPrefix ? [
-    ["deposit", 32n], ["depositPayable", 32n], ["withdraw", 8n], ["cashout", 8n],
-    ["burn", 8n], ["realize", 40n], ["payout", 24n], ["swapExactInput", 32n], ["swapExactOutput", 32n],
+    ["deposit", 32n], ["depositPayable", 32n], ["createPayout", 32n],
+    ["realize", 40n], ["hinted", 24n], ["swapExactInput", 32n], ["swapExactOutput", 32n],
     ["swapAssetExactInput", 32n], ["swapDebtExactOutput", 32n],
     ...["appoint", "dismiss", "allowance", "addPool", "removePool"].map(name => [name, 16n] as [string, bigint]),
   ] : prefix === PortPrefix ? [["portEndorse", 16n], ["portUnendorse", 16n]]

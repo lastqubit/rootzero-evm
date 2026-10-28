@@ -14,7 +14,7 @@ import {Deposit, DepositPayable} from "../commands/Deposit.sol";
 import {Withdraw} from "../commands/Withdraw.sol";
 import {ExecuteCreditAccount} from "../commands/Credit.sol";
 import {ExecuteDebitAccount} from "../commands/Debit.sol";
-import {Payout} from "../commands/Payout.sol";
+import {CreatePayout} from "../commands/Payout.sol";
 import {RelayPayable, RelayBalancePayable} from "../commands/Relay.sol";
 import {RecoverPayable} from "../commands/Recover.sol";
 import {Realize} from "../commands/Realize.sol";
@@ -43,7 +43,7 @@ contract TestHost is
     Withdraw,
     ExecuteCreditAccount,
     ExecuteDebitAccount,
-    Payout,
+    CreatePayout,
     RelayPayable,
     RelayBalancePayable,
     RecoverPayable,
@@ -65,7 +65,6 @@ contract TestHost is
     event WithdrawCalled(bytes32 account, bytes32 asset, uint amount);
     event CreditToCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
     event DebitFromCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
-    event PayoutCalled(bytes32 account, bytes32 to, bytes32 asset, uint amount);
     event RelayCalled(uint portal, uint resources, bytes32 account, bytes context);
     event RecoverCalled(uint handler, uint value, bytes32 key, bytes witness, uint spent);
     event RealizeCalled(bytes32 account, bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty);
@@ -157,10 +156,6 @@ contract TestHost is
 
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         emit DebitFromCalled(account, asset, amount, amount);
-    }
-
-    function payout(bytes32 account, bytes32 to, bytes32 asset, uint amount) internal override {
-        emit PayoutCalled(account, to, asset, amount);
     }
 
     function realize(bytes32 account, Position memory position) internal override returns (Position memory) {

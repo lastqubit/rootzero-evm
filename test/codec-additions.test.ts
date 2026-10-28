@@ -22,7 +22,7 @@ const layouts: [keyof typeof Keys, number][] = [
   ["HostAmount", 3],
   ["HostAccountAsset", 3],
   ["Quote", 4],
-  ["Transaction", 4],
+  ["Payout", 3],
   ["HostAccountAmount", 4],
   ["Position", 5]
 ];

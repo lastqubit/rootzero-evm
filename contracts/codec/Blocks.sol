@@ -1231,6 +1231,22 @@ library Blocks {
         amount = uint(b);
     }
 
+    /// @notice Decode PAYOUT and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
+    /// Performs no recipient validation; a zero recipient means burn.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return recipient Decoded payload value.
+    /// @return asset Decoded payload value.
+    /// @return amount Decoded payload value.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackPayout(
+        uint cur
+    ) internal pure returns (bytes32 recipient, bytes32 asset, uint amount, uint nextCur) {
+        bytes32 a;
+        (recipient, asset, a, nextCur) = unpack96(cur, Keys.Payout);
+        amount = uint(a);
+    }
+
     /// @notice Decode ACCOUNT_BALANCE and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
@@ -1336,22 +1352,6 @@ library Blocks {
         (asset, a, liability, b, nextCur) = unpack128(cur, Keys.Quote);
         amount = uint(a);
         debt = uint(b);
-    }
-
-    /// @notice Decode TRANSACTION and return the advanced source cursor.
-    /// @dev Reuses the fixed-word decoder's exact header and containment checks.
-    /// @param cur Bounded source cursor at the block header.
-    /// @return from Decoded payload value.
-    /// @return to Decoded payload value.
-    /// @return asset Decoded payload value.
-    /// @return amount Decoded payload value.
-    /// @return nextCur Advanced source preserving its end and metadata.
-    function unpackTransaction(
-        uint cur
-    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint nextCur) {
-        bytes32 a;
-        (from, to, asset, a, nextCur) = unpack128(cur, Keys.Transaction);
-        amount = uint(a);
     }
 
     /// @notice Decode HOST_ACCOUNT_AMOUNT and return the advanced source cursor.

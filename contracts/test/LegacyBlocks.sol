@@ -754,33 +754,6 @@ library LegacyBlocks {
         }
     }
 
-    /// @notice Write a TRANSACTION block at `i`.
-    /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B128` bytes first.
-    /// @param dst Destination buffer.
-    /// @param i Relative write position.
-    /// @param from Debit account identifier.
-    /// @param to Credit account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Transaction amount.
-    function writeTransaction(
-        bytes memory dst,
-        uint i,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure {
-        uint spec = Specs.Transaction;
-        assembly ("memory-safe") {
-            let p := add(add(dst, 0x20), i)
-            mstore(p, spec)
-            mstore(add(p, 0x08), from)
-            mstore(add(p, 0x28), to)
-            mstore(add(p, 0x48), asset)
-            mstore(add(p, 0x68), amount)
-        }
-    }
-
     /// @notice Write a HOST_ACCOUNT_AMOUNT block at `i`.
     /// @dev DANGER: Unchecked memory write. Reserve `Sizes.B128` bytes first.
     /// @param dst Destination buffer.
@@ -2142,23 +2115,6 @@ library LegacyBlocks {
         host = uint(raw);
     }
 
-    /// @notice Decode a spec-validated transaction tuple.
-    /// @param abs Absolute block position.
-    /// @param spec Expected block specification.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    /// @return end Absolute position after the block.
-    function unpackTransaction(
-        uint abs,
-        uint spec
-    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount, uint end) {
-        bytes32 value;
-        (from, to, asset, value, end) = unpack128(abs, spec);
-        amount = uint(value);
-    }
-
     // Fixed-width block unpackers
 
     /// @dev The fixed-width decoders below validate only the block key and
@@ -2473,24 +2429,6 @@ library LegacyBlocks {
             asset := calldataload(add(abs, 0x28))
         }
         if (head != LegacyHeaders.HostAsset) revert InvalidBlock();
-    }
-
-    /// @notice Decode a low-level fixed-width TRANSACTION block at `abs`.
-    /// @param abs Absolute block position.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    function unpackTransaction(uint abs) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        uint64 head;
-        assembly ("memory-safe") {
-            head := shr(192, calldataload(abs))
-            from := calldataload(add(abs, 0x08))
-            to := calldataload(add(abs, 0x28))
-            asset := calldataload(add(abs, 0x48))
-            amount := calldataload(add(abs, 0x68))
-        }
-        if (head != LegacyHeaders.Transaction) revert InvalidBlock();
     }
 
     /// @notice Decode a low-level fixed-width HOST_ACCOUNT_AMOUNT block at `abs`.
@@ -3046,22 +2984,6 @@ library LegacyBlocks {
     ) internal pure returns (bytes memory value) {
         value = allocate(Sizes.Position);
         writePosition(value, 0, asset, amount, liability, debt, counterparty);
-    }
-
-    /// @notice Encode a TRANSACTION block.
-    /// @param from Source account identifier.
-    /// @param to Destination account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Transfer amount.
-    /// @return value Encoded TRANSACTION block bytes.
-    function createTransaction(
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure returns (bytes memory value) {
-        value = allocate(Sizes.Transaction);
-        writeTransaction(value, 0, from, to, asset, amount);
     }
 
     // Composite factories

@@ -152,15 +152,3 @@ struct Booking {
     /// @dev Exact debit quantity in the liability's native units.
     uint debt;
 }
-
-/// @notice Transfer payload used by transaction blocks and peer posting.
-struct Tx {
-    /// @dev Sender account identifier.
-    bytes32 from;
-    /// @dev Destination account identifier.
-    bytes32 to;
-    /// @dev Asset identifier.
-    bytes32 asset;
-    /// @dev Transfer amount in the asset's native units.
-    uint amount;
-}

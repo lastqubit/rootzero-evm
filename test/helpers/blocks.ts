@@ -71,6 +71,7 @@ export const Keys = {
   // Live pipeline state
   Balance: blockKey("#balance"),
   Custody: blockKey("#custody"),
+  Payout: blockKey("#payout"),
   Position: blockKey("#position"),
 
   // Input and value blocks
@@ -86,7 +87,6 @@ export const Keys = {
   Allocation: blockKey("#allocation"),
   Allowance: blockKey("#allowance"),
   Account: blockKey("#account"),
-  Transaction: blockKey("#transaction"),
   Booking: blockKey("#booking"),
 
   // Composite and annotation blocks
@@ -272,8 +272,8 @@ export function encodeAssetBlock(asset: string): string {
   return encodeBlock(Keys.Asset, pad32(asset));
 }
 
-export function encodeTxBlock(from: string, to: string, asset: string, amount: bigint): string {
-  return encodeBlock(Keys.Transaction, ethers.concat([pad32(from), pad32(to), pad32(asset), pad32(amount)]));
+export function encodePayoutBlock(recipient: string, asset: string, amount: bigint): string {
+  return encodeBlock(Keys.Payout, ethers.concat([pad32(recipient), pad32(asset), pad32(amount)]));
 }
 
 export function encodeStepBlock(cmd: bigint, value: bigint, input: string): string {

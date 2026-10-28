@@ -51,8 +51,6 @@ library Sizes {
     uint constant HostAsset = B64;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant HostAmount = B96;
-    /// @dev TRANSACTION block: 8 header + 32 from + 32 to + 32 asset + 32 amount = 136 bytes
-    uint constant Transaction = B128;
 }
 
 /// @title Specs
@@ -103,7 +101,6 @@ library PreviousSpecs {
     uint constant Allocation = uint(bytes32(Keys.Allocation)) | Exact96;
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;
     uint constant Account = uint(bytes32(Keys.Account)) | Exact32;
-    uint constant Transaction = uint(bytes32(Keys.Transaction)) | Exact128;
 
     // Composite and annotation blocks
 

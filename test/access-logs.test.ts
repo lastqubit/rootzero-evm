@@ -45,8 +45,8 @@ describe("Node Access events", () => {
   });
   it("keeps access grants distinct when only logging hint bits differ", async () => {
     const host = await deploy("TestHost", await hostId(await (await getSigner(0)).getAddress()));
-    const logged = await commandId("withdraw(bytes)", host);
-    expect((logged >> 224n) & 255n).eq(8n);
+    const logged = await commandId("createPayout(bytes)", host);
+    expect((logged >> 224n) & 255n).eq(32n);
     const silent = logged & ~(56n << 224n);
     const account = await host.getAdminAccount();
     const context = (node: bigint) => encodeContextBlock(account, "0x", encodeEntityBlock(node));

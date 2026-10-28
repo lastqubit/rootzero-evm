@@ -33,8 +33,7 @@ import {
     PositionConstraints,
     Quote,
     Position,
-    Booking,
-    Tx
+    Booking
 } from "../core/Types.sol";
 
 // Frozen pre-single-record runner for historical benchmarks.
@@ -793,25 +792,6 @@ library Executions {
         (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
     }
 
-    /// @notice Decode and consume one TRANSACTION block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    function unpackTransaction(
-        Execution memory exec
-    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        (from, to, asset, amount, exec.input) = exec.input.unpackTransaction();
-    }
-
-    /// @notice Decode one TRANSACTION block into its structured value.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return value Decoded transaction.
-    function unpackTransactionValue(Execution memory exec) internal pure returns (Tx memory value) {
-        (value.from, value.to, value.asset, value.amount) = unpackTransaction(exec);
-    }
-
     /// @notice Decode POSITION_CONSTRAINTS with exact denominations and inclusive full-width bounds.
     function unpackPositionConstraints(Execution memory exec) internal pure returns (PositionConstraints memory value) {
         (value, exec.input) = exec.input.unpackPositionConstraints();
@@ -1198,29 +1178,6 @@ library Executions {
     /// @param asset Asset identifier to encode.
     function outputHostAccountAsset(Execution memory exec, uint host, bytes32 account, bytes32 asset) internal pure {
         (exec.buffer, exec.output) = exec.output.writeHostAccountAsset(exec.buffer, host, account, asset);
-    }
-
-    /// @notice Append a TRANSACTION block to regular execution output.
-    /// @param exec Execution receiving the block.
-    /// @param from Debit account identifier.
-    /// @param to Credit account identifier.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Transaction amount to encode.
-    function outputTransaction(
-        Execution memory exec,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeTransaction(exec.buffer, from, to, asset, amount);
-    }
-
-    /// @notice Append a structured TRANSACTION value to regular execution output.
-    /// @param exec Execution receiving the block.
-    /// @param value Structured transaction to encode.
-    function outputTransaction(Execution memory exec, Tx memory value) internal pure {
-        outputTransaction(exec, value.from, value.to, value.asset, value.amount);
     }
 
     /// @notice Append a HOST_ACCOUNT_AMOUNT block to execution output.

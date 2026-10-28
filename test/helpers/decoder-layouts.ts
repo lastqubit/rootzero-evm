@@ -15,7 +15,6 @@ export const decoderLayouts = [
   { name: "AccountAmount", words: 3, state: false },
   { name: "HostAccountAsset", words: 3, state: false },
   { name: "Quote", words: 4, state: false },
-  { name: "Transaction", words: 4, state: false },
   { name: "Position", words: 5, state: true },
   { name: "BalanceConstraints", words: 3, state: false },
   { name: "PositionConstraints", words: 4, state: false },

@@ -51,8 +51,9 @@ describe("Execute", () => {
     const native = BigInt(await after.nativeAsset());
     for (const name of executeCases) {
       // Composite Bootstrap behavior is covered in bootstrap.test.ts. Authorize changed its
-      // input from NODE to ENTITY; trust tests cover it.
-      if (name === "Bootstrap" || name === "Authorize") continue;
+      // input from NODE to ENTITY; trust tests cover it. Cashout changed its state from
+      // BALANCE to PAYOUT; commands.test.ts covers its local execution.
+      if (name === "Bootstrap" || name === "Authorize" || name === "Cashout") continue;
       for (const count of [0, 1, 4]) {
         const [state, input] = executeStreams(name, count, native);
         const a = await before["measure" + name].staticCall(state, input, 100);
@@ -69,8 +70,9 @@ describe("Execute", () => {
     const native = BigInt(await after.nativeAsset());
     for (const name of executeCases) {
       // Composite Bootstrap behavior is covered in bootstrap.test.ts. Authorize changed its
-      // input from NODE to ENTITY; trust tests cover it.
-      if (name === "Bootstrap" || name === "Authorize") continue;
+      // input from NODE to ENTITY; trust tests cover it. Cashout changed its state from
+      // BALANCE to PAYOUT; commands.test.ts covers its local execution.
+      if (name === "Bootstrap" || name === "Authorize" || name === "Cashout") continue;
       const [state, input] = executeStreams(name, 2, native);
       const memory = state !== "0x";
       const stream = memory ? state : input;

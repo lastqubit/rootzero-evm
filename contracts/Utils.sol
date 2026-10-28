@@ -45,6 +45,7 @@ import {
     UnexpectedState,
     UnexpectedValue,
     ValueOverflow,
+    ZeroAccount,
     ZeroAddress,
     ZeroAmount
 } from "./utils/Errors.sol";

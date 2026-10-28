@@ -31,6 +31,9 @@ error InvalidPreimage();
 /// @dev Thrown when an identifier contains a zero address.
 error ZeroAddress();
 
+/// @dev Thrown when a required nonzero account, such as a counterparty or payout recipient, is zero.
+error ZeroAccount();
+
 /// @dev Thrown when an address does not contain deployed bytecode.
 error InvalidContract();
 

@@ -75,13 +75,14 @@ pragma solidity ^0.8.33;
 // - command input and state streams are each a single run of blocks under the
 //   current protocol convention; the block format may support other shapes in
 //   future protocol surfaces
-// - balance, debt, custody, and position are the closed set of typed state
+// - balance, debt, custody, payout, and position are the closed set of typed state
 //   blocks; custom and dynamic schemas are input and do not extend that set
 // - execution generic navigation consumes input, while each typed state block
 //   has a dedicated unpacker that consumes state without source selection
 // - raw state forwarding is the explicit exception: it consumes state without
 //   interpreting or validating the forwarded block types
-// - `balance(...)`, `debt(...)`, `custody(...)`, and `position(...)` are live, linear state in the active command pipeline
+// - `balance(...)`, `debt(...)`, `custody(...)`, `payout(...)`, and `position(...)` are live, linear state in the active command pipeline
+// - payout is value leaving the protocol for its recipient (zero burns); it is only ever delivered
 // - pipeline state belongs to the active account while the pipeline is executing
 // - while a balance, debt, or custody is in-flight as pipeline state, it is not simultaneously persisted
 //   in another ledger/store by this protocol
@@ -91,7 +92,6 @@ pragma solidity ^0.8.33;
 // - fees and sourcing costs do not reduce fulfilled debt; when fulfillment produces
 //   custody, the amount actually reaching custody must equal the consumed debt
 // - either position side may be absent by setting both its identifier and quantity to zero,
-//   analogous to omitting a transaction side with a zero `from` or `to`
 // - debt and position state are transient and do not themselves create or erase an externally persisted obligation
 // - positions support backward composition, but pipeline steps always execute in encoded order
 // - commands must preserve, transform, settle, or intentionally consume pipeline state
@@ -128,6 +128,8 @@ library Schemas {
     string constant Balance = "bytes32 asset, uint amount";
     /// @dev Schema DSL for the CUSTODY block.
     string constant Custody = "uint host, bytes32 asset, uint amount";
+    /// @dev Schema DSL for the PAYOUT block; a zero recipient burns.
+    string constant Payout = "bytes32 recipient, bytes32 asset, uint amount";
     /// @dev Schema DSL for the POSITION block.
     string constant Position = "bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty";
     /// @dev Schema DSL for the TRUST block.
@@ -187,8 +189,6 @@ library Schemas {
 
     // Four-word payloads
 
-    /// @dev Schema DSL for the TRANSACTION block.
-    string constant Transaction = "bytes32 from, bytes32 to, bytes32 asset, uint amount";
     /// @dev Schema DSL for the HOST_ACCOUNT_AMOUNT block.
     string constant HostAccountAmount = "uint host, bytes32 account, bytes32 asset, uint amount";
 

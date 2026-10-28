@@ -4,10 +4,10 @@ import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceBlock, encodeBootstrapBlock,
   encodeContextBlock, encodeEntityBlock, encodePositionBlock, encodeRelayInputBlock, encodeStepBlock,
-  encodeAmountBlock, encodeTrustBlock, encodeUserAccount, pad32,
+  encodeAmountBlock, encodePayoutBlock, encodeTrustBlock, encodeUserAccount, pad32,
 } from "./helpers/blocks.js";
 import { Category, pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
-import { authorizeCommander, commanderDeadline, deployCommanderPair } from "./helpers/commander-proxy.js";
+import { authorizeCommander, commanderDeadline, deployCommanderPair, deployPayoutHost } from "./helpers/commander-proxy.js";
 import "./helpers/matchers.js";
 
 const pipelineCategories: number[] = [Category.Pipeline, Category.Input, Category.State];
@@ -31,7 +31,8 @@ describe("Pipeline records", () => {
       deposit: await commandId("deposit(bytes)", host),
       depositPayable: await commandId("depositPayable(bytes)", host, 1n),
       withdraw: await commandId("withdraw(bytes)", host),
-      payout: await commandId("payout(bytes)", host),
+      createPayout: await commandId("createPayout(bytes)", host),
+      hinted: await commandId("hinted(bytes)", await deploy("TestHintedHost", await host.host())),
       realize: await commandId("realize(bytes)", host),
       cashout: await commandId("cashout(bytes)", host),
       settle: await commandId("settle(bytes)", host),
@@ -50,20 +51,33 @@ describe("Pipeline records", () => {
   });
 
   it("logs a boundary state once when Output feeds a State hint", async () => {
+    const payee = encodeAccountBlock(encodeUserAccount(ethers.toBeHex(0xbeef, 20)));
     const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n)),
+      encodeStepBlock(ids.hinted, 0n, payee));
+    expect(records(await pipe(trust, steps))).deep.eq([
+      pipelineRecord(account, [ids.deposit, ids.hinted]),
+      stateRecord(1, encodeBalanceBlock(asset, 7n)),
+      stepRecord(1, 0n, payee),
+    ]);
+  });
+
+  it("records a payout once, at the createPayout boundary", async () => {
+    const payee = encodeUserAccount(ethers.toBeHex(0xbeef, 20));
+    const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n)),
+      encodeStepBlock(ids.createPayout, 0n, encodeAccountBlock(payee)),
       encodeStepBlock(ids.withdraw, 0n, "0x"));
     expect(records(await pipe(trust, steps))).deep.eq([
-      pipelineRecord(account, [ids.deposit, ids.withdraw]),
+      pipelineRecord(account, [ids.deposit, ids.createPayout, ids.withdraw]),
       stateRecord(1, encodeBalanceBlock(asset, 7n)),
+      stateRecord(2, encodePayoutBlock(payee, asset, 7n)),
     ]);
   });
 
   it("logs initial state and hinted input with step indexes", async () => {
-    const payee = encodeUserAccount(ethers.toBeHex(0xbeef, 20));
     const state = encodeBalanceBlock(asset, 9n);
-    const input = encodeAccountBlock(payee);
-    expect(records(await pipe(state, encodeStepBlock(ids.payout, 0n, input)))).deep.eq([
-      pipelineRecord(account, [ids.payout]),
+    const input = encodeAccountBlock(encodeUserAccount(ethers.toBeHex(0xbeef, 20)));
+    expect(records(await pipe(state, encodeStepBlock(ids.hinted, 0n, input)))).deep.eq([
+      pipelineRecord(account, [ids.hinted]),
       stateRecord(0, state),
       stepRecord(0, 0n, input),
     ]);
@@ -90,12 +104,11 @@ describe("Pipeline records", () => {
     ]);
   });
 
-  it("logs state for local hook execution", async () => {
+  it("logs nothing for local cashout, whose payout was recorded at creation", async () => {
     const native = await (await deploy("TestUtils")).testToChain();
-    const state = encodeBalanceBlock(native, 3n);
+    const state = encodePayoutBlock(account, native, 3n);
     expect(records(await pipe(state, encodeStepBlock(ids.cashout, 0n, "0x")))).deep.eq([
       pipelineRecord(account, [ids.cashout]),
-      stateRecord(0, state),
     ]);
   });
 
@@ -122,14 +135,15 @@ describe("Pipeline records", () => {
     const failing = encodeStepBlock(ids.deposit, 0n, "0x12");
     let data: string | undefined;
     try {
-      await host.testPipe.staticCall(account, trust, concat(first, encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
+      await host.testPipe.staticCall(account, trust, concat(first,
+        encodeStepBlock(ids.createPayout, 0n, encodeAccountBlock(account)), encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
     } catch (error: any) {
       data = error.data ?? error.info?.error?.data;
     }
     const errors = new ethers.Interface(["error StepFailed(uint256 index, uint256 cmd, bytes err)"]);
     const failure = errors.parseError(data!);
     expect(failure?.name).eq("StepFailed");
-    expect([failure!.args.index, failure!.args.cmd]).deep.eq([2n, ids.deposit]);
+    expect([failure!.args.index, failure!.args.cmd]).deep.eq([3n, ids.deposit]);
   });
 
   it("leaves direct endpoint calls unlogged", async () => {
@@ -144,13 +158,16 @@ describe("Pipeline records", () => {
     const native = await pair.direct.nativeAsset();
     const bootstrap = await commandId("bootstrap(bytes)", pair.direct);
     const cashout = await commandId("cashout(bytes)", pair.direct);
-    await authorizeCommander(pair.direct, [bootstrap, cashout]);
+    const payout = await deployPayoutHost(pair.direct);
+    await authorizeCommander(pair.direct, [bootstrap, cashout, payout]);
     const steps = concat(encodeStepBlock(bootstrap, 0n, encodeBootstrapBlock(0n, encodeAssetAmountBlock(native, 7n))),
+      encodeStepBlock(payout, 0n, encodeAccountBlock(user)),
       encodeStepBlock(cashout, 0n, "0x"));
     const receipt = await (await pair.direct.rootzero(steps, commanderDeadline)).wait();
+    // createPayout's Output hint is the only record of the payout; cashout logs nothing.
     expect(pipelineRecords(receipt)).deep.eq([
-      pipelineRecord(user, [bootstrap, cashout]),
-      stateRecord(1, encodeBalanceBlock(native, 7n)),
+      pipelineRecord(user, [bootstrap, payout, cashout]),
+      stateRecord(2, encodePayoutBlock(user, native, 7n)),
     ]);
   });
 

@@ -27,8 +27,7 @@ import {
     PositionConstraints,
     Quote,
     Position,
-    Booking,
-    Tx
+    Booking
 } from "../core/Types.sol";
 
 /// @notice Mutable state shared across one endpoint execution.
@@ -724,6 +723,16 @@ library Executions {
         (value.host, value.asset, value.amount) = unpackCustody(exec);
     }
 
+    /// @notice Decode and consume one PAYOUT block from state.
+    /// @dev Performs no recipient validation; a zero recipient means burn.
+    /// @param exec Execution whose state cursor is advanced.
+    /// @return recipient Decoded recipient account identifier.
+    /// @return asset Decoded asset identifier.
+    /// @return amount Decoded payout amount.
+    function unpackPayout(Execution memory exec) internal pure returns (bytes32 recipient, bytes32 asset, uint amount) {
+        (recipient, asset, amount, exec.state) = exec.state.unpackPayout();
+    }
+
     /// @notice Decode and consume one ACCOUNT_BALANCE block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return account Decoded account identifier.
@@ -813,25 +822,6 @@ library Executions {
     /// @return quote Decoded Quote value in independent memory.
     function unpackQuoteValue(Execution memory exec) internal pure returns (Quote memory quote) {
         (quote.asset, quote.amount, quote.liability, quote.debt) = unpackQuote(exec);
-    }
-
-    /// @notice Decode and consume one TRANSACTION block from input.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return from Decoded debit account.
-    /// @return to Decoded credit account.
-    /// @return asset Decoded asset identifier.
-    /// @return amount Decoded transaction amount.
-    function unpackTransaction(
-        Execution memory exec
-    ) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        (from, to, asset, amount, exec.input) = exec.input.unpackTransaction();
-    }
-
-    /// @notice Decode one TRANSACTION block into its structured value.
-    /// @param exec Execution whose input cursor is advanced.
-    /// @return value Decoded transaction.
-    function unpackTransactionValue(Execution memory exec) internal pure returns (Tx memory value) {
-        (value.from, value.to, value.asset, value.amount) = unpackTransaction(exec);
     }
 
     /// @notice Decode POSITION_CONSTRAINTS with exact denominations and inclusive full-width bounds.
@@ -1237,6 +1227,15 @@ library Executions {
         outputCustody(exec, value.host, value.asset, value.amount);
     }
 
+    /// @notice Append a PAYOUT block to execution output.
+    /// @param exec Execution receiving the block.
+    /// @param recipient Recipient account identifier to encode; zero means burn.
+    /// @param asset Asset identifier to encode.
+    /// @param amount Payout amount to encode.
+    function outputPayout(Execution memory exec, bytes32 recipient, bytes32 asset, uint amount) internal pure {
+        (exec.buffer, exec.output) = exec.output.writePayout(exec.buffer, recipient, asset, amount);
+    }
+
     /// @notice Append an ACCOUNT_BALANCE block to execution output.
     /// @param exec Execution receiving the block.
     /// @param account Account identifier to encode.
@@ -1285,29 +1284,6 @@ library Executions {
     /// @param asset Asset identifier to encode.
     function outputHostAccountAsset(Execution memory exec, uint host, bytes32 account, bytes32 asset) internal pure {
         (exec.buffer, exec.output) = exec.output.writeHostAccountAsset(exec.buffer, host, account, asset);
-    }
-
-    /// @notice Append a TRANSACTION block to regular execution output.
-    /// @param exec Execution receiving the block.
-    /// @param from Debit account identifier.
-    /// @param to Credit account identifier.
-    /// @param asset Asset identifier to encode.
-    /// @param amount Transaction amount to encode.
-    function outputTransaction(
-        Execution memory exec,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure {
-        (exec.buffer, exec.output) = exec.output.writeTransaction(exec.buffer, from, to, asset, amount);
-    }
-
-    /// @notice Append a structured TRANSACTION value to regular execution output.
-    /// @param exec Execution receiving the block.
-    /// @param value Structured transaction to encode.
-    function outputTransaction(Execution memory exec, Tx memory value) internal pure {
-        outputTransaction(exec, value.from, value.to, value.asset, value.amount);
     }
 
     /// @notice Append a HOST_ACCOUNT_AMOUNT block to execution output.

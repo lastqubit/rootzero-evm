@@ -30,6 +30,5 @@ library LegacyHeaders {
     uint64 constant Quote = uint64(Specs.Quote >> 192);
     uint64 constant Position = uint64(Specs.Position >> 192);
     uint64 constant HostAsset = uint64(Specs.HostAsset >> 192);
-    uint64 constant Transaction = uint64(Specs.Transaction >> 192);
     uint64 constant HostAccountAmount = uint64(Specs.HostAccountAmount >> 192);
 }

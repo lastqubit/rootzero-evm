@@ -632,6 +632,30 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Append PAYOUT, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements. Performs no recipient validation.
+    /// @param cur Packed writer cursor containing the relative position and logical capacity.
+    /// @param dst Destination memory buffer.
+    /// @param recipient Account the value is paid to; zero means burn.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @return value Output buffer; retain this value because growth may relocate it.
+    /// @return nextCur Updated packed writer cursor with relative position and capacity.
+    function writePayout(
+        uint cur,
+        bytes memory dst,
+        bytes32 recipient,
+        bytes32 asset,
+        uint amount
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 104);
+        abs = writeHeader(abs, Keys.Payout, 96);
+        abs = write32(abs, recipient);
+        abs = write32(abs, asset);
+        write32(abs, bytes32(amount));
+    }
+
     /// @notice Append ACCOUNT_BALANCE, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     /// @param cur Packed writer cursor containing the relative position and logical capacity.
@@ -777,33 +801,6 @@ library Encoder {
         abs = write32(abs, bytes32(amount));
         abs = write32(abs, liability);
         write32(abs, bytes32(debt));
-    }
-
-    /// @notice Append TRANSACTION, preserving field order and full-width values.
-    /// @dev Inherits reserve's initialized-writer requirements.
-    /// @param cur Packed writer cursor containing the relative position and logical capacity.
-    /// @param dst Destination memory buffer.
-    /// @param from Account debited for the transfer or booking.
-    /// @param to Account credited for the transfer or booking.
-    /// @param asset Asset identifier.
-    /// @param amount Quantity in the asset's native units.
-    /// @return value Output buffer; retain this value because growth may relocate it.
-    /// @return nextCur Updated packed writer cursor with relative position and capacity.
-    function writeTransaction(
-        uint cur,
-        bytes memory dst,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure returns (bytes memory value, uint nextCur) {
-        uint abs;
-        (value, abs, nextCur) = reserve(cur, dst, 136);
-        abs = writeHeader(abs, Keys.Transaction, 128);
-        abs = write32(abs, from);
-        abs = write32(abs, to);
-        abs = write32(abs, asset);
-        write32(abs, bytes32(amount));
     }
 
     /// @notice Append HOSTACCOUNT_AMOUNT, preserving field order and full-width values.
@@ -2054,6 +2051,20 @@ library Encoder {
         write32(abs, bytes32(amount));
     }
 
+    /// @notice Create a complete PAYOUT block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    /// @param recipient Account the value is paid to; zero means burn.
+    /// @param asset Asset identifier.
+    /// @param amount Quantity in the asset's native units.
+    /// @return value Complete encoded block.
+    function createPayout(bytes32 recipient, bytes32 asset, uint amount) internal pure returns (bytes memory value) {
+        value = allocate(104);
+        uint abs = writeHeader(pos(value, 0), Keys.Payout, 96);
+        abs = write32(abs, recipient);
+        abs = write32(abs, asset);
+        write32(abs, bytes32(amount));
+    }
+
     /// @notice Create a complete ACCOUNT_BALANCE block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     /// @param account Account identifier.
@@ -2159,27 +2170,6 @@ library Encoder {
         abs = write32(abs, bytes32(amount));
         abs = write32(abs, liability);
         write32(abs, bytes32(debt));
-    }
-
-    /// @notice Create a complete TRANSACTION block with zero allocation padding.
-    /// @dev Preserves field order and full-width values; performs no semantic validation.
-    /// @param from Account debited for the transfer or booking.
-    /// @param to Account credited for the transfer or booking.
-    /// @param asset Asset identifier.
-    /// @param amount Quantity in the asset's native units.
-    /// @return value Complete encoded block.
-    function createTransaction(
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) internal pure returns (bytes memory value) {
-        value = allocate(136);
-        uint abs = writeHeader(pos(value, 0), Keys.Transaction, 128);
-        abs = write32(abs, from);
-        abs = write32(abs, to);
-        abs = write32(abs, asset);
-        write32(abs, bytes32(amount));
     }
 
     /// @notice Create a complete HOSTACCOUNT_AMOUNT block with zero allocation padding.

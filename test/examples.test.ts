@@ -15,7 +15,6 @@ import {
   encodeContextBlock,
   encodeBytesBlock,
   encodeListBlock,
-  encodeTxBlock,
   encodeUserAccount,
   localKey,
   pad32,

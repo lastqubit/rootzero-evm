@@ -7,7 +7,7 @@ import {
 } from "./helpers/blocks.js";
 import {
   authorizeCommander, commanderCashout, commanderCodeSize, commanderDeadline,
-  commanderRoundtrip, deployCommanderPair, upgradeCommander,
+  commanderRoundtrip, deployCommanderPair, deployPayoutHost, upgradeCommander,
 } from "./helpers/commander-proxy.js";
 import { Category } from "./helpers/event-records.js";
 import "./helpers/matchers.js";
@@ -29,11 +29,12 @@ describe("Main-style commander upgrade", function () {
       expect(await commanderCodeSize(host === proxy ? implementation : host))
         .at.most(24_576);
       await host.rootzero("0x", commanderDeadline, { value: 1_000n });
-      await authorizeCommander(host, [remoteId]);
+      const payout = await deployPayoutHost(host);
+      await authorizeCommander(host, [remoteId, payout]);
       const local = await (await host.rootzero(await commanderRoundtrip(host, 4), commanderDeadline)).wait();
       await host.rootzero(await commanderRoundtrip(host, 2, remoteId), commanderDeadline);
       expect(await host.balanceOf(account, native)).eq(1_000n);
-      await host.rootzero(await commanderCashout(host, 7n), commanderDeadline);
+      await host.rootzero(await commanderCashout(host, payout, 7n, account), commanderDeadline);
       expect(await host.balanceOf(account, native)).eq(993n);
       expect(await (await getProvider()).getBalance(await host.getAddress())).eq(993n);
       // The local roundtrip emits identical account-balance records at each host. Start
@@ -54,12 +55,13 @@ describe("Main-style commander upgrade", function () {
     const remoteId = await commandId("noop(bytes)", remote);
     const appoint = await commandId("appoint(bytes)", proxy, 2n);
     await proxy.rootzero("0x", commanderDeadline, { value: 1_000n });
-    await authorizeCommander(proxy, [remoteId, appoint]);
+    const payout = await deployPayoutHost(proxy);
+    await authorizeCommander(proxy, [remoteId, appoint, payout]);
     await proxy.govern(encodeStepBlock(appoint, 0n, encodeAccountBlock(account)), commanderDeadline);
     await proxy.transferOwnership(nextOwner);
     const oldHost = await proxy.host();
     const oldAccount = await proxy.hostAccount();
-    const addedPipeline = await commanderCashout(proxy, 7n, true);
+    const addedPipeline = await commanderCashout(proxy, payout, 7n, account, true);
     await expect(proxy.rootzero(addedPipeline, commanderDeadline)).revertedWithCustomError(proxy, "AccessDenied");
 
     const upgraded = await upgradeCommander(proxy);
@@ -125,7 +127,10 @@ describe("Main-style commander upgrade", function () {
       await expect(host.rootzero.staticCall("0x", 0)).revertedWithCustomError(host, "Expired");
       await expect(host.rootzero.staticCall("0x" + "00".repeat(4097), commanderDeadline)).revertedWithCustomError(host, "InvalidSteps");
       const receiver = await deploy("TestCommanderReentrantReceiver");
-      await receiver.withdraw(await host.getAddress(), await commanderCashout(host, 7n), { value: 7n });
+      const payout = await deployPayoutHost(host);
+      await authorizeCommander(host, [payout]);
+      await receiver.withdraw(await host.getAddress(),
+        await commanderCashout(host, payout, 7n, encodeUserAccount(await receiver.getAddress())), { value: 7n });
       expect(await receiver.reentryError()).eq(ethers.id("ReentrancyGuardReentrantCall()").slice(0, 10));
       expect(await host.balanceOf(encodeUserAccount(await receiver.getAddress()), asset)).eq(0n);
       // The guard and budget recover for a later transaction.

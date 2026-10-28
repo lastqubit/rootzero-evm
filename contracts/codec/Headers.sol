@@ -46,6 +46,8 @@ library Headers {
     uint constant Allowance = Specs.Allowance >> 192;
     /// @dev Right-aligned CUSTODY key and exact payload length.
     uint constant Custody = Specs.Custody >> 192;
+    /// @dev Right-aligned PAYOUT key and exact payload length.
+    uint constant Payout = Specs.Payout >> 192;
     /// @dev Right-aligned TRUST key and exact payload length.
     uint constant Trust = Specs.Trust >> 192;
     /// @dev Right-aligned ACCOUNT_BALANCE key and exact payload length.
@@ -72,8 +74,6 @@ library Headers {
     uint constant Booking = Specs.Booking >> 192;
     /// @dev Right-aligned HOST_ASSET key and exact payload length.
     uint constant HostAsset = Specs.HostAsset >> 192;
-    /// @dev Right-aligned TRANSACTION key and exact payload length.
-    uint constant Transaction = Specs.Transaction >> 192;
     /// @dev Right-aligned HOST_ACCOUNT_AMOUNT key and exact payload length.
     uint constant HostAccountAmount = Specs.HostAccountAmount >> 192;
 }

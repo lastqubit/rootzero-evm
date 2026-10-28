@@ -4,7 +4,7 @@ import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAllowanceBlock, encodeAssetBlock, encodeAssetAmountBlock,
   encodeBalanceBlock, encodeContextBlock, encodeHostAccount, encodeEntityBlock,
-  encodePositionBlock, encodeStepBlock, encodeUserAccount, exactSpec, Keys,
+  encodePayoutBlock, encodePositionBlock, encodeStepBlock, encodeUserAccount, exactSpec, Keys,
 } from "./helpers/blocks.js";
 import { pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
 import "./helpers/matchers.js";
@@ -38,17 +38,21 @@ describe("Command operation records", () => {
     });
   }
 
-  it("payout hints State and Input; pipelines record both for its step", async () => {
-    const id = await commandId("payout(bytes)", host);
+  it("createPayout hints Output; pipelines record each payout once, before delivery", async () => {
+    const id = await commandId("createPayout(bytes)", host);
+    const withdraw = await commandId("withdraw(bytes)", host);
     await expect(host.deploymentTransaction()).emitEndpoint(host).withArgs(id,
-      exactSpec(Keys.Balance, 64), exactSpec(Keys.Account, 32), 0n);
-    await authorize(id);
+      exactSpec(Keys.Balance, 64), exactSpec(Keys.Account, 32), exactSpec(Keys.Payout, 96));
+    await authorize(id, withdraw);
     for (const count of [0, 1, 3]) {
+      const to = (i: number) => encodeUserAccount(ethers.toBeHex(i + 20));
       const state = concat(...Array.from({ length: count }, (_, i) => encodeBalanceBlock(asset, BigInt(i + 1))));
-      const input = concat(...Array.from({ length: count }, (_, i) => encodeAccountBlock(encodeUserAccount(ethers.toBeHex(i + 20)))));
-      expect(dataLogs(await (await host.payout(encodeContextBlock(account, state, input))).wait())).deep.eq([]);
-      const pipeline = await (await host.testPipe(account, state, encodeStepBlock(id, 0n, input))).wait();
-      expect(dataLogs(pipeline)).deep.eq([pipelineRecord(account, [id]), stateRecord(0, state), stepRecord(0, 0n, input)]);
+      const input = concat(...Array.from({ length: count }, (_, i) => encodeAccountBlock(to(i))));
+      const payouts = concat(...Array.from({ length: count }, (_, i) => encodePayoutBlock(to(i), asset, BigInt(i + 1))));
+      expect(dataLogs(await (await host.createPayout(encodeContextBlock(account, state, input))).wait())).deep.eq([]);
+      const steps = concat(encodeStepBlock(id, 0n, input), encodeStepBlock(withdraw, 0n, "0x"));
+      const pipeline = await (await host.testPipe(account, state, steps)).wait();
+      expect(dataLogs(pipeline)).deep.eq([pipelineRecord(account, [id, withdraw]), stateRecord(1, payouts)]);
     }
   });
 
@@ -71,12 +75,12 @@ describe("Command operation records", () => {
   });
 
   for (const method of ["cashout", "settle", "settlePayable"]) {
-    it(`${method} emits no record directly; pipelines record its hinted lanes`, async () => {
+    it(`${method} emits no record directly or in a pipeline`, async () => {
       const id = await commandId(`${method}(bytes)`, host, method === "settlePayable" ? 1n : 0n);
       const native = await (await deploy("TestUtils")).testToChain();
       await authorize(id);
       for (const count of [0, 1, 3]) {
-        const item = method === "cashout" ? encodeBalanceBlock(native, 10n) : encodePositionBlock(asset, 10n, liability, 8n);
+        const item = method === "cashout" ? encodePayoutBlock(account, native, 10n) : encodePositionBlock(asset, 10n, liability, 8n);
         const state = concat(...Array(count).fill(item));
         const receipt = await (await host[method](encodeContextBlock(account, state, "0x"),
           { value: method === "settlePayable" ? BigInt(count * 18) : 0n })).wait();
@@ -85,8 +89,7 @@ describe("Command operation records", () => {
           const pipeline = await (await host.testPipe(account, state, encodeStepBlock(id, 0n, "0x"))).wait();
           const hooks = (r: any) => r.logs.filter((log: any) => log.topics.length).map((log: any) => ({ topics: log.topics, data: log.data }));
           expect(hooks(pipeline)).deep.eq(hooks(receipt));
-          expect(dataLogs(pipeline)).deep.eq(method === "cashout"
-            ? [pipelineRecord(account, [id]), stateRecord(0, state)] : [pipelineRecord(account, [id])]);
+          expect(dataLogs(pipeline)).deep.eq([pipelineRecord(account, [id])]);
         }
       }
     });
@@ -102,8 +105,8 @@ describe("Command operation records", () => {
 
   it("burn emits no record, including an empty batch", async () => {
     const burn = await deploy("TestBurnHost", await hostId(await (await getSigner()).getAddress()));
-    expect((await commandId("burn(bytes)", burn) >> 224n) & 0x38n).eq(8n);
-    for (const state of ["0x", encodeBalanceBlock(asset, 25n)]) {
+    expect((await commandId("burn(bytes)", burn) >> 224n) & 0x38n).eq(0n);
+    for (const state of ["0x", encodePayoutBlock(ethers.ZeroHash, asset, 25n)]) {
       const receipt = await (await burn.burn(encodeContextBlock(account, state, "0x"))).wait();
       expect(dataLogs(receipt)).deep.eq([]);
     }

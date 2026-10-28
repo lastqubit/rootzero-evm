@@ -5,7 +5,7 @@ import { commandId, deploy, getProvider } from "./helpers/setup.js";
 import { concat, encodeStepBlock, encodeUserAccount } from "./helpers/blocks.js";
 import {
   authorizeCommander, commanderCashout, commanderCodeSize, commanderDeadline,
-  commanderRoundtrip, deployCommanderPair, upgradeCommander,
+  commanderRoundtrip, deployCommanderPair, deployPayoutHost, upgradeCommander,
 } from "./helpers/commander-proxy.js";
 
 describe("Pipeline parser and credit gas", function () {
@@ -34,9 +34,11 @@ describe("Main-style commander proxy gas", function () {
     const remoteId = await commandId("noop(bytes)", remote);
     const account = encodeUserAccount(pair.owner);
     const provider = await getProvider();
+    const payouts = new Map<any, bigint>();
     for (const host of [pair.direct, pair.proxy]) {
       await host.rootzero("0x", commanderDeadline, { value: ethers.parseEther("1") });
-      await authorizeCommander(host, [remoteId, await commandId("executePayable(bytes)", host, 3n)]);
+      payouts.set(host, await deployPayoutHost(host));
+      await authorizeCommander(host, [remoteId, await commandId("executePayable(bytes)", host, 3n), payouts.get(host)!]);
     }
 
     const cases = [
@@ -60,7 +62,7 @@ describe("Main-style commander proxy gas", function () {
         let steps = "0x";
         if (workload === "local checks") steps = await commanderRoundtrip(host, count);
         if (workload === "external commands") steps = await commanderRoundtrip(host, count, remoteId);
-        if (workload === "cashout") steps = await commanderCashout(host, 7n);
+        if (workload === "cashout") steps = await commanderCashout(host, payouts.get(host)!, 7n, account);
         if (governance) steps = concat(...Array(count).fill(
           encodeStepBlock(await commandId("executePayable(bytes)", host, 3n), 0n, "0x")));
         expect(ethers.dataLength(steps)).at.most(4096);

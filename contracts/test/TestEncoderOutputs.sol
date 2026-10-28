@@ -137,17 +137,10 @@ contract TestEncoderOutputs {
                 if (previous) {
                     uint i;
                     (exec.output, exec.buffer, i) = LegacyBuffers.reserve(exec.output, exec.buffer, 136, 136);
-                    LegacyBlocks.writeTransaction(exec.buffer, i, fields[0], fields[1], fields[2], uint(fields[3]));
-                } else Executions.outputTransaction(exec, fields[0], fields[1], fields[2], uint(fields[3]));
-            }
-            else if (kind == 18) {
-                if (previous) {
-                    uint i;
-                    (exec.output, exec.buffer, i) = LegacyBuffers.reserve(exec.output, exec.buffer, 136, 136);
                     LegacyBlocks.writeHostAccountAmount(exec.buffer, i, uint(fields[0]), fields[1], fields[2], uint(fields[3]));
                 } else Executions.outputHostAccountAmount(exec, uint(fields[0]), fields[1], fields[2], uint(fields[3]));
             }
-            else if (kind == 19) {
+            else if (kind == 18) {
                 if (previous) {
                     uint i;
                     (exec.output, exec.buffer, i) = LegacyBuffers.reserve(exec.output, exec.buffer, 168, 168);

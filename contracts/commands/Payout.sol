@@ -7,46 +7,35 @@ import {Accounts} from "../utils/Accounts.sol";
 
 using Executions for Execution;
 
-/// @title PayoutHook
-/// @notice Hook implemented by hosts that pay balances to accounts.
-abstract contract PayoutHook {
-    /// @notice Override to pay `amount` from `account` to `to`.
-    /// @dev Called once per paired BALANCE state block and ACCOUNT input block.
-    /// @param account Source account identifier.
-    /// @param to Destination account identifier.
-    /// @param asset Asset identifier.
-    /// @param amount Amount to pay out.
-    function payout(bytes32 account, bytes32 to, bytes32 asset, uint amount) internal virtual;
-}
-
-/// @title Payout
-/// @notice Command that sinks BALANCE state blocks to matching ACCOUNT input blocks.
-/// Each BALANCE block is paired with one ACCOUNT block at the same position.
-abstract contract Payout is CommandBase, PayoutHook {
-    uint private constant LOGS = Logs.State | Logs.Input;
-
+/// @title CreatePayout
+/// @notice Command that turns BALANCE state into PAYOUT state for matching ACCOUNT input recipients.
+/// Each BALANCE block is paired with one ACCOUNT block at the same position. Value leaving the
+/// protocol goes through PAYOUT, which delivering commands such as `withdraw`, `cashout` and
+/// `burn` consume. A zero recipient means burn; delivering commands that pay a recipient reject it.
+abstract contract CreatePayout is CommandBase {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("payout", Specs.Balance, Specs.Account, Specs.Empty, LOGS);
+        (, descriptor) = command("createPayout", Specs.Balance, Specs.Account, Specs.Payout, Logs.Output);
     }
 
-    /// @notice Pay out BALANCE state blocks to matching ACCOUNT input blocks.
-    /// @dev Validates the destination account category before calling the hook, even
-    /// for zero amounts. Authorization and payout-specific requirements remain with the host.
-    /// @dev Hints callers to record STATE and INPUT, preserving balance-to-recipient pairing.
+    /// @notice Convert BALANCE state blocks into PAYOUT blocks for matching ACCOUNT input blocks.
+    /// @dev Validates nonzero recipient account categories; a zero recipient passes unchanged.
+    /// Hints callers to record the OUTPUT stream, the only record of each PAYOUT: delivering
+    /// commands consume PAYOUT in full and do not log it again.
     /// @param context Command context carrying BALANCE state and matching ACCOUNT input.
-    /// @return Empty output state.
+    /// @return PAYOUT blocks, one per BALANCE block.
     /// @return Zero native budget credit.
-    function payout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
-        return runCommand(descriptor, context, payoutOne);
+    function createPayout(bytes calldata context) external onlyCommand returns (bytes memory, uint) {
+        return runCommand(descriptor, context, createPayoutOne);
     }
 
-    /// @dev Process one BALANCE / ACCOUNT item for the Payout endpoint.
+    /// @dev Process one BALANCE / ACCOUNT item for the CreatePayout endpoint.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    function payoutOne(Execution memory exec) private {
+    function createPayoutOne(Execution memory exec) private {
         (bytes32 asset, uint amount) = exec.unpackBalance();
-        bytes32 to = Accounts.account(exec.unpackAccount());
-        payout(exec.account, to, asset, amount);
+        bytes32 recipient = exec.unpackAccount();
+        if (recipient != 0) Accounts.account(recipient);
+        exec.outputPayout(recipient, asset, amount);
     }
 }

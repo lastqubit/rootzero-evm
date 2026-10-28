@@ -68,10 +68,6 @@ export const fixedLayouts = [
     "words": 4
   },
   {
-    "name": "Transaction",
-    "words": 4
-  },
-  {
     "name": "HostAccountAmount",
     "words": 4
   },

@@ -59,6 +59,8 @@ library Sizes {
     uint constant Balance = B64;
     /// @dev CUSTODY block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant Custody = B96;
+    /// @dev PAYOUT block: 8 header + 32 recipient + 32 asset + 32 amount = 104 bytes
+    uint constant Payout = B96;
     /// @dev POSITION block: 8 header + five-word position = 168 bytes
     uint constant Position = B160;
     /// @dev TRUST block: 8 header + 32 id = 40 bytes
@@ -101,8 +103,6 @@ library Sizes {
     uint constant Introduction = B96;
     /// @dev ENDPOINT block: 8-byte header, four full-width fields; flags are encoded in the endpoint ID.
     uint constant Endpoint = B128;
-    /// @dev TRANSACTION block: 8 header + 32 from + 32 to + 32 asset + 32 amount = 136 bytes
-    uint constant Transaction = B128;
 }
 
 /// @title Specs
@@ -169,6 +169,8 @@ library Specs {
     uint constant Balance = uint(bytes32(Keys.Balance)) | Exact64;
     /// @dev CUSTODY specification with an exact 96-byte payload.
     uint constant Custody = uint(bytes32(Keys.Custody)) | Exact96;
+    /// @dev PAYOUT specification with an exact 96-byte payload.
+    uint constant Payout = uint(bytes32(Keys.Payout)) | Exact96;
     /// @dev POSITION specification with an exact 160-byte payload.
     uint constant Position = uint(bytes32(Keys.Position)) | Exact160;
     /// @dev TRUST specification with an exact 32-byte payload.
@@ -205,8 +207,6 @@ library Specs {
     uint constant Allowance = uint(bytes32(Keys.Allowance)) | Exact96;
     /// @dev ACCOUNT specification with an exact 32-byte payload.
     uint constant Account = uint(bytes32(Keys.Account)) | Exact32;
-    /// @dev TRANSACTION specification with an exact 128-byte payload.
-    uint constant Transaction = uint(bytes32(Keys.Transaction)) | Exact128;
 
     // Composite and annotation blocks
 

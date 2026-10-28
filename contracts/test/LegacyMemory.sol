@@ -101,16 +101,4 @@ library LegacyMemory {
         (value.asset, value.amount, value.liability, value.debt, value.counterparty) = unpackPosition(abs);
     }
 
-    /// @notice Decode a TRANSACTION block at an in-bounds absolute memory position.
-    function unpackTransaction(uint abs) internal pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
-        uint64 actual;
-        assembly ("memory-safe") {
-            actual := shr(192, mload(abs))
-            from := mload(add(abs, 0x08))
-            to := mload(add(abs, 0x28))
-            asset := mload(add(abs, 0x48))
-            amount := mload(add(abs, 0x68))
-        }
-        if (actual != LegacyHeaders.Transaction) revert InvalidBlock();
-    }
 }

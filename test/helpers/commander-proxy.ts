@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { commandId, deploy, getProvider, getSigner } from "./setup.js";
 import {
-  concat, encodeAssetAmountBlock, encodeBalanceConstraintsBlock, encodeBootstrapBlock,
+  concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceConstraintsBlock, encodeBootstrapBlock,
   encodeEntityBlock, encodeStepBlock,
 } from "./blocks.js";
 
@@ -46,11 +46,20 @@ export async function commanderRoundtrip(host: any, count = 0, external?: bigint
   return concat(first, ...Array(count).fill(middle), last);
 }
 
-export async function commanderCashout(host: any, amount: bigint, debit = false) {
+/// Deploys a payout host trusted by `host` and returns its createPayout command ID, which
+/// the commander must still authorize. createPayout is never commander-local.
+export async function deployPayoutHost(host: any) {
+  const payout = await deploy("TestPayoutHost", await host.host());
+  return commandId("createPayout(bytes)", payout);
+}
+
+/// Native cashout: bootstrap (or debit) → createPayout on the payout host → cashout.
+export async function commanderCashout(host: any, payout: bigint, amount: bigint, recipient: string, debit = false) {
   const input = encodeAssetAmountBlock(await host.nativeAsset(), amount);
   return concat(
     encodeStepBlock(await commandId(debit ? "debitAccount(bytes)" : "bootstrap(bytes)", host), 0n,
       debit ? input : encodeBootstrapBlock(0n, input)),
+    encodeStepBlock(payout, 0n, encodeAccountBlock(recipient)),
     encodeStepBlock(await commandId("cashout(bytes)", host), 0n, "0x"),
   );
 }

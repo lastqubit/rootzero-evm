@@ -61,6 +61,8 @@ library Keys {
     bytes4 constant Balance = bytes4(keccak256("#balance"));
     /// @dev Cross-host custody state - (uint host, bytes32 asset, uint amount)
     bytes4 constant Custody = bytes4(keccak256("#custody"));
+    /// @dev Value leaving the protocol for a recipient; zero recipient burns - (bytes32 recipient, bytes32 asset, uint amount)
+    bytes4 constant Payout = bytes4(keccak256("#payout"));
     /// @dev Asset-liability position state - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
     bytes4 constant Position = bytes4(keccak256("#position"));
     /// @dev Trusted-ID state vouched for by a commander - (uint id)
@@ -95,8 +97,6 @@ library Keys {
     bytes4 constant Allowance = bytes4(keccak256("#allowance"));
     /// @dev Account identifier - (bytes32 account)
     bytes4 constant Account = bytes4(keccak256("#account"));
-    /// @dev Transfer record passed through the pipeline - (bytes32 from, bytes32 to, bytes32 asset, uint amount)
-    bytes4 constant Transaction = bytes4(keccak256("#transaction"));
 
     /// @dev Pipeline context - (bytes32 account, uint budget).
     bytes4 constant Pipeline = bytes4(keccak256("#pipeline"));

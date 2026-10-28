@@ -25,7 +25,7 @@ contract TestCodecAdditions {
         else if (kind == 14) value = Encoder.createHostAmount(uint(fields[0]), fields[1], uint(fields[2]));
         else if (kind == 15) value = Encoder.createHostAccountAsset(uint(fields[0]), fields[1], fields[2]);
         else if (kind == 16) value = Encoder.createQuote(fields[0], uint(fields[1]), fields[2], uint(fields[3]));
-        else if (kind == 17) value = Encoder.createTransaction(fields[0], fields[1], fields[2], uint(fields[3]));
+        else if (kind == 17) value = Encoder.createPayout(fields[0], fields[1], uint(fields[2]));
         else if (kind == 18) value = Encoder.createHostAccountAmount(uint(fields[0]), fields[1], fields[2], uint(fields[3]));
         else if (kind == 19) value = Encoder.createPosition(fields[0], uint(fields[1]), fields[2], uint(fields[3]), fields[4]);
         else revert();

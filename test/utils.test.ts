@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers, type BytesLike } from "ethers";
 import { deploy, getSigner, getProvider } from "./helpers/setup.js";
-import { encodeTxBlock, encodeUserAccount } from "./helpers/blocks.js";
+import { encodeUserAccount } from "./helpers/blocks.js";
 
 async function expectCustomError(promise: Promise<unknown>, name: string) {
   try {

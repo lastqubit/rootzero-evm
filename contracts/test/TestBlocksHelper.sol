@@ -34,12 +34,12 @@ contract TestBlocksHelper is CounterpartyAnnot {
         exec.openContext(descriptor, msg.value, context);
     }
 
-    function transactionSpec() external pure returns (bytes32) {
-        return bytes32(Specs.Transaction);
+    function payoutSpec() external pure returns (bytes32) {
+        return bytes32(Specs.Payout);
     }
 
     function specRanges() external pure returns (uint32 fixedMin, uint32 fixedMax, uint32 dynamicMin, uint32 dynamicMax) {
-        (, fixedMin, fixedMax) = Specs.decode(Specs.Transaction);
+        (, fixedMin, fixedMax) = Specs.decode(Specs.Payout);
         (, dynamicMin, dynamicMax) = Specs.decode(Specs.Step);
     }
 
@@ -956,14 +956,12 @@ contract TestBlocksHelper is CounterpartyAnnot {
         return LegacyBlocks.unpackHostAmount(position(source));
     }
 
-    function unpackHostAccountAsset(bytes calldata source) external pure returns (uint, bytes32, bytes32) {
-        return LegacyBlocks.unpackHostAccountAsset(position(source));
+    function unpackPayout(bytes calldata source) external pure returns (bytes32 recipient, bytes32 asset, uint amount) {
+        (recipient, asset, amount,) = Blocks.unpackPayout(Cursors.wrap(source));
     }
 
-    function unpackTransaction(
-        bytes calldata source
-    ) external pure returns (bytes32, bytes32, bytes32, uint) {
-        return LegacyBlocks.unpackTransaction(position(source));
+    function unpackHostAccountAsset(bytes calldata source) external pure returns (uint, bytes32, bytes32) {
+        return LegacyBlocks.unpackHostAccountAsset(position(source));
     }
 
     function unpackHostAccountAmount(
@@ -999,14 +997,4 @@ contract TestBlocksHelper is CounterpartyAnnot {
         length = end - abs;
     }
 
-    function writeTransaction(
-        uint offset,
-        bytes32 from,
-        bytes32 to,
-        bytes32 asset,
-        uint amount
-    ) external pure returns (bytes memory dst) {
-        dst = new bytes(offset + Sizes.Transaction);
-        LegacyBlocks.writeTransaction(dst, offset, from, to, asset, amount);
-    }
 }

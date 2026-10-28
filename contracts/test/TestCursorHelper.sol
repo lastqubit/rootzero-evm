@@ -5,7 +5,8 @@ import {LegacyMemory} from "./LegacyMemory.sol";
 
 import {Blocks} from "../codec/Blocks.sol";
 import {Encoder} from "../codec/Encoder.sol";
-import {Position, Tx} from "../core/Types.sol";
+import {Execute} from "../codec/Execute.sol";
+import {Position} from "../core/Types.sol";
 import {Specs} from "../codec/Specs.sol";
 import {Sizes} from "../Codec.sol";
 import {Cursors} from "../utils/Cursors.sol";
@@ -132,25 +133,9 @@ contract TestCursorHelper {
         return Encoder.finish(w, wBuffer);
     }
 
-    function testWriteTxBlock(
-        bytes32 from_,
-        bytes32 to_,
-        bytes32 asset,
-        uint amount
-    ) external pure returns (bytes memory) {
-        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Transaction, 1));
-        (wBuffer, w) = Encoder.writeTransaction(w, wBuffer, from_, to_, asset, amount);
-        return Encoder.finish(w, wBuffer);
-    }
-
-    function testWriteTxStructBlock(
-        bytes32 from_,
-        bytes32 to_,
-        bytes32 asset,
-        uint amount
-    ) external pure returns (bytes memory) {
-        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Transaction, 1));
-        (wBuffer, w) = Encoder.writeTransaction(w, wBuffer, from_, to_, asset, amount);
+    function testWritePayoutBlock(bytes32 recipient, bytes32 asset, uint amount) external pure returns (bytes memory) {
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Payout, 1));
+        (wBuffer, w) = Encoder.writePayout(w, wBuffer, recipient, asset, amount);
         return Encoder.finish(w, wBuffer);
     }
 
@@ -203,13 +188,8 @@ contract TestCursorHelper {
         return LegacyBlocks.createPosition(asset, amount, liability, debt, bytes32(0));
     }
 
-    function testToTransactionBlock(
-        bytes32 from_,
-        bytes32 to_,
-        bytes32 asset,
-        uint amount
-    ) external pure returns (bytes memory) {
-        return LegacyBlocks.createTransaction(from_, to_, asset, amount);
+    function testToPayoutBlock(bytes32 recipient, bytes32 asset, uint amount) external pure returns (bytes memory) {
+        return Encoder.createPayout(recipient, asset, amount);
     }
 
     function testWriterFinishEmpty() external pure returns (bytes memory) {
@@ -290,13 +270,13 @@ contract TestCursorHelper {
         (secondAsset, secondAmount) = LegacyMemory.unpackBalance(abs + Sizes.Balance);
     }
 
-    function testMemoryUnpackTransaction(
+    function testMemoryUnpackPayout(
         bytes calldata source
-    ) external pure returns (bytes32 from, bytes32 to, bytes32 asset, uint amount) {
+    ) external pure returns (bytes32 recipient, bytes32 asset, uint amount) {
         bytes memory data = source;
-        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Transaction);
-        if (end - abs != Sizes.Transaction) revert InvalidBlock();
-        return LegacyMemory.unpackTransaction(abs);
+        (uint abs, uint end) = LegacyMemory.bounds(data, Sizes.Payout);
+        if (end - abs != Sizes.Payout) revert InvalidBlock();
+        return Execute.unpackPayoutMemory(abs);
     }
 
     function testUnpackHostAccountAsset(
@@ -325,11 +305,9 @@ contract TestCursorHelper {
         (account,) = Blocks.unpackAccount(cur);
     }
 
-    function testToTxValue(bytes calldata source) external pure returns (bytes32 from_, bytes32 to_, bytes32 asset, uint amount) {
+    function testToPayoutValue(bytes calldata source) external pure returns (bytes32 recipient, bytes32 asset, uint amount) {
         uint cur = Cursors.wrap(source);
-        Tx memory value;
-        (value.from, value.to, value.asset, value.amount,) = Blocks.unpackTransaction(cur);
-        return (value.from, value.to, value.asset, value.amount);
+        (recipient, asset, amount,) = Blocks.unpackPayout(cur);
     }
 
     function testOpen(bytes calldata source)

@@ -201,18 +201,6 @@ contract TestExecutionDecoders {
             data = abi.encode(asset, amount, liability, debt);
         }
         else if (kind == 16) {
-            bytes32 from;
-            bytes32 to;
-            bytes32 asset;
-            uint amount;
-            if (previous) {
-                uint abs = uint32(exec.input);
-                exec.input = Cursors.advance(exec.input, 136);
-                (from, to, asset, amount) = LegacyBlocks.unpackTransaction(abs);
-            } else (from, to, asset, amount) = exec.unpackTransaction();
-            data = abi.encode(from, to, asset, amount);
-        }
-        else if (kind == 17) {
             bytes32 asset;
             uint amount;
             bytes32 liability;
@@ -225,7 +213,7 @@ contract TestExecutionDecoders {
             } else (asset, amount, liability, debt, counterparty) = exec.unpackPosition();
             data = abi.encode(asset, amount, liability, debt, counterparty);
         }
-        else if (kind == 18) {
+        else if (kind == 17) {
             BalanceConstraints memory value;
             if (previous) {
                 uint abs = uint32(exec.input);
@@ -234,7 +222,7 @@ contract TestExecutionDecoders {
             } else value = exec.unpackBalanceConstraints();
             data = abi.encode(value);
         }
-        else if (kind == 19) {
+        else if (kind == 18) {
             PositionConstraints memory value;
             if (previous) {
                 uint abs = uint32(exec.input);

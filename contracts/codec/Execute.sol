@@ -136,6 +136,24 @@ library Execute {
         if (header != Headers.Balance) revert InvalidBlock();
     }
 
+    /// @notice Decode a PAYOUT at an in-bounds absolute memory position.
+    /// @dev Checks the exact header; caller establishes containment for 104 bytes.
+    /// Performs no recipient validation; a zero recipient means burn.
+    /// @param abs Absolute memory byte position; not a packed cursor.
+    /// @return recipient Recipient account identifier.
+    /// @return asset Asset identifier.
+    /// @return amount Quantity in the asset's native units.
+    function unpackPayoutMemory(uint abs) internal pure returns (bytes32 recipient, bytes32 asset, uint amount) {
+        uint header;
+        assembly ("memory-safe") {
+            header := shr(192, mload(abs))
+            recipient := mload(add(abs, 8))
+            asset := mload(add(abs, 40))
+            amount := mload(add(abs, 72))
+        }
+        if (header != Headers.Payout) revert InvalidBlock();
+    }
+
     /// @notice Decode a POSITION into an independent memory struct.
     /// @dev Checks the exact header; caller establishes containment for 168 bytes.
     /// Copies all five words, including counterparty. Hooks may mutate or retain

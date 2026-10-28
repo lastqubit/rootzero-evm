@@ -1,7 +1,7 @@
 ﻿import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
-import { concat, exactSpec, Keys, encodeAssetAmountBlock, encodeBalanceBlock, encodeContextBlock } from "./helpers/blocks.js";
+import { concat, exactSpec, Keys, encodeAssetAmountBlock, encodeContextBlock, encodePayoutBlock } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
 describe("Burn", () => {
@@ -42,47 +42,52 @@ describe("Burn", () => {
     expect(deployment).to.not.equal(null);
 
     await expect(deployment!).to.emitEndpoint(host)
-      .withArgs(await commandId(burnMethod, host), exactSpec(Keys.Balance, 64), 0n, 0n);
+      .withArgs(await commandId(burnMethod, host), exactSpec(Keys.Payout, 96), 0n, 0n);
   });
 
   // â”€â”€ Happy path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  it("emits BurnCalled for a single BALANCE block in state", async () => {
+  it("emits BurnCalled for a single zero-recipient PAYOUT block in state", async () => {
     const asset = ethers.zeroPadValue("0xa1", 32);
-    const state = encodeBalanceBlock(asset, 100n);
+    const state = encodePayoutBlock(ethers.ZeroHash, asset, 100n);
     const tx = await callAs(0, ctx({ state }));
     await expect(tx).to.emit(host, "BurnCalled").withArgs(userAccount, asset, 100n);
   });
 
-  it("emits BurnCalled for each BALANCE block when multiple are present", async () => {
+  it("emits BurnCalled for each PAYOUT block when multiple are present", async () => {
     const asset1 = ethers.zeroPadValue("0xb1", 32);
     const asset2 = ethers.zeroPadValue("0xb2", 32);
     const state  = concat(
-      encodeBalanceBlock(asset1, 10n),
-      encodeBalanceBlock(asset2, 20n)
+      encodePayoutBlock(ethers.ZeroHash, asset1, 10n),
+      encodePayoutBlock(ethers.ZeroHash, asset2, 20n)
     );
     const tx = await callAs(0, ctx({ state }));
     await expect(tx).to.emit(host, "BurnCalled").withArgs(userAccount, asset1, 10n);
     await expect(tx).to.emit(host, "BurnCalled").withArgs(userAccount, asset2, 20n);
   });
 
-  it("returns empty bytes after processing BALANCE blocks", async () => {
-    const state = encodeBalanceBlock(ethers.zeroPadValue("0xc1", 32), 50n);
+  it("returns empty bytes after processing PAYOUT blocks", async () => {
+    const state = encodePayoutBlock(ethers.ZeroHash, ethers.zeroPadValue("0xc1", 32), 50n);
     const [result, transactions] = await (host as any)[burnMethod].staticCall(...ctx({ state }));
     expect(result).to.equal("0x");
     expect(transactions).to.equal(0n);
   });
 
-  it("rejects a non-BALANCE block after a valid balance", async () => {
+  it("rejects a non-PAYOUT block after a valid payout", async () => {
     const asset = ethers.zeroPadValue("0xd1", 32);
-    const state = concat(encodeBalanceBlock(asset, 5n), encodeAssetAmountBlock(asset, 5n));
+    const state = concat(encodePayoutBlock(ethers.ZeroHash, asset, 5n), encodeAssetAmountBlock(asset, 5n));
     await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidBlock");
+  });
+
+  it("rejects a payout with a nonzero recipient", async () => {
+    const state = encodePayoutBlock(userAccount, ethers.zeroPadValue("0xd2", 32), 5n);
+    await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidAccount");
   });
 
   // â”€â”€ Target / access guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("reverts AccessDenied for an untrusted caller", async () => {
-    const state = encodeBalanceBlock(ethers.zeroPadValue("0xf2", 32), 1n);
+    const state = encodePayoutBlock(ethers.ZeroHash, ethers.zeroPadValue("0xf2", 32), 1n);
     await expect(callAs(1, ctx({ state })))
       .to.be.revertedWithCustomError(host, "AccessDenied");
   });

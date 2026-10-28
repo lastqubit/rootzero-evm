@@ -35,7 +35,7 @@ import {
   encodeStatusBlock,
   encodeStringBlock,
   encodeStepBlock,
-  encodeTxBlock,
+  encodePayoutBlock,
   encodeUserAccount,
   exactSpec,
   concat,
@@ -275,7 +275,7 @@ describe("Cursors", () => {
     it("position decoder rejects another four-word block", async () => {
       const account = encodeUserAccount("0x03");
       const other = encodeUserAccount("0x04");
-      await expect(blocksHelper.unpackPosition(encodeTxBlock(account, other, asset, amount)))
+      await expect(blocksHelper.unpackPosition(encodePayoutBlock(account, asset, amount)))
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
     });
 
@@ -326,20 +326,17 @@ describe("Cursors", () => {
       expect(ethers.getBytes(data).length).to.equal(104);
     });
 
-    it("writeTxBlock round-trips", async () => {
-      const from_ = encodeUserAccount("0x03");
-      const to_ = encodeUserAccount("0x04");
-      const data: string = await helper.testWriteTxBlock(from_, to_, asset, amount);
-      expect(ethers.getBytes(data).length).to.equal(136);
-      expect(await helper.testToTxValue(data)).to.deep.equal([from_, to_, asset, amount]);
+    it("writePayoutBlock round-trips", async () => {
+      const recipient = encodeUserAccount("0x04");
+      const data: string = await helper.testWritePayoutBlock(recipient, asset, amount);
+      expect(ethers.getBytes(data).length).to.equal(104);
+      expect(data).to.equal(encodePayoutBlock(recipient, asset, amount));
+      expect(await helper.testToPayoutValue(data)).to.deep.equal([recipient, asset, amount]);
     });
 
-    it("transaction struct overload matches separate fields", async () => {
-      const from_ = encodeUserAccount("0x03");
-      const to_ = encodeUserAccount("0x04");
-      const fields: string = await helper.testWriteTxBlock(from_, to_, asset, amount);
-      const value: string = await helper.testWriteTxStructBlock(from_, to_, asset, amount);
-      expect(value).to.equal(fields);
+    it("writePayoutBlock keeps a zero recipient", async () => {
+      const data: string = await helper.testWritePayoutBlock(ethers.ZeroHash, asset, amount);
+      expect(await helper.testToPayoutValue(data)).to.deep.equal([ethers.ZeroHash, asset, amount]);
     });
 
     it("writeStringBlock round-trips UTF-8 payloads", async () => {
@@ -423,8 +420,8 @@ describe("Cursors", () => {
 
       expect(await blocksHelper.unpackPosition(encodePositionBlock(asset, amount, other, 99n)))
         .to.deep.equal([asset, amount, other, 99n, ethers.ZeroHash]);
-      expect(await blocksHelper.unpackTransaction(encodeTxBlock(account, other, asset, amount)))
-        .to.deep.equal([account, other, asset, amount]);
+      expect(await blocksHelper.unpackPayout(encodePayoutBlock(account, asset, amount)))
+        .to.deep.equal([account, asset, amount]);
       expect(await blocksHelper.unpackHostAccountAmount(
         encodeBlock(Keys.HostAccountAmount, concat(pad32(host), pad32(account), pad32(asset), pad32(amount)))
       )).to.deep.equal([host, account, asset, amount]);
@@ -436,21 +433,12 @@ describe("Cursors", () => {
       expect(data.slice(0, 10)).to.equal(Keys.Custody);
     });
 
-    it("transaction returns a valid encoded TRANSACTION block", async () => {
-      const from_ = encodeUserAccount("0x03");
-      const to_ = encodeUserAccount("0x04");
-      const data: string = await helper.testToTransactionBlock(from_, to_, asset, amount);
-      expect(ethers.getBytes(data).length).to.equal(136);
-      expect(data.slice(0, 10)).to.equal(Keys.Transaction);
-      expect(await helper.testToTxValue(data)).to.deep.equal([from_, to_, asset, amount]);
-    });
-
-    it("writeTransaction writes the specialized encoding at the requested offset", async () => {
-      const from_ = encodeUserAccount("0x03");
-      const to_ = encodeUserAccount("0x04");
-      const offset = 5n;
-      const data = await blocksHelper.writeTransaction(offset, from_, to_, asset, amount);
-      expect(data).to.equal(ethers.concat([new Uint8Array(Number(offset)), encodeTxBlock(from_, to_, asset, amount)]));
+    it("payout returns a valid encoded PAYOUT block", async () => {
+      const recipient = encodeUserAccount("0x04");
+      const data: string = await helper.testToPayoutBlock(recipient, asset, amount);
+      expect(ethers.getBytes(data).length).to.equal(104);
+      expect(data.slice(0, 10)).to.equal(Keys.Payout);
+      expect(await helper.testToPayoutValue(data)).to.deep.equal([recipient, asset, amount]);
     });
 
     it("writes every dynamic block at the requested offset", async () => {
@@ -637,13 +625,13 @@ describe("Cursors", () => {
         .to.be.revertedWithCustomError(blocksHelper, "InvalidBlock");
     });
 
-    it("stores the transaction header at the start of its word-aligned spec", async () => {
-      const spec: string = await blocksHelper.transactionSpec();
-      expect(spec.slice(0, 18)).to.equal(encodeTxBlock(ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, 0n).slice(0, 18));
+    it("stores the payout header at the start of its word-aligned spec", async () => {
+      const spec: string = await blocksHelper.payoutSpec();
+      expect(spec.slice(0, 18)).to.equal(encodePayoutBlock(ethers.ZeroHash, ethers.ZeroHash, 0n).slice(0, 18));
     });
 
     it("derives fixed bounds and stores dynamic bounds in specs", async () => {
-      expect(await blocksHelper.specRanges()).to.deep.equal([128n, 128n, 72n, 0n]);
+      expect(await blocksHelper.specRanges()).to.deep.equal([96n, 96n, 72n, 0n]);
     });
 
     it("stores allocation hints in three bytes", async () => {
@@ -1006,10 +994,9 @@ describe("Cursors", () => {
       ]);
     });
 
-    it("unpacks a fixed-stride transaction", async () => {
-      const source = encodeTxBlock(from, to, asset, 456n);
-      expect(await helper.testMemoryUnpackTransaction(source)).to.deep.equal([
-        from,
+    it("unpacks a fixed-stride payout", async () => {
+      const source = encodePayoutBlock(to, asset, 456n);
+      expect(await helper.testMemoryUnpackPayout(source)).to.deep.equal([
         to,
         asset,
         456n,

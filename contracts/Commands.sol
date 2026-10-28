@@ -13,7 +13,7 @@ import {Blocks} from "./codec/Blocks.sol";
 import {Sizes, Specs} from "./codec/Specs.sol";
 import {Headers} from "./codec/Headers.sol";
 import {Cursors} from "./utils/Cursors.sol";
-import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountBalance, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, BalanceConstraints, PositionConstraints, Quote, Position, Tx} from "./core/Types.sol";
+import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountBalance, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, BalanceConstraints, PositionConstraints, Quote, Position} from "./core/Types.sol";
 
 // Shared protocol errors.
 import {
@@ -39,6 +39,7 @@ import {
     UnexpectedState,
     UnexpectedValue,
     ValueOverflow,
+    ZeroAccount,
     ZeroAddress,
     ZeroAmount
 } from "./utils/Errors.sol";
