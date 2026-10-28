@@ -6,7 +6,8 @@ import {Execute} from "../codec/Execute.sol";
 import {Sizes} from "../codec/Specs.sol";
 import {CashoutHook} from "../core/Cash.sol";
 import {Cursors} from "../utils/Cursors.sol";
-import {InvalidAsset, UnexpectedInput, ZeroAccount} from "../utils/Errors.sol";
+import {Accounts} from "../utils/Accounts.sol";
+import {InvalidAsset, UnexpectedInput} from "../utils/Errors.sol";
 
 using Executions for Execution;
 
@@ -27,7 +28,8 @@ abstract contract Cashout is CommandBase, CashoutHook {
     }
 
     /// @notice Pay chain-asset PAYOUT state to its recipients.
-    /// @dev Reverts with `InvalidAsset` for another asset and `ZeroAccount` for a zero recipient.
+    /// @dev Reverts with `InvalidAsset` for another asset, and validates each recipient with
+    /// `Accounts.evm` (`InvalidAccount` for zero, opaque or non-account IDs, `ZeroAddress` for a zero address).
     /// Records nothing: the command that created the PAYOUT state recorded it.
     /// @param context Command context carrying a PAYOUT state stream.
     /// @return Empty output state.
@@ -41,8 +43,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
     function cashoutOne(Execution memory exec) private {
         (bytes32 recipient, bytes32 asset, uint amount) = exec.unpackPayout();
         if (asset != chainAsset) revert InvalidAsset();
-        if (recipient == 0) revert ZeroAccount();
-        cashout(recipient, amount);
+        cashout(Accounts.evm(recipient), amount);
     }
 }
 
@@ -70,8 +71,7 @@ abstract contract ExecuteCashout is Cashout {
         while (abs < end) {
             (bytes32 recipient, bytes32 asset, uint amount) = Execute.unpackPayoutMemory(abs);
             if (asset != chainAsset) revert InvalidAsset();
-            if (recipient == 0) revert ZeroAccount();
-            cashout(recipient, amount);
+            cashout(Accounts.evm(recipient), amount);
             unchecked {
                 abs += Sizes.Payout;
             }

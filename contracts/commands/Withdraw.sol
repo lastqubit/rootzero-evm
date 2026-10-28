@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {ZeroAccount} from "../utils/Errors.sol";
+import {Accounts} from "../utils/Accounts.sol";
 using Executions for Execution;
 
 /// @title WithdrawHook
 /// @notice Hook implemented by hosts that withdraw account balances.
 abstract contract WithdrawHook {
     /// @notice Override to send funds to `account`.
-    /// @dev Called once per PAYOUT block in state with its nonzero recipient. Implementations
+    /// @dev Called once per PAYOUT block in state with its recipient, an EVM account with a nonzero
+    /// address. Implementations
     /// must deliver the complete amount or revert.
     /// @param account Recipient account identifier.
     /// @param asset Asset identifier.
@@ -28,7 +29,8 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     }
 
     /// @notice Withdraw each PAYOUT block from the command state to its recipient.
-    /// @dev Reverts with `ZeroAccount` for a zero recipient. Records nothing: the command
+    /// @dev Validates each recipient with `Accounts.evm` (reverting `InvalidAccount` for zero, opaque
+    /// or non-account IDs and `ZeroAddress` for a zero address), even for zero amounts. Records nothing: the command
     /// that created the PAYOUT state recorded it.
     /// @param context Command context carrying the PAYOUT state stream.
     /// @return Empty output state.
@@ -41,7 +43,6 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function withdrawOne(Execution memory exec) private {
         (bytes32 recipient, bytes32 asset, uint amount) = exec.unpackPayout();
-        if (recipient == 0) revert ZeroAccount();
-        withdraw(recipient, asset, amount);
+        withdraw(Accounts.evm(recipient), asset, amount);
     }
 }

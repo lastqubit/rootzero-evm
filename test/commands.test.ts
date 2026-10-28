@@ -20,6 +20,13 @@ import {
   concat
 } from "./helpers/blocks.js";
 
+const undeliverable: [string, string][] = [
+  [ethers.ZeroHash, "InvalidAccount"],
+  [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), "InvalidAccount"], // opaque account
+  [ethers.toBeHex(0x03030100n << 224n, 32), "InvalidAccount"], // asset, not an account
+  [ethers.toBeHex(0x03010300n << 224n, 32), "ZeroAddress"], // EVM user account, zero address
+];
+
 describe("Commands", () => {
   const HandoffFunded = 0x81n;
   const RelayInputSpec = exactSpec(localKey(3), 64);
@@ -399,10 +406,13 @@ describe("Commands", () => {
         .withArgs(recipient, asset, 100n);
     });
 
-    it("rejects a zero recipient", async () => {
-      const state = encodePayoutBlock(ethers.ZeroHash, asset, 100n);
-      await expect(callAs(0, "withdraw", ctx({ state })))
-        .to.be.revertedWithCustomError(host, "ZeroAccount");
+    it("rejects recipients that aren't EVM accounts with an address, even for zero amounts", async () => {
+      for (const [recipient, error] of undeliverable) {
+        for (const amount of [0n, 100n]) {
+          await expect(callAs(0, "withdraw", ctx({ state: encodePayoutBlock(recipient, asset, amount) })))
+            .to.be.revertedWithCustomError(host, error);
+        }
+      }
     });
 
     it("rejects BALANCE state", async () => {
@@ -491,10 +501,14 @@ describe("Commands", () => {
         .to.be.revertedWithCustomError(host, "InvalidAsset");
     });
 
-    it("rejects a zero recipient", async () => {
-      const state = encodePayoutBlock(ethers.ZeroHash, await utils.testToChain(), 1n);
-      await expect(callAs(0, "cashout", ctx({ state })))
-        .to.be.revertedWithCustomError(host, "ZeroAccount");
+    it("rejects recipients that aren't EVM accounts with an address, even for zero amounts", async () => {
+      const chainAsset = await utils.testToChain();
+      for (const [recipient, error] of undeliverable) {
+        for (const amount of [0n, 1n]) {
+          await expect(callAs(0, "cashout", ctx({ state: encodePayoutBlock(recipient, chainAsset, amount) })))
+            .to.be.revertedWithCustomError(host, error);
+        }
+      }
     });
   });
 
@@ -1420,11 +1434,13 @@ describe("Commands", () => {
       await expect(tx).to.emit(host, "CashoutCalled").withArgs(userAccount, 29n);
     });
 
-    it("rejects a zero recipient in optimized local cashout", async () => {
-      const state = encodePayoutBlock(ethers.ZeroHash, await utils.testToChain(), 1n);
+    it("rejects undeliverable recipients in optimized local cashout", async () => {
+      const chainAsset = await utils.testToChain();
       const steps = encodeStepBlock(await cmd("cashout"), 0n, "0x");
-      await expect(callAs(0, "testPipe", userAccount, state, steps))
-        .to.be.revertedWithCustomError(host, "ZeroAccount");
+      for (const [recipient, error] of undeliverable) {
+        await expect(callAs(0, "testPipe", userAccount, encodePayoutBlock(recipient, chainAsset, 0n), steps))
+          .to.be.revertedWithCustomError(host, error);
+      }
     });
 
     it("debits stored native value and pays it out through createPayout", async () => {

@@ -823,7 +823,8 @@ and outputs `#payout`, and `withdraw` delivers it.
 
 `#payout` `(bytes32 recipient, bytes32 asset, uint amount)` is the only state that
 leaves the protocol. Commands that deliver it (`withdraw`, `cashout`) pay each block in
-full to its recipient and revert `ZeroAccount()` for a zero recipient; `burn` takes
+full to its recipient and validate it with `Accounts.evm` (`InvalidAccount` for a zero,
+opaque or non-account recipient); `burn` takes
 only zero-recipient payouts. No command turns `#payout` back into `#balance` or keeps
 it in an internal ledger. `createPayout` carries the `Logs.Output` hint, so each
 payout is recorded once, when it is created; delivering commands carry no logging

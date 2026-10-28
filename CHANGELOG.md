@@ -15,15 +15,17 @@ sections are immutable and must continue to describe the tagged release.
   `Execute.unpackPayoutMemory`.
   - `withdraw`, `cashout` and `burn` take `#payout` state instead of `#balance`,
     so their endpoint IDs and specs change. `withdraw` and `cashout` pass each
-    recipient to their hooks as `account` and revert `ZeroAccount()` for a zero
-    recipient; `burn` reverts `InvalidAccount()` unless the recipient is zero.
+    recipient to their hooks as `account` and validate it with `Accounts.evm`
+    (`InvalidAccount` for a zero, opaque or non-account recipient, even for zero
+    amounts); `burn` reverts `InvalidAccount()` unless the recipient is zero.
     All three drop the `Logs.State` hint.
   - `Payout` and `PayoutHook` are replaced by `CreatePayout` (`createPayout`,
     still in `commands/Payout.sol`): `#balance` state plus `#account` input to
     `#payout` output, with the `Logs.Output` hint. Nonzero recipients must be
     accounts; zero passes through and means burn. Withdrawals become
     `debitAccount → createPayout → withdraw`.
-  - New global error `ZeroAccount()`.
+  - New global error `ZeroAccount()` for a required nonzero account, such as a custody
+    settlement counterparty.
   - Removed `#transaction`, its codec helpers and the `Tx` struct.
 
 ## 1.56.0
