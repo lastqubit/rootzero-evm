@@ -8,6 +8,24 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: `#payout` state for all value leaving the protocol.** New block
+  `#payout` `(bytes32 recipient, bytes32 asset, uint amount)` with `Keys`,
+  `Specs`/`Sizes`, `Headers` and `Schema` entries, `Blocks.unpackPayout`,
+  `Encoder.writePayout`/`createPayout`, `exec.unpackPayout`/`outputPayout` and
+  `Execute.unpackPayoutMemory`.
+  - `withdraw`, `cashout` and `burn` take `#payout` state instead of `#balance`,
+    so their endpoint IDs and specs change. `withdraw` and `cashout` pass each
+    recipient to their hooks as `account` and revert `ZeroAccount()` for a zero
+    recipient; `burn` reverts `InvalidAccount()` unless the recipient is zero.
+    All three drop the `Logs.State` hint.
+  - `Payout` and `PayoutHook` are replaced by `CreatePayout` (`createPayout`,
+    still in `commands/Payout.sol`): `#balance` state plus `#account` input to
+    `#payout` output, with the `Logs.Output` hint. Nonzero recipients must be
+    accounts; zero passes through and means burn. Withdrawals become
+    `debitAccount → createPayout → withdraw`.
+  - New global error `ZeroAccount()`.
+  - Removed `#transaction`, its codec helpers and the `Tx` struct.
+
 ## 1.56.0
 
 - **New `bytes32` overloads of `expectTrust`**: `Blocks.expectTrust(cur, bytes32 id)`

@@ -665,8 +665,9 @@ bits 3 through 5 are logging hints, and bits 2 and 6 (`Logs.Pipeline`, `Logs.Val
 Hints are part of the endpoint ID: State=8, Input=16, Output=32.
 Combine these with behavior flags, e.g. `Logs.Input | Flags.Admin`.
 
-`CashoutHook` declares an abstract `cashout(account, amount)` hook. Hosts implement
-their payout policy and choose the accounting and events to emit. The hook has
+`CashoutHook` declares an abstract `cashout(account, amount)` hook; `account` is the
+`#payout` recipient. Hosts implement their payout policy and choose the accounting
+and events to emit. The hook has
 no `ChainAsset` inheritance or built-in flow logging.
 
 The free `sendChainAsset(account, amount)` helper in `core/Cash.sol`, also exported
@@ -680,12 +681,12 @@ and fund the withdrawal, finalize accounting before calling it, and protect its
 entrypoints against reentrancy.
 
 The standard commands cover the common ledger movements: `bootstrap` (source
-an initial balance and native-value budget), `cashout` (withdraw native
-`#balance` state), `deposit` and
+an initial balance and native-value budget), `deposit` and
 `depositPayable` (external funds in), `settlePayable` (funded settlement),
-`withdraw` and `burn` (funds out),
-`debitAccount` and `creditAccount` (internal movements), `payout` (deliver
-state to other accounts), `realize` (pass each position to
+`debitAccount` and `creditAccount` (internal movements), `createPayout`
+(turn `#balance` state plus an `#account` recipient into `#payout` state),
+`withdraw`, `cashout` (native) and `burn` (deliver `#payout` out of the
+protocol), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
 returns counterparty zero; input is empty, and an optional following
 `checkPosition` validates the result against POSITION_CONSTRAINTS),
@@ -816,9 +817,19 @@ Handoff has four operational rules:
   intended for empty or balance state; debt, position, and similarly fallible
   state must not be relayed this way.
 
-A transfer, for instance, is a two-step pipeline: `debitAccount` turns an
-`#assetAmount` input into `#balance` state, and `payout` consumes that state
-toward a recipient. Because a pipeline is just blocks, it is also the unit of
+A withdrawal, for instance, is a three-step pipeline: `debitAccount` turns an
+`#assetAmount` input into `#balance` state, `createPayout` names the recipient
+and outputs `#payout`, and `withdraw` delivers it.
+
+`#payout` `(bytes32 recipient, bytes32 asset, uint amount)` is the only state that
+leaves the protocol. Commands that deliver it (`withdraw`, `cashout`) pay each block in
+full to its recipient and revert `ZeroAccount()` for a zero recipient; `burn` takes
+only zero-recipient payouts. No command turns `#payout` back into `#balance` or keeps
+it in an internal ledger. `createPayout` carries the `Logs.Output` hint, so each
+payout is recorded once, when it is created; delivering commands carry no logging
+hint. Hosts that create `#payout` follow the same rule. Custody hosts using the
+default `Settlement` should override `settle` to revert `ZeroAccount()` on a zero
+counterparty, which would otherwise pay the asset out of custody without a payout. Because a pipeline is just blocks, it is also the unit of
 command batching. STEP, CALL, and RECOVER carry full-width native `uint value`
 drawn from the shared budget. CALL funds a local call; RECOVER funds its handler
 invocation. DISPATCH carries opaque, packed chain-specific `resources` for adapters
