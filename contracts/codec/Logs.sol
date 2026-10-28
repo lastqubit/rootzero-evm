@@ -11,19 +11,25 @@ pragma solidity ^0.8.33;
 // - Pipeline, State, Input, Output and Value are also endpoint-ID flag bits; the
 //   other categories are numbered after them.
 //
-// Category         Wire layout                                             Size
-// 0x04 Pipeline     [category:1][account][command...]                        33 + 32n
-// 0x08 State        [category:1][index:1][state payload]                     2 + state
-// 0x10 Input        Step: [category:1][index:1][value?][input payload?]      2 + value + input
-// 0x20 Output       Reserved; a step's output is recorded as the next State.
-// 0x40 Value        Reserved; also the Step index bit marking a value word.
-// 0x41 Trust        [category:1][id][enabled:1]                              34
-// 0x42 Introduction [category:1][peer][origin][claimed block number][name...] 97 + name
-// 0x43 Metadata     [category:1][subject][blocks...]                         33 + blocks
-// 0x44 Endpoint     [category:1][endpoint][state][input][output][name...]    129 + name
-// 0x45 Balance      [category:1][account][asset][actual balance]             97
-// 0x46 Envelope     [category:1][portal][resources][key][digest]             129
-// 0x47 Resolution   [category:1][key][digest][resolved:1]                    66
+// Category         Class    Wire layout                                             Size
+// 0x04 Pipeline     account  [category:1][account][command...]                        33 + 32n
+// 0x08 State        account  [category:1][index:1][state payload]                     2 + state
+// 0x10 Input        account  Step: [category:1][index:1][value?][input payload?]      2 + value + input
+// 0x20 Output       -        Reserved; a step's output is recorded as the next State.
+// 0x40 Value        -        Reserved; also the Step index bit marking a value word.
+// 0x41 Trust        host     [category:1][id][enabled:1]                              34
+// 0x42 Introduction host     [category:1][peer][origin][claimed block number][name...] 97 + name
+// 0x43 Metadata     host     [category:1][subject][blocks...]                         33 + blocks
+// 0x44 Endpoint     host     [category:1][endpoint][state][input][output][name...]    129 + name
+// 0x45 Balance      account  [category:1][account][asset][actual balance]             97
+// 0x46 Envelope     host     [category:1][portal][resources][key][digest]             129
+// 0x47 Resolution   host     [category:1][key][digest][resolved:1]                    66
+//
+// Classes (fixed per category, not encoded in the value; new entity kinds get new classes):
+// - host: about the emitting host, which is the emitter; layouts carry no host field.
+// - account: about an account on the emitting host; the account is always the first word.
+// - State and Step are children of their Pipeline record, take its class and are never
+//   top-level. Records emitted by step hooks, such as Balance, remain top-level.
 //
 // Names are trailing raw UTF-8 bytes (no block header, length word or padding).
 // Host names are optional discovery hints supplied by introductions; endpoint
@@ -81,7 +87,8 @@ pragma solidity ^0.8.33;
 //   blocks may include SCHEMA, LANE or COUNTERPARTY. No wrapper
 //   or codes are needed. Multiple blocks can describe one subject in one record.
 // - Introduction is a provenance claim, not authorization or verified creation.
-// - Envelope contains portal, resources, key and digest; interpretation is offchain.
+// - Envelope contains the destination portal, resources, key and digest; the sending
+//   portal is the emitter. Interpretation is offchain.
 // - Resolution ends in exactly 0 (unresolved) or 1 (resolved), not a code word.
 // - Reverts discard all records. Identity and trust come from the emitting
 //   contract and chain; these helpers do not authorize or mutate application state.
@@ -249,7 +256,7 @@ library Logs {
     }
 
     /// @notice Describe a transport operation without semantic codes.
-    /// @param portal Transport portal node identifier.
+    /// @param portal Destination portal host node identifier.
     /// @param resources Transport resource descriptor.
     /// @param key Forwarding or recovery lookup key.
     /// @param digest Message digest.
