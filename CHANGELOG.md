@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.57.0
+
 - **Breaking: `#payout` state for all value leaving the protocol.** New block
   `#payout` `(bytes32 recipient, bytes32 asset, uint amount)` with `Keys`,
   `Specs`/`Sizes`, `Headers` and `Schema` entries, `Blocks.unpackPayout`,
