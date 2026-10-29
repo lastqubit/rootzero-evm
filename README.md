@@ -669,7 +669,10 @@ Combine these with behavior flags, e.g. `Logs.Input | Flags.Admin`.
 `recipient` is the `#payout` recipient decoded as a nonzero EVM address. Hosts
 implement their payout policy and choose the accounting and events to emit. The
 hook has no `ChainAsset` inheritance or built-in flow logging. `WithdrawHook`
-likewise declares `withdraw(address recipient, bytes32 asset, uint amount)`.
+declares `withdraw(bytes32 recipient, bytes32 asset, uint amount)`: `withdraw`
+rejects a zero recipient and passes the native address word on, and the host turns
+it into the address it pays (an EVM host with `Accounts.recipientAddr`), so a
+custody host for other address formats can use the same command.
 
 The free `sendChainAsset(address recipient, uint amount)` helper in `core/Cash.sol`,
 also exported by `Core.sol` and `Endpoints.sol`, transfers the exact amount to

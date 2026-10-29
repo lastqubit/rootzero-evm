@@ -4,7 +4,6 @@ import {Logs} from "../codec/Logs.sol";
 
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
 import {Accounts} from "../utils/Accounts.sol";
-import {InvalidAccount} from "../utils/Errors.sol";
 
 using Executions for Execution;
 
@@ -41,13 +40,6 @@ abstract contract CreatePayout is CommandBase {
     function createPayoutOne(Execution memory exec) private pure {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         (bytes32 account, bytes32 addr) = exec.unpackRecipient();
-        if (account != 0 || addr != 0) {
-            if (
-                addr == 0 ||
-                uint(addr) >> 160 != 0 ||
-                Accounts.toUser(address(uint160(uint(addr)))) != account
-            ) revert InvalidAccount();
-        }
-        exec.outputPayout(addr, asset, amount);
+        exec.outputPayout(Accounts.matchRecipient(account, addr), asset, amount);
     }
 }

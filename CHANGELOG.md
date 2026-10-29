@@ -20,15 +20,18 @@ sections are immutable and must continue to describe the tagged release.
     `Headers` and `Schema` entries, `Blocks.unpackRecipient`,
     `Encoder.writeRecipient`/`createRecipient` and `exec.unpackRecipient`.
   - `withdraw`, `cashout` and `burn` take `#payout` state instead of `#balance`,
-    so their endpoint IDs and specs change. `withdraw` and `cashout` (including
-    `ExecuteCashout`) decode each recipient with the new
+    so their endpoint IDs and specs change. `cashout` (including
+    `ExecuteCashout`) decodes each recipient with the new
     `Accounts.recipientAddr(bytes32) returns (address)`: `ZeroAccount()` for
     zero, `InvalidAccount()` when any of the top 12 bytes are set, even for zero
-    amounts. `burn` reverts `InvalidAccount()` unless the recipient is zero.
+    amounts. `withdraw` reverts `ZeroAccount()` for zero and passes the
+    recipient word to its hook, which turns it into an address (EVM hosts use
+    `Accounts.recipientAddr`). `burn` reverts `InvalidAccount()` unless the recipient is zero.
     All three drop the `Logs.State` hint.
-  - Hook signatures take the address: `WithdrawHook.withdraw(address recipient,
-    bytes32 asset, uint amount)` and `CashoutHook.cashout(address recipient,
-    uint amount)` replace the `bytes32 account` versions, and
+  - Hook signatures: `WithdrawHook.withdraw(bytes32 recipient, bytes32 asset,
+    uint amount)` takes the native address word, and `CashoutHook.cashout(address
+    recipient, uint amount)` the decoded address; they replace the
+    `bytes32 account` versions, and
     `sendChainAsset(address recipient, uint amount)` replaces
     `sendChainAsset(bytes32 account, uint amount)` (it reverts `ZeroAddress()`
     for the zero address).
@@ -37,7 +40,8 @@ sections are immutable and must continue to describe the tagged release.
     `#payout` output, with the `Logs.Output` hint. Unless account and address
     are both zero (a burn), the address must be a nonzero EVM address whose
     `Accounts.toUser(address)` is the account, else `InvalidAccount()`; this
-    rejects foreign-chain, SVM, admin, host and opaque accounts. The output
+    rejects foreign-chain, SVM, admin, host and opaque accounts. The check is
+    the new `Accounts.matchRecipient(account, recipient) returns (bytes32)`. The output
     carries the address. Withdrawals become
     `debitAccount → createPayout → withdraw`.
   - New global error `ZeroAccount()` for a required nonzero account, such as a custody

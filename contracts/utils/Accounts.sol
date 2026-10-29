@@ -228,6 +228,22 @@ library Accounts {
         return address(uint160(uint(evm(value))));
     }
 
+    /// @notice Assert that `recipient` is the native EVM address of `account`, or that both are zero.
+    /// @dev Converts the address with the entry rule (`toUser`) and compares it to `account`.
+    /// Both zero passes, as a burn. Reverts with `InvalidAccount` otherwise: a zero address, a
+    /// word with any of its top 12 bytes set, or an address whose user account isn't `account`
+    /// (including admin, host, opaque and other-runtime accounts).
+    /// @param account Recipient's internal account ID.
+    /// @param recipient Recipient's native address, left-padded to 32 bytes.
+    /// @return The same `recipient` if validation succeeds.
+    function matchRecipient(bytes32 account, bytes32 recipient) internal pure returns (bytes32) {
+        if (account == 0 && recipient == 0) return recipient;
+        if (recipient == 0 || uint(recipient) >> 160 != 0 || toUser(address(uint160(uint(recipient)))) != account) {
+            revert InvalidAccount();
+        }
+        return recipient;
+    }
+
     /// @notice Decode a PAYOUT recipient word as the EVM address it pays.
     /// @dev A PAYOUT recipient is a native address left-padded to 32 bytes, not an account ID.
     /// Reverts with `ZeroAccount` for zero (a burn, which no paying command delivers) and

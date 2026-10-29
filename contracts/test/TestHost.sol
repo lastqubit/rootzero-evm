@@ -135,8 +135,8 @@ contract TestHost is
         return amount - depositFee;
     }
 
-    function withdraw(address recipient, bytes32 asset, uint amount) internal override {
-        emit WithdrawCalled(recipient, asset, amount);
+    function withdraw(bytes32 recipient, bytes32 asset, uint amount) internal override {
+        emit WithdrawCalled(Accounts.recipientAddr(recipient), asset, amount);
     }
 
     function settle(bytes32 account, Position memory position) internal override(Settlement, SettleHook) {
