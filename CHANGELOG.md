@@ -28,6 +28,20 @@ sections are immutable and must continue to describe the tagged release.
     settlement counterparty.
   - Removed `#transaction`, its codec helpers and the `Tx` struct.
 
+- **SVM reservations** for the Solana port; no EVM behaviour, endpoint ID or
+  existing wire format changes.
+  - `Layout.Svm = 0x04` (representation) and `Layout.Spl = 0x04` (asset subtype,
+    SPL Token and Token-2022), both reserved for the SVM runtime. No EVM helper
+    accepts them.
+  - New standard block `#portRequest` `(uint port, #input)` with `Keys`, `Specs`
+    and `Schemas` entries, so every runtime decodes it. SVM hosts return it to
+    ask the commander to apply a commander port after the step; EVM hosts never
+    emit it.
+  - `useResourceValue` NatSpec and the `Schemas` notes state the shared
+    `resources` rule: the low 128 bits are the destination's native value on
+    every runtime; the high 128 bits are runtime-specific (EVM: `uint128` gas
+    limit; SVM: `uint128` compute-unit limit).
+
 ## 1.56.0
 
 - **New `bytes32` overloads of `expectTrust`**: `Blocks.expectTrust(cur, bytes32 id)`

@@ -107,6 +107,8 @@ library Keys {
     bytes4 constant Swap = bytes4(keccak256("#swap"));
     /// @dev Sub-command invocation - (uint cmd, uint value, #input)
     bytes4 constant Step = bytes4(keccak256("#step"));
+    /// @dev Commander port request returned by runtimes whose hosts cannot call ports mid-step; EVM hosts never emit it - (uint port, #input)
+    bytes4 constant PortRequest = bytes4(keccak256("#portRequest"));
     /// @dev Pipeline handoff envelope - (#input, #bytes as steps)
     bytes4 constant Relay = bytes4(keccak256("#relay"));
     /// @dev Command context transport - (bytes32 account, #state, #input)

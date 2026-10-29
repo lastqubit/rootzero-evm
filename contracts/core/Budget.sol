@@ -47,8 +47,11 @@ library Budgets {
     }
 
     /// @notice Deduct the EVM value lane of `resources` from `budget`.
-    /// @dev `resources` is not a native value. This helper explicitly extracts
-    /// its low 128-bit EVM value lane and widens that lane to a plain `uint`.
+    /// @dev `resources` is not a native value. On every runtime its low 128 bits
+    /// are the destination's native value and its high 128 bits are
+    /// runtime-specific: a uint128 gas limit on EVM, a uint128 compute-unit limit
+    /// on SVM. This helper explicitly extracts the low 128-bit value lane and
+    /// widens that lane to a plain `uint`.
     /// @param budget Mutable budget to debit.
     /// @param resources Packed resources whose low 128 bits contain native value.
     /// @return value Native value to forward in wei.
@@ -58,8 +61,9 @@ library Budgets {
     }
 
     /// @notice Deduct the EVM value lane of `resources` from a scalar budget.
-    /// @dev `resources` is not a native value. This helper explicitly extracts
-    /// its low 128-bit EVM value lane and widens that lane to a plain `uint`.
+    /// @dev `resources` is not a native value; its packing is described on the
+    /// `Budget` overload. This helper explicitly extracts the low 128-bit value
+    /// lane and widens that lane to a plain `uint`.
     /// @param budget Remaining native value in wei.
     /// @param resources Packed resources whose low 128 bits contain native value.
     /// @return remaining Native value remaining after the deduction.

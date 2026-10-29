@@ -214,6 +214,8 @@ library Specs {
     uint constant Swap = uint(bytes32(Keys.Swap)) | UnboundedMin72Hint256;
     /// @dev STEP specification with minimum 72, unbounded maximum, and 256-byte allocation hint.
     uint constant Step = uint(bytes32(Keys.Step)) | UnboundedMin72Hint256;
+    /// @dev PORT_REQUEST specification with minimum 40, unbounded maximum, and 256-byte allocation hint.
+    uint constant PortRequest = uint(bytes32(Keys.PortRequest)) | UnboundedMin40Hint256;
     /// @dev RELAY specification with minimum 16, unbounded maximum, and 256-byte allocation hint.
     uint constant Relay = uint(bytes32(Keys.Relay)) | UnboundedMin16Hint256;
     /// @dev CONTEXT specification with minimum 48, unbounded maximum, and 512-byte allocation hint.
