@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import { commandId, deploy, getProvider, getSigner } from "./setup.js";
 import {
-  concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceConstraintsBlock, encodeBootstrapBlock,
-  encodeEntityBlock, encodeStepBlock,
+  concat, encodeAssetAmountBlock, encodeBalanceConstraintsBlock, encodeBootstrapBlock,
+  encodeEntityBlock, encodeStepBlock, encodeUserRecipientBlock,
 } from "./blocks.js";
 
 export const commanderDeadline = ethers.MaxUint256;
@@ -54,12 +54,13 @@ export async function deployPayoutHost(host: any) {
 }
 
 /// Native cashout: bootstrap (or debit) → createPayout on the payout host → cashout.
+/// `recipient` is the EVM address paid; createPayout gets it with its user account.
 export async function commanderCashout(host: any, payout: bigint, amount: bigint, recipient: string, debit = false) {
   const input = encodeAssetAmountBlock(await host.nativeAsset(), amount);
   return concat(
     encodeStepBlock(await commandId(debit ? "debitAccount(bytes)" : "bootstrap(bytes)", host), 0n,
       debit ? input : encodeBootstrapBlock(0n, input)),
-    encodeStepBlock(payout, 0n, encodeAccountBlock(recipient)),
+    encodeStepBlock(payout, 0n, encodeUserRecipientBlock(recipient)),
     encodeStepBlock(await commandId("cashout(bytes)", host), 0n, "0x"),
   );
 }

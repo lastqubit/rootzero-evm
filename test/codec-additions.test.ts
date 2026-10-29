@@ -24,7 +24,8 @@ const layouts: [keyof typeof Keys, number][] = [
   ["Quote", 4],
   ["Payout", 3],
   ["HostAccountAmount", 4],
-  ["Position", 5]
+  ["Position", 5],
+  ["Recipient", 2]
 ];
 const fields = [ethers.MaxUint256, 1n << 255n, 0x123456789abcdefn, (1n << 128n) + 7n, 0n]
   .map(value => ethers.toBeHex(value, 32));

@@ -80,8 +80,10 @@ describe("Burn", () => {
   });
 
   it("rejects a payout with a nonzero recipient", async () => {
-    const state = encodePayoutBlock(userAccount, ethers.zeroPadValue("0xd2", 32), 5n);
-    await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidAccount");
+    for (const recipient of [ethers.zeroPadValue("0xbeef", 20), userAccount]) {
+      const state = encodePayoutBlock(recipient, ethers.zeroPadValue("0xd2", 32), 5n);
+      await expect(callAs(0, ctx({ state }))).to.be.revertedWithCustomError(host, "InvalidAccount");
+    }
   });
 
   // â”€â”€ Target / access guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -115,6 +115,7 @@ export const Keys = {
   Status: blockKey("#status"),
   AssetLiability: blockKey("#assetLiability"),
   AccountAsset: blockKey("#accountAsset"),
+  Recipient: blockKey("#recipient"),
   HostAsset: blockKey("#hostAsset"),
   AccountBalance: blockKey("#accountBalance"),
   AccountAmount: blockKey("#accountAmount"),
@@ -273,8 +274,20 @@ export function encodeAssetBlock(asset: string): string {
   return encodeBlock(Keys.Asset, pad32(asset));
 }
 
+/// `recipient` is a native address, left-padded to 32 bytes; zero burns.
 export function encodePayoutBlock(recipient: string, asset: string, amount: bigint): string {
   return encodeBlock(Keys.Payout, ethers.concat([pad32(recipient), pad32(asset), pad32(amount)]));
+}
+
+/// `#recipient { bytes32 account, bytes32 address }`: the recipient's account ID and its
+/// native address, left-padded to 32 bytes. Zero for both means burn.
+export function encodeRecipientBlock(account: string, address: string): string {
+  return encodeBlock(Keys.Recipient, ethers.concat([pad32(account), pad32(address)]));
+}
+
+/// `#recipient` for an EVM address and the user account `createPayout` requires for it.
+export function encodeUserRecipientBlock(address: string): string {
+  return encodeRecipientBlock(encodeUserAccount(address), address);
 }
 
 export function encodeStepBlock(cmd: bigint, value: bigint, input: string): string {

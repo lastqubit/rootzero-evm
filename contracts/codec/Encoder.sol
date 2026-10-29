@@ -539,6 +539,27 @@ library Encoder {
         write32(abs, asset);
     }
 
+    /// @notice Append RECIPIENT, preserving field order and full-width values.
+    /// @dev Inherits reserve's initialized-writer requirements.
+    /// @param cur Packed writer cursor containing the relative position and logical capacity.
+    /// @param dst Destination memory buffer.
+    /// @param account Recipient account identifier.
+    /// @param addr Recipient native address, left-padded to 32 bytes.
+    /// @return value Output buffer; retain this value because growth may relocate it.
+    /// @return nextCur Updated packed writer cursor with relative position and capacity.
+    function writeRecipient(
+        uint cur,
+        bytes memory dst,
+        bytes32 account,
+        bytes32 addr
+    ) internal pure returns (bytes memory value, uint nextCur) {
+        uint abs;
+        (value, abs, nextCur) = reserve(cur, dst, 72);
+        abs = writeHeader(abs, Keys.Recipient, 64);
+        abs = write32(abs, account);
+        write32(abs, addr);
+    }
+
     /// @notice Append HOST_ASSET, preserving field order and full-width values.
     /// @dev Inherits reserve's initialized-writer requirements.
     /// @param cur Packed writer cursor containing the relative position and logical capacity.
@@ -636,7 +657,7 @@ library Encoder {
     /// @dev Inherits reserve's initialized-writer requirements. Performs no recipient validation.
     /// @param cur Packed writer cursor containing the relative position and logical capacity.
     /// @param dst Destination memory buffer.
-    /// @param recipient Account the value is paid to; zero means burn.
+    /// @param recipient Native address the value is paid to, left-padded to 32 bytes; zero means burn.
     /// @param asset Asset identifier.
     /// @param amount Quantity in the asset's native units.
     /// @return value Output buffer; retain this value because growth may relocate it.
@@ -1997,6 +2018,18 @@ library Encoder {
         write32(abs, asset);
     }
 
+    /// @notice Create a complete RECIPIENT block with zero allocation padding.
+    /// @dev Preserves field order and full-width values; performs no semantic validation.
+    /// @param account Recipient account identifier.
+    /// @param addr Recipient native address, left-padded to 32 bytes.
+    /// @return value Complete encoded block.
+    function createRecipient(bytes32 account, bytes32 addr) internal pure returns (bytes memory value) {
+        value = allocate(72);
+        uint abs = writeHeader(pos(value, 0), Keys.Recipient, 64);
+        abs = write32(abs, account);
+        write32(abs, addr);
+    }
+
     /// @notice Create a complete HOST_ASSET block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
     /// @param host Host node identifier.
@@ -2053,7 +2086,7 @@ library Encoder {
 
     /// @notice Create a complete PAYOUT block with zero allocation padding.
     /// @dev Preserves field order and full-width values; performs no semantic validation.
-    /// @param recipient Account the value is paid to; zero means burn.
+    /// @param recipient Native address the value is paid to, left-padded to 32 bytes; zero means burn.
     /// @param asset Asset identifier.
     /// @param amount Quantity in the asset's native units.
     /// @return value Complete encoded block.

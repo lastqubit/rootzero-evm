@@ -184,7 +184,7 @@ abstract contract PreviousExecuteCashout is Cashout {
         while (abs < end) {
             (bytes32 asset, uint amount) = LegacyMemory.unpackBalance(abs);
             if (asset != chainAsset) revert InvalidAsset();
-            cashout(account, amount);
+            cashout(address(uint160(uint(account))), amount);
             unchecked {
                 abs += Sizes.Balance;
             }

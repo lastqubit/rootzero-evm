@@ -7,14 +7,13 @@ using Executions for Execution;
 /// @title WithdrawHook
 /// @notice Hook implemented by hosts that withdraw account balances.
 abstract contract WithdrawHook {
-    /// @notice Override to send funds to `account`.
-    /// @dev Called once per PAYOUT block in state with its recipient, an EVM account with a nonzero
-    /// address. Implementations
-    /// must deliver the complete amount or revert.
-    /// @param account Recipient account identifier.
+    /// @notice Override to send funds to `recipient`.
+    /// @dev Called once per PAYOUT block in state with its recipient decoded as a nonzero EVM
+    /// address. Implementations must deliver the complete amount or revert.
+    /// @param recipient Address receiving the asset.
     /// @param asset Asset identifier.
     /// @param amount Amount to deliver.
-    function withdraw(bytes32 account, bytes32 asset, uint amount) internal virtual;
+    function withdraw(address recipient, bytes32 asset, uint amount) internal virtual;
 }
 
 /// @title Withdraw
@@ -29,9 +28,9 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     }
 
     /// @notice Withdraw each PAYOUT block from the command state to its recipient.
-    /// @dev Validates each recipient with `Accounts.evm` (reverting `InvalidAccount` for zero, opaque
-    /// or non-account IDs and `ZeroAddress` for a zero address), even for zero amounts. Records nothing: the command
-    /// that created the PAYOUT state recorded it.
+    /// @dev Decodes each recipient with `Accounts.recipientAddr`, even for zero amounts: reverts with
+    /// `ZeroAccount` for a zero recipient (a burn) and `InvalidAccount` when its top 12 bytes are set.
+    /// Records nothing: the command that created the PAYOUT state recorded it.
     /// @param context Command context carrying the PAYOUT state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -43,6 +42,6 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function withdrawOne(Execution memory exec) private {
         (bytes32 recipient, bytes32 asset, uint amount) = exec.unpackPayout();
-        withdraw(Accounts.evm(recipient), asset, amount);
+        withdraw(Accounts.recipientAddr(recipient), asset, amount);
     }
 }

@@ -140,7 +140,7 @@ library Execute {
     /// @dev Checks the exact header; caller establishes containment for 104 bytes.
     /// Performs no recipient validation; a zero recipient means burn.
     /// @param abs Absolute memory byte position; not a packed cursor.
-    /// @return recipient Recipient account identifier.
+    /// @return recipient Recipient native address, left-padded to 32 bytes.
     /// @return asset Asset identifier.
     /// @return amount Quantity in the asset's native units.
     function unpackPayoutMemory(uint abs) internal pure returns (bytes32 recipient, bytes32 asset, uint amount) {

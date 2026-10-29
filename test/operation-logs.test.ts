@@ -2,9 +2,9 @@ import { expect } from "chai";
 import { ethers } from "ethers";
 import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
-  concat, encodeAccountBlock, encodeAllowanceBlock, encodeAssetBlock, encodeAssetAmountBlock,
+  concat, encodeAllowanceBlock, encodeAssetBlock, encodeAssetAmountBlock,
   encodeBalanceBlock, encodeContextBlock, encodeHostAccount, encodeEntityBlock,
-  encodePayoutBlock, encodePositionBlock, encodeStepBlock, encodeUserAccount, exactSpec, Keys,
+  encodePayoutBlock, encodePositionBlock, encodeStepBlock, encodeUserAccount, encodeUserRecipientBlock, exactSpec, Keys,
 } from "./helpers/blocks.js";
 import { pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
 import "./helpers/matchers.js";
@@ -12,6 +12,7 @@ import "./helpers/matchers.js";
 const asset = ethers.id("logged-asset");
 const liability = ethers.id("logged-liability");
 const account = encodeUserAccount("0x11");
+const payee = ethers.zeroPadValue("0x11", 20);
 const dataLogs = (receipt: any) => receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data);
 
 describe("Command operation records", () => {
@@ -42,12 +43,13 @@ describe("Command operation records", () => {
     const id = await commandId("createPayout(bytes)", host);
     const withdraw = await commandId("withdraw(bytes)", host);
     await expect(host.deploymentTransaction()).emitEndpoint(host).withArgs(id,
-      exactSpec(Keys.Balance, 64), exactSpec(Keys.Account, 32), exactSpec(Keys.Payout, 96));
+      exactSpec(Keys.Balance, 64), exactSpec(Keys.Recipient, 64), exactSpec(Keys.Payout, 96));
+    expect((id >> 224n) & 0xffn).eq(32n); // Logs.Output alone
     await authorize(id, withdraw);
     for (const count of [0, 1, 3]) {
-      const to = (i: number) => encodeUserAccount(ethers.toBeHex(i + 20));
+      const to = (i: number) => ethers.zeroPadValue(ethers.toBeHex(i + 20), 20);
       const state = concat(...Array.from({ length: count }, (_, i) => encodeBalanceBlock(asset, BigInt(i + 1))));
-      const input = concat(...Array.from({ length: count }, (_, i) => encodeAccountBlock(to(i))));
+      const input = concat(...Array.from({ length: count }, (_, i) => encodeUserRecipientBlock(to(i))));
       const payouts = concat(...Array.from({ length: count }, (_, i) => encodePayoutBlock(to(i), asset, BigInt(i + 1))));
       expect(dataLogs(await (await host.createPayout(encodeContextBlock(account, state, input))).wait())).deep.eq([]);
       const steps = concat(encodeStepBlock(id, 0n, input), encodeStepBlock(withdraw, 0n, "0x"));
@@ -80,7 +82,7 @@ describe("Command operation records", () => {
       const native = await (await deploy("TestUtils")).testToChain();
       await authorize(id);
       for (const count of [0, 1, 3]) {
-        const item = method === "cashout" ? encodePayoutBlock(account, native, 10n) : encodePositionBlock(asset, 10n, liability, 8n);
+        const item = method === "cashout" ? encodePayoutBlock(payee, native, 10n) : encodePositionBlock(asset, 10n, liability, 8n);
         const state = concat(...Array(count).fill(item));
         const receipt = await (await host[method](encodeContextBlock(account, state, "0x"),
           { value: method === "settlePayable" ? BigInt(count * 18) : 0n })).wait();

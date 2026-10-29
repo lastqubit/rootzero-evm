@@ -30,6 +30,8 @@ library Headers {
     uint constant AssetLiability = Specs.AssetLiability >> 192;
     /// @dev Right-aligned ACCOUNT_ASSET key and exact payload length.
     uint constant AccountAsset = Specs.AccountAsset >> 192;
+    /// @dev Right-aligned RECIPIENT key and exact payload length.
+    uint constant Recipient = Specs.Recipient >> 192;
     /// @dev Right-aligned ENVELOPE key and exact payload length.
     uint constant Envelope = Specs.Envelope >> 192;
     /// @dev Right-aligned RESOLUTION key and exact payload length.

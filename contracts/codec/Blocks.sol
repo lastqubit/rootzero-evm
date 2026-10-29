@@ -1111,6 +1111,17 @@ library Blocks {
         (account, asset, nextCur) = unpack64(cur, Keys.AccountAsset);
     }
 
+    /// @notice Decode RECIPIENT and return the advanced source cursor.
+    /// @dev Reuses the fixed-word decoder's exact header and containment checks; performs no
+    /// account or address validation.
+    /// @param cur Bounded source cursor at the block header.
+    /// @return account Decoded recipient account identifier.
+    /// @return addr Decoded native address, left-padded to 32 bytes.
+    /// @return nextCur Advanced source preserving its end and metadata.
+    function unpackRecipient(uint cur) internal pure returns (bytes32 account, bytes32 addr, uint nextCur) {
+        (account, addr, nextCur) = unpack64(cur, Keys.Recipient);
+    }
+
     /// @notice Decode HOST_ASSET and return the advanced source cursor.
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// @param cur Bounded source cursor at the block header.
@@ -1235,7 +1246,7 @@ library Blocks {
     /// @dev Reuses the fixed-word decoder's exact header and containment checks.
     /// Performs no recipient validation; a zero recipient means burn.
     /// @param cur Bounded source cursor at the block header.
-    /// @return recipient Decoded payload value.
+    /// @return recipient Decoded native address, left-padded to 32 bytes.
     /// @return asset Decoded payload value.
     /// @return amount Decoded payload value.
     /// @return nextCur Advanced source preserving its end and metadata.

@@ -84,7 +84,8 @@ pragma solidity ^0.8.33;
 // - raw state forwarding is the explicit exception: it consumes state without
 //   interpreting or validating the forwarded block types
 // - `balance(...)`, `debt(...)`, `custody(...)`, `payout(...)`, and `position(...)` are live, linear state in the active command pipeline
-// - payout is value leaving the protocol for its recipient (zero burns); it is only ever delivered
+// - payout is value leaving the protocol for its recipient (zero burns); it is only ever delivered,
+//   on the chain that created it, and its recipient is a native address of that chain, not an account ID
 // - pipeline state belongs to the active account while the pipeline is executing
 // - while a balance, debt, or custody is in-flight as pipeline state, it is not simultaneously persisted
 //   in another ledger/store by this protocol
@@ -130,7 +131,8 @@ library Schemas {
     string constant Balance = "bytes32 asset, uint amount";
     /// @dev Schema DSL for the CUSTODY block.
     string constant Custody = "uint host, bytes32 asset, uint amount";
-    /// @dev Schema DSL for the PAYOUT block; a zero recipient burns.
+    /// @dev Schema DSL for the PAYOUT block; `recipient` is a native address of this chain,
+    /// left-padded to 32 bytes, and a zero recipient burns.
     string constant Payout = "bytes32 recipient, bytes32 asset, uint amount";
     /// @dev Schema DSL for the POSITION block.
     string constant Position = "bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty";
@@ -163,6 +165,9 @@ library Schemas {
     string constant AssetLiability = "bytes32 asset, bytes32 liability";
     /// @dev Schema DSL for the ACCOUNT_ASSET block.
     string constant AccountAsset = "bytes32 account, bytes32 asset";
+    /// @dev Schema DSL for the RECIPIENT block; `address` is a native address of this chain,
+    /// left-padded to 32 bytes, and `account` the internal account ID derived from it.
+    string constant Recipient = "bytes32 account, bytes32 address";
     /// @dev Schema DSL for the HOST_ASSET block.
     string constant HostAsset = "uint host, bytes32 asset";
 

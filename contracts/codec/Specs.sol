@@ -59,7 +59,7 @@ library Sizes {
     uint constant Balance = B64;
     /// @dev CUSTODY block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
     uint constant Custody = B96;
-    /// @dev PAYOUT block: 8 header + 32 recipient + 32 asset + 32 amount = 104 bytes
+    /// @dev PAYOUT block: 8 header + 32 recipient address + 32 asset + 32 amount = 104 bytes
     uint constant Payout = B96;
     /// @dev POSITION block: 8 header + five-word position = 168 bytes
     uint constant Position = B160;
@@ -89,6 +89,8 @@ library Sizes {
     uint constant Amount = B32;
     /// @dev HOST_ASSET block: 8 header + 32 host + 32 asset = 72 bytes
     uint constant HostAsset = B64;
+    /// @dev RECIPIENT block: 8 header + 32 account + 32 native address = 72 bytes
+    uint constant Recipient = B64;
     /// @dev ACCOUNT_BALANCE block: header plus account, asset and actual balance.
     uint constant AccountBalance = B96;
     /// @dev Three-word host amount block: 8 header + 32 host + 32 asset + 32 amount = 104 bytes
@@ -255,6 +257,8 @@ library Specs {
     uint constant AssetLiability = uint(bytes32(Keys.AssetLiability)) | Exact64;
     /// @dev ACCOUNT_ASSET specification with an exact 64-byte payload.
     uint constant AccountAsset = uint(bytes32(Keys.AccountAsset)) | Exact64;
+    /// @dev RECIPIENT specification with an exact 64-byte payload.
+    uint constant Recipient = uint(bytes32(Keys.Recipient)) | Exact64;
     /// @dev HOST_ASSET specification with an exact 64-byte payload.
     uint constant HostAsset = uint(bytes32(Keys.HostAsset)) | Exact64;
     /// @dev ACCOUNT_BALANCE specification with an exact 96-byte payload.

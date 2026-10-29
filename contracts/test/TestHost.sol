@@ -59,10 +59,10 @@ contract TestHost is
     Allowance,
     RevokeAllowance
 {
-    event CashoutCalled(bytes32 account, uint amount);
+    event CashoutCalled(address recipient, uint amount);
     event DepositCalled(bytes32 account, bytes32 asset, uint amount);
     event DepositPayableCalled(bytes32 account, bytes32 asset, uint amount, uint remaining);
-    event WithdrawCalled(bytes32 account, bytes32 asset, uint amount);
+    event WithdrawCalled(address recipient, bytes32 asset, uint amount);
     event CreditToCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
     event DebitFromCalled(bytes32 account, bytes32 asset, uint amount, uint returned);
     event RelayCalled(uint portal, uint resources, bytes32 account, bytes context);
@@ -104,8 +104,8 @@ contract TestHost is
         schema("relay.input: uint portal, uint resources", 3, 64);
     }
 
-    function cashout(bytes32 account, uint amount) internal override {
-        emit CashoutCalled(account, amount);
+    function cashout(address recipient, uint amount) internal override {
+        emit CashoutCalled(recipient, amount);
     }
 
     function setDepositFee(uint fee) external {
@@ -135,8 +135,8 @@ contract TestHost is
         return amount - depositFee;
     }
 
-    function withdraw(bytes32 account, bytes32 asset, uint amount) internal override {
-        emit WithdrawCalled(account, asset, amount);
+    function withdraw(address recipient, bytes32 asset, uint amount) internal override {
+        emit WithdrawCalled(recipient, asset, amount);
     }
 
     function settle(bytes32 account, Position memory position) internal override(Settlement, SettleHook) {

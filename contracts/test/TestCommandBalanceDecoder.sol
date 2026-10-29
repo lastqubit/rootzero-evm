@@ -31,5 +31,7 @@ contract CommandBalancePrevious is CommandBalanceHost, PreviousCommandCheckBalan
     function withdraw(bytes32 account, bytes32 asset, uint amount) internal override { record(account, asset, amount); }
 }
 contract CommandBalanceCurrent is CommandBalanceHost, CheckBalance, Withdraw {
-    function withdraw(bytes32 account, bytes32 asset, uint amount) internal override { record(account, asset, amount); }
+    function withdraw(address recipient, bytes32 asset, uint amount) internal override {
+        record(bytes32(uint(uint160(recipient))), asset, amount);
+    }
 }

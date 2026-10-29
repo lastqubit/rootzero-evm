@@ -4,7 +4,7 @@ import { commandId, deploy, getSigner, hostId } from "./helpers/setup.js";
 import {
   concat, encodeAccountBlock, encodeAssetAmountBlock, encodeBalanceBlock, encodeBootstrapBlock,
   encodeContextBlock, encodeEntityBlock, encodePositionBlock, encodeRelayInputBlock, encodeStepBlock,
-  encodeAmountBlock, encodePayoutBlock, encodeTrustBlock, encodeUserAccount, pad32,
+  encodeAmountBlock, encodePayoutBlock, encodeTrustBlock, encodeUserAccount, encodeUserRecipientBlock, pad32,
 } from "./helpers/blocks.js";
 import { Category, pipelineRecord, stateRecord, stepRecord } from "./helpers/event-records.js";
 import { authorizeCommander, commanderDeadline, deployCommanderPair, deployPayoutHost } from "./helpers/commander-proxy.js";
@@ -62,9 +62,9 @@ describe("Pipeline records", () => {
   });
 
   it("records a payout once, at the createPayout boundary", async () => {
-    const payee = encodeUserAccount(ethers.toBeHex(0xbeef, 20));
+    const payee = ethers.toBeHex(0xbeef, 20);
     const steps = concat(encodeStepBlock(ids.deposit, 0n, encodeAmountBlock(7n)),
-      encodeStepBlock(ids.createPayout, 0n, encodeAccountBlock(payee)),
+      encodeStepBlock(ids.createPayout, 0n, encodeUserRecipientBlock(payee)),
       encodeStepBlock(ids.withdraw, 0n, "0x"));
     expect(records(await pipe(trust, steps))).deep.eq([
       pipelineRecord(account, [ids.deposit, ids.createPayout, ids.withdraw]),
@@ -106,7 +106,7 @@ describe("Pipeline records", () => {
 
   it("logs nothing for local cashout, whose payout was recorded at creation", async () => {
     const native = await (await deploy("TestUtils")).testToChain();
-    const state = encodePayoutBlock(account, native, 3n);
+    const state = encodePayoutBlock(await (await getSigner(1)).getAddress(), native, 3n);
     expect(records(await pipe(state, encodeStepBlock(ids.cashout, 0n, "0x")))).deep.eq([
       pipelineRecord(account, [ids.cashout]),
     ]);
@@ -136,7 +136,8 @@ describe("Pipeline records", () => {
     let data: string | undefined;
     try {
       await host.testPipe.staticCall(account, trust, concat(first,
-        encodeStepBlock(ids.createPayout, 0n, encodeAccountBlock(account)), encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
+        encodeStepBlock(ids.createPayout, 0n, encodeUserRecipientBlock(await (await getSigner(1)).getAddress())),
+        encodeStepBlock(ids.withdraw, 0n, "0x"), failing));
     } catch (error: any) {
       data = error.data ?? error.info?.error?.data;
     }
@@ -161,13 +162,13 @@ describe("Pipeline records", () => {
     const payout = await deployPayoutHost(pair.direct);
     await authorizeCommander(pair.direct, [bootstrap, cashout, payout]);
     const steps = concat(encodeStepBlock(bootstrap, 0n, encodeBootstrapBlock(0n, encodeAssetAmountBlock(native, 7n))),
-      encodeStepBlock(payout, 0n, encodeAccountBlock(user)),
+      encodeStepBlock(payout, 0n, encodeUserRecipientBlock(pair.owner)),
       encodeStepBlock(cashout, 0n, "0x"));
     const receipt = await (await pair.direct.rootzero(steps, commanderDeadline)).wait();
     // createPayout's Output hint is the only record of the payout; cashout logs nothing.
     expect(pipelineRecords(receipt)).deep.eq([
       pipelineRecord(user, [bootstrap, payout, cashout]),
-      stateRecord(2, encodePayoutBlock(user, native, 7n)),
+      stateRecord(2, encodePayoutBlock(pair.owner, native, 7n)),
     ]);
   });
 

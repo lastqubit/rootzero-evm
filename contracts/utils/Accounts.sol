@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Layout} from "./Layout.sol";
-import {InvalidAccount} from "./Errors.sol";
+import {InvalidAccount, ZeroAccount} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
 import {Nodes} from "./Nodes.sol";
 import {ensureAddr, isFamily, toLocalBase, toUnspecifiedBase} from "./Utils.sol";
@@ -226,5 +226,17 @@ library Accounts {
     /// @return Embedded address (bits [159:0] of the ID).
     function addr(bytes32 value) internal pure returns (address) {
         return address(uint160(uint(evm(value))));
+    }
+
+    /// @notice Decode a PAYOUT recipient word as the EVM address it pays.
+    /// @dev A PAYOUT recipient is a native address left-padded to 32 bytes, not an account ID.
+    /// Reverts with `ZeroAccount` for zero (a burn, which no paying command delivers) and
+    /// `InvalidAccount` when any of the top 12 bytes are set.
+    /// @param recipient PAYOUT recipient word.
+    /// @return Nonzero EVM address in the low 20 bytes of `recipient`.
+    function recipientAddr(bytes32 recipient) internal pure returns (address) {
+        if (recipient == 0) revert ZeroAccount();
+        if (uint(recipient) >> 160 != 0) revert InvalidAccount();
+        return address(uint160(uint(recipient)));
     }
 }

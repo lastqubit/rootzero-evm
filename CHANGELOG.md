@@ -12,17 +12,33 @@ sections are immutable and must continue to describe the tagged release.
   `#payout` `(bytes32 recipient, bytes32 asset, uint amount)` with `Keys`,
   `Specs`/`Sizes`, `Headers` and `Schema` entries, `Blocks.unpackPayout`,
   `Encoder.writePayout`/`createPayout`, `exec.unpackPayout`/`outputPayout` and
-  `Execute.unpackPayoutMemory`.
+  `Execute.unpackPayoutMemory`. Its `recipient` is a native address of this
+  chain, left-padded to 32 bytes (on EVM, the address in the low 20 bytes), not
+  an account ID; zero means burn. A payout never crosses chains.
+  - New input block `#recipient` `(bytes32 account, bytes32 address)`, the
+    recipient's account ID and its native address, with `Keys`, `Specs`/`Sizes`,
+    `Headers` and `Schema` entries, `Blocks.unpackRecipient`,
+    `Encoder.writeRecipient`/`createRecipient` and `exec.unpackRecipient`.
   - `withdraw`, `cashout` and `burn` take `#payout` state instead of `#balance`,
-    so their endpoint IDs and specs change. `withdraw` and `cashout` pass each
-    recipient to their hooks as `account` and validate it with `Accounts.evm`
-    (`InvalidAccount` for a zero, opaque or non-account recipient, even for zero
-    amounts); `burn` reverts `InvalidAccount()` unless the recipient is zero.
+    so their endpoint IDs and specs change. `withdraw` and `cashout` (including
+    `ExecuteCashout`) decode each recipient with the new
+    `Accounts.recipientAddr(bytes32) returns (address)`: `ZeroAccount()` for
+    zero, `InvalidAccount()` when any of the top 12 bytes are set, even for zero
+    amounts. `burn` reverts `InvalidAccount()` unless the recipient is zero.
     All three drop the `Logs.State` hint.
+  - Hook signatures take the address: `WithdrawHook.withdraw(address recipient,
+    bytes32 asset, uint amount)` and `CashoutHook.cashout(address recipient,
+    uint amount)` replace the `bytes32 account` versions, and
+    `sendChainAsset(address recipient, uint amount)` replaces
+    `sendChainAsset(bytes32 account, uint amount)` (it reverts `ZeroAddress()`
+    for the zero address).
   - `Payout` and `PayoutHook` are replaced by `CreatePayout` (`createPayout`,
-    still in `commands/Payout.sol`): `#balance` state plus `#account` input to
-    `#payout` output, with the `Logs.Output` hint. Nonzero recipients must be
-    accounts; zero passes through and means burn. Withdrawals become
+    still in `commands/Payout.sol`): `#balance` state plus `#recipient` input to
+    `#payout` output, with the `Logs.Output` hint. Unless account and address
+    are both zero (a burn), the address must be a nonzero EVM address whose
+    `Accounts.toUser(address)` is the account, else `InvalidAccount()`; this
+    rejects foreign-chain, SVM, admin, host and opaque accounts. The output
+    carries the address. Withdrawals become
     `debitAccount → createPayout → withdraw`.
   - New global error `ZeroAccount()` for a required nonzero account, such as a custody
     settlement counterparty.

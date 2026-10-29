@@ -16,15 +16,18 @@ import {
   encodeBalanceBlock, encodeLiabilityPosition, encodePositionBlock, encodeCustodyBlock,
   encodeAccountBlock, encodeAmountBlock, encodeEntityBlock, encodeStepBlock, encodeTrustBlock, encodeUserAccount,
   encodeActionBlock, encodeOutputBlock, encodeStateBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
-  encodePayoutBlock, encodeSchemaBlock, localKey,
+  encodePayoutBlock, encodeRecipientBlock, encodeUserRecipientBlock, encodeSchemaBlock, localKey,
   concat
 } from "./helpers/blocks.js";
 
+// PAYOUT recipients that withdraw and cashout refuse to pay: zero (a burn) and words that
+// aren't an EVM address left-padded to 32 bytes.
 const undeliverable: [string, string][] = [
-  [ethers.ZeroHash, "InvalidAccount"],
+  [ethers.ZeroHash, "ZeroAccount"],
+  [encodeUserAccount("0xbeef"), "InvalidAccount"], // account ID, not an address
   [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), "InvalidAccount"], // opaque account
-  [ethers.toBeHex(0x03030100n << 224n, 32), "InvalidAccount"], // asset, not an account
-  [ethers.toBeHex(0x03010300n << 224n, 32), "ZeroAddress"], // EVM user account, zero address
+  [ethers.toBeHex((1n << 160n) | 0xbeefn, 32), "InvalidAccount"], // one bit above the address
+  [ethers.toBeHex((1n << 255n) | 0xbeefn, 32), "InvalidAccount"], // top bit set
 ];
 
 describe("Commands", () => {
@@ -377,7 +380,7 @@ describe("Commands", () => {
   describe("withdraw", () => {
     const asset = ethers.zeroPadValue("0x10", 32);
 
-    const recipient = encodeUserAccount("0xbeef");
+    const recipient = ethers.getAddress(ethers.zeroPadValue("0xbeef", 20));
 
     it("takes PAYOUT state without logging flags", async () => {
       const id = await cmd("withdraw");
@@ -399,14 +402,14 @@ describe("Commands", () => {
     });
 
 
-    it("emits WithdrawCalled with the PAYOUT recipient", async () => {
+    it("emits WithdrawCalled with the PAYOUT recipient address", async () => {
       const state = encodePayoutBlock(recipient, asset, 100n);
       const tx = await callAs(0, "withdraw", ctx({ state }));
       await expect(tx).to.emit(host, "WithdrawCalled")
         .withArgs(recipient, asset, 100n);
     });
 
-    it("rejects recipients that aren't EVM accounts with an address, even for zero amounts", async () => {
+    it("rejects zero and non-address recipients, even for zero amounts", async () => {
       for (const [recipient, error] of undeliverable) {
         for (const amount of [0n, 100n]) {
           await expect(callAs(0, "withdraw", ctx({ state: encodePayoutBlock(recipient, asset, amount) })))
@@ -430,12 +433,12 @@ describe("Commands", () => {
       const asset3 = ethers.zeroPadValue("0x13", 32);
       const state = concat(
         encodePayoutBlock(recipient, asset1, 10n),
-        encodePayoutBlock(userAccount, asset2, 20n),
+        encodePayoutBlock(commander, asset2, 20n),
         encodePayoutBlock(recipient, asset3, 30n),
       );
       const tx = await callAs(0, "withdraw", ctx({ state }));
       await expect(tx).to.emit(host, "WithdrawCalled").withArgs(recipient, asset1, 10n);
-      await expect(tx).to.emit(host, "WithdrawCalled").withArgs(userAccount, asset2, 20n);
+      await expect(tx).to.emit(host, "WithdrawCalled").withArgs(commander, asset2, 20n);
       await expect(tx).to.emit(host, "WithdrawCalled").withArgs(recipient, asset3, 30n);
     });
 
@@ -460,7 +463,7 @@ describe("Commands", () => {
   });
 
   describe("cashout", () => {
-    const recipient = encodeUserAccount("0xbeef");
+    const recipient = ethers.getAddress(ethers.zeroPadValue("0xbeef", 20));
 
     it("discovers PAYOUT state with empty input and output", async () => {
       const deployment = host.deploymentTransaction();
@@ -486,11 +489,11 @@ describe("Commands", () => {
       const chainAsset = await utils.testToChain();
       const state = concat(
         encodePayoutBlock(recipient, chainAsset, 3n),
-        encodePayoutBlock(userAccount, chainAsset, 5n),
+        encodePayoutBlock(commander, chainAsset, 5n),
       );
       const tx = await callAs(0, "cashout", ctx({ state }));
       await expect(tx).to.emit(host, "CashoutCalled").withArgs(recipient, 3n);
-      await expect(tx).to.emit(host, "CashoutCalled").withArgs(userAccount, 5n);
+      await expect(tx).to.emit(host, "CashoutCalled").withArgs(commander, 5n);
       expect(await host.cashout.staticCall(...ctx({ state }))).to.deep.equal(["0x", 0n]);
       expect(await host.cashout.staticCall(...ctx())).to.deep.equal(["0x", 0n]);
     });
@@ -501,7 +504,7 @@ describe("Commands", () => {
         .to.be.revertedWithCustomError(host, "InvalidAsset");
     });
 
-    it("rejects recipients that aren't EVM accounts with an address, even for zero amounts", async () => {
+    it("rejects zero and non-address recipients, even for zero amounts", async () => {
       const chainAsset = await utils.testToChain();
       for (const [recipient, error] of undeliverable) {
         for (const amount of [0n, 1n]) {
@@ -752,84 +755,95 @@ describe("Commands", () => {
   describe("createPayout", () => {
     const asset = ethers.zeroPadValue("0x28", 32);
     const createPayout = (state: string, input: string) => host.createPayout.staticCall(...ctx({ state, input }));
+    const address = (value: string) => ethers.getAddress(ethers.zeroPadValue(value, 20));
 
-    it("takes BALANCE state and ACCOUNT input, outputs PAYOUT and hints Output", async () => {
+    it("takes BALANCE state and RECIPIENT input, outputs PAYOUT and hints Output", async () => {
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(await cmd("createPayout"),
-        exactSpec(Keys.Balance, 64), exactSpec(Keys.Account, 32), exactSpec(Keys.Payout, 96));
+        exactSpec(Keys.Balance, 64), exactSpec(Keys.Recipient, 64), exactSpec(Keys.Payout, 96));
     });
 
-    it("turns paired BALANCE state and ACCOUNT input into PAYOUT", async () => {
-      const to = encodeUserAccount("0xd00d");
-      expect(await createPayout(encodeBalanceBlock(asset, 250n), encodeAccountBlock(to)))
+    it("pays the RECIPIENT address, not its account", async () => {
+      const to = address("0xd00d");
+      expect(await createPayout(encodeBalanceBlock(asset, 250n), encodeUserRecipientBlock(to)))
         .deep.eq([encodePayoutBlock(to, asset, 250n), 0n]);
     });
 
-    it("keeps a zero recipient, which means burn", async () => {
-      expect(await createPayout(encodeBalanceBlock(asset, 5n), encodeAccountBlock(ethers.ZeroHash)))
+    it("pays a recipient other than the pipeline account", async () => {
+      const to = address("0xd00e");
+      expect(encodeUserAccount(to)).not.eq(userAccount);
+      expect(await createPayout(encodeBalanceBlock(asset, 9n), encodeUserRecipientBlock(to)))
+        .deep.eq([encodePayoutBlock(to, asset, 9n), 0n]);
+    });
+
+    it("burns when both account and address are zero", async () => {
+      expect(await createPayout(encodeBalanceBlock(asset, 5n), encodeRecipientBlock(ethers.ZeroHash, ethers.ZeroHash)))
         .deep.eq([encodePayoutBlock(ethers.ZeroHash, asset, 5n), 0n]);
     });
 
-    it("rejects nonzero non-account recipients even for zero amounts", async () => {
-      const destinations = [
-        ethers.zeroPadValue("0x01", 32),
-        ethers.toBeHex(0x03030100n << 224n, 32), // Asset category.
-        ethers.toBeHex(await host.host(), 32), // Host node, not a host account.
+    it("rejects recipients whose address doesn't give their account, even for zero amounts", async () => {
+      const to = address("0xd00d");
+      const other = address("0xd00f");
+      const user = encodeUserAccount(to);
+      const cases: [string, string][] = [
+        [encodeUserAccount(other), to], // address and account don't match
+        [user, ethers.ZeroHash], // zero address with a nonzero account
+        [encodeUserAccount(ethers.ZeroAddress), ethers.ZeroHash], // user account of the zero address
+        [ethers.ZeroHash, to], // zero account with a nonzero address
+        [user, ethers.toBeHex((1n << 160n) | BigInt(to), 32)], // not an address: a top byte set
+        [user, user], // the account passed as the address
+        [ethers.toBeHex(BigInt(user) | (1n << 192n), 32), to], // the account bound to a chain
+        [ethers.toBeHex((0x04010300n << 224n) | BigInt(to), 32), to], // an SVM account
+        [ethers.toBeHex((0x03010100n << 224n) | BigInt(to), 32), to], // the admin account of the address
+        [encodeHostAccount(await host.host()), await host.getAddress()], // a host account
+        [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), to], // an opaque account
       ];
-      for (const to of destinations) {
+      for (const [account, addr] of cases) {
         for (const amount of [0n, 1n]) {
-          await expect(createPayout(encodeBalanceBlock(asset, amount), encodeAccountBlock(to)))
+          await expect(createPayout(encodeBalanceBlock(asset, amount), encodeRecipientBlock(account, addr)))
             .to.be.revertedWithCustomError(host, "InvalidAccount");
         }
       }
     });
 
-    it("accepts host and opaque account recipients without narrowing account policy", async () => {
-      const destinations = [
-        encodeHostAccount(await host.host()),
-        ethers.toBeHex((0x02017fn << 232n) | 123n, 32),
-      ];
-      for (const to of destinations) {
-        for (const amount of [0n, 1n]) {
-          expect(await createPayout(encodeBalanceBlock(asset, amount), encodeAccountBlock(to)))
-            .deep.eq([encodePayoutBlock(to, asset, amount), 0n]);
-        }
-      }
-    });
-
-    it("pairs each BALANCE block with the matching ACCOUNT block", async () => {
+    it("pairs each BALANCE block with the matching RECIPIENT block", async () => {
       const asset1 = ethers.zeroPadValue("0x29", 32);
       const asset2 = ethers.zeroPadValue("0x2a", 32);
-      const to1 = encodeUserAccount("0xd001");
-      const to2 = encodeUserAccount("0xd002");
+      const to1 = address("0xd001");
+      const to2 = address("0xd002");
       const state = concat(
         encodeBalanceBlock(asset1, 10n),
         encodeBalanceBlock(asset2, 20n),
+        encodeBalanceBlock(asset2, 30n),
       );
       const input = concat(
-        encodeAccountBlock(to1),
-        encodeAccountBlock(to2),
+        encodeUserRecipientBlock(to1),
+        encodeRecipientBlock(ethers.ZeroHash, ethers.ZeroHash),
+        encodeUserRecipientBlock(to2),
       );
-      expect(await createPayout(state, input))
-        .deep.eq([concat(encodePayoutBlock(to1, asset1, 10n), encodePayoutBlock(to2, asset2, 20n)), 0n]);
+      expect(await createPayout(state, input)).deep.eq([concat(
+        encodePayoutBlock(to1, asset1, 10n),
+        encodePayoutBlock(ethers.ZeroHash, asset2, 20n),
+        encodePayoutBlock(to2, asset2, 30n),
+      ), 0n]);
     });
 
-    it("reverts InvalidBlock when input accounts run out before state balances", async () => {
+    it("reverts InvalidBlock when recipients run out before state balances", async () => {
       const state = concat(
         encodeBalanceBlock(asset, 1n),
         encodeBalanceBlock(asset, 2n),
       );
-      const input = encodeAccountBlock(encodeUserAccount("0xd003"));
+      const input = encodeUserRecipientBlock(address("0xd003"));
 
       await expect(createPayout(state, input))
         .to.be.revertedWithCustomError(host, "InvalidBlock");
     });
 
-    it("reverts InvalidBlock when the paired input block is not an ACCOUNT", async () => {
+    it("reverts InvalidBlock when the paired input block is not a RECIPIENT", async () => {
       const state = encodeBalanceBlock(asset, 1n);
-      const input = encodeBalanceBlock(asset, 1n);
-
-      await expect(createPayout(state, input))
-        .to.be.revertedWithCustomError(host, "InvalidBlock");
+      for (const input of [encodeBalanceBlock(asset, 1n), encodeAccountBlock(encodeUserAccount(address("0xd003")))]) {
+        await expect(createPayout(state, input))
+          .to.be.revertedWithCustomError(host, "InvalidBlock");
+      }
     });
   });
 
@@ -1423,15 +1437,15 @@ describe("Commands", () => {
 
     it("executes cashout batches through optimized local execution", async () => {
       const chainAsset = await utils.testToChain();
-      const recipient = encodeUserAccount("0xbeef");
+      const recipient = ethers.getAddress(ethers.zeroPadValue("0xbeef", 20));
       const state = concat(
         encodePayoutBlock(recipient, chainAsset, 23n),
-        encodePayoutBlock(userAccount, chainAsset, 29n),
+        encodePayoutBlock(commander, chainAsset, 29n),
       );
       const steps = encodeStepBlock(await cmd("cashout"), 0n, "0x");
       const tx = await callAs(0, "testPipe", userAccount, state, steps);
       await expect(tx).to.emit(host, "CashoutCalled").withArgs(recipient, 23n);
-      await expect(tx).to.emit(host, "CashoutCalled").withArgs(userAccount, 29n);
+      await expect(tx).to.emit(host, "CashoutCalled").withArgs(commander, 29n);
     });
 
     it("rejects undeliverable recipients in optimized local cashout", async () => {
@@ -1446,14 +1460,14 @@ describe("Commands", () => {
     it("debits stored native value and pays it out through createPayout", async () => {
       const chainAsset = await utils.testToChain();
       const amount = 31n;
-      const recipient = encodeUserAccount("0xbeef");
+      const recipient = ethers.getAddress(ethers.zeroPadValue("0xbeef", 20));
       const steps = concat(
         encodeStepBlock(
           await cmd("debitAccount"),
           0n,
           encodeAssetAmountBlock(chainAsset, amount),
         ),
-        encodeStepBlock(await cmd("createPayout"), 0n, encodeAccountBlock(recipient)),
+        encodeStepBlock(await cmd("createPayout"), 0n, encodeUserRecipientBlock(recipient)),
         encodeStepBlock(await cmd("cashout"), 0n, "0x"),
       );
 
@@ -1467,7 +1481,7 @@ describe("Commands", () => {
     it("returns step value but rejects input for local cashout", async () => {
       const command = await cmd("cashout");
       const chainAsset = await utils.testToChain();
-      const state = encodePayoutBlock(userAccount, chainAsset, 1n);
+      const state = encodePayoutBlock(commander, chainAsset, 1n);
       const valued = encodeStepBlock(command, 1n, "0x");
       await expect(callAs(0, "testPipe", userAccount, state, valued, { value: 1n }))
         .to.emit(host, "CreditToCalled").withArgs(userAccount, chainAsset, 1n, 1n);
@@ -1478,7 +1492,7 @@ describe("Commands", () => {
     });
 
     it("rejects non-chain-asset state in optimized local cashout", async () => {
-      const state = encodePayoutBlock(userAccount, ethers.ZeroHash, 1n);
+      const state = encodePayoutBlock(commander, ethers.ZeroHash, 1n);
       const step = encodeStepBlock(await cmd("cashout"), 0n, "0x");
       await expect(callAs(0, "testPipe", userAccount, state, step))
         .to.be.revertedWithCustomError(host, "InvalidAsset");

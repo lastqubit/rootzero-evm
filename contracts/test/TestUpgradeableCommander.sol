@@ -42,8 +42,8 @@ abstract contract CommanderTestCore is
         Logs.balance(account, asset, creditTo(account, asset, amount));
     }
 
-    function cashout(bytes32 account, uint amount) internal override {
-        if (amount != 0) sendChainAsset(account, amount);
+    function cashout(address recipient, uint amount) internal override {
+        if (amount != 0) sendChainAsset(recipient, amount);
     }
 
     function cashin(bytes32 account, uint value) internal override {

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {Accounts} from "../utils/Accounts.sol";
 import {SendFailed} from "../utils/Errors.sol";
+import {ensureAddr} from "../utils/Utils.sol";
 
-/// @notice Send an exact chain-asset amount to the address embedded in `account`.
-/// @dev Validates the EVM account family and nonzero address, without restricting subtype.
-/// Zero amounts still validate the account and call the recipient. Failed transfers revert
-/// without copying recipient return data. This helper performs no bookkeeping
-/// and emits no events. Callers must authorize and fund the transfer, finalize
+/// @notice Send an exact chain-asset amount to `recipient`.
+/// @dev Reverts with `ZeroAddress` for a zero recipient. Zero amounts still call the recipient.
+/// Failed transfers revert without copying recipient return data. This helper performs no
+/// bookkeeping and emits no events. Callers must authorize and fund the transfer, finalize
 /// accounting before calling, and protect their entrypoints against reentrancy.
-/// @param account EVM-backed account receiving the chain asset.
+/// @param recipient Address receiving the chain asset.
 /// @param amount Chain-asset amount to send.
-function sendChainAsset(bytes32 account, uint amount) {
-    address recipient = Accounts.addr(account);
+function sendChainAsset(address recipient, uint amount) {
+    ensureAddr(recipient);
     bool success;
     assembly ("memory-safe") {
         success := call(gas(), recipient, amount, 0, 0, 0, 0)
@@ -38,16 +37,15 @@ abstract contract CashinHook {
 }
 
 /// @title CashoutHook
-/// @notice Hook implemented by hosts that pay chain assets to accounts.
+/// @notice Hook implemented by hosts that pay chain assets to addresses.
 abstract contract CashoutHook {
-    /// @notice Pay an exact chain-asset amount to `account`.
+    /// @notice Pay an exact chain-asset amount to `recipient`.
     /// @dev Called once per chain-asset PAYOUT block in state by the cashout command, with
-    /// its recipient, an EVM account with a nonzero address, as `account`.
+    /// its recipient decoded as a nonzero EVM address.
     /// Implementations must revert if the complete amount cannot be paid.
-    /// Account format may be trusted under the caller's policy. Hosts still enforce
-    /// payout destination requirements, accounting, event emission, and reentrancy protection.
-    /// EVM-backed payouts may use sendChainAsset.
-    /// @param account Account receiving the chain asset.
+    /// Hosts still enforce payout destination requirements, accounting, event emission,
+    /// and reentrancy protection. Implementations may use sendChainAsset.
+    /// @param recipient Address receiving the chain asset.
     /// @param amount Chain-asset amount to pay.
-    function cashout(bytes32 account, uint amount) internal virtual;
+    function cashout(address recipient, uint amount) internal virtual;
 }

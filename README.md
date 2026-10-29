@@ -330,9 +330,9 @@ semantics; this convention adds no checks to skipped legs.
 This is the intended integration convention, not a claim that all existing
 implementation checks have been removed or that every input boundary already
 enforces it. Validation helpers retain their documented checks; for example,
-`Accounts.addr` and `sendChainAsset` still check the EVM family and nonzero address,
-and `sendChainAsset` does so even for a zero amount. Existing host-specific checks
-also remain. No `Account` or `ValidatedAccount` wrapper type is required.
+`Accounts.addr` still checks the EVM family and nonzero address, and
+`sendChainAsset` rejects a zero address even for a zero amount. Existing
+host-specific checks also remain. No `Account` or `ValidatedAccount` wrapper type is required.
 
 ## Hosts
 
@@ -665,17 +665,18 @@ bits 3 through 5 are logging hints, and bits 2 and 6 (`Logs.Pipeline`, `Logs.Val
 Hints are part of the endpoint ID: State=8, Input=16, Output=32.
 Combine these with behavior flags, e.g. `Logs.Input | Flags.Admin`.
 
-`CashoutHook` declares an abstract `cashout(account, amount)` hook; `account` is the
-`#payout` recipient. Hosts implement their payout policy and choose the accounting
-and events to emit. The hook has
-no `ChainAsset` inheritance or built-in flow logging.
+`CashoutHook` declares an abstract `cashout(address recipient, uint amount)` hook;
+`recipient` is the `#payout` recipient decoded as a nonzero EVM address. Hosts
+implement their payout policy and choose the accounting and events to emit. The
+hook has no `ChainAsset` inheritance or built-in flow logging. `WithdrawHook`
+likewise declares `withdraw(address recipient, bytes32 asset, uint amount)`.
 
-The free `sendChainAsset(account, amount)` helper in `core/Cash.sol`, also exported
-by `Core.sol` and `Endpoints.sol`, transfers the exact amount to
-`Accounts.addr(account)`, accepting EVM-backed account subtypes with a nonzero
-address. Failed transfers revert with the global `SendFailed()` error without
-copying recipient return data. Zero amounts still validate the account and call
-the recipient; hook implementations may skip zero amounts before calling.
+The free `sendChainAsset(address recipient, uint amount)` helper in `core/Cash.sol`,
+also exported by `Core.sol` and `Endpoints.sol`, transfers the exact amount to
+`recipient` and reverts `ZeroAddress()` for the zero address. Failed transfers
+revert with the global `SendFailed()` error without copying recipient return data.
+Zero amounts still call the recipient; hook implementations may skip zero amounts
+before calling.
 The helper performs no bookkeeping and emits no events. The host must authorize
 and fund the withdrawal, finalize accounting before calling it, and protect its
 entrypoints against reentrancy.
@@ -684,7 +685,7 @@ The standard commands cover the common ledger movements: `bootstrap` (source
 an initial balance and native-value budget), `deposit` and
 `depositPayable` (external funds in), `settlePayable` (funded settlement),
 `debitAccount` and `creditAccount` (internal movements), `createPayout`
-(turn `#balance` state plus an `#account` recipient into `#payout` state),
+(turn `#balance` state plus a `#recipient` input into `#payout` state),
 `withdraw`, `cashout` (native) and `burn` (deliver `#payout` out of the
 protocol), `realize` (pass each position to
 `realize(account, position)`; the hook fulfills it in the existing denominations and
@@ -822,11 +823,20 @@ A withdrawal, for instance, is a three-step pipeline: `debitAccount` turns an
 and outputs `#payout`, and `withdraw` delivers it.
 
 `#payout` `(bytes32 recipient, bytes32 asset, uint amount)` is the only state that
-leaves the protocol. Commands that deliver it (`withdraw`, `cashout`) pay each block in
-full to its recipient and validate it with `Accounts.evm` (`InvalidAccount` for a zero,
-opaque or non-account recipient); `burn` takes
-only zero-recipient payouts. No command turns `#payout` back into `#balance` or keeps
-it in an internal ledger. `createPayout` carries the `Logs.Output` hint, so each
+leaves the protocol. Its recipient is a native address of this chain, left-padded to
+32 bytes (on EVM, the address in the low 20 bytes), not an account ID; zero means
+burn. A payout is created and delivered on one chain and never relayed.
+`createPayout` pairs each `#balance` with a `#recipient`
+`(bytes32 account, bytes32 address)` input: the recipient's account ID and its native
+address. Unless both are zero (a burn), it requires a nonzero EVM address whose
+user account, `Accounts.toUser(address)`, is that account, so a foreign-chain, SVM,
+admin, host or opaque account, a mismatched pair, or a word that isn't an address
+reverts `InvalidAccount()`. The output `#payout` carries only the address.
+Commands that deliver it (`withdraw`, `cashout`) pay each block in full and decode
+its recipient with `Accounts.recipientAddr` (`ZeroAccount()` for zero,
+`InvalidAccount()` when any of the top 12 bytes are set), even for zero amounts;
+`burn` takes only zero-recipient payouts. No command turns `#payout` back into
+`#balance` or keeps it in an internal ledger. `createPayout` carries the `Logs.Output` hint, so each
 payout is recorded once, when it is created; delivering commands carry no logging
 hint. Hosts that create `#payout` follow the same rule. Custody hosts using the
 default `Settlement` should override `settle` to revert `ZeroAccount()` on a zero

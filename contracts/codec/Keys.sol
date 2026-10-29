@@ -61,7 +61,7 @@ library Keys {
     bytes4 constant Balance = bytes4(keccak256("#balance"));
     /// @dev Cross-host custody state - (uint host, bytes32 asset, uint amount)
     bytes4 constant Custody = bytes4(keccak256("#custody"));
-    /// @dev Value leaving the protocol for a recipient; zero recipient burns - (bytes32 recipient, bytes32 asset, uint amount)
+    /// @dev Value leaving the protocol for a native-address recipient; zero recipient burns - (bytes32 recipient, bytes32 asset, uint amount)
     bytes4 constant Payout = bytes4(keccak256("#payout"));
     /// @dev Asset-liability position state - (bytes32 asset, uint amount, bytes32 liability, uint debt, bytes32 counterparty)
     bytes4 constant Position = bytes4(keccak256("#position"));
@@ -148,6 +148,8 @@ library Keys {
     bytes4 constant AssetLiability = bytes4(keccak256("#assetLiability"));
     /// @dev Structural account asset form - (bytes32 account, bytes32 asset)
     bytes4 constant AccountAsset = bytes4(keccak256("#accountAsset"));
+    /// @dev Payout recipient - (bytes32 account, bytes32 address): internal account ID and native address
+    bytes4 constant Recipient = bytes4(keccak256("#recipient"));
     /// @dev Structural host asset form - (uint host, bytes32 asset)
     bytes4 constant HostAsset = bytes4(keccak256("#hostAsset"));
     /// @dev Actual account balance - (bytes32 account, bytes32 asset, uint amount).

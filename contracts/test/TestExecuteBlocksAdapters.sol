@@ -28,7 +28,7 @@ contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDeb
         unchecked { checksum += uint(account) ^ uint(asset) ^ amount; }
     }
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override { debitAccount(account, asset, amount); }
-    function cashout(bytes32 account, uint amount) internal override { debitAccount(account, chainAsset, amount); }
+    function cashout(address recipient, uint amount) internal override { debitAccount(bytes32(uint(uint160(recipient))), chainAsset, amount); }
     function settle(bytes32 account, Position memory position) internal override {
         require(position.amount != type(uint).max, "hook");
         unchecked { checksum += uint(account) ^ uint(position.asset) ^ position.amount ^ uint(position.liability) ^ position.debt ^ uint(position.counterparty); }
@@ -139,7 +139,7 @@ contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, Execut
         unchecked { checksum += uint(account) ^ uint(asset) ^ amount; }
     }
     function creditAccount(bytes32 account, bytes32 asset, uint amount) internal override { debitAccount(account, asset, amount); }
-    function cashout(bytes32 account, uint amount) internal override { debitAccount(account, chainAsset, amount); }
+    function cashout(address recipient, uint amount) internal override { debitAccount(bytes32(uint(uint160(recipient))), chainAsset, amount); }
     function settle(bytes32 account, Position memory position) internal override {
         require(position.amount != type(uint).max, "hook");
         unchecked { checksum += uint(account) ^ uint(position.asset) ^ position.amount ^ uint(position.liability) ^ position.debt ^ uint(position.counterparty); }

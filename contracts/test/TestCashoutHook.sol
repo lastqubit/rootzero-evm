@@ -7,13 +7,13 @@ contract TestCashoutHook is CashoutHook {
     uint public paid;
     receive() external payable {}
 
-    function pay(bytes32 account, uint amount) external {
+    function pay(address recipient, uint amount) external {
         paid += amount;
-        cashout(account, amount);
+        cashout(recipient, amount);
     }
 
-    function cashout(bytes32 account, uint amount) internal override {
-        sendChainAsset(account, amount);
+    function cashout(address recipient, uint amount) internal override {
+        sendChainAsset(recipient, amount);
     }
 }
 

@@ -192,6 +192,16 @@ contract TestCursorHelper {
         return Encoder.createPayout(recipient, asset, amount);
     }
 
+    function testToRecipientBlock(bytes32 account, bytes32 addr) external pure returns (bytes memory) {
+        return Encoder.createRecipient(account, addr);
+    }
+
+    function testWriteRecipientBlock(bytes32 account, bytes32 addr) external pure returns (bytes memory) {
+        (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Recipient, 1));
+        (wBuffer, w) = Encoder.writeRecipient(w, wBuffer, account, addr);
+        return Encoder.finish(w, wBuffer);
+    }
+
     function testWriterFinishEmpty() external pure returns (bytes memory) {
         (bytes memory wBuffer, uint w) = Encoder.init(Specs.allocation(Specs.Balance, 1));
         return Encoder.finish(w, wBuffer);
@@ -291,6 +301,11 @@ contract TestCursorHelper {
     ) external pure returns (bytes32 account, bytes32 asset) {
         uint cur = Cursors.wrap(source);
         (account, asset,) = Blocks.unpackAccountAsset(cur);
+    }
+
+    function testUnpackRecipient(bytes calldata source) external pure returns (bytes32 account, bytes32 addr) {
+        uint cur = Cursors.wrap(source);
+        (account, addr,) = Blocks.unpackRecipient(cur);
     }
 
     function testUnpackHostAsset(

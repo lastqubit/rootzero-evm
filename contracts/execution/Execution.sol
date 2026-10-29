@@ -636,6 +636,15 @@ library Executions {
         (value.account, value.asset) = unpackAccountAsset(exec);
     }
 
+    /// @notice Decode and consume one RECIPIENT block from input.
+    /// @dev Performs no account or address validation.
+    /// @param exec Execution whose input cursor is advanced.
+    /// @return account Decoded recipient account identifier.
+    /// @return addr Decoded native address, left-padded to 32 bytes.
+    function unpackRecipient(Execution memory exec) internal pure returns (bytes32 account, bytes32 addr) {
+        (account, addr, exec.input) = exec.input.unpackRecipient();
+    }
+
     /// @notice Decode and consume one HOST_ASSET block from input.
     /// @param exec Execution whose input cursor is advanced.
     /// @return host Decoded host identifier.
@@ -726,7 +735,7 @@ library Executions {
     /// @notice Decode and consume one PAYOUT block from state.
     /// @dev Performs no recipient validation; a zero recipient means burn.
     /// @param exec Execution whose state cursor is advanced.
-    /// @return recipient Decoded recipient account identifier.
+    /// @return recipient Decoded recipient native address, left-padded to 32 bytes.
     /// @return asset Decoded asset identifier.
     /// @return amount Decoded payout amount.
     function unpackPayout(Execution memory exec) internal pure returns (bytes32 recipient, bytes32 asset, uint amount) {
@@ -1229,7 +1238,7 @@ library Executions {
 
     /// @notice Append a PAYOUT block to execution output.
     /// @param exec Execution receiving the block.
-    /// @param recipient Recipient account identifier to encode; zero means burn.
+    /// @param recipient Recipient native address to encode, left-padded to 32 bytes; zero means burn.
     /// @param asset Asset identifier to encode.
     /// @param amount Payout amount to encode.
     function outputPayout(Execution memory exec, bytes32 recipient, bytes32 asset, uint amount) internal pure {

@@ -36,6 +36,8 @@ import {
   encodeStringBlock,
   encodeStepBlock,
   encodePayoutBlock,
+  encodeRecipientBlock,
+  encodeUserRecipientBlock,
   encodeUserAccount,
   exactSpec,
   concat,
@@ -296,6 +298,22 @@ describe("Cursors", () => {
       expect(await helper.testUnpackAccountAsset(data)).to.deep.equal([account, asset]);
     });
 
+    it("recipient block round-trips through factories, writers, and decoders", async () => {
+      const address = ethers.zeroPadValue("0x03", 20);
+      const account = encodeUserAccount(address);
+      const addr = ethers.zeroPadValue(address, 32);
+      const data = encodeRecipientBlock(account, address);
+      expect(data).to.equal(encodeUserRecipientBlock(address));
+      expect(ethers.getBytes(data).length).to.equal(72);
+      expect(data.slice(0, 10)).to.equal(Keys.Recipient);
+      expect(Keys.Recipient).to.equal(ethers.id("#recipient").slice(0, 10));
+      expect(await helper.testToRecipientBlock(account, addr)).to.equal(data);
+      expect(await helper.testWriteRecipientBlock(account, addr)).to.equal(data);
+      expect(await helper.testUnpackRecipient(data)).to.deep.equal([account, addr]);
+      await expect(helper.testUnpackRecipient(encodeAccountAssetBlock(account, addr)))
+        .to.be.revertedWithCustomError(helper, "InvalidBlock");
+    });
+
     it("assetLiability block round-trips through factories, writers, and execution", async () => {
       const liability = ethers.zeroPadValue("0x44", 32);
       const data = encodeAssetLiabilityBlock(asset, liability);
@@ -327,7 +345,7 @@ describe("Cursors", () => {
     });
 
     it("writePayoutBlock round-trips", async () => {
-      const recipient = encodeUserAccount("0x04");
+      const recipient = ethers.zeroPadValue("0x04", 32);
       const data: string = await helper.testWritePayoutBlock(recipient, asset, amount);
       expect(ethers.getBytes(data).length).to.equal(104);
       expect(data).to.equal(encodePayoutBlock(recipient, asset, amount));
@@ -434,7 +452,7 @@ describe("Cursors", () => {
     });
 
     it("payout returns a valid encoded PAYOUT block", async () => {
-      const recipient = encodeUserAccount("0x04");
+      const recipient = ethers.zeroPadValue("0x04", 32);
       const data: string = await helper.testToPayoutBlock(recipient, asset, amount);
       expect(ethers.getBytes(data).length).to.equal(104);
       expect(data.slice(0, 10)).to.equal(Keys.Payout);

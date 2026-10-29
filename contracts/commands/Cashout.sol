@@ -28,9 +28,9 @@ abstract contract Cashout is CommandBase, CashoutHook {
     }
 
     /// @notice Pay chain-asset PAYOUT state to its recipients.
-    /// @dev Reverts with `InvalidAsset` for another asset, and validates each recipient with
-    /// `Accounts.evm` (`InvalidAccount` for zero, opaque or non-account IDs, `ZeroAddress` for a zero address).
-    /// Records nothing: the command that created the PAYOUT state recorded it.
+    /// @dev Reverts with `InvalidAsset` for another asset, and decodes each recipient with
+    /// `Accounts.recipientAddr` (`ZeroAccount` for a zero recipient, `InvalidAccount` when its top
+    /// 12 bytes are set). Records nothing: the command that created the PAYOUT state recorded it.
     /// @param context Command context carrying a PAYOUT state stream.
     /// @return Empty output state.
     /// @return Zero native budget credit.
@@ -43,7 +43,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
     function cashoutOne(Execution memory exec) private {
         (bytes32 recipient, bytes32 asset, uint amount) = exec.unpackPayout();
         if (asset != chainAsset) revert InvalidAsset();
-        cashout(Accounts.evm(recipient), amount);
+        cashout(Accounts.recipientAddr(recipient), amount);
     }
 }
 
@@ -51,6 +51,7 @@ abstract contract Cashout is CommandBase, CashoutHook {
 /// @notice Extends cashout with optimized local pipeline execution.
 abstract contract ExecuteCashout is Cashout {
     /// @notice Execute cashout directly against chain-asset PAYOUT state held in memory.
+    /// @dev Applies the same asset and recipient checks as `cashout`.
     /// @param account Pipeline account; unused because each PAYOUT names its recipient.
     /// @param state PAYOUT block stream held in pipeline memory.
     /// @param inputCur Cursor over empty input required by the command schema.
@@ -71,7 +72,7 @@ abstract contract ExecuteCashout is Cashout {
         while (abs < end) {
             (bytes32 recipient, bytes32 asset, uint amount) = Execute.unpackPayoutMemory(abs);
             if (asset != chainAsset) revert InvalidAsset();
-            cashout(Accounts.evm(recipient), amount);
+            cashout(Accounts.recipientAddr(recipient), amount);
             unchecked {
                 abs += Sizes.Payout;
             }
