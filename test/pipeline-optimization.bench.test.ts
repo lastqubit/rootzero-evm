@@ -62,7 +62,7 @@ describe("Main-style commander proxy gas", function () {
         let steps = "0x";
         if (workload === "local checks") steps = await commanderRoundtrip(host, count);
         if (workload === "external commands") steps = await commanderRoundtrip(host, count, remoteId);
-        if (workload === "cashout") steps = await commanderCashout(host, payouts.get(host)!, 7n, account);
+        if (workload === "cashout") steps = await commanderCashout(host, payouts.get(host)!, 7n, pair.owner);
         if (governance) steps = concat(...Array(count).fill(
           encodeStepBlock(await commandId("executePayable(bytes)", host, 3n), 0n, "0x")));
         expect(ethers.dataLength(steps)).at.most(4096);
@@ -101,6 +101,7 @@ describe("Main-style commander proxy gas", function () {
     await measure("direct", pair.direct);
     await measure("proxy V1", pair.proxy);
     const v2 = await upgradeCommander(pair.proxy);
+    payouts.set(v2, payouts.get(pair.proxy)!);
     // EIP-1967 implementation slot; record deployed V2 size separately from the proxy.
     const slot = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
     const v2Address = ethers.getAddress(ethers.dataSlice(await provider.getStorage(await v2.getAddress(), slot), 12));
