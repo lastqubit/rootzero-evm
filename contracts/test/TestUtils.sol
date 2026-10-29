@@ -34,12 +34,12 @@ contract TestUtils is CommandBase {
         return Nodes.ensureContract(node);
     }
 
-    function testRepresentations() external pure returns (uint8 rootzero, uint8 opaque, uint8 evm, uint8 svm) {
-        return (Layout.Rootzero, Layout.Opaque, Layout.Evm, Layout.Svm);
+    function testRepresentations() external pure returns (uint8 rootzero, uint8 opaque, uint8 evm) {
+        return (Layout.Rootzero, Layout.Opaque, Layout.Evm);
     }
 
-    function testAssetSubtypes() external pure returns (uint8 derived, uint8 virtual_, uint8 erc20, uint8 spl) {
-        return (Layout.Derived, Layout.Virtual, Layout.Erc20, Layout.Spl);
+    function testAssetSubtypes() external pure returns (uint8 derived, uint8 virtual_, uint8 erc20) {
+        return (Layout.Derived, Layout.Virtual, Layout.Erc20);
     }
 
     function testEnforceSender(address expected) external view returns (address) {

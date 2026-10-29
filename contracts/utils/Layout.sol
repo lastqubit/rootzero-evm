@@ -28,9 +28,6 @@ library Layout {
     uint8 constant Opaque = 0x02;
     /// @dev EVM-compatible ID; lower 20 payload bytes hold an address when present.
     uint8 constant Evm = 0x03;
-    /// @dev SVM structured ID, reserved for the SVM runtime (Solana and other SVM chains);
-    /// payloads hold the first bytes of a 32-byte key. No EVM helper accepts it.
-    uint8 constant Svm = 0x04;
 
     // -------------------------------------------------------------------------
     // Category tags (uint8, second byte of the ID type field)
@@ -78,7 +75,4 @@ library Layout {
     uint8 constant Virtual = 0x02;
     /// @dev ERC-20 fungible token; lower 20 bytes of the ID hold the contract address.
     uint8 constant Erc20 = 0x03;
-    /// @dev SPL token (Token and Token-2022), reserved for the SVM runtime; the payload
-    /// holds the first 24 bytes of the mint. No EVM helper accepts it.
-    uint8 constant Spl = 0x04;
 }

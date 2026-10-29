@@ -95,7 +95,6 @@ export const Keys = {
   Trust: blockKey("#trust"),
   Asset: blockKey("#asset"),
   Step: blockKey("#step"),
-  PortRequest: blockKey("#portRequest"),
   Swap: blockKey("#swap"),
   Call: blockKey("#call"),
   Context: blockKey("#context"),

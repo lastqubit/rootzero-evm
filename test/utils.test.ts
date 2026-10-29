@@ -63,8 +63,8 @@ describe("Utils", () => {
   });
 
   describe("Ids", () => {
-    it("assigns the Rootzero, opaque, EVM, and reserved SVM representation bytes", async () => {
-      expect(await utils.testRepresentations()).to.deep.equal([0x01n, 0x02n, 0x03n, 0x04n]);
+    it("assigns the Rootzero, opaque, and EVM representation bytes", async () => {
+      expect(await utils.testRepresentations()).to.deep.equal([0x01n, 0x02n, 0x03n]);
     });
 
     it("derives opaque keccak IDs with representation, category, and subtype bytes", async () => {
@@ -379,14 +379,8 @@ describe("Utils", () => {
   // ── Assets ────────────────────────────────────────────────────────────────
 
   describe("Assets", () => {
-    it("assigns derived, virtual, ERC-20, and reserved SPL asset subtypes", async () => {
-      expect(await utils.testAssetSubtypes()).to.deep.equal([0x01n, 0x02n, 0x03n, 0x04n]);
-    });
-
-    it("does not treat a reserved SVM SPL asset as EVM or opaque", async () => {
-      const spl = ethers.toBeHex((0x04030400n << 224n) | (0x3a132ecen << 192n) | 0x1234n, 32);
-      expect(await utils.testIsEvmAsset(spl)).to.be.false;
-      expect(await utils.testIsOpaqueAsset(spl)).to.be.false;
+    it("assigns derived, virtual, and ERC-20 asset subtypes", async () => {
+      expect(await utils.testAssetSubtypes()).to.deep.equal([0x01n, 0x02n, 0x03n]);
     });
 
     it("uses [Rootzero][Asset] as the singleton global Rootzero asset ID", async () => {

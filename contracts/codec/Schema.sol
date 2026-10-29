@@ -43,9 +43,8 @@ pragma solidity ^0.8.33;
 // - `resources` fields are opaque chain-specific packed words, not native
 //   values. A portal adapter interprets them for the destination runtime. On
 //   every runtime the low 128 bits are the destination's native value; the high
-//   128 bits are runtime-specific (EVM: uint128 gas limit; SVM: uint128
-//   compute-unit limit). EVM code extracts the value explicitly with `useResourceValue`
-//   before spending.
+//   128 bits are runtime-specific (on EVM, a uint128 gas limit). EVM code
+//   extracts the value explicitly with `useResourceValue` before spending.
 // - STEP, CALL, and RECOVER encode full-width native `value` directly as uint.
 //   DISPATCH alone carries a chain-specific resources word in the standard catalog.
 // - dotted field names and aliases, e.g. `dst.portal` or `#bytes as dst.payload`,
@@ -219,8 +218,6 @@ library Schemas {
     string constant Swap = "bytes32 asset, uint amount, many #asset as hops";
     /// @dev Schema DSL for the STEP block.
     string constant Step = "uint cmd, uint value, #input";
-    /// @dev Schema DSL for the PORT_REQUEST block; `port` is a commander port node ID and the input is its input blocks.
-    string constant PortRequest = "uint port, #input";
     /// @dev Schema DSL for the CALL block.
     string constant Call = "uint target, uint value, #bytes as payload";
     /// @dev Schema DSL for the RELAY block.

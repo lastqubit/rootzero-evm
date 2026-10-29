@@ -792,7 +792,7 @@ describe("Commands", () => {
         [user, ethers.toBeHex((1n << 160n) | BigInt(to), 32)], // not an address: a top byte set
         [user, user], // the account passed as the address
         [ethers.toBeHex(BigInt(user) | (1n << 192n), 32), to], // the account bound to a chain
-        [ethers.toBeHex((0x04010300n << 224n) | BigInt(to), 32), to], // an SVM account
+        [ethers.toBeHex((0x04010300n << 224n) | BigInt(to), 32), to], // another runtime's account
         [ethers.toBeHex((0x03010100n << 224n) | BigInt(to), 32), to], // the admin account of the address
         [encodeHostAccount(await host.host()), await host.getAddress()], // a host account
         [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), to], // an opaque account

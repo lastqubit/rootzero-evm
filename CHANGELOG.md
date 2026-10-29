@@ -8,6 +8,15 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: SVM constants removed.** `Layout.Svm` (representation `0x04`),
+  `Layout.Spl` (asset subtype `0x04`) and the `#portRequest` block (its `Keys`,
+  `Specs` and `Schemas` entries) are gone, along with `Keys.PortRequest` in the
+  TS helpers. The hub's protocol registry now holds cross-runtime reservations,
+  and this library defines only EVM and chain-neutral constants. The
+  `resources` NatSpec keeps the neutral rule (the low 128 bits are the
+  destination's native value on every runtime) without naming other runtimes'
+  packing.
+
 ## 1.57.0
 
 - **Breaking: `#payout` state for all value leaving the protocol.** New block

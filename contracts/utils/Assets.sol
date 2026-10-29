@@ -14,8 +14,6 @@ import {ensureAddr, isFamily, matchesBase, toLocalBase} from "./Utils.sol";
 ///   - `ChainAsset` - the chain coin/token; no address payload
 ///   - `Derived` and `Virtual` - reserved subtypes without dedicated helpers
 ///   - `Erc20` - ERC-20 token; contract address in bits [159:0]
-/// `Layout.Spl` is reserved for SPL assets under the SVM representation and
-/// has no helpers here.
 /// ERC-20 asset encoders leave the middle bits [191:160] zero.
 ///
 /// An opaque asset uses `[0x02][Asset][subtype][bytes29(hash)]`. The full asset

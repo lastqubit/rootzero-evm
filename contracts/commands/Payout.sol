@@ -25,7 +25,7 @@ abstract contract CreatePayout is CommandBase {
     /// @dev Unless both the account and the address are zero (a burn, output with a zero recipient),
     /// requires the address to be a nonzero EVM address left-padded to 32 bytes whose user account,
     /// `Accounts.toUser(address)`, equals the account, and reverts with `InvalidAccount` otherwise.
-    /// This rejects foreign-chain, SVM, admin, host and opaque accounts. Hints callers to record the
+    /// This rejects foreign-chain, other-runtime, admin, host and opaque accounts. Hints callers to record the
     /// OUTPUT stream, the only record of each PAYOUT: delivering commands consume PAYOUT in full and
     /// do not log it again.
     /// @param context Command context carrying BALANCE state and matching RECIPIENT input.

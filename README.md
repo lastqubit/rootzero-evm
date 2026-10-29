@@ -832,9 +832,9 @@ burn. A payout is created and delivered on one chain and never relayed.
 `createPayout` pairs each `#balance` with a `#recipient`
 `(bytes32 account, bytes32 address)` input: the recipient's account ID and its native
 address. Unless both are zero (a burn), it requires a nonzero EVM address whose
-user account, `Accounts.toUser(address)`, is that account, so a foreign-chain, SVM,
-admin, host or opaque account, a mismatched pair, or a word that isn't an address
-reverts `InvalidAccount()`. The output `#payout` carries only the address.
+user account, `Accounts.toUser(address)`, is that account, so a foreign-chain,
+other-runtime, admin, host or opaque account, a mismatched pair, or a word that
+isn't an address reverts `InvalidAccount()`. The output `#payout` carries only the address.
 Commands that deliver it (`withdraw`, `cashout`) pay each block in full and decode
 its recipient with `Accounts.recipientAddr` (`ZeroAccount()` for zero,
 `InvalidAccount()` when any of the top 12 bytes are set), even for zero amounts;
