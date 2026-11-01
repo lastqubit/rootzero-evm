@@ -42,10 +42,10 @@ describe("Trust registry and endorsement", () => {
   it("lets trusted peers endorse and unendorse non-node IDs with Trust records", async () => {
     const input = concat(encodeEntityBlock(asset), encodeEntityBlock(other));
     await expectTrustLogs(peer.portEndorse(input), [asset, other], true);
-    expect([await host.isTrusted(asset), await host.isTrusted(other)]).deep.eq([true, true]);
+    expect([await host.trusted(asset), await host.trusted(other)]).deep.eq([true, true]);
     await expectTrustLogs(peer.portEndorse(input), [], true);
     await expectTrustLogs(peer.portUnendorse(encodeEntityBlock(asset)), [asset], false);
-    expect(await host.isTrusted(asset)).eq(false);
+    expect(await host.trusted(asset)).eq(false);
     expect(Array.from(await peer.portEndorse.staticCall("0x"))).deep.eq(["0x", 0n]);
   });
 
@@ -82,7 +82,7 @@ describe("Trust registry and endorsement", () => {
     const chain = BigInt(await (await deploy("TestUtils")).testToChain());
     const rootzero = 0x0103n << 240n;
     for (const native of [chain, rootzero]) {
-      expect(await host.isTrusted(native)).eq(false);
+      expect(await host.trusted(native)).eq(true);
       await host.requireOne(ethers.toBeHex(native, 32));
       await host.requireMany([ethers.toBeHex(native, 32), ethers.toBeHex(native, 32)]);
       expect(await host.runner.call({ to: host.target, data: concat(CHECK_TRUST, ethers.toBeHex(native, 32)) })).eq("0x");

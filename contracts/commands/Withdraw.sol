@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 import {Execution, Executions, CommandBase, Specs} from "./Base.sol";
-import {ZeroAccount} from "../utils/Errors.sol";
+import {ZeroAddress} from "../utils/Errors.sol";
 using Executions for Execution;
 
 /// @title WithdrawHook
@@ -10,7 +10,7 @@ abstract contract WithdrawHook {
     /// @notice Override to send funds to `recipient`.
     /// @dev Called once per PAYOUT block in state with its nonzero recipient, a native address
     /// left-padded to 32 bytes. Implementations turn it into the address they pay and revert for
-    /// one they can't pay; an EVM host uses `Accounts.recipientAddr`. They must deliver the
+    /// one they can't pay; an EVM host uses `ensureAddr`. They must deliver the
     /// complete amount or revert.
     /// @param recipient Native address receiving the asset, as a 32-byte word.
     /// @param asset Asset identifier.
@@ -30,7 +30,7 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     }
 
     /// @notice Withdraw each PAYOUT block from the command state to its recipient.
-    /// @dev Reverts with `ZeroAccount` for a zero recipient (a burn), even for zero amounts, and
+    /// @dev Reverts with `ZeroAddress` for a zero recipient (a burn), even for zero amounts, and
     /// passes every other recipient word to the hook, which turns it into an address.
     /// Records nothing: the command that created the PAYOUT state recorded it.
     /// @param context Command context carrying the PAYOUT state stream.
@@ -44,7 +44,7 @@ abstract contract Withdraw is CommandBase, WithdrawHook {
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
     function withdrawOne(Execution memory exec) private {
         (bytes32 recipient, bytes32 asset, uint amount) = exec.unpackPayout();
-        if (recipient == 0) revert ZeroAccount();
+        if (recipient == 0) revert ZeroAddress();
         withdraw(recipient, asset, amount);
     }
 }

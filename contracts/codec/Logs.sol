@@ -138,51 +138,54 @@ library Logs {
         }
     }
 
-    /// @notice Record one pipeline step's assigned native value and hinted input.
-    /// @dev Uses temporary memory. Requires index < 64, leaving bit 6 for Value;
-    /// Pipeline enforces its step limit. A zero value emits no value word.
+    /// @notice Record one pipeline step before it runs.
+    /// @dev Decides from the logging hints which records to emit, and can write up to two. First
+    /// the State record, when this command has the State hint or the previous one the Output hint.
+    /// It writes the category and index over the last two bytes of the length word, emits in place
+    /// without copying, then restores the length, and accepts the shared empty bytes value. Then
+    /// the Step record, in temporary memory, when this command has the Input hint or value is
+    /// nonzero. A zero value emits no value word, and the input is appended only with the Input
+    /// hint. Requires index < 64, leaving bit 6 for Value; Pipeline enforces its step limit.
     /// @param index Zero-based step index within the pipeline.
+    /// @param cmd Command node identifier, whose flag byte carries this step's hints.
+    /// @param prevCmd Previous step's command node identifier; zero for the first step.
+    /// @param stream State block stream passed to the step.
     /// @param value Native value assigned to the step, in wei.
     /// @param inputCur Bounded calldata cursor over the step's input payload.
-    /// @param withInput Whether to append the input payload.
-    function step(uint index, uint value, uint inputCur, bool withInput) internal {
+    function step(uint index, uint cmd, uint prevCmd, bytes memory stream, uint value, uint inputCur) internal {
         assembly ("memory-safe") {
-            let start := mload(0x40)
-            mstore8(start, Input)
-            let abs := add(start, 2)
-            switch iszero(value)
-            case 1 {
-                mstore8(add(start, 1), index)
+            // Lane hints are flag-byte bits; masking ignores the other prefix bits.
+            let hints := shr(224, cmd)
+            if or(and(shr(224, prevCmd), Output), and(hints, State)) {
+                let size := mload(stream)
+                let data := add(stream, 32)
+                mstore8(sub(data, 2), State)
+                mstore8(sub(data, 1), index)
+                log0(sub(data, 2), add(size, 2))
+                mstore(stream, size)
             }
-            default {
-                mstore8(add(start, 1), or(index, Value))
-                mstore(abs, value)
-                abs := add(abs, 32)
+            let withInput := and(hints, Input)
+            if or(withInput, value) {
+                let start := mload(0x40)
+                mstore8(start, Input)
+                let abs := add(start, 2)
+                switch iszero(value)
+                case 1 {
+                    mstore8(add(start, 1), index)
+                }
+                default {
+                    mstore8(add(start, 1), or(index, Value))
+                    mstore(abs, value)
+                    abs := add(abs, 32)
+                }
+                if withInput {
+                    let source := and(inputCur, 0xffffffff)
+                    let size := sub(and(shr(32, inputCur), 0xffffffff), source)
+                    calldatacopy(abs, source, size)
+                    abs := add(abs, size)
+                }
+                log0(start, sub(abs, start))
             }
-            if withInput {
-                let source := and(inputCur, 0xffffffff)
-                let size := sub(and(shr(32, inputCur), 0xffffffff), source)
-                calldatacopy(abs, source, size)
-                abs := add(abs, size)
-            }
-            log0(start, sub(abs, start))
-        }
-    }
-
-    /// @notice Record the state block stream passed to one pipeline step.
-    /// @dev Writes the category and index over the last two bytes of the length
-    /// word, emits in place without copying, then restores the length. Accepts the
-    /// shared empty bytes value. Requires index < 64.
-    /// @param stream State block stream passed to the step.
-    /// @param index Zero-based step index within the pipeline.
-    function state(bytes memory stream, uint index) internal {
-        assembly ("memory-safe") {
-            let size := mload(stream)
-            let data := add(stream, 32)
-            mstore8(sub(data, 2), State)
-            mstore8(sub(data, 1), index)
-            log0(sub(data, 2), add(size, 2))
-            mstore(stream, size)
         }
     }
 

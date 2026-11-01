@@ -6,20 +6,21 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {Host, Pipeline, Balances, Settlement, sendChainAsset, Trust} from "../Core.sol";
+import {Host, Pipeline, Balances, Settlement, sendChainAsset} from "../Core.sol";
 import {Cursors, Logs} from "../Codec.sol";
 import {Accounts, Nodes} from "../Utils.sol";
 import {
     PipePayablePort, DebitAccountPort, CreditAccountPort, BookPort,
-    ExecuteBootstrap, ExecuteCreditAccount, ExecuteSettle, ExecuteCheckPosition,
-    ExecuteCheckBalance, ExecuteCashout, ExecuteAuthorize, ExecuteDebitAccount, GetBalance
+    ExecuteBootstrap, ExecuteBank, ExecuteSettle, ExecuteCheckPosition,
+    ExecuteCheckBalance, ExecuteCashout, ExecuteAuthorize, GetBalance
 } from "../Endpoints.sol";
+import {ExecuteDebitAccount} from "./ExecuteDebitAccount.sol";
 
 /// @dev Mirrors commander Main/Base using the current protocol API. Shared by both
 /// deployments so ledger, logging, entry limits, reentrancy and dispatch work match.
 abstract contract CommanderTestCore is
     Host, Pipeline, Balances, Settlement, PipePayablePort, DebitAccountPort,
-    CreditAccountPort, BookPort, ExecuteBootstrap, ExecuteCreditAccount, ExecuteSettle,
+    CreditAccountPort, BookPort, ExecuteBootstrap, ExecuteBank, ExecuteSettle,
     ExecuteCheckPosition, ExecuteCheckBalance, ExecuteCashout, ExecuteAuthorize,
     GetBalance, ReentrancyGuardTransient
 {
@@ -54,7 +55,7 @@ abstract contract CommanderTestCore is
         internal virtual override returns (bool, bytes memory, uint)
     {
         if (cmd == bootstrapId()) return executeBootstrap(account, state, input, value);
-        if (cmd == creditAccountId()) return executeCreditAccount(account, state, input, value);
+        if (cmd == bankId()) return executeBank(account, state, input, value);
         if (cmd == settleId()) return executeSettle(account, state, input, value);
         if (cmd == checkPositionId()) return executeCheckPosition(account, state, input, value);
         if (cmd == checkBalanceId()) return executeCheckBalance(account, state, input, value);
@@ -72,7 +73,7 @@ abstract contract CommanderTestCore is
     // Inspection only; neither getter participates in timed pipeline execution.
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function balanceOf(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
-    function isAuthorized(uint node) external view returns (bool) { return Trust.isTrusted(node); }
+    function isAuthorized(uint node) external view returns (bool) { return isTrusted(node); }
 }
 
 contract TestCommanderDirect is CommanderTestCore, Ownable2Step {

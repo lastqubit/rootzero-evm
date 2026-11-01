@@ -37,9 +37,9 @@ abstract contract CreatePayout is CommandBase {
 
     /// @dev Process one BALANCE / RECIPIENT item for the CreatePayout endpoint.
     /// @param exec Execution containing the account, source cursors, output writer, and native-value budget.
-    function createPayoutOne(Execution memory exec) private pure {
+    function createPayoutOne(Execution memory exec) private view {
         (bytes32 asset, uint amount) = exec.unpackBalance();
         (bytes32 account, bytes32 addr) = exec.unpackRecipient();
-        exec.outputPayout(Accounts.matchRecipient(account, addr), asset, amount);
+        exec.outputPayout(Accounts.matchAddr(account, addr), asset, amount);
     }
 }

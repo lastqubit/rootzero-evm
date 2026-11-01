@@ -23,11 +23,11 @@ import {
 // PAYOUT recipients that withdraw and cashout refuse to pay: zero (a burn) and words that
 // aren't an EVM address left-padded to 32 bytes.
 const undeliverable: [string, string][] = [
-  [ethers.ZeroHash, "ZeroAccount"],
-  [encodeUserAccount("0xbeef"), "InvalidAccount"], // account ID, not an address
-  [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), "InvalidAccount"], // opaque account
-  [ethers.toBeHex((1n << 160n) | 0xbeefn, 32), "InvalidAccount"], // one bit above the address
-  [ethers.toBeHex((1n << 255n) | 0xbeefn, 32), "InvalidAccount"], // top bit set
+  [ethers.ZeroHash, "ZeroAddress"],
+  [encodeUserAccount("0xbeef"), "ValueOverflow"], // account ID, not an address
+  [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), "ValueOverflow"], // opaque account
+  [ethers.toBeHex((1n << 160n) | 0xbeefn, 32), "ValueOverflow"], // one bit above the address
+  [ethers.toBeHex((1n << 255n) | 0xbeefn, 32), "ValueOverflow"], // top bit set
 ];
 
 describe("Commands", () => {
@@ -55,7 +55,7 @@ describe("Commands", () => {
         "cashout",
         "createPayout",
         "debitAccount",
-        "creditAccount",
+        "bank",
         "settle",
         "deposit",
         "realize",
@@ -76,7 +76,7 @@ describe("Commands", () => {
     // USER_PREFIX = [Evm][Account][User][flags=0] = 0x03010300
     const USER_PREFIX = 0x03010300n;
     userAccount = ethers.zeroPadValue(
-      ethers.toBeHex((USER_PREFIX << 224n) | addrBig), 32
+      ethers.toBeHex((USER_PREFIX << 224n) | (31337n << 192n) | addrBig), 32
     );
     await host.setAcceptedSettleCounterparty(userAccount);
   });
@@ -197,10 +197,10 @@ describe("Commands", () => {
           const id = await commandId(`${method}(bytes)`, host, value ? 1n : 0n);
           await host.authorize(encodeContextBlock(adminAccount, "0x", encodeEntityBlock(id)));
           const steps = concat(encodeStepBlock(id, value, encodeAmountBlock(50n)),
-            encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
+            encodeStepBlock(await cmd("bank"), 0n, "0x"));
           const receipt = await (await callAs(0, "testPipe", userAccount, trustState(asset), steps, { value })).wait();
           expect(receipt.logs.filter((log: any) => log.topics.length === 0).map((log: any) => log.data)).deep.eq([
-            pipelineRecord(userAccount, [id, await cmd("creditAccount")]),
+            pipelineRecord(userAccount, [id, await cmd("bank")]),
             ...(value ? [stepRecord(0, value)] : []),
             stateRecord(1, encodeBalanceBlock(asset, 43n)),
           ]);
@@ -219,12 +219,12 @@ describe("Commands", () => {
           direct.push(...receipt.logs.map((log: any) => ({ topics: log.topics, data: log.data })));
         }
         const steps = concat(encodeStepBlock(await cmd("debitAccount"), 0n, input),
-          encodeStepBlock(await cmd("creditAccount"), 0n, "0x"));
+          encodeStepBlock(await cmd("bank"), 0n, "0x"));
         const receipt = await (await callAs(0, "testPipe", userAccount, "0x", steps)).wait();
         const hooks = receipt.logs.filter((log: any) => log.topics.length);
         expect(hooks.map((log: any) => ({ topics: log.topics, data: log.data }))).deep.eq(direct);
         expect(receipt.logs.filter((log: any) => !log.topics.length).map((log: any) => log.data)).deep.eq([
-          pipelineRecord(userAccount, [await cmd("debitAccount"), await cmd("creditAccount")]),
+          pipelineRecord(userAccount, [await cmd("debitAccount"), await cmd("bank")]),
         ]);
       }
     });
@@ -784,23 +784,23 @@ describe("Commands", () => {
       const to = address("0xd00d");
       const other = address("0xd00f");
       const user = encodeUserAccount(to);
-      const cases: [string, string][] = [
-        [encodeUserAccount(other), to], // address and account don't match
-        [user, ethers.ZeroHash], // zero address with a nonzero account
-        [encodeUserAccount(ethers.ZeroAddress), ethers.ZeroHash], // user account of the zero address
-        [ethers.ZeroHash, to], // zero account with a nonzero address
-        [user, ethers.toBeHex((1n << 160n) | BigInt(to), 32)], // not an address: a top byte set
-        [user, user], // the account passed as the address
-        [ethers.toBeHex(BigInt(user) | (1n << 192n), 32), to], // the account bound to a chain
-        [ethers.toBeHex((0x04010300n << 224n) | BigInt(to), 32), to], // another runtime's account
-        [ethers.toBeHex((0x03010100n << 224n) | BigInt(to), 32), to], // the admin account of the address
-        [encodeHostAccount(await host.host()), await host.getAddress()], // a host account
-        [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), to], // an opaque account
+      const cases: [string, string, string][] = [
+        [encodeUserAccount(other), to, "InvalidAccount"], // address and account don't match
+        [user, ethers.ZeroHash, "ZeroAddress"], // zero address with a nonzero account
+        [encodeUserAccount(ethers.ZeroAddress), ethers.ZeroHash, "ZeroAddress"], // user account of the zero address
+        [ethers.ZeroHash, to, "InvalidAccount"], // zero account with a nonzero address
+        [user, ethers.toBeHex((1n << 160n) | BigInt(to), 32), "ValueOverflow"], // not an address: a top byte set
+        [user, user, "ValueOverflow"], // the account passed as the address
+        [ethers.toBeHex(BigInt(user) ^ (1n << 192n), 32), to, "InvalidAccount"], // the same address on another chain
+        [ethers.toBeHex((0x04010300n << 224n) | BigInt(to), 32), to, "InvalidAccount"], // another runtime's account
+        [ethers.toBeHex((0x03010100n << 224n) | BigInt(to), 32), to, "InvalidAccount"], // the admin account of the address
+        [encodeHostAccount(await host.host()), await host.getAddress(), "InvalidAccount"], // a host account
+        [ethers.toBeHex((0x02017fn << 232n) | 123n, 32), to, "InvalidAccount"], // an opaque account
       ];
-      for (const [account, addr] of cases) {
+      for (const [account, addr, error] of cases) {
         for (const amount of [0n, 1n]) {
           await expect(createPayout(encodeBalanceBlock(asset, amount), encodeRecipientBlock(account, addr)))
-            .to.be.revertedWithCustomError(host, "InvalidAccount");
+            .to.be.revertedWithCustomError(host, error);
         }
       }
     });
@@ -1401,7 +1401,7 @@ describe("Commands", () => {
   describe("pipeline", () => {
     for (const [method, hook] of [
       ["debitAccount", "DebitFromCalled"],
-      ["creditAccount", "CreditToCalled"],
+      ["bank", "CreditToCalled"],
       ["settle", "SettleCalled"],
     ]) {
       it(`accepts an empty local ${method} batch without calling its hook`, async () => {
@@ -1431,7 +1431,7 @@ describe("Commands", () => {
         encodeStepBlock(await cmd("debitAccount"), 0n, "0x")))
         .to.be.revertedWithCustomError(host, "UnexpectedState");
       await expect(callAs(0, "testPipe", userAccount, "0x",
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x01")))
+        encodeStepBlock(await cmd("bank"), 0n, "0x01")))
         .to.be.revertedWithCustomError(host, "UnexpectedInput");
     });
 
@@ -1505,7 +1505,7 @@ describe("Commands", () => {
       const input = concat(
         encodeStepBlock(await cmd("bootstrap"), 0n, encodeBootstrapBlock(amount, encodeAssetAmountBlock(asset, 9n))),
         encodeStepBlock(await remoteCmd("noop"), amount, "0x"),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       await (await getSigner(0)).sendTransaction({ to: await host.getAddress(), value: amount });
@@ -1524,7 +1524,7 @@ describe("Commands", () => {
           4n,
           encodeBootstrapBlock(0n, encodeAssetAmountBlock(chainAsset, 7n)),
         ),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       const tx = await callAs(0, "testPipe", userAccount, "0x", input, { value: 4n });
@@ -1542,7 +1542,7 @@ describe("Commands", () => {
           4n,
           encodeBootstrapBlock(5n, encodeAssetAmountBlock(chainAsset, 7n)),
         ),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       const tx = await callAs(0, "testPipe", userAccount, "0x", input, { value: 4n });
@@ -1568,7 +1568,7 @@ describe("Commands", () => {
           5n,
           encodeBootstrapBlock(0n, encodeAssetAmountBlock(chainAsset, 3n)),
         ),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       const tx = await callAs(0, "testPipe", userAccount, "0x", input, { value: 5n });
@@ -1597,7 +1597,7 @@ describe("Commands", () => {
       ));
       const steps = concat(
         encodeStepBlock(command, 0n, bootstrapInput),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
       const tx = await callAs(0, "testPipe", userAccount, "0x", steps);
       await expect(tx).to.emit(host, "DebitFromCalled")
@@ -1626,7 +1626,7 @@ describe("Commands", () => {
       const amount = 42n;
       const input = concat(
         encodeStepBlock(await cmd("debitAccount"), 0n, encodeAssetAmountBlock(asset, amount)),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       const tx = await callAs(0, "testPipe", userAccount, "0x", input);
@@ -1644,7 +1644,7 @@ describe("Commands", () => {
       const amount = 43n;
       const input = concat(
         encodeStepBlock(await cmd("deposit"), 0n, encodeAmountBlock(amount)),
-        encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+        encodeStepBlock(await cmd("bank"), 0n, "0x"),
       );
 
       const tx = await callAs(0, "testPipe", userAccount, trustState(asset), input);
@@ -1690,7 +1690,7 @@ describe("Commands", () => {
       const liability = ethers.zeroPadValue("0xb5", 32);
       const input = encodeAssetAmountBlock(asset, 1n);
       const cases = [
-        { command: "creditAccount", state: encodeBalanceBlock(asset, 1n) },
+        { command: "bank", state: encodeBalanceBlock(asset, 1n) },
       ];
 
       for (const testCase of cases) {
@@ -1721,7 +1721,7 @@ describe("Commands", () => {
             0n,
             concat(encodeAssetAmountBlock(asset, 1n), encodeAssetAmountBlock(asset, 2n)),
           ),
-          encodeStepBlock(await cmd("creditAccount"), 0n, "0x"),
+          encodeStepBlock(await cmd("bank"), 0n, "0x"),
         ),
       );
       await expect(debitCreditTx).to.emit(host, "DebitFromCalled").withArgs(userAccount, asset, 2n, 2n);
@@ -1758,7 +1758,7 @@ describe("Commands", () => {
       const liability = ethers.zeroPadValue("0xb7", 32);
       const position = encodePositionBlock(asset, 1n, liability, 2n);
       const cases = [
-        { command: "creditAccount", state: encodeAssetAmountBlock(asset, 1n) },
+        { command: "bank", state: encodeAssetAmountBlock(asset, 1n) },
         { command: "settle", state: ethers.dataSlice(position, 0, ethers.dataLength(position) - 1) },
         { command: "settle", state: encodeBalanceBlock(liability, 1n) },
       ];
@@ -1807,7 +1807,7 @@ describe("Commands", () => {
           input: encodeAssetAmountBlock(asset, 1n),
         },
         {
-          command: "creditAccount",
+          command: "bank",
           state: encodeBalanceBlock(asset, 1n),
           input: "0x",
         },
@@ -1830,7 +1830,7 @@ describe("Commands", () => {
           testCase.input,
         );
         if (testCase.command === "debitAccount") {
-          steps = concat(steps, encodeStepBlock(await cmd("creditAccount"), 1n, "0x"));
+          steps = concat(steps, encodeStepBlock(await cmd("bank"), 1n, "0x"));
         }
         await expect(
           callAs(0, "testPipe", userAccount, testCase.state, steps, { value: 1n }),
@@ -1840,7 +1840,7 @@ describe("Commands", () => {
 
     it("preserves assigned value across empty adapters for a later funded step", async () => {
       const steps = concat(
-        ...await Promise.all(["debitAccount", "creditAccount", "settle", "cashout"]
+        ...await Promise.all(["debitAccount", "bank", "settle", "cashout"]
           .map(async method => encodeStepBlock(await cmd(method), 7n, "0x"))),
         encodeStepBlock(await remoteCmd("noop"), 7n, "0x"),
       );

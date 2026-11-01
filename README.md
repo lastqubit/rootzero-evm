@@ -261,8 +261,8 @@ the ID's representation and category, extract the address with
 where `type` packs
 `[uint8 representation][uint8 category][uint8 subtype][uint8 flags]`. A
 structured ID announces what it is (an account, an asset, a node) and which
-chain it lives on, and the payload usually embeds the underlying address. User
-accounts are chain-agnostic, while admin accounts are chain-local. Guardians
+chain it lives on, and the payload usually embeds the underlying address. All
+accounts are chain-local: the same address on another chain is another account. Guardians
 are normal user accounts assigned a host-specific role.
 Assets are unique IDs in the same single-word form as accounts and nodes.
 Nodes are hosts, commands, ports, queries, and guards.
@@ -288,7 +288,7 @@ verify and resolve
 The `Utils.sol` entry point provides the constructors and inspectors:
 
 ```solidity
-bytes32 account = Accounts.toUser(msg.sender); // chain-agnostic user account
+bytes32 account = Accounts.toUser(msg.sender); // this chain's user account
 bytes32 asset = Assets.toErc20(tokenAddress);  // ERC-20 asset ID
 uint hostId = Nodes.toHost(address(this));       // host node ID
 bytes32 hostAccount = Accounts.toHost(hostId); // deterministic host account
@@ -364,12 +364,12 @@ host's trusted set, and **guardians** are accounts allowed to take protective
 actions. At deployment, a host introduces itself to its commander, which is how
 host topology becomes discoverable.
 
-The trusted set holds self-describing IDs of any kind, stored per ID in a salted
-slot (`Trust.isTrusted`/`setTrusted`). On ordinary hosts it lists the nodes allowed to call them. On
+The trusted set holds self-describing IDs of any kind, in a mapping on `Host`, read
+through the virtual `isTrusted`. On ordinary hosts it lists the nodes allowed to call them. On
 a commander it is also the global registry of trusted entities such as assets:
 hosts check IDs against it with `requireTrusted(id)` or `requireTrusted(ptr, count)`
 (from `Runtime`), a raw STATICCALL to the commander's `checkTrust()` entrypoint
-(`TrustRegistry`) that reverts `Untrusted(id)`. Boundary commands that cannot start
+that reverts `Untrusted(id)`. Boundary commands that cannot start
 from `#trust` state call it with the IDs they are about to accept; callers gather
 the IDs themselves. `deposit` and `depositPayable` need no call: they take the
 asset from `#trust` state produced by the commander's `vouch`. Admins change trust with `authorize` and
@@ -671,7 +671,7 @@ implement their payout policy and choose the accounting and events to emit. The
 hook has no `ChainAsset` inheritance or built-in flow logging. `WithdrawHook`
 declares `withdraw(bytes32 recipient, bytes32 asset, uint amount)`: `withdraw`
 rejects a zero recipient and passes the native address word on, and the host turns
-it into the address it pays (an EVM host with `Accounts.recipientAddr`), so a
+it into the address it pays (an EVM host with `ensureAddr`), so a
 custody host for other address formats can use the same command.
 
 The free `sendChainAsset(address recipient, uint amount)` helper in `core/Cash.sol`,
@@ -687,7 +687,8 @@ entrypoints against reentrancy.
 The standard commands cover the common ledger movements: `bootstrap` (source
 an initial balance and native-value budget), `deposit` and
 `depositPayable` (external funds in), `settlePayable` (funded settlement),
-`debitAccount` and `creditAccount` (internal movements), `createPayout`
+`debitAccount` and `creditAccount` (internal movements), `bank` (the commander's
+sink, keeping `#balance` state on the ledger), `createPayout`
 (turn `#balance` state plus a `#recipient` input into `#payout` state),
 `withdraw`, `cashout` (native) and `burn` (deliver `#payout` out of the
 protocol), `realize` (pass each position to
@@ -833,11 +834,12 @@ burn. A payout is created and delivered on one chain and never relayed.
 `(bytes32 account, bytes32 address)` input: the recipient's account ID and its native
 address. Unless both are zero (a burn), it requires a nonzero EVM address whose
 user account, `Accounts.toUser(address)`, is that account, so a foreign-chain,
-other-runtime, admin, host or opaque account, a mismatched pair, or a word that
-isn't an address reverts `InvalidAccount()`. The output `#payout` carries only the address.
+other-runtime, admin, host or opaque account or a mismatched pair reverts
+`InvalidAccount()`, and a word that isn't a nonzero address reverts as in `ensureAddr`.
+The output `#payout` carries only the address.
 Commands that deliver it (`withdraw`, `cashout`) pay each block in full and decode
-its recipient with `Accounts.recipientAddr` (`ZeroAccount()` for zero,
-`InvalidAccount()` when any of the top 12 bytes are set), even for zero amounts;
+its recipient with `ensureAddr` (`ZeroAddress()` for zero,
+`ValueOverflow()` when any of the top 12 bytes are set), even for zero amounts;
 `burn` takes only zero-recipient payouts. No command turns `#payout` back into
 `#balance` or keeps it in an internal ledger. `createPayout` carries the `Logs.Output` hint, so each
 payout is recorded once, when it is created; delivering commands carry no logging
@@ -858,12 +860,12 @@ The paired balance/position checks validate streams in place, and settlement
 copies each position into an independent struct. See [Execute](../rootzero-main/docs/protocol/codec.md).
 
 Hosts that implement a pipeline locally can inherit `ExecuteBootstrap`,
-`ExecuteVouch`, `ExecuteCashout`, `ExecuteDebitAccount`, `ExecuteCreditAccount`, and
+`ExecuteVouch`, `ExecuteCashout`, `ExecuteBank`, and
 `ExecuteSettle` to register canonical command metadata while executing
 their local command IDs through `executeBootstrap`, `executeVouch`, `executeCashout`,
-`executeDebitAccount`, `executeCreditAccount`, and `executeSettle`. The vouch adapter
-decodes fixed-stride Entity calldata and reads trust slots directly. The bootstrap and debit adapters decode fixed-stride AssetAmount calldata
-input directly; cashout, credit, and settle decode memory-backed pipeline
+`executeBank`, and `executeSettle`. The vouch adapter
+decodes fixed-stride Entity calldata and checks each ID with `isTrusted`. The bootstrap adapter decodes fixed-stride AssetAmount calldata
+input directly; cashout, bank, and settle decode memory-backed pipeline
 state. All return `handled = true` and avoid an
 external self-call. The host's `execute` hook must authorize a command before
 returning true. Returning `handled = false` delegates a local command to its

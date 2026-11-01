@@ -1,10 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {TRUST_CHECK} from "./Trust.sol";
 import {Assets} from "../utils/Assets.sol";
 import {Accounts} from "../utils/Accounts.sol";
 import {Nodes} from "../utils/Nodes.sol";
+
+/// @dev Thrown when an ID is not trusted by the commander.
+/// @param id The first untrusted ID.
+error Untrusted(bytes32 id);
+
+/// @dev Right-aligned `checkTrust()` selector: the commander's raw trust check entrypoint. Its
+/// calldata is not ABI: the selector followed by packed 32-byte IDs. It returns no data, and
+/// reverts `Untrusted(id)` for the first untrusted ID and `InvalidBlock` unless the IDs are whole words.
+uint constant TRUST_CHECK = 0x131d5b28;
 
 /// @title ChainAsset
 /// @notice Shared chain asset identity for host helpers.

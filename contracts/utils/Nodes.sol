@@ -4,7 +4,7 @@ pragma solidity ^0.8.33;
 import {Layout} from "./Layout.sol";
 import {InvalidId, InvalidContract} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
-import {ensureAddr, isFamily, matchesBase, toLocalBase} from "./Utils.sol";
+import {ensureAddr, isFamily, matchesBase, max32, toLocalBase} from "./Utils.sol";
 
 /// @title Nodes
 /// @notice Encoding and decoding helpers for 256-bit node identifiers.
@@ -191,6 +191,22 @@ library Nodes {
     function matchHost(uint value, address target) internal view returns (uint node) {
         if (value != toHost(target)) revert InvalidId();
         return value;
+    }
+
+    /// @notice Check whether `node` is exactly a chain node: the chain prefix, then only a chain word.
+    /// @dev A chain node can't be called: every call path requires a command, port or host ID.
+    /// @param node Node ID to classify.
+    /// @return True if `node` is a chain node; false otherwise, including for any flags or payload.
+    function isChain(uint node) internal pure returns (bool) {
+        return node >> 224 == Chain && uint192(node) == 0;
+    }
+
+    /// @notice Build the chain node ID for a chain.
+    /// @dev Reverts with `ValueOverflow` for a chain ID above 32 bits.
+    /// @param chainId Chain ID.
+    /// @return node Chain node ID of `chainId`.
+    function toChain(uint chainId) internal pure returns (uint node) {
+        return (uint(Chain) << 224) | (uint(max32(chainId)) << 192);
     }
 
     /// @notice Build the chain node ID for the current chain.

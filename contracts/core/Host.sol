@@ -8,7 +8,7 @@ import {Authorize} from "../commands/admin/Authorize.sol";
 import {Unauthorize} from "../commands/admin/Unauthorize.sol";
 import {ExecutePayable} from "../commands/admin/Execute.sol";
 import {Revoke} from "../guards/Revoke.sol";
-import {Trust} from "./Trust.sol";
+import {Sweep} from "./Sweep.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Accounts} from "../utils/Accounts.sol";
 import {Assets} from "../utils/Assets.sol";
@@ -65,7 +65,7 @@ abstract contract HostIntroduction is Runtime, IHostIntroduction {
 /// Does not include admin commands, peer authorization, guardians, generic
 /// execution, or a native-token receive function.
 /// Pipelines must separately compose a `CommandAccess` policy.
-abstract contract CommandHost is CallerAccess, HostIntroduction {
+abstract contract CommandHost is CallerAccess, HostIntroduction, Sweep {
     /// @notice Initialize a host restricted to a nonzero local commander.
     /// @param cmdr Nonzero local host ID allowed to invoke hosted commands.
     /// @param name Discovery hint emitted only when introducing this host.
@@ -95,10 +95,18 @@ abstract contract Host is
     ExecutePayable,
     Appoint,
     Dismiss,
-    Revoke
+    Revoke,
+    Sweep
 {
     /// @dev Admin account ID derived from the commander identity.
     bytes32 internal immutable admin;
+
+    /// @dev IDs this host trusts. IDs are self-describing, so nodes, assets, accounts and other
+    /// entities share one set. A mapping, so no ID a caller supplies can reach any other storage.
+    mapping(uint id => bool) private trustedIds;
+    /// @dev Accounts with the guardian role. A guardian is a role, not a trusted ID, so endorsing
+    /// an account can't make it a guardian.
+    mapping(bytes32 account => bool) private guardians;
 
     /// @notice Initialize host identity, administration, and constructor-time introduction.
     /// @param cmdr Commander host ID; used by the composed access capabilities.
@@ -110,32 +118,39 @@ abstract contract Host is
         admin = Accounts.toAdmin(commanderAddr);
     }
 
+    /// @notice Return whether an ID is trusted. The chain and Rootzero assets always are, and are never stored.
+    /// @param id ID of any kind.
+    /// @return Whether the ID is trusted.
+    function isTrusted(uint id) internal view virtual override returns (bool) {
+        return bytes32(id) == chainAsset || bytes32(id) == Assets.Rootzero || trustedIds[id];
+    }
+
     /// @notice Set whether an ID is trusted and log a change when its value differs.
-    /// @dev Stored with `Trust.setTrusted`. Reverts InvalidId for zero, for the always-trusted chain
-    /// and Rootzero assets, and for node IDs that are not local EVM nodes; other kinds are
-    /// stored as given.
+    /// @dev Reverts InvalidId for zero, for the always-trusted chain and Rootzero assets, and for
+    /// node IDs that are not local EVM nodes, because trusted nodes can get called. Chain nodes of
+    /// any chain are allowed: none can be called. Other kinds are stored as given.
     /// @param id ID of any kind.
     /// @param trusted Whether the ID should be trusted.
     function setTrust(uint id, bool trusted) internal virtual override {
         if (id == 0 || bytes32(id) == chainAsset || bytes32(id) == Assets.Rootzero) revert InvalidId();
-        if (uint8(id >> 240) == Layout.Node) Nodes.local(id);
-        if (Trust.isTrusted(id) == trusted) return;
-        Trust.setTrusted(id, trusted);
+        if (uint8(id >> 240) == Layout.Node && !Nodes.isChain(id)) Nodes.local(id);
+        if (trustedIds[id] == trusted) return;
+        trustedIds[id] = trusted;
         Logs.trust(id, trusted);
     }
 
-    /// @notice Validate a user account and grant it the guardian role.
+    /// @notice Validate a user account of this chain and grant it the guardian role.
+    /// @dev Only a local account can act as a guardian, so another chain's is rejected here rather
+    /// than appointed and silently unable to act.
     /// @param account Account identifier.
     function appointGuardian(bytes32 account) internal virtual override {
-        account = Accounts.user(account);
-        Trust.setGuardian(account, true);
+        guardians[Accounts.localUser(account)] = true;
     }
 
     /// @notice Validate a user account and revoke its guardian role.
     /// @param account Account identifier.
     function dismissGuardian(bytes32 account) internal virtual override {
-        account = Accounts.user(account);
-        Trust.setGuardian(account, false);
+        guardians[Accounts.user(account)] = false;
     }
 
     /// @notice Return true if `caller` is the commander, this host, or an authorized host.
@@ -143,14 +158,14 @@ abstract contract Host is
     /// @return True if `caller` is the commander, this host, or an authorized host.
     function isTrustedCaller(address caller) internal view returns (bool) {
         if (caller == address(0)) return false;
-        return caller == commanderAddr || caller == address(this) || Trust.isTrusted(Nodes.toHost(caller));
+        return caller == commanderAddr || caller == address(this) || trustedIds[Nodes.toHost(caller)];
     }
 
     /// @notice Return true if `addr` belongs to an active guardian account.
     /// @param addr Native address to check.
     /// @return True if `addr` belongs to an active guardian account.
-    function isGuardian(address addr) internal view returns (bool) {
-        return Trust.isGuardian(Accounts.toUser(addr));
+    function isGuardian(address addr) internal view virtual override returns (bool) {
+        return guardians[Accounts.toUser(addr)];
     }
 
     /// @notice Require the admin account and its commander caller.
@@ -191,7 +206,7 @@ abstract contract Host is
     /// @return selector ABI selector encoded in the authorized node.
     /// @return target Contract address encoded in the authorized node.
     function enforceNode(uint node) internal view returns (bytes4 selector, address target) {
-        if (!Trust.isTrusted(node)) revert AccessDenied();
+        if (!trustedIds[node]) revert AccessDenied();
         selector = bytes4(uint32(node >> 160));
         target = address(uint160(node));
     }

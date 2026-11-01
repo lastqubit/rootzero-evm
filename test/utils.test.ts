@@ -276,12 +276,9 @@ describe("Utils", () => {
       expect("0x" + embeddedAddr.toString(16).padStart(40, "0")).to.equal(signerAddress.toLowerCase());
     });
 
-    it("toUserAccount encodes user prefix without chain-specific chainId", async () => {
+    it("toUserAccount binds the account to the local chain", async () => {
       const result: string = await utils.testToUserAccount(signerAddress);
-      const val = BigInt(result);
-      // Chain bytes (bits 192..223) should be 0 for unspecified
-      const chainBytes = (val >> 192n) & 0xffffffffn;
-      expect(chainBytes).to.equal(0n);
+      expect(result).to.equal(ethers.toBeHex((0x03010300n << 224n) | (chainId << 192n) | BigInt(signerAddress), 32));
     });
 
     it("isAdminAccount returns true for admin account", async () => {
@@ -365,6 +362,16 @@ describe("Utils", () => {
       const userAccount = await utils.testToUserAccount(signerAddress);
       const extracted = await utils.testAccountAddr(userAccount);
       expect(extracted.toLowerCase()).to.equal(signerAddress.toLowerCase());
+    });
+
+    it("accountAddr rejects another chain's accounts", async () => {
+      const address = BigInt(signerAddress);
+      for (const prefix of [0x03010100n, 0x03010200n, 0x03010300n]) {
+        await expectCustomError(
+          utils.testAccountAddr(ethers.toBeHex((prefix << 224n) | ((chainId + 1n) << 192n) | address, 32)),
+          "InvalidAccount",
+        );
+      }
     });
 
     it("accountAddr reverts for non-EVM account", async () => {

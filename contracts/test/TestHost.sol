@@ -5,15 +5,16 @@ import {Blocks} from "../codec/Blocks.sol";
 import {Cursors} from "../utils/Cursors.sol";
 
 import {Accounts} from "../utils/Accounts.sol";
+import {ensureAddr} from "../utils/Utils.sol";
 
 import {Host} from "../core/Host.sol";
-import {Trust} from "../core/Trust.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {ExecuteCashout} from "../commands/Cashout.sol";
 import {Deposit, DepositPayable} from "../commands/Deposit.sol";
 import {Withdraw} from "../commands/Withdraw.sol";
-import {ExecuteCreditAccount} from "../commands/Credit.sol";
-import {ExecuteDebitAccount} from "../commands/Debit.sol";
+import {ExecuteBank} from "../commands/Bank.sol";
+import {CreditAccount} from "../commands/Credit.sol";
+import {ExecuteDebitAccount} from "./ExecuteDebitAccount.sol";
 import {CreatePayout} from "../commands/Payout.sol";
 import {RelayPayable, RelayBalancePayable} from "../commands/Relay.sol";
 import {RecoverPayable} from "../commands/Recover.sol";
@@ -23,7 +24,7 @@ import {Pipeline} from "../core/Pipeline.sol";
 import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {BookPort} from "../ports/Book.sol";
 import {EndorsePort, UnendorsePort} from "../ports/Endorse.sol";
-import {TrustRegistry} from "../core/Trust.sol";
+import {TestTrustRegistry} from "./TestTrustRegistry.sol";
 import {Allowance} from "../commands/admin/Allowance.sol";
 import {RevokeAllowance} from "../guards/Revoke.sol";
 import {Position} from "../core/Types.sol";
@@ -41,7 +42,8 @@ contract TestHost is
     Deposit,
     DepositPayable,
     Withdraw,
-    ExecuteCreditAccount,
+    CreditAccount,
+    ExecuteBank,
     ExecuteDebitAccount,
     CreatePayout,
     RelayPayable,
@@ -55,7 +57,7 @@ contract TestHost is
     BookPort,
     EndorsePort,
     UnendorsePort,
-    TrustRegistry,
+    TestTrustRegistry,
     Allowance,
     RevokeAllowance
 {
@@ -136,7 +138,7 @@ contract TestHost is
     }
 
     function withdraw(bytes32 recipient, bytes32 asset, uint amount) internal override {
-        emit WithdrawCalled(Accounts.recipientAddr(recipient), asset, amount);
+        emit WithdrawCalled(ensureAddr(recipient), asset, amount);
     }
 
     function settle(bytes32 account, Position memory position) internal override(Settlement, SettleHook) {
@@ -212,9 +214,9 @@ contract TestHost is
             enforceCommand(cid);
             return executeDebitAccount(account, state, inputCur, value);
         }
-        if (cid == creditAccountId()) {
+        if (cid == bankId()) {
             enforceCommand(cid);
-            return executeCreditAccount(account, state, inputCur, value);
+            return executeBank(account, state, inputCur, value);
         }
         if (cid == settleId()) {
             enforceCommand(cid);
@@ -246,7 +248,7 @@ contract TestHost is
     }
 
     function isAuthorized(uint node) external view returns (bool) {
-        return Trust.isTrusted(node);
+        return isTrusted(node);
     }
 
     function testEnforceNode(uint node) external view returns (bytes4, address) {

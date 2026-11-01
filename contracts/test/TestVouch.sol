@@ -10,7 +10,7 @@ import {Settlement, SettleHook} from "../core/Settlement.sol";
 import {Balances} from "../core/Balances.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {Runtime} from "../core/Runtime.sol";
-import {Trust} from "../core/Trust.sol";
+import {Assets} from "../utils/Assets.sol";
 import {Position} from "../core/Types.sol";
 import {AccessDenied} from "../core/Access.sol";
 import {InvalidBlock} from "../utils/Errors.sol";
@@ -21,6 +21,7 @@ import {Nodes} from "../utils/Nodes.sol";
 contract TestVouchCommander is ExecuteVouch, ExecuteSettle, Settlement, Balances, Pipeline {
     address private immutable tester = msg.sender;
     mapping(uint => bool) private commands;
+    mapping(uint => bool) private trustedIds;
     uint public lastRemaining;
 
     constructor() Runtime(0, address(0)) {}
@@ -29,7 +30,12 @@ contract TestVouchCommander is ExecuteVouch, ExecuteSettle, Settlement, Balances
     function settleCommandId() external view returns (uint) { return settleId(); }
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
     function setCommand(uint cmd, bool enabled) external { commands[cmd] = enabled; }
-    function setTrusted(bytes32 id, bool trusted) external { Trust.setTrusted(uint(id), trusted); }
+    function setTrusted(bytes32 id, bool trusted) external { trustedIds[uint(id)] = trusted; }
+
+    function isTrusted(uint id) internal view override returns (bool) {
+        return bytes32(id) == chainAsset || bytes32(id) == Assets.Rootzero || trustedIds[id];
+    }
+
     function seed(bytes32 account, bytes32 asset, uint amount) external { creditTo(account, asset, amount); }
     function balanceOf(bytes32 account, bytes32 asset) external view returns (uint) { return balances[account][asset]; }
 

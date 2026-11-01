@@ -78,7 +78,7 @@ contract TestUtils is CommandBase {
         return Accounts.account(value);
     }
 
-    function testToUserAccount(address addr) external pure returns (bytes32) {
+    function testToUserAccount(address addr) external view returns (bytes32) {
         return Accounts.toUser(addr);
     }
 
@@ -98,7 +98,7 @@ contract TestUtils is CommandBase {
         return Accounts.host(account);
     }
 
-    function testAccountAddr(bytes32 account) external pure returns (address) {
+    function testAccountAddr(bytes32 account) external view returns (address) {
         return Accounts.addr(account);
     }
 

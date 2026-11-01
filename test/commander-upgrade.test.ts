@@ -120,7 +120,7 @@ describe("Main-style commander upgrade", function () {
           encodeBootstrapBlock(0n, encodeAssetAmountBlock(asset, 7n))),
         encodeStepBlock(await commandId("checkBalance(bytes)", host), 0n,
           encodeBalanceConstraintsBlock(asset, 8n, 9n)),
-        encodeStepBlock(await commandId("creditAccount(bytes)", host), 0n, "0x"),
+        encodeStepBlock(await commandId("bank(bytes)", host), 0n, "0x"),
       );
       await expect(host.rootzero(failing, commanderDeadline)).revertedWithCustomError(host, "OutOfRange");
       expect(await host.balanceOf(account, asset)).eq(100n);

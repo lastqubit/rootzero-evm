@@ -318,20 +318,15 @@ abstract contract Pipeline is CommandAccess, PipeHook, ExecuteHook {
         uint budget
     ) internal virtual override returns (uint remaining) {
         logPipeline(account, stepsCur);
-        uint outputHint;
+        uint prevCmd;
         uint index;
         while (Cursors.more(stepsCur)) {
             uint cmd;
             uint value;
             uint inputCur;
             (cmd, value, inputCur, stepsCur) = takeStep(stepsCur);
-            // Lane hints are flag-byte bits; masking cmd >> 224 ignores the other prefix bits.
-            uint hints = cmd >> 224;
-            // logPipeline bounds the step count, so index stays below the Value bit.
-            if (outputHint | (hints & Logs.State) != 0) Logs.state(state, index);
-            uint inputHint = hints & Logs.Input;
-            if (inputHint | value != 0) Logs.step(index, value, inputCur, inputHint != 0);
-            outputHint = hints & Logs.Output;
+            Logs.step(index, cmd, prevCmd, state, value, inputCur);
+            prevCmd = cmd;
             if (value > budget) revert InsufficientValue();
             unchecked {
                 budget -= value;

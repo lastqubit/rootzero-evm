@@ -5,15 +5,16 @@ import {CommandBase, Specs} from "./Base.sol";
 import {Encoder} from "../codec/Encoder.sol";
 import {VOUCH_KEY, LIST_KEY} from "../codec/Keys.sol";
 import {ENTITY_HEADER, TRUST_HEADER} from "../codec/Specs.sol";
+import {TrustCheck} from "../core/Access.sol";
+import {Untrusted} from "../core/Runtime.sol";
 import {DebitAccountHook} from "../core/Settlement.sol";
-import {ROOTZERO_ASSET, TRUST_SALT, UNTRUSTED} from "../core/Trust.sol";
 import {UnexpectedState, INVALID_BLOCK} from "../utils/Errors.sol";
 
 /// @title ExecuteVouch
 /// @notice Pipeline-local trust vouching with a minimum remaining native budget.
 /// @dev Commander counterpart of ExecuteBootstrap: it starts a pipeline with TRUST state
 /// for IDs in this host's trusted set instead of BALANCE state.
-abstract contract ExecuteVouch is CommandBase, DebitAccountHook {
+abstract contract ExecuteVouch is TrustCheck, CommandBase, DebitAccountHook {
     uint private immutable id;
 
     constructor() {
@@ -81,26 +82,22 @@ abstract contract ExecuteVouch is CommandBase, DebitAccountHook {
             i = Encoder.pos(output, 0);
         }
 
-        // Native assets are always trusted; other IDs read this host's Trust slot
-        // (id ^ TRUST_SALT) directly.
-        bytes32 chain = chainAsset;
-        assembly ("memory-safe") {
-            for {} lt(abs, end) { abs := add(abs, 40) } {
-                if iszero(eq(shr(192, calldataload(abs)), ENTITY_HEADER)) {
-                    mstore(0, INVALID_BLOCK)
-                    revert(28, 4)
-                }
-                let entity := calldataload(add(abs, 8))
-                if iszero(or(eq(entity, chain), eq(entity, ROOTZERO_ASSET))) {
-                    if iszero(sload(xor(entity, TRUST_SALT))) {
-                        mstore(0, shl(224, UNTRUSTED))
-                        mstore(4, entity)
-                        revert(0, 36)
+        unchecked {
+            for (; abs < end; abs += 40) {
+                uint entity;
+                assembly ("memory-safe") {
+                    if iszero(eq(shr(192, calldataload(abs)), ENTITY_HEADER)) {
+                        mstore(0, INVALID_BLOCK)
+                        revert(28, 4)
                     }
+                    entity := calldataload(add(abs, 8))
                 }
-                mstore(i, shl(192, TRUST_HEADER))
-                mstore(add(i, 8), entity)
-                i := add(i, 40)
+                if (!isTrusted(entity)) revert Untrusted(bytes32(entity));
+                assembly ("memory-safe") {
+                    mstore(i, shl(192, TRUST_HEADER))
+                    mstore(add(i, 8), entity)
+                }
+                i += 40;
             }
         }
 

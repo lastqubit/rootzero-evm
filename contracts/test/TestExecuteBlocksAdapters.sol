@@ -4,8 +4,8 @@ import {Cursors} from "../utils/Cursors.sol";
 import {Position} from "../core/Types.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
-import {ExecuteDebitAccount} from "../commands/Debit.sol";
-import {ExecuteCreditAccount} from "../commands/Credit.sol";
+import {ExecuteDebitAccount} from "./ExecuteDebitAccount.sol";
+import {ExecuteBank} from "../commands/Bank.sol";
 import {ExecuteCashout} from "../commands/Cashout.sol";
 import {ExecuteSettle} from "../commands/Settle.sol";
 import {ExecuteAuthorize} from "../commands/admin/Authorize.sol";
@@ -22,6 +22,7 @@ contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDeb
     function enforceAdmin(bytes32 account, address) internal pure override returns (bytes32) { require(account == bytes32(uint(9))); return account; }
     function enforceCommand(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
     function enforcePort(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
+    function isTrusted(uint) internal pure override returns (bool) { return false; }
     function setTrust(uint node, bool enabled) internal override { if (enabled) { unchecked { checksum += node; } } }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         require(amount != type(uint).max, "hook");
@@ -124,7 +125,7 @@ contract ExecuteAdaptersBaseline is PreviousExecuteBootstrap, PreviousExecuteDeb
     }
 }
 
-contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, ExecuteCreditAccount, ExecuteCashout, ExecuteSettle, ExecuteAuthorize, ExecuteCheckBalance, ExecuteCheckPosition {
+contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, ExecuteBank, ExecuteCashout, ExecuteSettle, ExecuteAuthorize, ExecuteCheckBalance, ExecuteCheckPosition {
     uint public checksum;
     constructor() Runtime(0, address(0)) {}
     function nativeAsset() external view returns (bytes32) { return chainAsset; }
@@ -133,6 +134,7 @@ contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, Execut
     function enforceAdmin(bytes32 account, address) internal pure override returns (bytes32) { require(account == bytes32(uint(9))); return account; }
     function enforceCommand(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
     function enforcePort(uint) internal pure override returns (bytes4, address) { return (bytes4(0), address(0)); }
+    function isTrusted(uint) internal pure override returns (bool) { return false; }
     function setTrust(uint node, bool enabled) internal override { if (enabled) { unchecked { checksum += node; } } }
     function debitAccount(bytes32 account, bytes32 asset, uint amount) internal override {
         require(amount != type(uint).max, "hook");
@@ -173,7 +175,7 @@ contract ExecuteAdaptersCurrent is ExecuteBootstrap, ExecuteDebitAccount, Execut
     ) {
         uint inputCur = Cursors.wrap(input);
         uint initial = gasleft();
-        (handled, output, credit) = executeCreditAccount(bytes32(uint(9)), state, inputCur, value);
+        (handled, output, credit) = executeBank(bytes32(uint(9)), state, inputCur, value);
         usedGas = initial - gasleft();
         result = checksum;
         stateHash = keccak256(state);

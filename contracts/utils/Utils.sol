@@ -194,6 +194,14 @@ function ensureAddr(address addr) pure returns (address) {
     return addr;
 }
 
+/// @notice Decode a left-padded word as a nonzero address.
+/// @dev Reverts with `ValueOverflow` when any of the top 12 bytes are set and `ZeroAddress` for zero.
+/// @param value Native address, left-padded to 32 bytes.
+/// @return Validated nonzero address in the low 20 bytes of `value`.
+function ensureAddr(bytes32 value) pure returns (address) {
+    return ensureAddr(address(max160(uint(value))));
+}
+
 /// @notice Convert a signed integer to its 32-byte two's-complement representation.
 /// @param value Full-width value to encode or transform.
 /// @return Two's-complement word preserving the signed value.
@@ -253,7 +261,7 @@ function toLocalBase(uint32 prefix) view returns (uint) {
 }
 
 /// @notice Build a chain-unspecified base prefix (no chainid embedded).
-/// Used for IDs that must be portable across chains (e.g. user accounts).
+/// Used for IDs that aren't bound to one chain.
 /// @param prefix Four-byte type tag.
 /// @return Base value with the type tag in bits [255:224] and zeros elsewhere.
 function toUnspecifiedBase(uint32 prefix) pure returns (uint) {

@@ -46,7 +46,7 @@ library Layout {
 
     /// @dev Admin account — chain-local, backed by an EVM address.
     uint8 constant Admin = 0x01;
-    /// @dev User account — chain-agnostic, backed by an EVM address.
+    /// @dev User account — chain-local, backed by the address that entered on that chain.
     uint8 constant User = 0x03;
     // -------------------------------------------------------------------------
     // Node subtype tags (uint8, third byte of the ID type field)

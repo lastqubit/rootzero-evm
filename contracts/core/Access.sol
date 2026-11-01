@@ -62,10 +62,20 @@ abstract contract AdminAccess {
     function enforceAdmin(bytes32 account, address caller) internal view virtual returns (bytes32);
 }
 
+/// @title TrustCheck
+/// @notice Read access to a host's trusted set.
+/// @dev Contains declarations only; hosts provide the storage.
+abstract contract TrustCheck {
+    /// @notice Return whether an ID is trusted. The chain and Rootzero assets always are.
+    /// @param id ID of any kind.
+    /// @return Whether the ID is trusted.
+    function isTrusted(uint id) internal view virtual returns (bool);
+}
+
 /// @title TrustAccess
 /// @notice Aggregate hook surface required by trust administration, endorsement and guards.
 /// @dev Contains declarations only; hosts provide the policy and storage.
-abstract contract TrustAccess is PeerAccess, AdminAccess, CommandAccess, PortAccess {
+abstract contract TrustAccess is TrustCheck, PeerAccess, AdminAccess, CommandAccess, PortAccess {
     /// @notice Set whether an ID is trusted under the host's policy.
     /// @dev IDs are self-describing: nodes, assets, accounts and other entities share one set.
     /// @param id ID whose trust is updated.
@@ -77,6 +87,11 @@ abstract contract TrustAccess is PeerAccess, AdminAccess, CommandAccess, PortAcc
 /// @notice Guardian authorization and mutation capabilities required by guardian features.
 /// @dev Contains declarations only; hosts provide the policy and storage.
 abstract contract GuardianAccess {
+    /// @notice Return whether `addr` belongs to an active guardian account.
+    /// @param addr Native address to check.
+    /// @return Whether the address is an active guardian.
+    function isGuardian(address addr) internal view virtual returns (bool);
+
     /// @notice Appoint an account as a guardian.
     /// @param account Account to grant the guardian role.
     function appointGuardian(bytes32 account) internal virtual;

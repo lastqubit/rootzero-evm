@@ -16,7 +16,7 @@ describe("Burn", () => {
 
     const USER_PREFIX = 0x03010300n;
     userAccount = ethers.zeroPadValue(
-      ethers.toBeHex((USER_PREFIX << 224n) | BigInt(commander)),
+      ethers.toBeHex((USER_PREFIX << 224n) | (31337n << 192n) | BigInt(commander)),
       32
     );
   });

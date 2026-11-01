@@ -3,7 +3,6 @@ pragma solidity ^0.8.33;
 import {Cursors} from "../utils/Cursors.sol";
 
 import {Host} from "../core/Host.sol";
-import {Trust} from "../core/Trust.sol";
 import {Pipeline} from "../core/Pipeline.sol";
 import {ExecuteAuthorize} from "../Endpoints.sol";
 
@@ -24,5 +23,5 @@ contract TestExecuteAuthorize is Host, Pipeline, ExecuteAuthorize {
 
     function adminAccount() external view returns (bytes32) { return admin; }
     function commandId() external view returns (uint) { return authorizeId(); }
-    function isAuthorized(uint node) external view returns (bool) { return Trust.isTrusted(node); }
+    function isAuthorized(uint node) external view returns (bool) { return isTrusted(node); }
 }

@@ -73,6 +73,8 @@ contract TestEndpointRunners is AdminBase, PortBase, GuardBase, QueryBase {
     function enforceCommand(uint) internal pure override returns(bytes4,address) { revert Rejected(); }
     function enforcePort(uint) internal pure override returns(bytes4,address) { revert Rejected(); }
     function setTrust(uint, bool) internal pure override {}
+    function isTrusted(uint) internal pure override returns (bool) { return false; }
+    function isGuardian(address) internal pure override returns (bool) { return false; }
     function appointGuardian(bytes32) internal pure override {}
     function dismissGuardian(bytes32) internal pure override {}
     function enforceGuardian(address who) internal pure override returns(address) { return who; }

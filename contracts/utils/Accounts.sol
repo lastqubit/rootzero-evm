@@ -2,10 +2,10 @@
 pragma solidity ^0.8.33;
 
 import {Layout} from "./Layout.sol";
-import {InvalidAccount, ZeroAccount} from "./Errors.sol";
+import {InvalidAccount} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
 import {Nodes} from "./Nodes.sol";
-import {ensureAddr, isFamily, toLocalBase, toUnspecifiedBase} from "./Utils.sol";
+import {ensureAddr, isFamily, toLocalBase} from "./Utils.sol";
 
 /// @title Accounts
 /// @notice Encoding and decoding helpers for 256-bit account identifiers.
@@ -13,8 +13,9 @@ import {ensureAddr, isFamily, toLocalBase, toUnspecifiedBase} from "./Utils.sol"
 /// Host accounts use the Host subtype shared with node IDs, under the Account category.
 /// Account IDs embed a 4-byte type tag in bits [255:224]:
 ///   - `Admin`    — chain-local EVM address in bits [159:0]
-///   - `User`     — chain-agnostic EVM address in bits [159:0]
-/// EVM account encoders leave the middle bits [191:160] zero.
+///   - `User`     — chain-local EVM address in bits [159:0]
+/// EVM account encoders leave the middle bits [191:160] zero. Every account carries its chain in
+/// bits [223:192], because the same address on another chain may have a different controller.
 ///
 /// An opaque account uses `[0x02][Account][subtype][bytes29(hash)]`. The full
 /// account identity must be supplied by
@@ -35,7 +36,7 @@ library Accounts {
     uint32 constant Admin = (uint32(Layout.Evm) << 24) | (uint32(Layout.Account) << 16) | (uint32(Layout.Admin) << 8);
     /// @dev Full 4-byte type prefix for chain-local host accounts.
     uint32 constant Host = (uint32(Layout.Evm) << 24) | (uint32(Layout.Account) << 16) | (uint32(Layout.Host) << 8);
-    /// @dev Full 4-byte type prefix for user accounts (chain-agnostic EVM address).
+    /// @dev Full 4-byte type prefix for user accounts (chain-local EVM address).
     uint32 constant User = (uint32(Layout.Evm) << 24) | (uint32(Layout.Account) << 16) | (uint32(Layout.User) << 8);
 
     /// @notice Extract the 4-byte type prefix from an account ID.
@@ -157,6 +158,16 @@ library Accounts {
         return value;
     }
 
+    /// @notice Assert that `value` is a user account of the current chain, with a nonzero embedded
+    /// address, and return it unchanged.
+    /// @dev Reverts with `InvalidAccount` for another prefix or chain, or `ZeroAddress` for a zero address.
+    /// @param value Account identifier to validate.
+    /// @return The same `value` if validation succeeds.
+    function localUser(bytes32 value) internal view returns (bytes32) {
+        if (uint32(uint(user(value)) >> 192) != block.chainid) revert InvalidAccount();
+        return value;
+    }
+
     /// @notice Assert that `value` is Rootzero (zero) or has the account category and return it unchanged.
     /// @dev Reverts with `InvalidAccount` for nonzero values outside the account category.
     /// Representation, subtype, flags, and payload are not validated; does not authorize the account.
@@ -194,13 +205,13 @@ library Accounts {
         return bytes32((uint(Host) << 224) | (uint(uint32(node >> 192)) << 192) | uint(uint160(node)));
     }
 
-    /// @notice Encode an EVM address as a chain-agnostic user account ID.
+    /// @notice Encode an EVM address as a chain-local user account ID.
     /// @dev Encoding only. Validate untrusted addresses at entry (e.g. with `user`);
     /// trusted canonical construction needs no redundant account-format check.
     /// @param accountAddr EVM address to embed.
-    /// @return User account ID without a chain binding.
-    function toUser(address accountAddr) internal pure returns (bytes32) {
-        return bytes32(toUnspecifiedBase(User) | uint(uint160(accountAddr)));
+    /// @return User account ID bound to the current chain.
+    function toUser(address accountAddr) internal view returns (bytes32) {
+        return bytes32(toLocalBase(User) | uint(uint160(accountAddr)));
     }
 
     /// @notice Derive an opaque account ID from a keccak preimage.
@@ -219,40 +230,29 @@ library Accounts {
         return value;
     }
 
-    /// @notice Extract the address embedded in an EVM-family account ID.
-    /// @dev Validates via `evm`; reverts with `InvalidAccount` for a family mismatch
-    /// or `ZeroAddress` for a zero embedded address.
-    /// @param value EVM-family account ID.
+    /// @notice Extract the address of a local EVM-family account ID.
+    /// @dev Validates via `evm`; reverts with `InvalidAccount` for a family mismatch or another
+    /// chain's account, whose address may be controlled by someone else here, and with
+    /// `ZeroAddress` for a zero embedded address.
+    /// @param value EVM-family account ID of this chain.
     /// @return Embedded address (bits [159:0] of the ID).
-    function addr(bytes32 value) internal pure returns (address) {
-        return address(uint160(uint(evm(value))));
+    function addr(bytes32 value) internal view returns (address) {
+        if (uint32(uint(evm(value)) >> 192) != block.chainid) revert InvalidAccount();
+        return address(uint160(uint(value)));
     }
 
-    /// @notice Assert that `recipient` is the native EVM address of `account`, or that both are zero.
-    /// @dev Converts the address with the entry rule (`toUser`) and compares it to `account`.
-    /// Both zero passes, as a burn. Reverts with `InvalidAccount` otherwise: a zero address, a
-    /// word with any of its top 12 bytes set, or an address whose user account isn't `account`
-    /// (including admin, host, opaque and other-runtime accounts).
-    /// @param account Recipient's internal account ID.
-    /// @param recipient Recipient's native address, left-padded to 32 bytes.
-    /// @return The same `recipient` if validation succeeds.
-    function matchRecipient(bytes32 account, bytes32 recipient) internal pure returns (bytes32) {
-        if (account == 0 && recipient == 0) return recipient;
-        if (recipient == 0 || uint(recipient) >> 160 != 0 || toUser(address(uint160(uint(recipient)))) != account) {
-            revert InvalidAccount();
-        }
-        return recipient;
-    }
-
-    /// @notice Decode a PAYOUT recipient word as the EVM address it pays.
-    /// @dev A PAYOUT recipient is a native address left-padded to 32 bytes, not an account ID.
-    /// Reverts with `ZeroAccount` for zero (a burn, which no paying command delivers) and
-    /// `InvalidAccount` when any of the top 12 bytes are set.
-    /// @param recipient PAYOUT recipient word.
-    /// @return Nonzero EVM address in the low 20 bytes of `recipient`.
-    function recipientAddr(bytes32 recipient) internal pure returns (address) {
-        if (recipient == 0) revert ZeroAccount();
-        if (uint(recipient) >> 160 != 0) revert InvalidAccount();
-        return address(uint160(uint(recipient)));
+    /// @notice Assert that `rawAddr` is the native EVM address of account `value`, or that both are zero.
+    /// @dev Converts the address with the entry rule (`toUser`) and compares it to `value`.
+    /// Both zero passes. Otherwise reverts with `ZeroAddress` for a zero address,
+    /// `ValueOverflow` for a word with any of its top 12 bytes set, and `InvalidAccount` for an
+    /// address whose user account isn't `value` (including admin, host, opaque and
+    /// other-runtime accounts).
+    /// @param value Internal account ID.
+    /// @param rawAddr Native address, left-padded to 32 bytes.
+    /// @return The same `rawAddr` if validation succeeds.
+    function matchAddr(bytes32 value, bytes32 rawAddr) internal view returns (bytes32) {
+        if (value == 0 && rawAddr == 0) return rawAddr;
+        if (toUser(ensureAddr(rawAddr)) != value) revert InvalidAccount();
+        return rawAddr;
     }
 }

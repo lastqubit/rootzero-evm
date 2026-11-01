@@ -133,8 +133,8 @@ export function pad32(value: bigint | string): string {
 
 const USER_PREFIX = 0x03010300n;
 
-export function encodeUserAccount(addr: string): string {
-  const account = (USER_PREFIX << 224n) | BigInt(ethers.zeroPadValue(addr, 20));
+export function encodeUserAccount(addr: string, chainId = 31337n): string {
+  const account = (USER_PREFIX << 224n) | (chainId << 192n) | BigInt(ethers.zeroPadValue(addr, 20));
   return ethers.zeroPadValue(ethers.toBeHex(account), 32);
 }
 

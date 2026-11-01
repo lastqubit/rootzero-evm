@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {ExecuteCreditAccount} from "../commands/Credit.sol";
-import {ExecuteDebitAccount} from "../commands/Debit.sol";
+import {ExecuteBank} from "../commands/Bank.sol";
+import {CreditAccount} from "../commands/Credit.sol";
+import {ExecuteDebitAccount} from "./ExecuteDebitAccount.sol";
 import {ExecuteBootstrap} from "../commands/Bootstrap.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Logs} from "../codec/Logs.sol";
@@ -13,7 +14,7 @@ import {GetBalance} from "../queries/Balance.sol";
 import {Runtime} from "../core/Runtime.sol";
 import {AccessDenied} from "../core/Access.sol";
 
-contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPort, GetBalance, ExecuteCreditAccount, ExecuteDebitAccount, ExecuteBootstrap {
+contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPort, GetBalance, CreditAccount, ExecuteBank, ExecuteDebitAccount, ExecuteBootstrap {
     address private immutable peer = msg.sender;
     constructor() Runtime(0, address(0)) {}
 
@@ -30,7 +31,7 @@ contract TestAccountBalancePorts is Balances, CreditAccountPort, DebitAccountPor
         external onlyCommand returns (bool, bytes memory, uint)
     {
         uint cur = Cursors.wrap(input);
-        if (mode == 0) return executeCreditAccount(account, state, cur, value);
+        if (mode == 0) return executeBank(account, state, cur, value);
         if (mode == 1) return executeDebitAccount(account, state, cur, value);
         return executeBootstrap(account, state, cur, value);
     }

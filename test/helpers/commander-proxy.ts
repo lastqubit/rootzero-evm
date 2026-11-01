@@ -42,7 +42,7 @@ export async function commanderRoundtrip(host: any, count = 0, external?: bigint
     ? encodeStepBlock(await commandId("checkBalance(bytes)", host), 0n,
       encodeBalanceConstraintsBlock(asset, 7n, 7n))
     : encodeStepBlock(external, 0n, "0x");
-  const last = encodeStepBlock(await commandId("creditAccount(bytes)", host), 0n, "0x");
+  const last = encodeStepBlock(await commandId("bank(bytes)", host), 0n, "0x");
   return concat(first, ...Array(count).fill(middle), last);
 }
 

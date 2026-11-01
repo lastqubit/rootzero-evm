@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 import {Logs as PreviousLogs} from "./PreviousEventLogs.sol";
 
-import {ExecuteCreditAccount} from "../commands/Credit.sol";
+import {ExecuteBank} from "../commands/Bank.sol";
 import {Execute} from "../codec/Execute.sol";
 import {Logs} from "../codec/Logs.sol";
 import {Encoder} from "../codec/Encoder.sol";
@@ -12,7 +12,7 @@ import {UnexpectedInput} from "../utils/Errors.sol";
 import {Cursors} from "../utils/Cursors.sol";
 import {Runtime} from "../core/Runtime.sol";
 
-abstract contract CreditMeasure is ExecuteCreditAccount {
+abstract contract CreditMeasure is ExecuteBank {
     uint internal sum;
     constructor() Runtime(0, address(0)) {}
     function enforceCaller(address caller) internal pure override returns (address) { return caller; }
@@ -46,7 +46,7 @@ contract CreditBefore is CreditMeasure {
         if (!Cursors.done(inputCur)) revert UnexpectedInput();
         (uint abs, uint end) = Execute.bounds(state, Sizes.Balance);
 
-        PreviousLogs.memCopyWrap(creditAccountId(), Keys.State, state);
+        PreviousLogs.memCopyWrap(bankId(), Keys.State, state);
 
         while (abs < end) {
             (bytes32 asset, uint amount) = Execute.unpackBalanceMemory(abs);
@@ -62,7 +62,7 @@ contract CreditBefore is CreditMeasure {
 
 contract CreditCurrent is CreditMeasure {
     function run(bytes memory state, uint inputCur, uint value) internal override returns (bool, bytes memory, uint) {
-        return executeCreditAccount(bytes32(uint(9)), state, inputCur, value);
+        return executeBank(bytes32(uint(9)), state, inputCur, value);
     }
 }
 

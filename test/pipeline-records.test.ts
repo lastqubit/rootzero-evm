@@ -36,7 +36,7 @@ describe("Pipeline records", () => {
       realize: await commandId("realize(bytes)", host),
       cashout: await commandId("cashout(bytes)", host),
       settle: await commandId("settle(bytes)", host),
-      creditAccount: await commandId("creditAccount(bytes)", host),
+      bank: await commandId("bank(bytes)", host),
       relayBalancePayable: await commandId("relayBalancePayable(bytes)", host, 0x81n),
     };
     await host.authorize(encodeContextBlock(await host.getAdminAccount(), "0x",
@@ -85,9 +85,9 @@ describe("Pipeline records", () => {
 
   it("logs nonzero assigned value without unhinted input", async () => {
     const steps = concat(encodeStepBlock(ids.depositPayable, 5n, encodeAmountBlock(5n)),
-      encodeStepBlock(ids.creditAccount, 0n, "0x"));
+      encodeStepBlock(ids.bank, 0n, "0x"));
     expect(records(await pipe(trust, steps, 5n))).deep.eq([
-      pipelineRecord(account, [ids.depositPayable, ids.creditAccount]),
+      pipelineRecord(account, [ids.depositPayable, ids.bank]),
       stepRecord(0, 5n),
       stateRecord(1, encodeBalanceBlock(asset, 5n)),
     ]);
@@ -123,9 +123,9 @@ describe("Pipeline records", () => {
   });
 
   it("accepts 64 steps and rejects 65", async () => {
-    const step = encodeStepBlock(ids.creditAccount, 0n, "0x");
+    const step = encodeStepBlock(ids.bank, 0n, "0x");
     const receipt = await pipe("0x", concat(...Array(64).fill(step)));
-    expect(records(receipt)).deep.eq([pipelineRecord(account, Array(64).fill(ids.creditAccount))]);
+    expect(records(receipt)).deep.eq([pipelineRecord(account, Array(64).fill(ids.bank))]);
     await expect(host.testPipe(account, "0x", concat(...Array(65).fill(step))))
       .revertedWithCustomError(host, "TooManySteps");
   });
@@ -172,22 +172,62 @@ describe("Pipeline records", () => {
     ]);
   });
 
-  describe("encoders", () => {
+  describe("Logs.step", () => {
+    const hint = (flags: number) => BigInt(flags) << 224n;
+    const STATE = 8, INPUT = 16, OUTPUT = 32;
+    // Every other prefix bit set, so a hint must be read from its own bit.
+    const others = hint(0xff ^ (STATE | INPUT | OUTPUT));
+    const stream = concat(encodeBalanceBlock(asset, 1n), encodeBalanceBlock(liability, 2n));
+    const input = encodeAssetAmountBlock(asset, 3n);
     let harness: any;
     beforeEach(async () => { harness = await deploy("TestPipelineRecords"); });
 
-    it("encodes Step with optional value and input", async () => {
-      const input = encodeAssetAmountBlock(asset, 3n);
-      for (const [index, value, withInput] of [[0, 0n, true], [5, 9n, false], [63, 1n, true], [3, 0n, false]] as const) {
-        const receipt = await (await harness.step(index, value, input, withInput)).wait();
-        expect(records(receipt)).deep.eq([stepRecord(index, value, withInput ? input : undefined)]);
-      }
+    const logged = async (index: number, cmd: bigint, prevCmd: bigint, value: bigint) =>
+      records(await (await harness.step(index, cmd, prevCmd, stream, value, input)).wait());
+
+    it("emits a State record from the State hint alone", async () => {
+      expect(await logged(2, hint(STATE), 0n, 0n)).deep.eq([stateRecord(2, stream)]);
     });
 
-    it("encodes State in place and restores the stream", async () => {
-      const stream = concat(encodeBalanceBlock(asset, 1n), encodeBalanceBlock(liability, 2n));
-      expect(await harness.state.staticCall(stream, 63)).eq(stream);
-      expect(records(await (await harness.state(stream, 63)).wait())).deep.eq([stateRecord(63, stream)]);
+    it("emits a State record from the previous command's Output hint alone", async () => {
+      expect(await logged(2, 0n, hint(OUTPUT), 0n)).deep.eq([stateRecord(2, stream)]);
+    });
+
+    it("emits one State record when both hints are set", async () => {
+      expect(await logged(2, hint(STATE), hint(OUTPUT), 0n)).deep.eq([stateRecord(2, stream)]);
+    });
+
+    it("emits a Step record from the Input hint alone", async () => {
+      expect(await logged(0, hint(INPUT), 0n, 0n)).deep.eq([stepRecord(0, 0n, input)]);
+    });
+
+    it("emits a Step record without input from nonzero value alone", async () => {
+      expect(await logged(5, 0n, 0n, 9n)).deep.eq([stepRecord(5, 9n)]);
+    });
+
+    it("emits a Step record with value and input when both are present", async () => {
+      expect(await logged(63, hint(INPUT), 0n, 1n)).deep.eq([stepRecord(63, 1n, input)]);
+    });
+
+    it("emits the State record before the Step record", async () => {
+      expect(await logged(1, hint(STATE | INPUT), 0n, 4n)).deep.eq([stateRecord(1, stream), stepRecord(1, 4n, input)]);
+    });
+
+    it("emits nothing without a hint or value, whatever the other bits", async () => {
+      expect(await logged(1, 0n, 0n, 0n)).deep.eq([]);
+      expect(await logged(1, others, others | hint(STATE | INPUT), 0n)).deep.eq([]);
+    });
+
+    it("ignores the previous command's other hints and this command's Output hint", async () => {
+      expect(await logged(1, hint(OUTPUT), hint(STATE | INPUT), 0n)).deep.eq([]);
+    });
+
+    it("restores the stream after logging it in place", async () => {
+      expect(await harness.step.staticCall(63, hint(STATE), 0n, stream, 0n, input)).eq(stream);
+      expect(await harness.step.staticCall(63, hint(STATE | INPUT), hint(OUTPUT), stream, 7n, input)).eq(stream);
+    });
+
+    it("logs the shared empty stream and leaves the zero slot and allocator alone", async () => {
       const [zeroSlot, allocated] = await harness.emptyState.staticCall(4);
       expect([zeroSlot, allocated]).deep.eq([0n, 0n]);
       expect(records(await (await harness.emptyState(4)).wait())).deep.eq([stateRecord(4, "0x")]);
