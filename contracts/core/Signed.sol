@@ -88,6 +88,6 @@ abstract contract SignedEntry is TrustCheck {
 
         if (deadline <= lastDeadlines[signer]) revert NonceUsed();
         lastDeadlines[signer] = deadline;
-        return bytes32((uint(Accounts.User) << 224) | (home << 192) | uint(uint160(signer)));
+        return Accounts.toChainUser(signer, home);
     }
 }

@@ -5,7 +5,7 @@ import {Layout} from "./Layout.sol";
 import {InvalidAccount} from "./Errors.sol";
 import {Ids} from "./Ids.sol";
 import {Nodes} from "./Nodes.sol";
-import {ensureAddr, isFamily, toLocalBase} from "./Utils.sol";
+import {ensureAddr, isFamily, toChainBase, toLocalBase} from "./Utils.sol";
 
 /// @title Accounts
 /// @notice Encoding and decoding helpers for 256-bit account identifiers.
@@ -212,6 +212,15 @@ library Accounts {
     /// @return User account ID bound to the current chain.
     function toUser(address accountAddr) internal view returns (bytes32) {
         return bytes32(toLocalBase(User) | uint(uint160(accountAddr)));
+    }
+
+    /// @notice Encode an EVM address as a user account ID on a given chain.
+    /// @dev Encoding only, like `toUser`. Reverts if `chain` does not fit in 32 bits.
+    /// @param accountAddr EVM address to embed.
+    /// @param chain Chain ID to embed.
+    /// @return User account ID bound to `chain`.
+    function toChainUser(address accountAddr, uint chain) internal pure returns (bytes32) {
+        return bytes32(toChainBase(User, chain) | uint(uint160(accountAddr)));
     }
 
     /// @notice Derive an opaque account ID from a keccak preimage.

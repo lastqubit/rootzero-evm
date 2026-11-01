@@ -257,7 +257,16 @@ function retryTicket(bytes32 account, bytes calldata state) pure returns (bytes3
 /// @param prefix Four-byte type tag (e.g. `Nodes.Host`, `Nodes.Command`).
 /// @return Base value with the type tag in bits [255:224] and chainid in bits [223:192].
 function toLocalBase(uint32 prefix) view returns (uint) {
-    return (uint(prefix) << 224) | (uint(max32(block.chainid)) << 192);
+    return toChainBase(prefix, block.chainid);
+}
+
+/// @notice Build the base prefix for a 256-bit ID bound to a given chain.
+/// @dev Reverts if `chain` does not fit in 32 bits.
+/// @param prefix Four-byte type tag (e.g. `Nodes.Host`, `Nodes.Command`).
+/// @param chain Chain ID to embed.
+/// @return Base value with the type tag in bits [255:224] and `chain` in bits [223:192].
+function toChainBase(uint32 prefix, uint chain) pure returns (uint) {
+    return (uint(prefix) << 224) | (uint(max32(chain)) << 192);
 }
 
 /// @notice Build a chain-unspecified base prefix (no chainid embedded).
