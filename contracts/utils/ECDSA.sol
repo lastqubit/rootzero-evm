@@ -22,6 +22,14 @@ library ECDSA {
         }
     }
 
+    /// @notice Compute the EIP-712 digest for a domain separator and struct hash.
+    /// @param domain EIP-712 domain separator.
+    /// @param structHash EIP-712 hash of the signed struct.
+    /// @return digest `keccak256("\x19\x01" || domain || structHash)`, suitable for `ecrecover`.
+    function toTypedDataHash(bytes32 domain, bytes32 structHash) internal pure returns (bytes32 digest) {
+        return keccak256(abi.encodePacked("\x19\x01", domain, structHash));
+    }
+
     /// @notice Recover the signer address from a calldata ECDSA signature.
     /// Returns `address(0)` on any validation failure rather than reverting,
     /// so callers must check the return value.
@@ -54,5 +62,19 @@ library ECDSA {
         if (uint256(s) > MALLEABILITY_THRESHOLD) return address(0);
 
         return ecrecover(hash, v, r, s);
+    }
+
+    /// @notice Recover the signer address from an EIP-2098 compact signature.
+    /// Returns `address(0)` on any validation failure rather than reverting,
+    /// so callers must check the return value.
+    /// @param hash Message digest to recover from.
+    /// @param r Signature `r`.
+    /// @param vs Compact signature word: y parity in the top bit, `s` below it.
+    /// @return signer Recovered signer address, or `address(0)` if invalid.
+    function tryRecoverCompact(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address signer) {
+        uint256 s = uint256(vs) & (type(uint256).max >> 1);
+        if (s > MALLEABILITY_THRESHOLD) return address(0);
+
+        return ecrecover(hash, uint8(uint256(vs) >> 255) + 27, r, bytes32(s));
     }
 }

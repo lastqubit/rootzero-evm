@@ -59,7 +59,7 @@ abstract contract SignedEntry is TrustCheck {
     function pipelineDigest(uint home, bytes calldata steps, uint deadline) private view returns (bytes32) {
         bytes32 domain = block.chainid == cachedChain && address(this) == cachedThis ? cachedDomain : domainHash();
         bytes32 pipeline = keccak256(abi.encode(PIPELINE_TYPEHASH, home, keccak256(steps), msg.value, deadline));
-        return keccak256(abi.encodePacked("\x19\x01", domain, pipeline));
+        return ECDSA.toTypedDataHash(domain, pipeline);
     }
 
     /// @notice Verify a signed pipeline, record its deadline and return the signer's account of `home`.
@@ -81,9 +81,7 @@ abstract contract SignedEntry is TrustCheck {
         if (home == 0 || home > type(uint32).max || !isTrusted(Nodes.toChain(home))) revert InvalidHome();
         if (deadline > block.timestamp + MAX_WINDOW) revert InvalidDeadline();
 
-        uint s = uint(vs) & (type(uint).max >> 1);
-        if (s > ECDSA.MALLEABILITY_THRESHOLD) revert InvalidSignature();
-        address signer = ecrecover(pipelineDigest(home, steps, deadline), uint8(uint(vs) >> 255) + 27, r, bytes32(s));
+        address signer = ECDSA.tryRecoverCompact(pipelineDigest(home, steps, deadline), r, vs);
         if (signer == address(0)) revert InvalidSignature();
 
         if (deadline <= lastDeadlines[signer]) revert NonceUsed();

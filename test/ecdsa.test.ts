@@ -66,6 +66,48 @@ describe("ECDSA", () => {
     expect(await ecdsa.testTryRecoverCalldata(digest, malleableSignature))
       .to.equal(ethers.ZeroAddress);
   });
+
+  it("matches ethers for EIP-712 digests", async () => {
+    const domain = { name: "rootzero", version: "1", chainId: 1, verifyingContract: ethers.ZeroAddress };
+    const types = { Mail: [{ name: "contents", type: "string" }] };
+    const value = { contents: "hello" };
+    const digest = await ecdsa.testToTypedDataHash(
+      ethers.TypedDataEncoder.hashDomain(domain),
+      ethers.TypedDataEncoder.from(types).hash(value),
+    );
+    expect(digest).to.equal(ethers.TypedDataEncoder.hash(domain, types, value));
+  });
+
+  it("recovers the signer from compact signatures of both y parities", async () => {
+    const signer = await getSigner(0);
+    const seen = new Set<number>();
+    for (let i = 0; seen.size < 2; i++) {
+      const hash = ethers.id(`compact ${i}`);
+      const parsed = ethers.Signature.from(await signer.signMessage(ethers.getBytes(hash)));
+      seen.add(parsed.yParity);
+      const digest = ethers.hashMessage(ethers.getBytes(hash));
+      expect(await ecdsa.testTryRecoverCompact(digest, parsed.r, parsed.yParityAndS))
+        .to.equal(await signer.getAddress());
+    }
+  });
+
+  it("returns zero for compact signatures with high s under either y parity", async () => {
+    const signer = await getSigner(0);
+    const hash = ethers.id("compact high s");
+    const parsed = ethers.Signature.from(await signer.signMessage(ethers.getBytes(hash)));
+    const digest = ethers.hashMessage(ethers.getBytes(hash));
+    const highS = CURVE_ORDER / 2n + 1n;
+    for (const parity of [0n, 1n << 255n]) {
+      expect(await ecdsa.testTryRecoverCompact(digest, parsed.r, ethers.toBeHex(parity | highS, 32)))
+        .to.equal(ethers.ZeroAddress);
+    }
+  });
+
+  it("returns zero for compact signatures that can't be recovered", async () => {
+    const digest = ethers.id("compact zero r");
+    expect(await ecdsa.testTryRecoverCompact(digest, ethers.ZeroHash, ethers.toBeHex(1, 32)))
+      .to.equal(ethers.ZeroAddress);
+  });
 });
 
 

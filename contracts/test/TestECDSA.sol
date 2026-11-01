@@ -13,5 +13,13 @@ contract TestECDSA {
     function testTryRecoverCalldata(bytes32 hash, bytes calldata signature) external pure returns (address) {
         return hash.tryRecoverCalldata(signature);
     }
+
+    function testTryRecoverCompact(bytes32 hash, bytes32 r, bytes32 vs) external pure returns (address) {
+        return hash.tryRecoverCompact(r, vs);
+    }
+
+    function testToTypedDataHash(bytes32 domain, bytes32 structHash) external pure returns (bytes32) {
+        return ECDSA.toTypedDataHash(domain, structHash);
+    }
 }
 

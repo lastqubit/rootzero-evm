@@ -12,6 +12,9 @@ sections are immutable and must continue to describe the tagged release.
   `chain` does not fit in 32 bits. `toLocalBase` now delegates to it.
 - `Accounts.toChainUser(accountAddr, chain)` encodes a user account ID for a given
   chain.
+- `ECDSA.tryRecoverCompact(hash, r, vs)` recovers an EIP-2098 compact signature and
+  `ECDSA.toTypedDataHash(domain, structHash)` computes an EIP-712 digest. `SignedEntry`
+  now uses both.
 
 ## 1.58.0
 
