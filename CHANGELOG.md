@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.58.0
+
 - **Breaking: SVM constants removed.** `Layout.Svm` (representation `0x04`),
   `Layout.Spl` (asset subtype `0x04`) and the `#portRequest` block (its `Keys`,
   `Specs` and `Schemas` entries) are gone, along with `Keys.PortRequest` in the
@@ -16,6 +18,57 @@ sections are immutable and must continue to describe the tagged release.
   `resources` NatSpec keeps the neutral rule (the low 128 bits are the
   destination's native value on every runtime) without naming other runtimes'
   packing.
+- **Breaking: user accounts are bound to their chain.** `Accounts.toUser` writes
+  the local chain ID into the chain word, so the same address on two chains is
+  two accounts, and a pipeline relayed from chain A runs as chain A's account.
+  This closes a takeover where a contract's authority on one chain reached its
+  balance on another through a trusted route, even if the two have different
+  owners. Every user account ID changes.
+  - `Accounts.toUser`, `matchAddr` and `addr` are now `view`.
+  - `Accounts.addr` rejects another chain's account, so custody never pays or
+    debits a wallet at an address that isn't this account's here.
+- **Breaking: trust and guardians are normal mappings on `Host`.** The salted
+  `id ^ TRUST_SALT` slots let a guardian or peer reach arbitrary storage by choosing
+  an ID. The `Trust` library, `TRUST_SALT`, `GUARDIAN_SALT`, `UNTRUSTED`,
+  `ROOTZERO_ASSET` and `core/Trust.sol` are removed.
+  - `TrustCheck` declares `isTrusted`, which includes the chain and Rootzero
+    assets; `TrustAccess` inherits it. `GuardianAccess` declares `isGuardian`.
+  - `TrustRegistry` is removed. A commander implements `checkTrust()` itself;
+    `Runtime` now holds `TRUST_CHECK` and `Untrusted`, the calling side.
+  - A contract composing `ExecuteVouch` or `SignedEntry` with `Host` must add
+    `override(Host, TrustCheck)` for `isTrusted`.
+- **Breaking: guardians must be appointed with a local account.** `Accounts.localUser`
+  is new; `dismiss` stays permissive.
+- **Chain nodes can be trusted for any chain.** `Host.setTrust` no longer requires
+  them to be local. `Nodes.isChain` and `Nodes.toChain` are new. Other nodes must
+  still be local, and `portEndorse` still refuses all nodes.
+- **`SignedEntry` in `core/Signed.sol`:** verifies an EIP-712 pipeline signed by a
+  secp256k1 key for a commander's `runSigned`. The deadline is the replay protection
+  (`lastDeadlines`), within `MAX_WINDOW`, and home chains are allowed as trusted chain
+  nodes.
+- **`Sweep` in `core/Sweep.sol`,** on `Host` and `CommandHost`: `sweep(amount)` sends
+  a host's native value to its commander, callable by the commander or the host.
+- **Breaking: `Validator` removed,** in favor of `SignedEntry`.
+- **Breaking: `ExecuteCreditAccount` replaced by `ExecuteBank`** in `commands/Bank.sol`.
+  `bank` is a separately named pipeline command with no external function, like
+  `bootstrap`, so a commander no longer exposes `creditAccount(bytes)`. The `creditAccount`
+  hook, `CreditAccountPort` and the external `CreditAccount` command are unchanged.
+- **Breaking: `ExecuteDebitAccount` removed.** No host used it. The external `DebitAccount`
+  command, its hook and `DebitAccountPort` are unchanged.
+- **Breaking: `Accounts.recipientAddr` is now `ensureAddr(bytes32)`** in `utils/Utils.sol`,
+  an overload of `ensureAddr(address)`, because the word it decodes is an address and not an
+  account. It reverts `ZeroAddress()` for zero and `ValueOverflow()` when any of the top 12
+  bytes are set. `cashout` (including `ExecuteCashout`) reverts with these errors instead of
+  `ZeroAccount()` and `InvalidAccount()`, and `withdraw` reverts `ZeroAddress()` for a zero
+  recipient.
+- **Breaking: `Accounts.matchRecipient` is now `Accounts.matchAddr`** and decodes with
+  `ensureAddr`. In it, and so in `createPayout`, a zero address with a nonzero account reverts
+  `ZeroAddress()` and a word with any of its top 12 bytes set reverts `ValueOverflow()`, both
+  instead of `InvalidAccount()`.
+- **Breaking: `Logs.step` now decides which records to emit,** with the signature
+  `step(index, cmd, prevCmd, stream, value, inputCur)`, and `Logs.state` is removed. It reads the
+  hints from both commands and writes the State and Step records `Pipeline` wrote before. The
+  records are unchanged.
 
 ## 1.57.0
 
