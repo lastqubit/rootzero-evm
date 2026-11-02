@@ -624,13 +624,20 @@ they must make the complete requested amount available or revert. Any account
 fee is charged in addition and does not reduce the resulting balance.
 
 Commands can describe grouped lanes through `SchemaAnnot`, already inherited by
-endpoint bases:
+endpoint bases. Return the described lane from a `<command><Lane>()` hook and
+call it inline in `command(...)`:
 
 ```solidity
-uint input = lane("#amount[2] as (first, second)", "amountPair", Specs.Amount);
+constructor() {
+    (, descriptor) = command("myCommand", Specs.Empty, myCommandInput(), Specs.Empty, 0);
+}
+
+function myCommandInput() internal virtual returns (uint) {
+    return lane("#amount[2] as (first, second)", "amountPair", Specs.Amount);
+}
 ```
 
-Pass the returned value as the endpoint's input spec. The low 32 bits identify
+The returned value is the endpoint's input spec. The low 32 bits identify
 host-scoped `#lane` metadata; all block-spec fields stay unchanged. A plain spec
 has lane key zero. The body describes consecutive blocks of the same type using
 the normal schema language; mixed types require a parent block. Lane keys are
@@ -638,6 +645,19 @@ only for offchain lookup and never used as block headers or during unpacking.
 Allocation retains the embedded spec's per-block hints, without a group multiplier.
 The latest trusted lane definition replaces the previous one; an empty body
 clears grouping hints. Block definitions still use `schema(...)` and `#schema`.
+
+Bits 63-32 of a lane hold an optional protocol **variant** from `Variants`, a
+`bytes4(keccak256("<block>.<name>"))` key that tells offchain tools more about the
+lane's blocks without changing their wire key: for example
+`Specs.PositionCounterparty` declares POSITION blocks with a nonzero counterparty
+account, and `Specs.PositionLedger` POSITION blocks with a zero counterparty.
+On an output lane a variant is a promise, on a state lane a requirement. Nothing
+onchain reads or enforces variants. `Specs.toVariant(spec, variant)` adds one and
+composes with `toLane` in either order; `Specs.variant(spec)` reads it back.
+Hosts refine inherited lanes by overriding hooks such as `settleState()`,
+`swapExactInputOutput()` or `addPoolInput()`: return another constant, or wrap
+`super` with `Specs.toVariant(super.addPoolInput(), variant)`. Hooks are
+`internal virtual` without a mutability keyword so an override may call `lane(...)`.
 
 Both `lane` and the exact-size and ranged `schema` helpers accept a string key
 as an alternative to `uint32`. They derive `uint32(bytes4(keccak256(bytes(key))))`

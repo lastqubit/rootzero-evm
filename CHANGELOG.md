@@ -15,6 +15,38 @@ sections are immutable and must continue to describe the tagged release.
 - `ECDSA.tryRecoverCompact(hash, r, vs)` recovers an EIP-2098 compact signature and
   `ECDSA.toTypedDataHash(domain, structHash)` computes an EIP-712 digest. `SignedEntry`
   now uses both.
+- **Lane variants.** Spec words now read
+  `[block key:32][min:32][max:32][hint:24][reserved:72][variant:32][lane key:32]`:
+  bits 63-32 hold an optional 4-byte variant that refines what a lane's blocks
+  carry without changing their wire key. Variants are declarations for offchain
+  tools only; nothing onchain reads or enforces them. Bits 135-64 stay reserved.
+  - New `Variants` library (`codec/Variants.sol`, re-exported from `Codec.sol`
+    and `Commands.sol`) with keys `bytes4(keccak256("<block>.<name>"))`: `Debt`,
+    `Counterparty`, `Ledger`, `Same`, `Realized`, `Repaid`, `NewAsset`, `NewDebt`
+    (`position.debt`, `position.counterparty`, ...).
+  - `Specs.toVariant(spec, variant)` sets bits 63-32 and reverts `InvalidSpec` on
+    an empty spec, a zero variant, or any of bits 135-32 already set.
+    `Specs.variant(spec)` reads them back (zero when none).
+  - Constants `Specs.PositionDebt`, `PositionCounterparty`, `PositionLedger`,
+    `PositionSame`, `PositionRealized`, `PositionRepaid`, `PositionNewAsset` and
+    `PositionNewDebt`, each `Specs.Position` with its variant.
+  - `Specs.toLane` now requires only bits 135-64 and the low 32 bits to be zero, so
+    `toLane` and `toVariant` compose in either order. `Executions.describe` now
+    rejects only bits 135-64, so endpoints may publish variant-bearing lanes.
+- **Endpoint records publish variants** (endpoint IDs are unchanged):
+  `swapAssetExactInput` and `swapDebtExactOutput` declare state
+  `PositionCounterparty` and output `PositionNewAsset` / `PositionNewDebt`;
+  `realize` declares state `PositionCounterparty` and output `PositionRealized`;
+  `checkPosition` output is `PositionSame`; `repay` output is `PositionRepaid`.
+  Offchain decoders that still treat bits 63-32 as reserved will flag these lanes
+  until they learn the variant field.
+- **Lane hooks.** Hosts can refine inherited lanes by overriding
+  `<command><Lane>()` hooks, which default to the previous lane: `settleState()`
+  (`Specs.Position`), `swapExactInputOutput()` and `swapExactOutputOutput()`
+  (`Specs.Position`), and `addPoolInput()` / `removePoolInput()`, which replace the
+  `lane(...)` locals in `AddPool` / `RemovePool` with the same lane keys and
+  descriptions. A host that defines its own function with one of these names must
+  now mark it `override`. The convention is documented in `AGENTS.md`.
 
 ## 1.58.0
 

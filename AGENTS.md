@@ -16,6 +16,33 @@
   positions, memory from calldata, asset units from wei, and validation performed
   by the helper from requirements imposed on its caller or hook implementation.
 
+## Command lanes
+
+- Keep `command(name, state, input, output, flags)` as the single call that shows a
+  command's signature in its constructor.
+- Take a lane from a `<command><Lane>()` hook (`Lane` is `State`, `Input` or
+  `Output`, e.g. `settleState()`, `addPoolInput()`, `swapExactInputOutput()`),
+  called inline in `command(...)`, when the lane is more than a single `Specs`
+  constant (built with `lane(...)`, `Specs.toVariant(...)` or anything else that
+  computes or emits) or when a host may want to refine it. Otherwise write the
+  `Specs` constant inline, e.g. `Specs.Position` or `Specs.PositionCounterparty`.
+- Declare hooks `internal virtual` with no mutability keyword, even when the
+  default only returns a constant: overrides may only tighten mutability, and a
+  host override may call `lane(...)`, which emits. An override that returns a
+  constant may itself be `pure`.
+- The default hook returns the lane the command published before the hook existed,
+  so adding a hook never changes an existing host. Add hooks when a host needs one,
+  not to every mixin up front; commands whose behaviour the protocol fixes write
+  their variant inline.
+- An override that replaces a lane description returns its own `lane(...)` without
+  calling `super` (otherwise both descriptions are emitted). One that only adds a
+  variant wraps `super`, e.g. `Specs.toVariant(super.addPoolInput(), variant)`.
+- Specs that the command also reads at run time (for example `schema(...)` results
+  used with `exec.enter`) stay immutables, because calling a hook at run time would
+  emit its metadata again; refer to the immutable inline in `command(...)`.
+- Variants (`Variants`, spec bits 63-32) are declarations for offchain tools only.
+  Do not read or enforce them onchain; only the protocol defines variant keys.
+
 ## Development verification
 
 - During local development, run only focused tests for affected behavior, such as
