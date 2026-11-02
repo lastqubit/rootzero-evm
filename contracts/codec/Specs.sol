@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Keys} from "./Keys.sol";
+import {Variants} from "./Variants.sol";
 import {max24} from "../utils/Utils.sol";
 
 /// @dev Right-aligned Headers.AssetAmount for direct assembly use: key plus 64-byte payload.
@@ -109,11 +110,13 @@ library Sizes {
 
 /// @title Specs
 /// @notice Word-aligned block specifications encoded as
-/// `[key:4][min:4][max:4][hint:3][reserved:17]`.
+/// `[block key:32][min:32][max:32][hint:24][reserved:72][variant:32][lane key:32]` (bits).
 /// The upper eight bytes of a fixed-layout spec are its encoded block header,
 /// allowing the entire spec word to be written directly as that header.
-/// Named endpoint lanes use the low 32 reserved bits for a host-local lane key;
-/// these accessors continue to read only the embedded block spec fields.
+/// Endpoint lanes may carry a host-local lane key in bits 31-0 and a protocol
+/// variant key (see `Variants`) in bits 63-32. Both are declarations for offchain
+/// tools: these accessors and onchain execution read only the block spec fields.
+/// Bits 135-64 are reserved and must be zero.
 /// A maximum of zero means the payload size is unbounded.
 library Specs {
     /// @dev A payload is incompatible with its block specification.
@@ -270,6 +273,25 @@ library Specs {
     /// @dev HOST_ACCOUNT_AMOUNT specification with an exact 128-byte payload.
     uint constant HostAccountAmount = uint(bytes32(Keys.HostAccountAmount)) | Exact128;
 
+    // POSITION lane variants
+
+    /// @dev POSITION specification declaring the `Variants.Debt` variant.
+    uint constant PositionDebt = Position | (uint(uint32(Variants.Debt)) << 32);
+    /// @dev POSITION specification declaring the `Variants.Counterparty` variant.
+    uint constant PositionCounterparty = Position | (uint(uint32(Variants.Counterparty)) << 32);
+    /// @dev POSITION specification declaring the `Variants.Ledger` variant.
+    uint constant PositionLedger = Position | (uint(uint32(Variants.Ledger)) << 32);
+    /// @dev POSITION specification declaring the `Variants.Same` variant.
+    uint constant PositionSame = Position | (uint(uint32(Variants.Same)) << 32);
+    /// @dev POSITION specification declaring the `Variants.Realized` variant.
+    uint constant PositionRealized = Position | (uint(uint32(Variants.Realized)) << 32);
+    /// @dev POSITION specification declaring the `Variants.Repaid` variant.
+    uint constant PositionRepaid = Position | (uint(uint32(Variants.Repaid)) << 32);
+    /// @dev POSITION specification declaring the `Variants.NewAsset` variant.
+    uint constant PositionNewAsset = Position | (uint(uint32(Variants.NewAsset)) << 32);
+    /// @dev POSITION specification declaring the `Variants.NewDebt` variant.
+    uint constant PositionNewDebt = Position | (uint(uint32(Variants.NewDebt)) << 32);
+
     /// @notice Construct a block specification from its encoded fields.
     /// @param blockkey Encoded block key.
     /// @param min Minimum accepted payload length.
@@ -320,14 +342,38 @@ library Specs {
         return bytes4(uint32(spec >> 224));
     }
 
-    /// @notice Attach a nonzero host-local lane key to a plain block spec.
-    /// @dev Rejects EMPTY and occupied reserved bits. Preserves all block-spec fields.
-    /// @param spec Nonempty block spec without a lane key or other reserved bits.
+    /// @notice Attach a nonzero host-local lane key to a block spec.
+    /// @dev Reverts `InvalidSpec` on a zero lane key, EMPTY, an existing lane key,
+    /// or any of reserved bits 135-64 set. Preserves all block-spec fields and
+    /// any variant, so `toLane` and `toVariant` compose in either order.
+    /// @param spec Nonempty block spec without a lane key or reserved bits; may carry a variant.
     /// @param laneKey Host-local description key; not a wire block key.
     /// @return Packed lane value for endpoint discovery.
     function toLane(uint spec, uint32 laneKey) internal pure returns (uint) {
-        if (laneKey == 0 || key(spec) == bytes4(0) || uint136(spec) != 0) revert InvalidSpec();
+        if (laneKey == 0 || key(spec) == bytes4(0) || uint72(spec >> 64) != 0 || uint32(spec) != 0) {
+            revert InvalidSpec();
+        }
         return spec | uint(laneKey);
+    }
+
+    /// @notice Attach a nonzero protocol variant key to a block spec.
+    /// @dev Checks packing only; the variant is a declaration for offchain tools
+    /// and nothing onchain reads or enforces it. Reverts `InvalidSpec` on a zero
+    /// variant, EMPTY, or any of bits 135-32 set (reserved bits or an existing variant).
+    /// Preserves all block-spec fields and any lane key.
+    /// @param spec Nonempty block spec without a variant or reserved bits; may carry a lane key.
+    /// @param variantKey Protocol variant key from `Variants`; not a wire block key.
+    /// @return Spec with the variant in bits 63-32.
+    function toVariant(uint spec, bytes4 variantKey) internal pure returns (uint) {
+        if (variantKey == bytes4(0) || key(spec) == bytes4(0) || uint104(spec >> 32) != 0) revert InvalidSpec();
+        return spec | (uint(uint32(variantKey)) << 32);
+    }
+
+    /// @notice Return the variant key encoded in `spec`.
+    /// @param spec Packed block specification or lane.
+    /// @return Variant key from bits 63-32; zero when the spec declares none.
+    function variant(uint spec) internal pure returns (bytes4) {
+        return bytes4(uint32(spec >> 32));
     }
 
     /// @notice Return whether a payload size lies within a specification's bounds.

@@ -71,14 +71,15 @@ library Executions {
     /// [reserved:19][flags:1]. Sizes include headers and require 25 bits at maximum hint.
     /// Declared state takes precedence over input, even when supplied state is empty.
     /// Zero output size disables preallocation; no source reserves one output block.
-    /// State/input/output may carry low 32-bit lane keys, ignored by the descriptor.
+    /// State/input/output may carry lane keys (bits 31-0) and variants (bits 63-32),
+    /// both ignored by the descriptor. Reverts `InvalidSpec` if any lane sets reserved bits 135-64.
     /// The low byte contains internal source and capacity selections.
     /// @param state State block specification or named lane.
     /// @param input Input block specification or named lane.
     /// @param output Output block specification or named lane.
     /// @return descriptor Packed source and output allocation hints with internal execution flags.
     function describe(uint state, uint input, uint output) internal pure returns (uint descriptor) {
-        if (uint104((state | input | output) >> 32) != 0) revert Specs.InvalidSpec();
+        if (uint72((state | input | output) >> 64) != 0) revert Specs.InvalidSpec();
         bool stateSource = Specs.key(state) != bytes4(0);
         uint source = stateSource ? state : input;
         uint sourceSize = Specs.blockSize(source);
