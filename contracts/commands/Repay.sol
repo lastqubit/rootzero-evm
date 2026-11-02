@@ -13,7 +13,7 @@ abstract contract Repay is CommandBase, RepayHook {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("repay", Specs.Position, Specs.Empty, Specs.Position, 0);
+        (, descriptor) = command("repay", Specs.Position, Specs.Empty, Specs.PositionRepaid, 0);
     }
 
     /// @notice Fully repay each debt and return its remaining position.

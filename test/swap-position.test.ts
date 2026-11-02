@@ -4,7 +4,7 @@ import { deploy, getSigner, hostId, commandId } from "./helpers/setup.js";
 import {
   concat, encodeAssetBlock, encodeBlock, encodeBytesBlock, encodeContextBlock,
   encodeListBlock, encodeOutputBlock, encodePositionBlock, encodeSwapBlock,
-  encodeUserAccount, exactSpec, rangedSpec, Keys, pad32,
+  encodeUserAccount, exactSpec, rangedSpec, Keys, pad32, Variants, withVariant,
 } from "./helpers/blocks.js";
 import "./helpers/matchers.js";
 
@@ -33,10 +33,11 @@ describe("Position swap commands", () => {
       ? encodePositionBlock(hops.at(-1) ?? asset, amount - delta * BigInt(hops.length), liability, debt, counterparty)
       : encodePositionBlock(asset, amount, hops.at(-1) ?? liability, debt + delta * BigInt(hops.length), counterparty);
 
-    it(`${method} registers POSITION / LIST / POSITION metadata and its name`, async () => {
+    it(`${method} registers POSITION / LIST / POSITION metadata with variants and its name`, async () => {
       const id = await commandId(method + "(bytes)", host);
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
-        exactSpec(Keys.Position, 160), rangedSpec(Keys.List, 0, 0, 128), exactSpec(Keys.Position, 160));
+        withVariant(exactSpec(Keys.Position, 160), Variants.Counterparty), rangedSpec(Keys.List, 0, 0, 128),
+        withVariant(exactSpec(Keys.Position, 160), exactInput ? Variants.NewAsset : Variants.NewDebt));
       await expect(host.deploymentTransaction()).to.emitEndpoint(host)
         .withArgs(id, undefined, undefined, undefined, method);
     });

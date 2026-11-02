@@ -51,7 +51,16 @@ abstract contract SwapExactInput is CommandBase, SwapExactInputHook, Counterpart
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("swapExactInput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapExactInput", Specs.Empty, Specs.Swap, swapExactInputOutput(), Logs.Output);
+    }
+
+    /// @notice Output lane this host publishes for `swapExactInput`; override to declare a variant.
+    /// @dev Called once from the constructor. Declared without a mutability keyword
+    /// so an override may publish a described `lane(...)`. The lane must keep the
+    /// POSITION block spec; only its lane key and variant may differ.
+    /// @return Packed POSITION output lane; plain `Specs.Position` by default.
+    function swapExactInputOutput() internal virtual returns (uint) {
+        return Specs.Position;
     }
 
     /// @notice Process a SWAP batch with empty state; empty input is a valid empty batch.
@@ -92,7 +101,16 @@ abstract contract SwapExactOutput is CommandBase, SwapExactOutputHook, Counterpa
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("swapExactOutput", Specs.Empty, Specs.Swap, Specs.Position, Logs.Output);
+        (, descriptor) = command("swapExactOutput", Specs.Empty, Specs.Swap, swapExactOutputOutput(), Logs.Output);
+    }
+
+    /// @notice Output lane this host publishes for `swapExactOutput`; override to declare a variant.
+    /// @dev Called once from the constructor. Declared without a mutability keyword
+    /// so an override may publish a described `lane(...)`. The lane must keep the
+    /// POSITION block spec; only its lane key and variant may differ.
+    /// @return Packed POSITION output lane; plain `Specs.Position` by default.
+    function swapExactOutputOutput() internal virtual returns (uint) {
+        return Specs.Position;
     }
 
     /// @notice Process a SWAP batch with empty state; hops run from output toward input.
@@ -133,7 +151,9 @@ abstract contract SwapAssetExactInput is CommandBase, SwapExactInputHook, Counte
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("swapAssetExactInput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
+        (, descriptor) = command(
+            "swapAssetExactInput", Specs.PositionCounterparty, Specs.List, Specs.PositionNewAsset, Logs.Output
+        );
     }
 
     /// @notice Transform POSITION state using exactly one LIST of ASSET hops per position.
@@ -175,7 +195,9 @@ abstract contract SwapDebtExactOutput is CommandBase, SwapExactOutputHook, Count
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("swapDebtExactOutput", Specs.Position, Specs.List, Specs.Position, Logs.Output);
+        (, descriptor) = command(
+            "swapDebtExactOutput", Specs.PositionCounterparty, Specs.List, Specs.PositionNewDebt, Logs.Output
+        );
     }
 
     /// @notice Transform POSITION state using exactly one LIST of ASSET hops per position.

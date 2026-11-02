@@ -33,7 +33,16 @@ abstract contract Settle is CommandBase, SettleHook {
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("settle", Specs.Position, Specs.Empty, Specs.Empty, 0);
+        (id, descriptor) = command("settle", settleState(), Specs.Empty, Specs.Empty, 0);
+    }
+
+    /// @notice State lane this host publishes for `settle`; override to declare a variant.
+    /// @dev Called once from the constructor. Declared without a mutability keyword
+    /// so an override may publish a described `lane(...)`. The lane must keep the
+    /// POSITION block spec; only its lane key and variant may differ.
+    /// @return Packed POSITION state lane; plain `Specs.Position` by default.
+    function settleState() internal virtual returns (uint) {
+        return Specs.Position;
     }
 
     /// @notice Return the registered SETTLE command ID.
