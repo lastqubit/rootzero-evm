@@ -152,7 +152,7 @@ abstract contract SwapAssetExactInput is CommandBase, SwapExactInputHook, Counte
 
     constructor() {
         (, descriptor) = command(
-            "swapAssetExactInput", Specs.PositionCounterparty, Specs.List, Specs.PositionNewAsset, Logs.Output
+            "swapAssetExactInput", Specs.PositionCounterparty, Specs.List, Specs.PositionKeepDebt, Logs.Output
         );
     }
 
@@ -196,7 +196,7 @@ abstract contract SwapDebtExactOutput is CommandBase, SwapExactOutputHook, Count
 
     constructor() {
         (, descriptor) = command(
-            "swapDebtExactOutput", Specs.PositionCounterparty, Specs.List, Specs.PositionNewDebt, Logs.Output
+            "swapDebtExactOutput", Specs.PositionCounterparty, Specs.List, Specs.PositionKeepAsset, Logs.Output
         );
     }
 

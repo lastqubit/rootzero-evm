@@ -39,14 +39,14 @@ contract TestLaneVariants {
     function keys() external pure returns (bytes4[8] memory) {
         return [
             Variants.Debt, Variants.Counterparty, Variants.Ledger, Variants.Same,
-            Variants.Realized, Variants.Repaid, Variants.NewAsset, Variants.NewDebt
+            Variants.Realized, Variants.Repaid, Variants.KeepDebt, Variants.KeepAsset
         ];
     }
 
     function specs() external pure returns (uint[8] memory) {
         return [
             Specs.PositionDebt, Specs.PositionCounterparty, Specs.PositionLedger, Specs.PositionSame,
-            Specs.PositionRealized, Specs.PositionRepaid, Specs.PositionNewAsset, Specs.PositionNewDebt
+            Specs.PositionRealized, Specs.PositionRepaid, Specs.PositionKeepDebt, Specs.PositionKeepAsset
         ];
     }
 
@@ -55,7 +55,7 @@ contract TestLaneVariants {
     }
 
     function barrels() external pure returns (bytes4, bytes4, uint) {
-        return (CodecVariants.Debt, CommandVariants.NewDebt, CodecSpecs.PositionNewDebt);
+        return (CodecVariants.Debt, CommandVariants.KeepAsset, CodecSpecs.PositionKeepAsset);
     }
 }
 

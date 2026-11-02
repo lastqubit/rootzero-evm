@@ -26,7 +26,7 @@ library Variants {
     /// @dev POSITION with a zero `debt`; every other field incoming.
     bytes4 constant Repaid = bytes4(keccak256("position.repaid"));
     /// @dev POSITION with any `asset` and `amount`; debt leg and counterparty incoming.
-    bytes4 constant NewAsset = bytes4(keccak256("position.newAsset"));
+    bytes4 constant KeepDebt = bytes4(keccak256("position.keepDebt"));
     /// @dev POSITION with any `liability` and `debt`; asset leg and counterparty incoming.
-    bytes4 constant NewDebt = bytes4(keccak256("position.newDebt"));
+    bytes4 constant KeepAsset = bytes4(keccak256("position.keepAsset"));
 }

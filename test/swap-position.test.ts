@@ -37,7 +37,7 @@ describe("Position swap commands", () => {
       const id = await commandId(method + "(bytes)", host);
       await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(id,
         withVariant(exactSpec(Keys.Position, 160), Variants.Counterparty), rangedSpec(Keys.List, 0, 0, 128),
-        withVariant(exactSpec(Keys.Position, 160), exactInput ? Variants.NewAsset : Variants.NewDebt));
+        withVariant(exactSpec(Keys.Position, 160), exactInput ? Variants.KeepDebt : Variants.KeepAsset));
       await expect(host.deploymentTransaction()).to.emitEndpoint(host)
         .withArgs(id, undefined, undefined, undefined, method);
     });

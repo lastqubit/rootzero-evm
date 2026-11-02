@@ -8,6 +8,16 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+- **Breaking: two lane variants renamed** after what they keep rather than what
+  they change. `Variants.NewAsset` (`position.newAsset`, `0x3be2bce7`) is now
+  `Variants.KeepDebt` (`position.keepDebt`, `0x1901fefb`) and `Variants.NewDebt`
+  (`position.newDebt`, `0x15262456`) is now `Variants.KeepAsset`
+  (`position.keepAsset`, `0xf83a2669`); `Specs.PositionNewAsset` /
+  `PositionNewDebt` become `Specs.PositionKeepDebt` / `PositionKeepAsset`. The
+  rules are unchanged: the swapped leg is any, the other leg and the
+  counterparty incoming. `swapAssetExactInput` and `swapDebtExactOutput` now
+  publish the new keys; hosts on 1.59.0 publish the old ones until they repin.
+
 ## 1.59.0
 
 - `toChainBase(prefix, chain)` builds an ID base for a given chain and reverts if

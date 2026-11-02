@@ -287,10 +287,10 @@ library Specs {
     uint constant PositionRealized = Position | (uint(uint32(Variants.Realized)) << 32);
     /// @dev POSITION specification declaring the `Variants.Repaid` variant.
     uint constant PositionRepaid = Position | (uint(uint32(Variants.Repaid)) << 32);
-    /// @dev POSITION specification declaring the `Variants.NewAsset` variant.
-    uint constant PositionNewAsset = Position | (uint(uint32(Variants.NewAsset)) << 32);
-    /// @dev POSITION specification declaring the `Variants.NewDebt` variant.
-    uint constant PositionNewDebt = Position | (uint(uint32(Variants.NewDebt)) << 32);
+    /// @dev POSITION specification declaring the `Variants.KeepDebt` variant.
+    uint constant PositionKeepDebt = Position | (uint(uint32(Variants.KeepDebt)) << 32);
+    /// @dev POSITION specification declaring the `Variants.KeepAsset` variant.
+    uint constant PositionKeepAsset = Position | (uint(uint32(Variants.KeepAsset)) << 32);
 
     /// @notice Construct a block specification from its encoded fields.
     /// @param blockkey Encoded block key.

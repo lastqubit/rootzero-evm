@@ -131,8 +131,8 @@ export const Variants = {
   Same: blockKey("position.same"),
   Realized: blockKey("position.realized"),
   Repaid: blockKey("position.repaid"),
-  NewAsset: blockKey("position.newAsset"),
-  NewDebt: blockKey("position.newDebt"),
+  KeepDebt: blockKey("position.keepDebt"),
+  KeepAsset: blockKey("position.keepAsset"),
 } as const;
 
 export function withVariant(spec: bigint, variant: string): bigint {

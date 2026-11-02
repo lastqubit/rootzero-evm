@@ -9,10 +9,10 @@ import "./helpers/matchers.js";
 
 const position = exactSpec(Keys.Position, 160);
 const amount = exactSpec(Keys.Amount, 32);
-const names = ["debt", "counterparty", "ledger", "same", "realized", "repaid", "newAsset", "newDebt"];
+const names = ["debt", "counterparty", "ledger", "same", "realized", "repaid", "keepDebt", "keepAsset"];
 const variants = [
   Variants.Debt, Variants.Counterparty, Variants.Ledger, Variants.Same,
-  Variants.Realized, Variants.Repaid, Variants.NewAsset, Variants.NewDebt,
+  Variants.Realized, Variants.Repaid, Variants.KeepDebt, Variants.KeepAsset,
 ];
 
 describe("Lane variants", () => {
@@ -22,7 +22,7 @@ describe("Lane variants", () => {
   it("derives keys from scoped names and packs the POSITION variant constants into bits 63-32", async () => {
     expect(variants).deep.eq(names.map(name => blockKey(`position.${name}`)));
     expect(variants).deep.eq([
-      "0x43713627", "0x2841eda5", "0x40a08141", "0x60649c75", "0x3b6cdd34", "0x9a4d821c", "0x3be2bce7", "0x15262456",
+      "0x43713627", "0x2841eda5", "0x40a08141", "0x60649c75", "0x3b6cdd34", "0x9a4d821c", "0x1901fefb", "0xf83a2669",
     ]);
     expect(Array.from(await helper.keys())).deep.eq(variants);
     const specs = Array.from(await helper.specs()) as bigint[];
@@ -36,7 +36,7 @@ describe("Lane variants", () => {
     const [plain, counterparty] = await helper.plain();
     expect(plain).eq(position);
     expect(counterparty).eq(exactSpec(Keys.Counterparty, 32));
-    expect(Array.from(await helper.barrels())).deep.eq([Variants.Debt, Variants.NewDebt, specs[7]]);
+    expect(Array.from(await helper.barrels())).deep.eq([Variants.Debt, Variants.KeepAsset, specs[7]]);
   });
 
   it("reads the variant independently of the lane key and reports zero without one", async () => {
@@ -122,7 +122,7 @@ describe("Lane variants in endpoint records", () => {
   it("publishes the inline POSITION variants of position-transforming commands", async () => {
     const swaps = await deploy("TestSwapCommands", await hostId(await (await getSigner()).getAddress()), counterparty);
     const list = rangedSpec(Keys.List, 0, 0, 128);
-    for (const [method, output] of [["swapAssetExactInput", Variants.NewAsset], ["swapDebtExactOutput", Variants.NewDebt]]) {
+    for (const [method, output] of [["swapAssetExactInput", Variants.KeepDebt], ["swapDebtExactOutput", Variants.KeepAsset]]) {
       await expect(swaps.deploymentTransaction()).to.emitEndpoint(swaps).withArgs(await commandId(`${method}(bytes)`, swaps),
         withVariant(position, Variants.Counterparty), list, withVariant(position, output), method);
     }
