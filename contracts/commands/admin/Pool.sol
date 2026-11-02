@@ -35,8 +35,17 @@ abstract contract AddPool is AdminBase, AddPoolHook {
     uint private immutable descriptor;
 
     constructor() {
-        uint input = lane("#assetAmount[2] as (a, b)", "addPool", Specs.AssetAmount);
-        (, descriptor) = command("addPool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("addPool", Specs.Empty, addPoolInput(), Specs.Empty, Logs.Input | Flags.Admin);
+    }
+
+    /// @notice Input lane for `addPool`: pairs of asset amounts, one pair per pool.
+    /// @dev Called once from the constructor and publishes the `addPool` lane description.
+    /// An override that replaces the description returns its own `lane(...)` without
+    /// calling `super`; one that only adds a variant wraps `super.addPoolInput()`.
+    /// The lane must keep the ASSET_AMOUNT block spec.
+    /// @return Packed ASSET_AMOUNT input lane with the `addPool` lane key.
+    function addPoolInput() internal virtual returns (uint) {
+        return lane("#assetAmount[2] as (a, b)", "addPool", Specs.AssetAmount);
     }
 
     /// @notice Add pools from consecutive ASSET_AMOUNT pairs.
@@ -64,8 +73,17 @@ abstract contract RemovePool is AdminBase, RemovePoolHook {
     uint private immutable descriptor;
 
     constructor() {
-        uint input = lane("#asset[2] as (a, b)", "removePool", Specs.Asset);
-        (, descriptor) = command("removePool", Specs.Empty, input, Specs.Empty, Logs.Input | Flags.Admin);
+        (, descriptor) = command("removePool", Specs.Empty, removePoolInput(), Specs.Empty, Logs.Input | Flags.Admin);
+    }
+
+    /// @notice Input lane for `removePool`: pairs of assets, one pair per pool.
+    /// @dev Called once from the constructor and publishes the `removePool` lane description.
+    /// An override that replaces the description returns its own `lane(...)` without
+    /// calling `super`; one that only adds a variant wraps `super.removePoolInput()`.
+    /// The lane must keep the ASSET block spec.
+    /// @return Packed ASSET input lane with the `removePool` lane key.
+    function removePoolInput() internal virtual returns (uint) {
+        return lane("#asset[2] as (a, b)", "removePool", Specs.Asset);
     }
 
     /// @notice Remove pools from consecutive ASSET pairs.

@@ -17,7 +17,7 @@ import {
   encodeAccountBlock, encodeAmountBlock, encodeEntityBlock, encodeStepBlock, encodeTrustBlock, encodeUserAccount,
   encodeActionBlock, encodeOutputBlock, encodeStateBlock, encodeContextBlock, encodeRecoverBlock, encodeRelayBlock, encodeRelayInputBlock,
   encodePayoutBlock, encodeRecipientBlock, encodeUserRecipientBlock, encodeSchemaBlock, localKey,
-  concat
+  concat, Variants, withVariant
 } from "./helpers/blocks.js";
 
 // PAYOUT recipients that withdraw and cashout refuse to pay: zero (a burn) and words that
@@ -853,10 +853,10 @@ describe("Commands", () => {
     const asset = ethers.zeroPadValue("0x21", 32);
     const liability = ethers.zeroPadValue("0x22", 32);
 
-    it("discovers POSITION state, empty input, and POSITION output", async () => {
-      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(await cmd("realize"), ...endpointSpecs({
-          state: Keys.Position, stateHint: 160, output: exactSpec(Keys.Position, 160),
-          }));
+    it("discovers counterparty POSITION state, empty input, and realized POSITION output", async () => {
+      await expect(host.deploymentTransaction()).to.emitEndpoint(host).withArgs(await cmd("realize"),
+        withVariant(exactSpec(Keys.Position, 160), Variants.Counterparty), 0n,
+        withVariant(exactSpec(Keys.Position, 160), Variants.Realized));
     });
 
     it("passes the full position to its hook and returns its result", async () => {

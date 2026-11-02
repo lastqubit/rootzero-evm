@@ -33,7 +33,7 @@ abstract contract Realize is CommandBase, RealizeHook {
     uint private immutable descriptor;
 
     constructor() {
-        (, descriptor) = command("realize", Specs.Position, Specs.Empty, Specs.Position, LOGS);
+        (, descriptor) = command("realize", Specs.PositionCounterparty, Specs.Empty, Specs.PositionRealized, LOGS);
     }
 
     /// @notice Realize POSITION state blocks without caller-supplied outcome constraints.

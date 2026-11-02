@@ -15,7 +15,9 @@ abstract contract CheckPosition is CommandBase {
     uint private immutable id;
 
     constructor() {
-        (id, descriptor) = command("checkPosition", Specs.Position, Specs.PositionConstraints, Specs.Position, 0);
+        (id, descriptor) = command(
+            "checkPosition", Specs.Position, Specs.PositionConstraints, Specs.PositionSame, 0
+        );
     }
 
     /// @notice Return the registered checkPosition command ID.
