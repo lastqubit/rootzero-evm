@@ -66,7 +66,7 @@ describe("Endpoint runner lifecycle", () => {
   });
   it("rejects reserved bits on view query registration", async () => {
     const helper = await deploy("TestQueryLanes", 0, 0);
-    for (const bit of [32n, 64n, 127n, 128n, 135n]) {
+    for (const bit of [64n, 100n, 127n, 128n, 135n]) {
       for (const lanes of [[1n << bit, 0n], [0n, 1n << bit]]) {
         await expect(deploy("TestQueryLanes", ...lanes)).revertedWithCustomError(helper, "InvalidSpec");
       }

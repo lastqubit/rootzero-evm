@@ -62,20 +62,23 @@ describe("Lane annotations", () => {
         ethers.concat([ethers.toBeHex(amount, 32), encodeStringBlock("uint amount")])));
   });
 
-  it("ignores lane identifiers in all descriptor lanes but rejects reserved bits", async () => {
+  it("ignores lane identifiers and variants in all descriptor lanes but rejects reserved bits", async () => {
     const host = await deploy("TestLaneAnnotation");
     for (const [state, input, output] of [[0n, amount, amount], [amount, amount, exactSpec(Keys.Position, 160)]]) {
       expect(await host.describe(state ? state | 0xffffffffn : 0n, input | 7n, output | 9n))
         .eq(await host.describe(state, input, output));
+      expect(await host.describe(state ? state | (0xffffffffn << 32n) : 0n, input | (1n << 32n), output | (1n << 63n)))
+        .eq(await host.describe(state, input, output));
     }
-    for (const bit of [32n, 64n, 127n, 128n, 135n]) {
+    for (const bit of [64n, 100n, 127n, 128n, 135n]) {
       for (const index of [0, 1, 2]) {
         const lanes = [amount, amount, amount];
         lanes[index] = amount | (1n << bit);
         await expect(host.describe(...lanes)).revertedWithCustomError(host, "InvalidSpec");
       }
     }
-    for (const [key, spec] of [[0n, amount], [1n, 0n], [1n, amount | 2n], [1n, amount | (1n << 135n)]]) {
+    expect(await host.publish.staticCall("#amount", 1, amount | (3n << 32n))).eq(amount | (3n << 32n) | 1n);
+    for (const [key, spec] of [[0n, amount], [1n, 0n], [1n, amount | 2n], [1n, amount | (1n << 64n)], [1n, amount | (1n << 135n)]]) {
       await expect(host.publish("#amount[2] as (a, b)", key, spec)).revertedWithCustomError(host, "InvalidSpec");
     }
   });

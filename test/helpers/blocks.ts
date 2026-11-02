@@ -123,6 +123,22 @@ export const Keys = {
   HostAccountAmount: blockKey("#hostAccountAmount"),
 } as const;
 
+// Lane variant keys: bytes4(keccak256("<block>.<name>")), packed into spec bits 63-32.
+export const Variants = {
+  Debt: blockKey("position.debt"),
+  Counterparty: blockKey("position.counterparty"),
+  Ledger: blockKey("position.ledger"),
+  Same: blockKey("position.same"),
+  Realized: blockKey("position.realized"),
+  Repaid: blockKey("position.repaid"),
+  NewAsset: blockKey("position.newAsset"),
+  NewDebt: blockKey("position.newDebt"),
+} as const;
+
+export function withVariant(spec: bigint, variant: string): bigint {
+  return spec | (BigInt(variant) << 32n);
+}
+
 // Pad a bigint or hex string to 32 bytes
 export function pad32(value: bigint | string): string {
   if (typeof value === "bigint") {

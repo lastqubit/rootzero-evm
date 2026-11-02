@@ -11,6 +11,7 @@ import {Flags} from "./utils/Flags.sol";
 import {Execution, Executions} from "./execution/Execution.sol";
 import {Blocks} from "./codec/Blocks.sol";
 import {Sizes, Specs} from "./codec/Specs.sol";
+import {Variants} from "./codec/Variants.sol";
 import {Headers} from "./codec/Headers.sol";
 import {Cursors} from "./utils/Cursors.sol";
 import {AssetAmount, AssetLiability, AccountAsset, HostAsset, AccountBalance, AccountAmount, HostAmount, HostAccountAsset, HostAccountAmount, BalanceConstraints, PositionConstraints, Quote, Position} from "./core/Types.sol";
