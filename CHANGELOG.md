@@ -8,6 +8,8 @@ sections are immutable and must continue to describe the tagged release.
 
 ## Unreleased
 
+## 1.59.0
+
 - `toChainBase(prefix, chain)` builds an ID base for a given chain and reverts if
   `chain` does not fit in 32 bits. `toLocalBase` now delegates to it.
 - `Accounts.toChainUser(accountAddr, chain)` encodes a user account ID for a given
